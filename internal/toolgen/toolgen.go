@@ -346,8 +346,8 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "task --result-file <path> [--result-file <path> ...] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]; suite-result (--full-suite-proof <path>|--full-suite-digest <digest>) [--sast-proof <name=path> ...] [--sast-digest <name=digest> ...] [--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence.", "`suite-result` requires an active governed change in S3_REVIEW with a current execution-summary.yaml."}},
+		Arguments:     "task --result-file <path> [--result-file <path> ...] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
 	// Helpers (1)
 	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "helpers", HasPromptSurface: false,
 		Arguments:     "<helper> [helper flags]",
@@ -413,8 +413,7 @@ var governanceSurfaceDescriptors = []governanceSurfaceDescriptor{
 	{ID: "code-quality-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "independent-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 	{ID: "security-review", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
-	{ID: "goal-verification", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
-	{ID: "final-closeout", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
+	{ID: "ship-verification", RenderMode: governanceRenderTemplated, WorkflowOwned: true},
 }
 
 func governanceSurfaceIDs(filter func(governanceSurfaceDescriptor) bool) []string {
@@ -547,8 +546,7 @@ var hostSkillExportAllowlist = map[string]struct{}{
 	"tdd-governance":         {},
 	"spec-compliance-review": {},
 	"code-quality-review":    {},
-	"goal-verification":      {},
-	"final-closeout":         {},
+	"ship-verification":      {},
 
 	"independent-review": {},
 	"context-assembly":   {},

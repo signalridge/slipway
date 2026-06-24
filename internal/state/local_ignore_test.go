@@ -81,10 +81,10 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	ignored := []string{
 		"artifacts/changes/demo/evidence/governance/review.yaml",
 		"artifacts/changes/demo/events/lifecycle.jsonl",
-		"artifacts/changes/demo/verification/final-closeout.yaml",
+		"artifacts/changes/demo/verification/ship-verification.yaml",
 		"artifacts/changes/archived/demo/evidence/tasks/t-01.json",
 		"artifacts/changes/archived/demo/events/lifecycle.jsonl",
-		"artifacts/changes/archived/demo/verification/final-closeout.yaml",
+		"artifacts/changes/archived/demo/verification/ship-verification.yaml",
 		".worktrees/demo/change.yaml",
 	}
 	for _, rel := range ignored {

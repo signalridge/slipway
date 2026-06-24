@@ -53,8 +53,7 @@ func TestPurePacingAutoSafeAllowlistMembership(t *testing.T) {
 		SkillSpecComplianceReview,
 		SkillCodeQualityReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
-		SkillFinalCloseout,
+		SkillShipVerification,
 	}
 	for _, name := range autoSafe {
 		if !SkillIsPurePacingAutoSafe(name) {

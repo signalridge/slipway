@@ -8,19 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestThinHostGoalVerificationDelegatesBulkyEvidence(t *testing.T) {
+func TestThinHostShipVerificationDelegatesBulkyEvidence(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/goal-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
-		"Trigger":     "/slipway:goal-verification",
+		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	})
 	require.NoError(t, err)
 
 	flat := thinHostFlatten(content)
 	flatLower := strings.ToLower(flat)
-	assert.Contains(t, content, "IRON LAW: NO COMPLETION CLAIMS WITHOUT FRESH 3-LEVEL VERIFICATION")
+	assert.Contains(t, content, "IRON LAW: NO SHIP WITHOUT FRESH, INDEPENDENT, 3-LEVEL TERMINAL VERIFICATION")
 	assert.Contains(t, content, "<HARD-GATE>")
 	assert.Contains(t, content, "run_version")
 	assert.Contains(t, content, "fresh:command_ref")

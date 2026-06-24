@@ -47,7 +47,7 @@ Keep the goal visible, then delegate detailed mechanics to the owning Slipway
 skills:
 - planning and task decomposition -> `slipway-plan-audit`
 - guarded implementation and test-first execution -> `slipway-tdd-governance`
-- completion and freshness proof -> `slipway-goal-verification`
+- completion and freshness proof -> `slipway-ship-verification`
 - explicit review verdict and handoff -> `slipway-independent-review`
 
 If a host already owns a detailed procedure, follow that host for mechanics and

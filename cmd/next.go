@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -156,10 +155,10 @@ type skillConstraints struct {
 	GuardrailDomain  string   `json:"guardrail_domain,omitempty"`
 	MitigationTarget string   `json:"mitigation_target,omitempty"`
 	RunSummaryBound  bool     `json:"run_summary_bound,omitempty"`
-	// RequiredHighRiskTokens lists the exact reference tokens the goal-verification
+	// RequiredHighRiskTokens lists the exact reference tokens the ship-verification
 	// host must record (from a real SAST run) to satisfy the ship gate's high-risk
 	// checks when the change has a guardrail domain. Populated only for the
-	// goal-verification handoff so the next agent never has to guess the format.
+	// ship-verification handoff so the next agent never has to guess the format.
 	RequiredHighRiskTokens []string `json:"required_high_risk_tokens,omitempty"`
 }
 
@@ -624,22 +623,17 @@ func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model
 		true,
 	)
 	if err != nil {
-		return nil, wrapRequiredSkillsEvaluationError("evaluate advisory closeout evidence", ref.Slug, err)
+		return nil, wrapRequiredSkillsEvaluationError("evaluate ship-verification evidence", ref.Slug, err)
 	}
-	if _, ok := passingSkills[progression.SkillFinalCloseout]; ok {
+	// ship-verification is the single always-required terminal S3 gate. A
+	// done_ready projection already implies it passed; if its passing record is
+	// present there is nothing to advise. Its absence is owned as a hard ship-gate
+	// blocker by EvaluateShipAuthority, not surfaced as an advisory here.
+	if _, ok := passingSkills[progression.SkillShipVerification]; ok {
 		return nil, nil
 	}
-	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
-	if err != nil {
-		return nil, err
-	}
-	if presetPolicy.CloseoutRefreshRequired {
-		return []string{
-			"ship_gate_blocked:required_skill_missing:final-closeout",
-		}, nil
-	}
 	return []string{
-		"optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired",
+		"ship_gate_blocked:required_skill_missing:ship-verification",
 	}, nil
 }
 

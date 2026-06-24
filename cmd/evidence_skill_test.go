@@ -443,29 +443,33 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writeSkillVerification(t, root, slug, progression.SkillGoalVerification, model.VerificationRecord{
+		// Overwrite the spec-compliance-review record with a malformed
+		// review-stage context-origin handle so the selected-reviewer restamp
+		// path becomes available for a narrow, in-place replacement.
+		writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
 			References: []string{
-				"verification:pass",
+				"layer:R0=pass",
+				"layer:R3=pass",
 				model.ContextOriginReferencePrefix + model.StageContextGoal + "=retired-goal-context",
 			},
 		})
-		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillGoalVerification)
+		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillSpecComplianceReview)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
 			"skill",
 			"--json",
 			"--change", slug,
-			"--skill", progression.SkillGoalVerification,
+			"--skill", progression.SkillSpecComplianceReview,
 			"--verdict", model.VerificationVerdictPass,
-			"--reference", "fresh:command_ref=verification/full-suite-transcript.txt",
-			"--reference", "scope_contract:pass",
-			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-goal-review-context",
-			"--notes", "Goal verification rerun in fresh review context.",
+			"--reference", "layer:R0=pass",
+			"--reference", "layer:R3=pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-spec-review-context",
+			"--notes", "Spec-compliance review rerun in fresh review context.",
 		})
 		var out bytes.Buffer
 		cmd.SetOut(&out)
@@ -473,14 +477,14 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 
 		var view evidenceSkillView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Equal(t, progression.SkillGoalVerification, view.SkillName)
+		assert.Equal(t, progression.SkillSpecComplianceReview, view.SkillName)
 		assert.True(t, view.Recorded)
 
-		rec, err := state.LoadVerification(root, slug, progression.SkillGoalVerification)
+		rec, err := state.LoadVerification(root, slug, progression.SkillSpecComplianceReview)
 		require.NoError(t, err)
 		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
 		require.True(t, ok)
-		assert.Equal(t, "fresh-goal-review-context", handle.Handle)
+		assert.Equal(t, "fresh-spec-review-context", handle.Handle)
 		assert.NotContains(t, rec.References, model.ContextOriginReferencePrefix+model.StageContextGoal+"=retired-goal-context")
 	})
 }
@@ -495,29 +499,28 @@ func TestEvidenceSkillRejectsSelectedReviewerRestampWithValidContextOrigin(t *te
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
 			"skill",
 			"--change", slug,
-			"--skill", progression.SkillGoalVerification,
+			"--skill", progression.SkillSpecComplianceReview,
 			"--verdict", model.VerificationVerdictPass,
-			"--reference", "fresh:command_ref=verification/full-suite-transcript.txt",
-			"--reference", "scope_contract:pass",
+			"--reference", "layer:R0=pass",
+			"--reference", "layer:R3=pass",
 			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=unexpected-overwrite-context",
-			"--notes", "Unexpected goal verification overwrite.",
+			"--notes", "Unexpected spec-compliance review overwrite.",
 		})
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_not_current", cliErr.ErrorCode)
 
-		rec, err := state.LoadVerification(root, slug, progression.SkillGoalVerification)
+		rec, err := state.LoadVerification(root, slug, progression.SkillSpecComplianceReview)
 		require.NoError(t, err)
 		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
 		require.True(t, ok)
-		assert.Equal(t, testGoalContextHandle, handle.Handle)
-		assert.NotEqual(t, "Unexpected goal verification overwrite.", rec.Notes)
+		assert.Equal(t, testSpecContextHandle, handle.Handle)
+		assert.NotEqual(t, "Unexpected spec-compliance review overwrite.", rec.Notes)
 	})
 }
 
@@ -551,35 +554,38 @@ func TestEvidenceSkillRejectsUnselectedSecurityReview(t *testing.T) {
 	})
 }
 
-func TestEvidenceSkillRejectsFinalCloseoutBeforeGoalVerification(t *testing.T) {
+func TestEvidenceSkillRejectsShipVerificationBeforeReviewSet(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects closeout ordering")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill rejects ship ordering")
 		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{})
-		writePassingReviewEvidencePack(t, root, slug, 1)
+		// Deliberately omit the selected review set so ship-verification, the
+		// terminal S3 skill, is not yet the current actionable skill.
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
 			"skill",
 			"--change", slug,
-			"--skill", progression.SkillFinalCloseout,
+			"--skill", progression.SkillShipVerification,
 			"--verdict", model.VerificationVerdictPass,
-			"--reference", "closeout:pass",
-			"--notes", "Closeout passed.",
+			"--reference", "verification:pass",
+			"--notes", "Ship verification passed.",
 		})
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_predecessor_required", cliErr.ErrorCode)
-		assert.Equal(t, progression.SkillFinalCloseout, cliErr.Details["skill"])
-		assert.Equal(t, progression.SkillGoalVerification, cliErr.Details["required_first"])
+		assert.Equal(t, progression.SkillShipVerification, cliErr.Details["skill"])
+		// ship-verification runs last; the first still-missing selected reviewer
+		// must be recorded before it.
+		assert.Equal(t, progression.SkillSpecComplianceReview, cliErr.Details["required_first"])
 
-		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillFinalCloseout+".yaml"))
+		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillShipVerification+".yaml"))
 		require.Error(t, err)
 		assert.True(t, os.IsNotExist(err))
 	})
@@ -730,12 +736,11 @@ func TestEvidenceSkillWrongStateForWaveOrchestrationInS3RoutesToReviewAndVerific
 		assert.Contains(t, cliErr.Remediation, progression.SkillSpecComplianceReview)
 		assert.Contains(t, cliErr.Remediation, progression.SkillCodeQualityReview)
 		assert.Contains(t, cliErr.Remediation, progression.SkillIndependentReview)
-		assert.Contains(t, cliErr.Remediation, progression.SkillGoalVerification)
-		assert.Contains(t, cliErr.Remediation, progression.SkillFinalCloseout)
+		assert.Contains(t, cliErr.Remediation, progression.SkillShipVerification)
 	})
 }
 
-func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToCloseoutEvidence(t *testing.T) {
+func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToShipVerificationEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -754,8 +759,7 @@ func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToCloseoutEvidence(t *t
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Remediation, progression.SkillGoalVerification)
-		assert.Contains(t, cliErr.Remediation, progression.SkillFinalCloseout)
+		assert.Contains(t, cliErr.Remediation, progression.SkillShipVerification)
 	})
 }
 

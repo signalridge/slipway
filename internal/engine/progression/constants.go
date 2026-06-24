@@ -11,6 +11,5 @@ const (
 	SkillCodeQualityReview     = "code-quality-review"
 	SkillSecurityReview        = "security-review"
 	SkillIndependentReview     = "independent-review"
-	SkillGoalVerification      = "goal-verification"
-	SkillFinalCloseout         = "final-closeout"
+	SkillShipVerification      = "ship-verification"
 )

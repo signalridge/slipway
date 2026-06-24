@@ -332,8 +332,7 @@ func TestCLIEndToEndSuccessfulReviewPassAtS3(t *testing.T) {
 		// so that evidence timestamps post-date artifact modifications.
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
-		writePassingFinalCloseoutEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		materializeWaveExecutionForSummary(t, root, slug)
 

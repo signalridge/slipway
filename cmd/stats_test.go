@@ -276,14 +276,7 @@ func TestStatsUsesAuthoritativeVerificationForHiddenBoundWorktreeCloseoutFreshne
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
 	writePassingIndependentReviewEvidence(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
-	writeSkillVerification(t, root, slug, "final-closeout", model.VerificationRecord{
-		Verdict:    model.VerificationVerdictPass,
-		Blockers:   []model.ReasonCode{},
-		Timestamp:  time.Now().UTC(),
-		RunVersion: 1,
-		References: []string{"closeout:pass"},
-	})
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	require.NoError(t, os.Remove(filepath.Join(normalizedWT, ".slipway.yaml")))
 

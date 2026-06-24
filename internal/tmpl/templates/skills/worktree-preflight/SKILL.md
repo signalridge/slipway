@@ -67,8 +67,8 @@ At minimum:
 - capture the full baseline output in an artifact or transcript reference
 - if baseline fails, set verdict to `fail` and record the failure as a blocker
 
-Do not repeat an expensive full-suite run here solely because final
-goal-verification or closeout will require fresh proof later. Worktree preflight
+Do not repeat an expensive full-suite run here solely because terminal
+ship-verification will require fresh proof later. Worktree preflight
 proves the starting worktree; final verification proves the completed change.
 
 ### 3. Write Verification

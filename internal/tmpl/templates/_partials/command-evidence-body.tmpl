@@ -13,9 +13,6 @@ slipway evidence task --result-file <path> [--result-file <path> ...] --json
 
 slipway evidence skill --skill <name> --verdict <pass|fail> \
   --reference "<ref>" --notes-file <path> --json
-
-slipway evidence suite-result (--full-suite-proof <path>|--full-suite-digest <digest>) \
-  [--sast-proof <name=path> ...] [--sast-digest <name=digest> ...] --json
 ```
 
 ## Contract
@@ -39,8 +36,9 @@ slipway evidence suite-result (--full-suite-proof <path>|--full-suite-digest <di
 - `evidence skill` writes the verification record, updates the change evidence
   reference, and does not advance lifecycle state; advance separately with
   `slipway run`.
-- `evidence suite-result` records full-suite and SAST proof/digest references
-  during review after current execution evidence exists.
+- The authoritative full-suite and guardrail SAST proof is produced and recorded
+  by the terminal `ship-verification` gate, not by a separate evidence
+  subcommand.
 
 ## Flags
 
@@ -60,15 +58,6 @@ slipway evidence suite-result (--full-suite-proof <path>|--full-suite-digest <di
 - `--blocker <code[:detail]>`: skill blocker (repeatable)
 - `--notes <text>`: inline verification notes
 - `--notes-file <path>`: file containing verification notes
-- `--json`: JSON output
-- `--change <slug>`: target a specific active change
-
-### `evidence suite-result`
-
-- `--full-suite-proof <path>`: path to full-suite proof artifact
-- `--full-suite-digest <digest>`: digest for full-suite proof
-- `--sast-proof <name=path>`: named SAST proof artifact (repeatable)
-- `--sast-digest <name=digest>`: named SAST proof digest (repeatable)
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 {{- end -}}

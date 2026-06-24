@@ -29,15 +29,15 @@ func HostHandoffBlockerCanRide(reason model.ReasonCode) bool {
 }
 
 // ReviewCompanionBlockerCanRide reports governance blockers that are satisfied
-// by running the selected review or closeout handoff that carries them.
+// by running the selected review or ship-verification handoff that carries them.
 func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 	switch strings.TrimSpace(reason.Code) {
 	case "governance_action_required",
-		"closeout_assurance_attestation_missing",
-		"closeout_reviewer_independence_missing",
+		"ship_verification_assurance_attestation_missing",
+		"ship_verification_reviewer_independence_missing",
+		"ship_verification_evidence_missing",
 		"context_origin_handle_invalid",
-		"high_risk_check_missing",
-		"verification_evidence_missing":
+		"high_risk_check_missing":
 		return true
 	default:
 		return false
@@ -57,9 +57,8 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 	case SkillSpecComplianceReview,
 		SkillCodeQualityReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
 		SkillSecurityReview,
-		SkillFinalCloseout:
+		SkillShipVerification:
 		return true
 	default:
 		return false
@@ -82,8 +81,7 @@ func SkillIsPurePacingAutoSafe(skillName string) bool {
 		SkillSpecComplianceReview,
 		SkillCodeQualityReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
-		SkillFinalCloseout:
+		SkillShipVerification:
 		return true
 	default:
 		return false

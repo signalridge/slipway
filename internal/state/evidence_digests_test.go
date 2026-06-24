@@ -87,7 +87,7 @@ func TestLoadOptionalEvidenceDigestsSelfHealsUnusableLegacyCache(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	legacy := []byte(`version: 1
 skills:
-  goal-verification:
+  ship-verification:
     run_version: 1
     inputs:
       some-input: sha256:abc

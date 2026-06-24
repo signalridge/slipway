@@ -23,11 +23,12 @@ reviewers are unordered peers, neither gating the other.
 ## When This Runs
 At `S3_REVIEW` the workflow dispatches the selected review set as concurrent
 native subagents from one dispatch point. The selected set always includes
-spec-compliance-review, independent-review, and goal-verification. It adds
-code-quality-review when the workflow profile requires code-quality review, and
-adds security-review when the security control is selected. This review does not
-wait for any peer reviewer. `slipway next` returns the selected review set at
-`S3_REVIEW` independent of which review evidence is recorded first.
+spec-compliance-review and independent-review. It adds code-quality-review when
+the workflow profile requires code-quality review, and adds security-review when
+the security control is selected. This review does not wait for any peer
+reviewer. `slipway next` returns the selected review set at `S3_REVIEW`
+independent of which review evidence is recorded first. The terminal
+`ship-verification` gate runs last, after this selected peer set has converged.
 
 ## Review Contract
 Use fresh context; do not carry assumptions from the implementer or from peer
@@ -38,15 +39,6 @@ depend on peer verdicts.
 - Do NOT trust "tests pass" claims without reading or rerunning the tests
 - Do NOT trust "no duplication" claims without searching for similar patterns
 - If something "looks fine at a glance", treat that as a signal to inspect it line-by-line
-
-## S3 Suite-Result Keystone
-Selected S3 reviewer freshness depends on
-`verification/suite-result.yaml`. Before recording a passing review verdict,
-confirm that file exists, is valid, and matches the current
-`run_summary_version`. It carries the shared reviewer input digests for the full
-suite and guardrail SAST proof. If it is absent, malformed, or from a different
-run version, stop and require fresh suite-result proof before this review is
-recorded; otherwise the engine will stale the selected reviewer set.
 
 ## Read Context
 Run `slipway next --json`. Read

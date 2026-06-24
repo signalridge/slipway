@@ -82,22 +82,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The assurance artifact still contains a placeholder section",
 	},
-	"closeout_assurance_attestation_missing": {
-		Severity: ReasonSeverityError,
-		Message:  "The final-closeout assurance attestation is missing",
-	},
-	"closeout_chain_order_invalid": {
-		Severity: ReasonSeverityError,
-		Message:  "Final-closeout must be stamped after every selected S3 peer; goal-verification is an unordered peer, not a serialized post-review step",
-	},
-	"closeout_reviewer_independence_missing": {
-		Severity: ReasonSeverityError,
-		Message:  "The final-closeout reviewer-independence attestation is missing",
-	},
-	"closeout_goal_verification_reuse_invalid": {
-		Severity: ReasonSeverityError,
-		Message:  "Final-closeout cannot reuse the recorded goal-verification evidence",
-	},
 	"change_bundle_unreadable": {
 		Severity: ReasonSeverityError,
 		Message:  "Change bundle authority is unreadable",
@@ -534,6 +518,18 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "The ship gate blocked finalization",
 	},
+	"ship_verification_assurance_attestation_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The ship-verification assurance attestation is missing",
+	},
+	"ship_verification_evidence_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "Required ship-verification evidence is missing; rerun ship-verification before done",
+	},
+	"ship_verification_reviewer_independence_missing": {
+		Severity: ReasonSeverityError,
+		Message:  "The ship-verification reviewer-independence attestation is missing",
+	},
 	"skill_prompt_surface_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "Governance skill points to a missing host skill surface",
@@ -617,10 +613,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	unknownReasonCode: {
 		Severity: ReasonSeverityError,
 		Message:  "An unrecognized reason code was produced",
-	},
-	"verification_evidence_missing": {
-		Severity: ReasonSeverityError,
-		Message:  "Required verification evidence is missing; rerun goal-verification, then rerun final-closeout before done",
 	},
 	"wave_orchestration_run_summary_version_invalid": {
 		Severity: ReasonSeverityError,

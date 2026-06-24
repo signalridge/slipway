@@ -342,7 +342,7 @@ func TestGeneratedHostSkillSetEqualsAllowlist(t *testing.T) {
 		expected = append(expected, name)
 	}
 	assert.ElementsMatch(t, expected, got)
-	assert.Len(t, got, 23, "host skill count should stay within the slim exported surface target")
+	assert.Len(t, got, 22, "host skill count should stay within the slim exported surface target")
 
 	// Every Slipway command must have its own discoverable Codex command skill.
 	assert.ElementsMatch(t, commandSkillDirNames(), gotCommandSkills,
@@ -409,8 +409,7 @@ func TestResolveNextSkillOutputsMapToExportedHostSkills(t *testing.T) {
 		"code-quality-review",
 		"independent-review",
 		"security-review",
-		"goal-verification",
-		"final-closeout",
+		"ship-verification",
 		"tdd-governance",
 	} {
 		assert.Truef(t, shouldExportAsHostSkill(id), "next-skill output %q must map to an exported host skill", id)
@@ -2343,11 +2342,14 @@ func TestGeneratedSkillDescriptionsMatchCurrentRouting(t *testing.T) {
 		return fm["description"]
 	}
 
-	goal := readSkill("goal-verification")
-	assert.Contains(t, frontmatterDescription("goal-verification", goal), "selected S3 review peer",
-		"goal-verification must be described as an unordered selected review peer")
-	assert.NotContains(t, goal, "post-review completion checks",
-		"goal-verification must not claim post-review routing")
+	ship := readSkill("ship-verification")
+	shipDescription := frontmatterDescription("ship-verification", ship)
+	assert.Contains(t, shipDescription, "single terminal pre-ship verification gate",
+		"ship-verification must be described as the single terminal pre-ship gate")
+	assert.Contains(t, shipDescription, "Runs LAST in S3",
+		"ship-verification must declare it runs last in S3 after the review peers")
+	assert.NotContains(t, shipDescription, "selected S3 review peer",
+		"ship-verification is the terminal gate, not a selected review peer")
 
 	preflight := readSkill("worktree-preflight")
 	assert.Contains(t, frontmatterDescription("worktree-preflight", preflight), "missing or unavailable early worktree binding",

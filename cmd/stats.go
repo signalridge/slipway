@@ -82,13 +82,18 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 			continue
 		}
 		switch {
-		case hasReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillFinalCloseout):
+		case hasReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillShipVerification):
 			view.CloseoutFreshness.Missing = append(view.CloseoutFreshness.Missing, change.Slug)
 		// CloseoutFreshness is intentionally broader than StaleRunSummaries: it
-		// reflects ship-readiness for refreshed closeout evidence, not only the
-		// execution-summary authority.
+		// reflects ship-readiness for refreshed ship-verification evidence, not only
+		// the execution-summary authority. A present-but-unattested or out-of-order
+		// ship-verification record is stale (its attestation/ordering blockers fail
+		// closed) rather than fresh.
 		case statsExecutionSummaryStale(readiness) ||
-			hasAnyRequiredSkillBlocker(shipAuthority.VerifySkillBlockers, progression.SkillGoalVerification, progression.SkillFinalCloseout):
+			hasAnyRequiredSkillBlocker(shipAuthority.VerifySkillBlockers, progression.SkillShipVerification) ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_assurance_attestation_missing", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_reviewer_independence_missing", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_evidence_missing", ""):
 			view.CloseoutFreshness.Stale = append(view.CloseoutFreshness.Stale, change.Slug)
 		default:
 			view.CloseoutFreshness.Fresh = append(view.CloseoutFreshness.Fresh, change.Slug)

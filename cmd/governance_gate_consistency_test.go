@@ -234,7 +234,6 @@ func TestMissingReviewEvidenceBlockersIncludeSelectedReviewSetAcrossStatusValida
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
-		progression.SkillGoalVerification,
 	}, nextResp.NextSkill.SelectedReviewSkills)
 }
 
@@ -374,8 +373,7 @@ func TestShipOnlyBlockersStayConsistentAcrossStatusValidateAndNext(t *testing.T)
 	writePassingWaveEvidence(t, root, slug, 1)
 	writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{})
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
-	writePassingFinalCloseoutEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	statusResp, validateResp, nextResp := runReadOnlyGovernanceViewsForChange(t, root, slug)
 

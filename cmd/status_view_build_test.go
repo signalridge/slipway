@@ -609,7 +609,6 @@ func TestBuildGovernedStatusViewReportsSelectedReviewSkills(t *testing.T) {
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
-		progression.SkillGoalVerification,
 	}, view.SelectedReviewSkills)
 }
 

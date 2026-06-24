@@ -28,11 +28,11 @@ func TestRequiredHighRiskTokenHints(t *testing.T) {
 	assert.Nil(t, requiredHighRiskTokenHints(""))
 }
 
-func TestBuildSkillConstraintsSurfacesHighRiskTokensForGoalVerification(t *testing.T) {
+func TestBuildSkillConstraintsSurfacesHighRiskTokensForShipVerification(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("guardrail-change")
 	change.GuardrailDomain = model.GuardrailDomainExternalAPIContracts
-	def := skill.Definition{Name: progression.SkillGoalVerification}
+	def := skill.Definition{Name: progression.SkillShipVerification}
 
 	sc := buildSkillConstraints(t.TempDir(), def, &change, true)
 	require.NotNil(t, sc)
@@ -42,7 +42,7 @@ func TestBuildSkillConstraintsSurfacesHighRiskTokensForGoalVerification(t *testi
 func TestBuildSkillConstraintsNoHighRiskTokensWithoutGuardrailDomain(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("plain-change") // no guardrail domain
-	def := skill.Definition{Name: progression.SkillGoalVerification}
+	def := skill.Definition{Name: progression.SkillShipVerification}
 
 	sc := buildSkillConstraints(t.TempDir(), def, &change, true)
 	require.NotNil(t, sc)
@@ -503,14 +503,16 @@ func TestSkillConstraintsGuardrailDomainFromAdmission(t *testing.T) {
 	})
 }
 
-func TestDeriveAgentConstraintsDoesNotGateFinalCloseout(t *testing.T) {
+func TestDeriveAgentConstraintsGatesShipVerification(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	require.NoError(t, toolgen.Generate(root, []string{"claude"}, true))
 	registry, err := skill.LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	c := deriveAgentConstraints(registry, "final-closeout")
+	// ship-verification is the single terminal S3 gate; deriveAgentConstraints
+	// must surface its G_ship hard gate so the host knows it cannot self-pass.
+	c := deriveAgentConstraints(registry, progression.SkillShipVerification)
 	require.NotNil(t, c)
-	assert.Empty(t, c.HardGate)
+	assert.Equal(t, "G_ship", c.HardGate)
 	assert.Contains(t, c.AllowedOperations, "write_evidence")
 }

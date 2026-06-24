@@ -85,7 +85,7 @@ func TestEvaluateGShipMissingVerificationEvidenceRoutesS4Recovery(t *testing.T) 
 
 	eval := EvaluateGShip(model.NewChange("slug"), true, false, true, nil, nil)
 	require.NotEmpty(t, eval.ReasonCodes)
-	reason := findGateReasonCode(t, eval.ReasonCodes, "verification_evidence_missing")
+	reason := findGateReasonCode(t, eval.ReasonCodes, "ship_verification_evidence_missing")
 	assert.Equal(t, model.ReasonSeverityError, reason.Severity)
 	recovery := model.BuildRecovery(eval.ReasonCodes)
 	require.NotNil(t, recovery)

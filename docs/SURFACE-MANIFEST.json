@@ -514,13 +514,6 @@
     },
     {
       "kind": "skill",
-      "name": "slipway-final-closeout",
-      "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
-      "docs": "README.md",
-      "token": "`slipway-final-closeout/SKILL.md`"
-    },
-    {
-      "kind": "skill",
       "name": "slipway-fix",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/ai-tools.md",
@@ -532,13 +525,6 @@
       "source": "internal/engine/capability.DefaultRegistry",
       "docs": "README.md",
       "token": "`slipway-git-recovery/SKILL.md`"
-    },
-    {
-      "kind": "skill",
-      "name": "slipway-goal-verification",
-      "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
-      "docs": "README.md",
-      "token": "`slipway-goal-verification/SKILL.md`"
     },
     {
       "kind": "skill",
@@ -679,6 +665,13 @@
       "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
       "docs": "README.md",
       "token": "`slipway-security-review/SKILL.md`"
+    },
+    {
+      "kind": "skill",
+      "name": "slipway-ship-verification",
+      "source": "internal/toolgen/toolgen.go:governanceSurfaceDescriptors",
+      "docs": "README.md",
+      "token": "`slipway-ship-verification/SKILL.md`"
     },
     {
       "kind": "skill",

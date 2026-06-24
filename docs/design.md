@@ -35,7 +35,7 @@ Every stage records the distinct context handle it ran under (`context_origin:st
 
 ### 2. Tamper-evident evidence
 
-Freshness is computed from authoritative inputs, not from the verification record's own claims. Selected S3 review certificates are keyed to an engine-owned input digest (code diff, planning artifacts, task-scope hash, run-summary version, and the shared `verification/suite-result.yaml`); execution-summary task freshness is **structural** (`change_id`, `run_summary_version`, `task_id`, `guardrail_domain`), and old hash-only summaries are treated as stale and regenerated. Either way, a hand-edited verdict or a drifted input is detected and named (`required_skill_stale:<skill>:<input>`) rather than trusted. The engine remains the sole verdict and run-version stamper; no gate adds a self-stamp, restamp, or force-close path. Adjacent tools store state as Markdown/YAML the model maintains and could edit freely.
+Freshness is computed from authoritative inputs, not from the verification record's own claims. Selected S3 review certificates are keyed to an engine-owned input digest (code diff, planning artifacts, task-scope hash, and run-summary version); the one authoritative full suite is owned by the terminal `ship-verification` gate rather than a shared keystone the peers consume. Execution-summary task freshness is **structural** (`change_id`, `run_summary_version`, `task_id`, `guardrail_domain`), and old hash-only summaries are treated as stale and regenerated. Either way, a hand-edited verdict or a drifted input is detected and named (`required_skill_stale:<skill>:<input>`) rather than trusted. The engine remains the sole verdict and run-version stamper; no gate adds a self-stamp, restamp, or force-close path. Adjacent tools store state as Markdown/YAML the model maintains and could edit freely.
 
 ### 3. Two-sided parallel safety
 
@@ -89,8 +89,9 @@ boundary honestly rather than overselling it.
 | Attestation | What the engine enforces | Tier |
 | --- | --- | --- |
 | `context_origin:stage=<stage>=<handle>` emitted by the chain-wide independence skills on the shared worktree, with all selected S3 reviewers using `stage=review` and S3 review-finding fixes using `stage=fix` when recorded | the participant handles owned by each seam are present and pairwise distinct; selected reviewers are keyed by skill name even though they share the `review` wire stage; recorded fix handles must be distinct from implementation and reviewer handles | Audit/structural — raises forging cost and auditability, not cryptographic proof |
-| `closeout:reviewer_independence=pass` on final-closeout | Pattern-A presence, now engine-consumed | Structural presence |
-| Final ordering `final-closeout >= every selected S3 peer` | final closeout is stamped after the unordered selected review set, including goal-verification | Genuinely enforced ordering |
+| `closeout:reviewer_independence=pass` on ship-verification | Pattern-A presence, engine-consumed on the terminal ship record (`ship_verification_reviewer_independence_missing` when absent) | Structural presence |
+| `closeout:assurance_complete=pass` on ship-verification | Pattern-A presence attesting `assurance.md` is complete (`ship_verification_assurance_attestation_missing` when absent) | Structural presence |
+| Terminal ordering `ship-verification >= every selected S3 peer` | the terminal ship record is stamped at or after the unordered selected review set, so the gate observes the final review evidence | Genuinely enforced ordering |
 | `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` | a `degraded_sequential` dispatch is paired with a tool-unavailable justification | Structural pairing |
 
 Each gate fails closed at error severity on `standard`/`strict` and is advisory on
@@ -102,10 +103,11 @@ or self-stamp path; the engine stays the sole verdict stamper.
 
 `context_origin:stage=<stage>=<handle>` is one chain-wide grammar — emitted by the
 independence skills on the shared worktree — that spans the whole governed chain.
-S3 uses a selected review set: spec, independent review, and goal-verification
-reviewers are selected for every profile; code-quality review joins when the
-workflow profile requires code-quality review; security review joins when the
-engine-derived security control is selected. Every selected review host records the same
+S3 uses a selected review set: spec and independent review reviewers are selected
+for every profile; code-quality review joins when the workflow profile requires
+code-quality review; security review joins when the engine-derived security
+control is selected. The terminal `ship-verification` gate runs after this set
+converges and is not one of its peers. Every selected review host records the same
 `context_origin:stage=review=<handle>` wire token, but the R2 lattice keys those
 participants by the recording review skill name rather than by the shared
 `review` stage. The other review-authority participants are the S2 wave
@@ -114,18 +116,17 @@ evidence; S1 `audit_origin` is owned by the plan gate, not the live S3 review
 seam. The collision lattice is owned per seam so no stage re-checks an edge
 another seam already owns:
 
-Selected reviewer freshness is keyed through
-`verification/suite-result.yaml`, not a silent execution-summary fallback. The
-suite-result record carries the current run-summary version plus the shared
-full-suite and guardrail SAST digests. Missing or mismatched suite-result data
-fails selected S3 review freshness closed; changed shared suite inputs stale the
-selected peer set.
+Selected reviewer freshness is keyed through the current diff, planning
+artifacts, and run-summary version; there is no shared suite-result keystone for
+the peers to consume. The one authoritative full suite — and any guardrail SAST
+baseline — is run once by the terminal `ship-verification` gate after the peers
+converge, recorded on its own evidence rather than a peer-shared record.
 
 | Seam | Owns | Edges |
 | --- | --- | --- |
 | Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
 | Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable by workflow profile, selected security control, and optional fix handle |
-| Ship authority | no additional context-origin edges; ship owns final ordering and closeout presence attestations | 0 |
+| Ship authority | no additional context-origin edges; the terminal `ship-verification` gate owns the terminal ordering invariant plus the reviewer-independence and assurance-complete presence attestations | 0 |
 
 When a seam fails closed, recovery is to re-run the owning stage or selected
 reviewer in a fresh native subagent so it re-emits a distinct `context_origin`
@@ -148,7 +149,7 @@ and never as cryptographic distinct-context proof.
 
 - Slipway does not infer a full project plan without governed artifacts.
 - Slipway does not make AI-tool generated files authoritative over CLI state.
-- Slipway does not treat a green test run as sufficient closeout when review or assurance evidence is missing.
+- Slipway does not treat a green test run as a passing `ship-verification` gate when review, acceptance, or assurance evidence is missing.
 - Slipway does not hide local state mutations behind read-only commands.
 
 ## What Counts As Complete
@@ -159,5 +160,5 @@ A governed change is complete only when the worktree, artifact bundle, verificat
 2. Implementation files and docs satisfy the requirements.
 3. Task evidence is fresh for the current execution run.
 4. Spec and quality review records pass.
-5. Final verification proves the stated acceptance criteria.
-6. `slipway done` archives the terminal state after done-ready closeout.
+5. The terminal `ship-verification` gate proves the stated acceptance criteria with fresh 3-level evidence and the one authoritative full suite.
+6. `slipway done` archives the terminal state after the done-ready outcome.

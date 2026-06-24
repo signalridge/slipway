@@ -93,7 +93,7 @@ func EvaluateGShip(
 		reasonCodes = append(reasonCodes, model.NewReasonCode("artifact_not_ready", ""))
 	}
 	if !verificationReady {
-		reasonCodes = append(reasonCodes, model.NewReasonCode("verification_evidence_missing", ""))
+		reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_missing", ""))
 	}
 	if !manifestR0Valid {
 		reasonCodes = append(reasonCodes, model.NewReasonCode("manifest_r0_invalid", ""))

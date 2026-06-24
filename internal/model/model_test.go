@@ -278,14 +278,14 @@ func TestNormalizeReasonCodesSortsGateReasons(t *testing.T) {
 	t.Parallel()
 
 	reasonCodes := NormalizeReasonCodes([]ReasonCode{
-		NewReasonCode("verification_evidence_missing", ""),
-		NewReasonCode("required_skill_missing", "final-closeout"),
+		NewReasonCode("ship_verification_evidence_missing", ""),
+		NewReasonCode("required_skill_missing", "ship-verification"),
 	})
 
 	require.Len(t, reasonCodes, 2)
 	assert.Equal(t, "required_skill_missing", reasonCodes[0].Code)
 	assert.Equal(t, ReasonSeverityError, reasonCodes[0].Severity)
-	assert.Equal(t, "verification_evidence_missing", reasonCodes[1].Code)
+	assert.Equal(t, "ship_verification_evidence_missing", reasonCodes[1].Code)
 }
 
 func TestWaveReasonCodesCarryRemediation(t *testing.T) {

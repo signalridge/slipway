@@ -1,0 +1,46 @@
+version: 1
+slug: merge-the-goal-verification-and-final-closeout-s3-surfaces-i
+description: 'Merge the goal-verification and final-closeout S3 surfaces into a single pre-ship verification stage. Direction B from design analysis: the two are the only S3 skills with run_tests; both verify completion; final-closeout already reuses goal-verification''s suite proof, so they are one verification concern artificially split into two peers. The merged surface owns suite-result.yaml production, acceptance-criteria (3-level) proof, guardrail high_risk_check SAST baseline, and the final pre-ship freshness/assurance/independence closeout stamp, gated hard on G_ship. Retire the proof-reuse-edge machinery between them (closeoutGoalVerificationReuseBlockers / proofReuseEdge), the goal<->closeout chain-order invariant, and the now-dead reason codes (closeout_goal_verification_reuse_invalid, closeout_chain_order_invalid). Reclassify the surface out of the review taxonomy (IsReviewSkill / reviewSkillGoal): it is verification that runs tests, not an adversarial read like spec/code/independent/security. Keep all fail-closed properties; this is a breaking change to the governance evidence contract, CLI JSON, generated skills, and docs.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-23T18:12:46.353904Z
+quality_mode: standard
+workflow_preset: strict
+worktree_branch: feat/merge-the-goal-verification-and-final-closeout-s3-surfaces-i
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 0a5c870afeb53ab767f420f80f8f0620317db46a5b7f8301faff0e85445789df
+        updated_at: 2026-06-24T03:25:53.472728611Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 8ab3c31425e0297ebc49ff8f4627d46583a43399e6974c444a205c177508390b
+        updated_at: 2026-06-23T18:22:09.496450799Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: af9e6407941f8e88b7dbe81e4dd092ab11ae314e08ef0ca0fdc28da446b5a378
+        updated_at: 2026-06-23T18:24:04.194462197Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 981bf54f3d3cd6c7d0a8265e6c7ecc22106ae23df31f4c3c8e9931dffcc910b5
+        updated_at: 2026-06-24T01:41:09.72789964Z
+evidence_refs:
+    code-quality-review: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/code-quality-review.yaml
+    independent-review: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/independent-review.yaml
+    intake-clarification: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/intake-clarification.yaml
+    plan-audit: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/plan-audit.yaml
+    security-review: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/security-review.yaml
+    ship-verification: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/artifacts/changes/merge-the-goal-verification-and-final-closeout-s3-surfaces-i/verification/wave-orchestration.yaml
