@@ -675,10 +675,24 @@ func nextS3ShipAuthoritySkill(
 	blockers []model.ReasonCode,
 ) string {
 	if hasRequiredSkillBlockerFor(blockers, progression.SkillShipVerification) ||
-		!skillHasPassingEvidence(evidenceMap, progression.SkillShipVerification) {
+		!skillHasPassingEvidence(evidenceMap, progression.SkillShipVerification) ||
+		hasShipVerificationHandoffBlocker(blockers) {
 		return progression.SkillShipVerification
 	}
 	return ""
+}
+
+// hasShipVerificationHandoffBlocker reports an active G_ship gate blocker that a
+// fresh ship-verification handoff resolves. It keeps `next` from stranding the
+// operator when a passing-but-malformed ship record leaves the gate blocked yet
+// the generic required-skill check sees a passing record.
+func hasShipVerificationHandoffBlocker(blockers []model.ReasonCode) bool {
+	for _, blocker := range blockers {
+		if progression.IsShipVerificationHandoffBlockerCode(blocker.Code) {
+			return true
+		}
+	}
+	return false
 }
 
 func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []model.ReasonCode) string {
