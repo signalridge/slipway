@@ -19,6 +19,14 @@ import (
 
 const WavePlanFileName = "wave-plan.yaml"
 
+// ErrWavePlanCacheUnreadable is wrapped around parse/validate failures of the
+// persisted, engine-owned wave-plan.yaml cache. It lets callers distinguish a
+// corrupt or unsupported-field cache (which must be regenerated, never
+// hand-edited) from a tasks.md-derivation failure, via errors.Is. It is
+// intentionally NOT used for a missing cache file, so callers can keep matching
+// fs.ErrNotExist for the not-exist path.
+var ErrWavePlanCacheUnreadable = errors.New("wave plan cache is unreadable")
+
 func WavePlanPathForRead(root, slug string) string {
 	return filepath.Join(verificationDirPathForRead(root, slug), WavePlanFileName)
 }
@@ -49,11 +57,11 @@ func loadWavePlanFromPath(path string) (model.WavePlan, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&plan); err != nil {
-		return model.WavePlan{}, fmt.Errorf("parse wave plan: %w", err)
+		return model.WavePlan{}, fmt.Errorf("%w: parse wave plan: %w", ErrWavePlanCacheUnreadable, err)
 	}
 	plan.Normalize()
 	if err := plan.Validate(); err != nil {
-		return model.WavePlan{}, fmt.Errorf("invalid wave plan: %w", err)
+		return model.WavePlan{}, fmt.Errorf("%w: invalid wave plan: %w", ErrWavePlanCacheUnreadable, err)
 	}
 	return plan, nil
 }

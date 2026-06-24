@@ -1510,6 +1510,142 @@ func assertTaskEvidenceNotWritten(t *testing.T, root, slug, taskID string) {
 	assert.True(t, os.IsNotExist(statErr))
 }
 
+// corruptWavePlanCache overwrites the engine-owned wave-plan.yaml cache with
+// view-only fields (wave_count/advisories) that the persisted schema rejects
+// under KnownFields(true), so loadCurrentWavePlanForCommand fails closed with
+// state.ErrWavePlanCacheUnreadable.
+func corruptWavePlanCache(t *testing.T, root, slug string) {
+	t.Helper()
+	cachePath := state.WavePlanPathForRead(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(cachePath), 0o755))
+	require.NoError(t, os.WriteFile(cachePath, []byte("wave_count: 1\nadvisories: [\"narrow\"]\nwaves: []\n"), 0o644))
+}
+
+// assertWavePlanCacheUnreadableError asserts an evidence command translated a
+// corrupt engine-owned cache into the canonical wave_plan_unreadable recovery
+// story instead of misdirecting the user to edit tasks.md.
+func assertWavePlanCacheUnreadableError(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "wave_plan_unreadable", cliErr.ErrorCode,
+		"a corrupt engine-owned cache must surface as wave_plan_unreadable, not a tasks.md-derivation failure")
+	assert.Contains(t, cliErr.Remediation, "wave-plan.yaml")
+	assert.Contains(t, cliErr.Remediation, "slipway repair")
+	assert.Contains(t, cliErr.Remediation, "must not be hand-edited",
+		"cache-unreadable remediation must describe the cache as engine-owned / not hand-editable")
+	assert.NotContains(t, cliErr.Remediation, "Fix tasks.md",
+		"cache-unreadable remediation must not tell the user to edit tasks.md")
+}
+
+// TestEvidenceTaskInteractiveCacheUnreadableNamesCacheNotTasks covers the
+// `slipway evidence task --task-id` surface: a corrupt engine-owned cache must
+// route to the cache + `slipway repair` recovery, not the tasks.md remediation.
+func TestEvidenceTaskInteractiveCacheUnreadableNamesCacheNotTasks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createEvidenceTaskFixture(t, root)
+		corruptWavePlanCache(t, root, slug)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "verification",
+			"--verdict", "pass",
+			"--evidence-ref", "test:evidence-task",
+			"--changed-file", "cmd/lifecycle_commands_test.go",
+			"--target-file", "cmd/lifecycle_commands_test.go",
+		})
+		assertWavePlanCacheUnreadableError(t, cmd.Execute())
+	})
+}
+
+// TestEvidenceTaskResultFileCacheUnreadableNamesCacheNotTasks covers the
+// `slipway evidence task --result-file` import surface.
+func TestEvidenceTaskResultFileCacheUnreadableNamesCacheNotTasks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createEvidenceTaskFixture(t, root)
+
+		resultPath := filepath.Join(root, "task-result.json")
+		rawResult, err := json.Marshal(map[string]any{
+			"task_id":       "t-01",
+			"verdict":       "pass",
+			"evidence_ref":  "test:result-file",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"blockers":      []string{},
+			"session_id":    "executor-a",
+		})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(resultPath, rawResult, 0o644))
+
+		corruptWavePlanCache(t, root, slug)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--result-file", "task-result.json",
+		})
+		assertWavePlanCacheUnreadableError(t, cmd.Execute())
+	})
+}
+
+// TestEvidenceSkillWaveOrchestrationCacheUnreadableNamesCacheNotTasks covers the
+// `slipway evidence skill wave-orchestration` surface: task evidence is recorded
+// while the cache is valid, then the cache is corrupted before recording
+// wave-orchestration evidence.
+func TestEvidenceSkillWaveOrchestrationCacheUnreadableNamesCacheNotTasks(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createEvidenceTaskFixture(t, root)
+
+		taskCmd := commandForRoot(t, root, makeEvidenceCmd())
+		taskCmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "verification",
+			"--verdict", "pass",
+			"--evidence-ref", "test:wave-bootstrap-task",
+			"--changed-file", "cmd/lifecycle_commands_test.go",
+			"--target-file", "cmd/lifecycle_commands_test.go",
+		})
+		require.NoError(t, taskCmd.Execute())
+
+		// Corrupt the cache only after valid task evidence exists, so the
+		// wave-orchestration run-version derivation reaches the wave-plan load.
+		corruptWavePlanCache(t, root, slug)
+
+		notesPath := filepath.Join(root, "wave-notes.md")
+		require.NoError(t, os.WriteFile(notesPath, []byte("wave evidence from task ledger\n"), 0o644))
+		skillCmd := commandForRoot(t, root, makeEvidenceCmd())
+		skillCmd.SetArgs([]string{
+			"skill",
+			"--json",
+			"--skill", progression.SkillWaveOrchestration,
+			"--verdict", "pass",
+			"--reference", "wave-orchestration:pass",
+			"--notes-file", "wave-notes.md",
+		})
+		assertWavePlanCacheUnreadableError(t, skillCmd.Execute())
+	})
+}
+
 func createEvidenceTaskFixture(t *testing.T, root string) (string, model.Change) {
 	t.Helper()
 

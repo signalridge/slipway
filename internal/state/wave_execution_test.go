@@ -1,6 +1,8 @@
 package state
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -131,6 +133,37 @@ func TestCurrentWavePlanRunSummaryVersionFailsClosedOnCorruptWavePlan(t *testing
 	require.Error(t, err)
 	assert.Equal(t, 0, runVersion)
 	assert.Contains(t, err.Error(), "parse wave plan")
+}
+
+func TestLoadWavePlanFromPathUnsupportedFieldFailsClosedAsCacheUnreadable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, WavePlanFileName)
+	// View-only fields (wave_count, advisories) live on the diagnostic
+	// projection only; the persisted cache schema (model.WavePlan) rejects them
+	// under KnownFields(true).
+	require.NoError(t, os.WriteFile(path, []byte(
+		"wave_count: 1\nadvisories: [\"narrow wave\"]\nwaves: []\n"), 0o644))
+
+	_, err := loadWavePlanFromPath(path)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrWavePlanCacheUnreadable),
+		"unsupported field must fail closed as a cache-unreadable condition, got: %v", err)
+	assert.False(t, errors.Is(err, fs.ErrNotExist),
+		"a corrupt cache is not a missing-file condition")
+}
+
+func TestLoadWavePlanFromPathMissingFileStaysNotExist(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), WavePlanFileName)
+	_, err := loadWavePlanFromPath(path)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, fs.ErrNotExist),
+		"missing cache must remain an fs.ErrNotExist condition, got: %v", err)
+	assert.False(t, errors.Is(err, ErrWavePlanCacheUnreadable),
+		"a missing cache must not be misreported as cache-unreadable")
 }
 
 const (

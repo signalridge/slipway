@@ -1082,6 +1082,31 @@ func loadExecutionContext(root string, change model.Change) (executionContext, e
 	return ctx, nil
 }
 
+// wavePlanCacheUnreadableRemediation guides recovery when the engine-owned
+// wave-plan.yaml cache is corrupt or carries unsupported/view-only fields. It
+// must point at regeneration via `slipway repair`, never at hand-editing
+// tasks.md or the cache itself.
+const wavePlanCacheUnreadableRemediation = "wave-plan.yaml is an engine-owned cache and must not be hand-edited. Run `slipway repair` to rebuild it from tasks.md, then `slipway run` to refresh affected execution evidence."
+
+// newWavePlanCacheUnreadableError builds the state-integrity error every command
+// surface must emit when loadCurrentWavePlanForCommand reports a corrupt
+// engine-owned wave-plan.yaml cache (errors.Is(err, state.ErrWavePlanCacheUnreadable)).
+// It fails closed to the canonical wave_plan_unreadable recovery story so a
+// copied or hand-edited cache never receives "Fix tasks.md" guidance it cannot
+// act on. surface is a short human label for the operation (for example "task
+// evidence").
+func newWavePlanCacheUnreadableError(root string, change model.Change, surface string, err error) error {
+	return newStateIntegrityError(
+		"wave_plan_unreadable",
+		fmt.Sprintf("%s could not read the engine-owned wave-plan.yaml cache for %q: %v", surface, change.Slug, err),
+		wavePlanCacheUnreadableRemediation,
+		change.Slug,
+		map[string]any{
+			"path": state.WavePlanPathForRead(root, change.Slug),
+		},
+	)
+}
+
 func loadAuthoritativeWaveExecution(
 	root string,
 	change model.Change,
@@ -1094,8 +1119,16 @@ func loadAuthoritativeWaveExecution(
 
 	plan, err := loadCurrentWavePlanForCommand(root, change)
 	if err != nil {
+		// The persisted, engine-owned wave-plan.yaml cache is corrupt or carries
+		// unsupported/view-only fields. Point at the cache and the public
+		// regenerate path, NOT at editing tasks.md.
+		if errors.Is(err, state.ErrWavePlanCacheUnreadable) {
+			return nil, newWavePlanCacheUnreadableError(root, change, operation, err)
+		}
 		errorCode := "wave_plan_load_failed"
 		message := fmt.Sprintf("%s failed to derive the current wave plan for %q: %v", operation, change.Slug, err)
+		// Default remediation covers the derive-from-tasks.md failure only.
+		remediation := "Update tasks.md so it can be converted into the current wave plan before continuing."
 		if errors.Is(err, fs.ErrNotExist) {
 			errorCode = "wave_plan_missing"
 			message = fmt.Sprintf("%s requires tasks.md for %q, but it is missing", operation, change.Slug)
@@ -1103,7 +1136,7 @@ func loadAuthoritativeWaveExecution(
 		return nil, newStateIntegrityError(
 			errorCode,
 			message,
-			"Update tasks.md so it can be converted into the current wave plan before continuing.",
+			remediation,
 			change.Slug,
 			map[string]any{
 				"path": state.WavePlanPathForRead(root, change.Slug),
