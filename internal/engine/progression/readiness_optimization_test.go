@@ -268,11 +268,11 @@ func TestBuildShipAuthorityUsesStructuredVerifySkillBlockers(t *testing.T) {
 	shipAuthority, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
 		ArtifactReadiness: ArtifactReadiness{Ready: true},
 		PassingSkills:     map[string]model.VerificationRecord{},
-		SkillBlockers:     []model.ReasonCode{model.NewReasonCode("required_skill_missing", "goal-verification")},
+		SkillBlockers:     []model.ReasonCode{model.NewReasonCode("required_skill_missing", "code-quality-review")},
 		ReviewSurface:     &ReviewAuthority{},
 	})
 	require.NoError(t, err)
-	assert.Contains(t, shipAuthority.VerifySkillBlockers, model.NewReasonCode("required_skill_missing", "goal-verification"))
+	assert.Contains(t, shipAuthority.VerifySkillBlockers, model.NewReasonCode("required_skill_missing", "code-quality-review"))
 }
 
 func TestBuildShipAuthorityUsesCachedReviewAuthorityWhenReviewSurfaceIsHidden(t *testing.T) {

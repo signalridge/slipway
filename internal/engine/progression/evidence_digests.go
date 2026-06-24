@@ -20,8 +20,6 @@ import (
 
 var errDigestInputsUnavailable = errors.New("evidence digest inputs unavailable")
 
-const suiteResultFileName = "suite-result.yaml"
-
 type skillDigestStampResult struct {
 	Blockers []string
 }
@@ -66,12 +64,8 @@ func certifiedSkillInputDigest(
 		if err := addReviewSkillInputs(root, change, summary, inputs); err != nil {
 			return model.SkillDigest{}, err
 		}
-	case strings.TrimSpace(skillName) == SkillGoalVerification:
-		if err := addGoalVerificationInputs(root, change, summary, inputs); err != nil {
-			return model.SkillDigest{}, err
-		}
-	case strings.TrimSpace(skillName) == SkillFinalCloseout:
-		if err := addFinalCloseoutInputs(root, change, summary, inputs); err != nil {
+	case strings.TrimSpace(skillName) == SkillShipVerification:
+		if err := addShipVerificationInputs(root, change, summary, inputs); err != nil {
 			return model.SkillDigest{}, err
 		}
 	default:
@@ -198,85 +192,6 @@ func skillDigestFreshnessBlockersWithSummary(
 		return nil, nil
 	}
 	return staleSkillDigestBlockers(skillName, changed), nil
-}
-
-func reviewerDigestFreshAtCycle(
-	root string,
-	change model.Change,
-	skillName string,
-	cycleRunVersion int,
-	summary *model.ExecutionSummary,
-) ([]string, error) {
-	if cycleRunVersion < 1 {
-		return []string{"input_digest_unavailable"}, nil
-	}
-	current, err := certifiedSkillInputDigest(root, change, skillName, summary)
-	if err != nil {
-		if digestStampUnavailable(err) {
-			return []string{"input_digest_unavailable"}, nil
-		}
-		return nil, err
-	}
-	digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
-	if err != nil {
-		return nil, err
-	}
-	if digests == nil {
-		return nil, nil
-	}
-	digests.Normalize()
-	stored, ok := digests.Skills[strings.TrimSpace(skillName)]
-	if !ok {
-		return nil, nil
-	}
-	fresh, changed := model.EvidenceFreshness(stored, current.Inputs)
-	if fresh {
-		return nil, nil
-	}
-	return changed, nil
-}
-
-func reviewerDigestCycleRunVersion(root string, change model.Change, summary *model.ExecutionSummary) (int, error) {
-	result, ok, err := loadSuiteResultForChange(root, change)
-	if err != nil {
-		return 0, err
-	}
-	if ok {
-		return result.RunSummaryVersion, nil
-	}
-	if requiresSuiteResultForSharedReviewerInputs(change) {
-		return 0, nil
-	}
-	if state.ExecutionSummaryReady(summary) {
-		return summary.RunSummaryVersion, nil
-	}
-	return 0, nil
-}
-
-func loadSuiteResultForChange(root string, change model.Change) (model.SuiteResult, bool, error) {
-	paths, err := state.ResolveChangePaths(root, change)
-	if err != nil {
-		return model.SuiteResult{}, false, err
-	}
-	path := filepath.Join(paths.GovernedBundleDir, "verification", suiteResultFileName)
-	raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from governed bundle authority before this read.
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return model.SuiteResult{}, false, nil
-		}
-		return model.SuiteResult{}, false, err
-	}
-	var result model.SuiteResult
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&result); err != nil {
-		return model.SuiteResult{}, false, fmt.Errorf("parse %s: %w", suiteResultFileName, err)
-	}
-	result.Normalize()
-	if err := result.Validate(); err != nil {
-		return model.SuiteResult{}, false, fmt.Errorf("invalid %s: %w", suiteResultFileName, err)
-	}
-	return result, true, nil
 }
 
 func stampPassingSkillDigests(
@@ -489,7 +404,7 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 	seenAny := false
 	// assurance.md is not a plan-audit input: it is deferred to S3_REVIEW authoring
 	// (issue #141) and does not exist at plan-audit time. It remains an input to the
-	// final-closeout digest.
+	// terminal ship-verification digest (the merged goal-verification/final-closeout gate).
 	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md"} {
 		path := filepath.Join(bundleDir, rel)
 		if _, err := os.Stat(path); err != nil {
@@ -793,7 +708,14 @@ func addContentPathInputs(
 	return nil
 }
 
-func addGoalVerificationInputs(
+// addShipVerificationInputs computes the digest inputs for the single terminal
+// ship-verification skill. It is the union of the inputs the retired
+// goal-verification and final-closeout digests covered: the shared
+// execution-summary reviewer inputs, the planning artifacts and task-plan scope,
+// the changed/target file set, the change-authority-normalized content paths, and
+// assurance.md when present. The suite-result keystone is gone, so shared reviewer
+// inputs now derive purely from the ready execution summary.
+func addShipVerificationInputs(
 	root string,
 	change model.Change,
 	summary *model.ExecutionSummary,
@@ -809,13 +731,7 @@ func addGoalVerificationInputs(
 	if !state.ExecutionSummaryReady(summary) {
 		return errDigestInputsUnavailable
 	}
-	if err := addSharedReviewerInputs(
-		root,
-		change,
-		summary,
-		inputs,
-		requiresSuiteResultForSharedReviewerInputs(change),
-	); err != nil {
+	if err := addSharedReviewerInputs(root, change, summary, inputs); err != nil {
 		return err
 	}
 	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
@@ -828,6 +744,18 @@ func addGoalVerificationInputs(
 		return err
 	}
 	if err := addContentPathInputs(root, change, summary, inputs, true); err != nil {
+		return err
+	}
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return err
+	}
+	assurancePath := filepath.Join(bundleDir, "assurance.md")
+	if _, err := os.Stat(assurancePath); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	} else if err := addGovernedFileInput(root, change, "assurance.md", inputs); err != nil {
 		return err
 	}
 	if len(inputs) == 0 {
@@ -848,51 +776,6 @@ func addChangedTargetFileSetInput(change model.Change, summary *model.ExecutionS
 	return nil
 }
 
-func addFinalCloseoutInputs(
-	root string,
-	change model.Change,
-	summary *model.ExecutionSummary,
-	inputs map[string]string,
-) error {
-	if summary == nil {
-		loaded, err := state.LoadOptionalRelevantExecutionSummary(root, change)
-		if err != nil {
-			return err
-		}
-		summary = loaded
-	}
-	if !state.ExecutionSummaryReady(summary) {
-		return errDigestInputsUnavailable
-	}
-	if err := addSharedReviewerInputs(root, change, summary, inputs, false); err != nil {
-		return err
-	}
-	if err := addChangedTargetFileSetInput(change, summary, inputs); err != nil {
-		return err
-	}
-	if err := addContentPathInputs(root, change, summary, inputs, true); err != nil {
-		return err
-	}
-	bundleDir, err := state.GovernedBundleDir(root, change)
-	if err != nil {
-		return err
-	}
-	assurancePath := filepath.Join(bundleDir, "assurance.md")
-	if _, err := os.Stat(assurancePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	if err := addGovernedFileInput(root, change, "assurance.md", inputs); err != nil {
-		return err
-	}
-	if len(inputs) == 0 {
-		return errDigestInputsUnavailable
-	}
-	return nil
-}
-
 func addReviewSkillInputs(
 	root string,
 	change model.Change,
@@ -906,13 +789,7 @@ func addReviewSkillInputs(
 		}
 		summary = loaded
 	}
-	if err := addSharedReviewerInputs(
-		root,
-		change,
-		summary,
-		inputs,
-		requiresSuiteResultForSharedReviewerInputs(change),
-	); err != nil {
+	if err := addSharedReviewerInputs(root, change, summary, inputs); err != nil {
 		return err
 	}
 	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
@@ -930,66 +807,16 @@ func addReviewSkillInputs(
 	return nil
 }
 
+// addSharedReviewerInputs contributes the execution-summary-derived inputs shared
+// across the S3 review peers and ship-verification. The suite-result keystone has
+// been retired, so the shared baseline is the ready execution summary itself.
 func addSharedReviewerInputs(
 	root string,
 	change model.Change,
 	summary *model.ExecutionSummary,
 	inputs map[string]string,
-	requireSuiteResult bool,
 ) error {
-	result, ok, err := loadSuiteResultForChange(root, change)
-	if err != nil {
-		return err
-	}
-	if ok {
-		if state.ExecutionSummaryReady(summary) && result.RunSummaryVersion != summary.RunSummaryVersion {
-			return fmt.Errorf(
-				"%s run_summary_version mismatch: got=%d want=%d",
-				suiteResultFileName,
-				result.RunSummaryVersion,
-				summary.RunSummaryVersion,
-			)
-		}
-		if err := requireGuardrailSuiteResultSASTDigest(change, result); err != nil {
-			return err
-		}
-		shared, err := result.SharedReviewerInputDigests()
-		if err != nil {
-			return err
-		}
-		for name, digest := range shared {
-			inputs[name] = digest
-		}
-		return nil
-	}
-	if requireSuiteResult {
-		return errDigestInputsUnavailable
-	}
 	return addExecutionSummaryInputs(summary, inputs)
-}
-
-func requireGuardrailSuiteResultSASTDigest(change model.Change, result model.SuiteResult) error {
-	required := requiredGuardrailSuiteResultSASTDigestName(change)
-	if required == "" {
-		return nil
-	}
-	result.Normalize()
-	if strings.TrimSpace(result.SASTDigests[required]) == "" {
-		return errDigestInputsUnavailable
-	}
-	return nil
-}
-
-func requiredGuardrailSuiteResultSASTDigestName(change model.Change) string {
-	domain := strings.TrimSpace(change.GuardrailDomain)
-	if domain == "" {
-		return ""
-	}
-	return domain + ".safety_baseline"
-}
-
-func requiresSuiteResultForSharedReviewerInputs(change model.Change) bool {
-	return change.CurrentState == model.StateS3Review
 }
 
 func addReviewerSpecificInputs(

@@ -25,14 +25,17 @@ func TestInstallProfileClosurePreservesFailClosedSkills(t *testing.T) {
 	for _, id := range []string{
 		"plan-audit",
 		"security-review",
-		"goal-verification",
-		"final-closeout",
+		"ship-verification",
 		"spec-compliance-review",
 		"code-quality-review",
 		"independent-review",
 	} {
 		assert.Truef(t, core.includesHostSkill(id), "%s must be fail-closed in core", id)
 	}
+	assert.Falsef(t, core.includesHostSkill("goal-verification"),
+		"goal-verification is merged into ship-verification and must no longer exist")
+	assert.Falsef(t, core.includesHostSkill("final-closeout"),
+		"final-closeout is merged into ship-verification and must no longer exist")
 	for _, id := range alwaysInstalledCommandIDs {
 		assert.Truef(t, core.includesCommandSkill(id), "%s command surface must be installed in core", id)
 		assert.Truef(t, full.includesCommandSkill(id), "%s command surface must be installed in full", id)
@@ -54,13 +57,16 @@ func TestCoreInstallProfileGeneratesRoutersAndPrunesOptionalCodexSkills(t *testi
 		"evidence",
 		"plan-audit",
 		"security-review",
-		"goal-verification",
-		"final-closeout",
+		"ship-verification",
 		"spec-trace",
 		"coverage-analysis",
 	} {
 		_, err := os.Stat(filepath.Join(root, SkillPath(cfg, id)))
 		assert.NoErrorf(t, err, "core profile missing required skill %s", id)
+	}
+	for _, id := range []string{"goal-verification", "final-closeout"} {
+		_, err := os.Stat(filepath.Join(root, SkillPath(cfg, id)))
+		assert.Truef(t, os.IsNotExist(err), "merged skill %s must no longer be generated", id)
 	}
 	for _, id := range []string{
 		"health",

@@ -219,8 +219,7 @@ func TestDeriveConfirmationRequirementAutoSoftensOnlyPurePacingAllowlist(t *test
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
-		progression.SkillGoalVerification,
-		progression.SkillFinalCloseout,
+		progression.SkillShipVerification,
 	} {
 		skillName := skillName
 		t.Run("allowlisted_"+skillName, func(t *testing.T) {
@@ -302,7 +301,7 @@ func TestDeriveConfirmationRequirementAutoKeepsSecurityReviewHardStop(t *testing
 			auto:            true,
 			GuardrailDomain: "",
 			NextSkill: &nextSkillView{
-				Name:         progression.SkillGoalVerification,
+				Name:         progression.SkillShipVerification,
 				BlockingName: progression.SkillSecurityReview,
 			},
 		}
@@ -385,12 +384,9 @@ func TestDeriveConfirmationRequirementAutoDoesNotSoftenNonPacingBlockers(t *test
 				Skills: []reviewBatchSkillView{{Name: "security-review"}},
 			},
 			Blockers: []model.ReasonCode{
-				model.NewReasonCode("closeout_assurance_attestation_missing", ""),
-				model.NewReasonCode("closeout_reviewer_independence_missing", ""),
 				model.NewReasonCode("context_origin_handle_invalid", "spec-compliance-review"),
 				model.NewReasonCode("governance_action_required", "domain-review: run domain-aware review"),
 				model.NewReasonCode("high_risk_check_missing", "auth_authz.safety_baseline"),
-				model.NewReasonCode("verification_evidence_missing", ""),
 			},
 		}
 
@@ -421,16 +417,15 @@ func TestDeriveConfirmationRequirementAutoDoesNotSoftenNonPacingBlockers(t *test
 		assert.Equal(t, "blocker_resolution", req.NextActionKind)
 	})
 
-	t.Run("review companion blockers ride goal verification handoff", func(t *testing.T) {
+	t.Run("review companion blockers ride ship-verification handoff", func(t *testing.T) {
 		t.Parallel()
 		view := nextView{
 			auto:      false,
-			NextSkill: &nextSkillView{Name: "goal-verification"},
+			NextSkill: &nextSkillView{Name: progression.SkillShipVerification},
 			Blockers: []model.ReasonCode{
-				model.NewReasonCode("closeout_assurance_attestation_missing", ""),
-				model.NewReasonCode("closeout_reviewer_independence_missing", ""),
 				model.NewReasonCode("high_risk_check_missing", "auth_authz.safety_baseline"),
-				model.NewReasonCode("verification_evidence_missing", ""),
+				model.NewReasonCode("context_origin_handle_invalid", ""),
+				model.NewReasonCode("governance_action_required", ""),
 			},
 		}
 
@@ -438,7 +433,7 @@ func TestDeriveConfirmationRequirementAutoDoesNotSoftenNonPacingBlockers(t *test
 		assert.Equal(t, "hard_stop", req.Boundary)
 		assert.False(t, req.PriorAuthorizationSufficient)
 		assert.True(t, req.FreshConfirmationRequired)
-		assert.Equal(t, "skill_handoff:goal-verification", req.Reason)
+		assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, req.Reason)
 		assert.Equal(t, "skill_handoff", req.NextActionKind)
 	})
 }
@@ -785,7 +780,7 @@ func TestLightAutoPassEligibilityUnchangedUnderAuto(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		// skipAutoPass=true surfaces AutoPassEligible instead of auto-passing.
 		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{

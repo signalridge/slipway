@@ -164,15 +164,6 @@ func assembleSkillViewWithOptions(
 		view.SkillEvidence = requiredSkillEvidence
 	}
 
-	if autoSkipEvidence {
-		if nextSkillName == progression.SkillGoalVerification && evidenceMap != nil {
-			if _, hasGoalVerification := evidenceMap[progression.SkillGoalVerification]; hasGoalVerification {
-				nextSkillName = progression.SkillFinalCloseout
-				resolutionReason = "passing goal-verification evidence makes final-closeout available before finalization"
-			}
-		}
-	}
-
 	blockersForResolution := append([]model.ReasonCode(nil), view.Blockers...)
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
@@ -200,14 +191,10 @@ func assembleSkillViewWithOptions(
 				blockingResolution = true
 				resolutionReason = fmt.Sprintf("review alignment required for stale upstream evidence; rerun %s", repairSkill)
 				view.Warnings = append(view.Warnings, resolutionReason)
-			} else if closeoutSkill := nextS3CloseoutAuthoritySkill(evidenceMap, blockersForResolution); closeoutSkill != "" {
-				nextSkillName = closeoutSkill
-				blockingResolution = hasRequiredSkillBlockerFor(blockersForResolution, closeoutSkill)
-			} else if autoSkipEvidence && skillHasPassingEvidence(evidenceMap, progression.SkillGoalVerification) &&
-				!skillHasPassingEvidence(evidenceMap, progression.SkillFinalCloseout) {
-				nextSkillName = progression.SkillFinalCloseout
-				displaySkillName = progression.SkillGoalVerification
-				resolutionReason = "passing goal-verification evidence makes final-closeout available before finalization"
+			} else if shipSkill := nextS3ShipAuthoritySkill(evidenceMap, blockersForResolution); shipSkill != "" {
+				nextSkillName = shipSkill
+				displaySkillName = shipSkill
+				blockingResolution = hasRequiredSkillBlockerFor(blockersForResolution, shipSkill)
 			} else if actionableSkill, reason := resolveActionableBlockingSkill(nextSkillName, evidenceMap, blockersForResolution); actionableSkill != "" {
 				nextSkillName = actionableSkill
 				blockingResolution = true
@@ -683,18 +670,29 @@ func pendingReviewBatchSkills(
 	return pending
 }
 
-func nextS3CloseoutAuthoritySkill(
+func nextS3ShipAuthoritySkill(
 	evidenceMap map[string]model.VerificationRecord,
 	blockers []model.ReasonCode,
 ) string {
-	if hasRequiredSkillBlockerFor(blockers, progression.SkillGoalVerification) ||
-		!skillHasPassingEvidence(evidenceMap, progression.SkillGoalVerification) {
-		return progression.SkillGoalVerification
-	}
-	if hasRequiredSkillBlockerFor(blockers, progression.SkillFinalCloseout) {
-		return progression.SkillFinalCloseout
+	if hasRequiredSkillBlockerFor(blockers, progression.SkillShipVerification) ||
+		!skillHasPassingEvidence(evidenceMap, progression.SkillShipVerification) ||
+		hasShipVerificationHandoffBlocker(blockers) {
+		return progression.SkillShipVerification
 	}
 	return ""
+}
+
+// hasShipVerificationHandoffBlocker reports an active G_ship gate blocker that a
+// fresh ship-verification handoff resolves. It keeps `next` from stranding the
+// operator when a passing-but-malformed ship record leaves the gate blocked yet
+// the generic required-skill check sees a passing record.
+func hasShipVerificationHandoffBlocker(blockers []model.ReasonCode) bool {
+	for _, blocker := range blockers {
+		if progression.IsShipVerificationHandoffBlockerCode(blocker.Code) {
+			return true
+		}
+	}
+	return false
 }
 
 func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []model.ReasonCode) string {
@@ -975,11 +973,11 @@ func appendWorkflowProfileTechniqueHints(existing []techniqueHint, hostSkill str
 	}
 	switch governedChange.EffectiveWorkflowProfile() {
 	case model.WorkflowProfileDocs:
-		if hostSkill == progression.SkillSpecComplianceReview || hostSkill == progression.SkillGoalVerification {
+		if hostSkill == progression.SkillSpecComplianceReview || hostSkill == progression.SkillShipVerification {
 			addHint("spec-trace", "[workflow-profile:docs] verify rendered docs, links, and requirement references instead of code-only quality signals")
 		}
 	case model.WorkflowProfileResearch:
-		if hostSkill == progression.SkillResearchOrchestration || hostSkill == progression.SkillGoalVerification {
+		if hostSkill == progression.SkillResearchOrchestration || hostSkill == progression.SkillShipVerification {
 			addHint("codebase-mapping", "[workflow-profile:research] keep discovery evidence bounded and cite only the artifacts needed for the research answer")
 		}
 	case model.WorkflowProfileConfig:

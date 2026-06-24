@@ -29,7 +29,7 @@ func TestDoneAllReadyPreservesShipGateReasonCodes(t *testing.T) {
 	writeShipReadyGovernedBundle(t, root, blocked)
 	writePassingExecutionSummary(t, root, blocked.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, blocked.Slug, 1)
-	writePassingGoalVerificationEvidence(t, root, blocked.Slug, 1)
+	writePassingShipVerificationEvidence(t, root, blocked.Slug, 1)
 	writeAssuranceMD(t, root, blocked.Slug, validAssuranceContent())
 
 	view := archiveAllDoneReady(root)
@@ -64,7 +64,7 @@ func TestDoneAllReadyPreservesSpecificReadinessArtifactBlockers(t *testing.T) {
 	writePassingExecutionSummary(t, root, blocked.Slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, blocked.Slug, 1)
 	writePassingReviewEvidencePack(t, root, blocked.Slug, 1)
-	writePassingGoalVerificationEvidence(t, root, blocked.Slug, 1)
+	writePassingShipVerificationEvidence(t, root, blocked.Slug, 1)
 	writeAssuranceMD(t, root, blocked.Slug, validAssuranceContent())
 
 	require.NoError(t, os.Remove(filepath.Join(root, "artifacts", "changes", blocked.Slug, "decision.md")))

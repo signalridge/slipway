@@ -91,11 +91,12 @@ func TestAuthorityTimestampOrderingIsLimitedToProofOrderingGates(t *testing.T) {
 	disallowed := disallowedSelectorCalls(
 		file,
 		[]selectorCallMatch{{selector: "Before"}, {selector: "After"}},
-		"proofReuseEdgeBlockers",
-		"closeoutChainOrderBlockers",
+		// The merged ship gate keeps exactly ONE timestamp-ordering invariant:
+		// ship-verification must be stamped at/after every selected review peer.
+		"shipReviewSetOrderingBlockers",
 	)
 	if len(disallowed) > 0 {
-		t.Fatalf("authority timestamp ordering must stay limited to proof-ordering gates: %v", disallowed)
+		t.Fatalf("authority timestamp ordering must stay limited to the ship review-set ordering gate: %v", disallowed)
 	}
 }
 

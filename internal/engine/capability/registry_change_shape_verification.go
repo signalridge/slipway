@@ -46,13 +46,13 @@ func coverageAnalysis() Skill {
 		Function:          "evaluate test coverage against the change surface with a reproducible report",
 		Tier:              TierT1,
 		PrimaryAttachment: AttachmentChecklist,
-		Summary:           "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the goal-verification host, or coverage-related user text.",
-		Evidence:          EvidenceVerdict, // Host-embedded on goal-verification; also suggested on validate so
+		Summary:           "Use when evaluating test coverage of a change's new and modified lines (not the whole codebase). Triggers on the `slipway validate` command, the ship-verification host, or coverage-related user text.",
+		Evidence:          EvidenceVerdict, // Host-embedded on ship-verification; also suggested on validate so
 		// verification flows keep coverage as a recommendation without a
 		// public focus selector.
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "validate", Attachment: AttachmentChecklist},
-			{Type: BindingHostEmbedded, Target: "goal-verification", Attachment: AttachmentChecklist},
+			{Type: BindingHostEmbedded, Target: "ship-verification", Attachment: AttachmentChecklist},
 		},
 	}
 }

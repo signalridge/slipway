@@ -80,16 +80,16 @@ func TestSaveVerificationOverwritesExisting(t *testing.T) {
 		Blockers:  []model.ReasonCode{testVerificationReason("missing_coverage", "")},
 		Timestamp: time.Now().UTC(),
 	}
-	writeVerificationForTest(t, root, slug, "goal-verification", rec1)
+	writeVerificationForTest(t, root, slug, "ship-verification", rec1)
 
 	rec2 := model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
 		Blockers:  []model.ReasonCode{},
 		Timestamp: time.Now().UTC(),
 	}
-	writeVerificationForTest(t, root, slug, "goal-verification", rec2)
+	writeVerificationForTest(t, root, slug, "ship-verification", rec2)
 
-	loaded, err := LoadVerification(root, slug, "goal-verification")
+	loaded, err := LoadVerification(root, slug, "ship-verification")
 	require.NoError(t, err)
 	assert.Equal(t, model.VerificationVerdictPass, loaded.Verdict)
 }
@@ -230,6 +230,13 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 		Blockers:  []model.ReasonCode{},
 		Timestamp: time.Now().UTC(),
 	})
+	// The merged terminal ship gate writes an ordinary verification record; it
+	// must be loaded like any other skill verdict, not skipped as a keystone.
+	writeVerificationForTest(t, root, slug, "ship-verification", model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Now().UTC(),
+	})
 	require.NoError(t, saveWavePlanForTest(root, slug, model.WavePlan{
 		Version:       model.WavePlanVersion,
 		GeneratedAt:   time.Now().UTC(),
@@ -242,17 +249,13 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 			}},
 		}},
 	}))
-	require.NoError(t, os.WriteFile(filepath.Join(VerificationDir(root, slug), "suite-result.yaml"), []byte(`version: 1
-run_summary_version: 1
-full_suite_digest: "sha256:full-suite"
-`), 0o644))
 
 	result, err := ListVerifications(root, slug)
 	require.NoError(t, err)
-	assert.Len(t, result, 1)
+	assert.Len(t, result, 2)
 	assert.Contains(t, result, "plan-audit")
+	assert.Contains(t, result, "ship-verification")
 	assert.NotContains(t, result, "wave-plan")
-	assert.NotContains(t, result, "suite-result")
 }
 
 func TestListVerificationsRejectsInvalidFiles(t *testing.T) {

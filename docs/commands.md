@@ -60,7 +60,7 @@ slipway new "docs-only change" --profile docs
 slipway new --from-doc docs/installation.md "refresh install docs"
 slipway new "small fix" --trivial
 slipway new "auth refactor" --discuss   # carry open questions forward into context
-slipway new "schema migration" --full   # force fresh final-closeout evidence before ship
+slipway new "schema migration" --full   # force fresh ship-verification evidence before ship
 ```
 
 Presets control gate strictness: `light`, `standard`, or `strict`.
@@ -68,7 +68,7 @@ Presets control gate strictness: `light`, `standard`, or `strict`.
 Workflow profiles shape checks: `code`, `docs`, `research`, `config`, or `meta`.
 
 `--discuss` persists unresolved gray areas into context before execution;
-`--full` requires a refreshed final-closeout verification before the ship gate.
+`--full` requires a refreshed `ship-verification` pass before the ship gate.
 
 ## Discovery
 
@@ -313,9 +313,9 @@ execution-summary evidence. Before `execution-summary.yaml` exists, it derives
 the wave run version from the current flat task evidence ledger, requires all
 task evidence to use a single valid `run_summary_version`, and stamps the
 wave-orchestration digest from that ledger. Later run-summary-bound skills such
-as `spec-compliance-review`, `code-quality-review`, `goal-verification`, and
-`final-closeout` still require an existing execution summary and fail closed
-with `evidence_skill_run_summary_missing` when it is absent.
+as `spec-compliance-review`, `code-quality-review`, and the terminal
+`ship-verification` gate still require an existing execution summary and fail
+closed with `evidence_skill_run_summary_missing` when it is absent.
 
 Accepted governance skill evidence is additionally bound by
 `verification/evidence-digests.yaml`, an engine-owned local file that records the
@@ -332,19 +332,15 @@ the review stale until the owning review stage is run again through
 missing or stale, the owning governance skill is reported stale and must be
 re-run.
 
-Selected S3 reviewer digests also require
-`verification/suite-result.yaml` for the current execution summary run. That file
-is the shared digest keystone for the full-suite proof and any guardrail SAST
-proof consumed by spec-compliance-review, independent-review,
-goal-verification, code-quality-review when selected by the workflow profile,
-and security-review when selected by policy. Record it through `slipway evidence
-suite-result --full-suite-proof <path>` to hash a workspace-relative proof file
-(such as `verification/logs/suite-result-run2.txt`), or use
-`--full-suite-digest <digest>` when an external system already computed the
-digest. Repeat `--sast-proof name=path` or `--sast-digest name=digest` for
-guardrail SAST proof. If the file is absent, invalid, or tied to a different
-`run_summary_version`, selected S3 review evidence is not fresh. If a suite or
-SAST digest changes, the selected review set is conservatively staled.
+The selected S3 review peers (spec-compliance-review, independent-review,
+code-quality-review when the workflow profile requires it, and security-review
+when selected by policy) assert their verdicts against the current diff,
+planning artifacts, and run-summary version; they do not consume a shared
+suite-result keystone. The one authoritative full-suite run — plus any
+guardrail SAST baseline — is owned by the terminal `ship-verification` gate,
+which runs it once, after the peers converge, and never from a peer-shared
+record. There is no `slipway evidence suite-result` subcommand: ship-verification
+runs and records the suite itself as part of its single terminal evidence pass.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task --result-file <path> --json`, and the compact result schema: `task_id,verdict,evidence_ref,changed_files,blockers,session_id`; repeat `--result-file` for atomic batch import. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 

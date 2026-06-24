@@ -29,10 +29,10 @@ func TestSpecTraceReportSchemaIncludesScopeContractEvidence(t *testing.T) {
 	assert.Contains(t, body, "scope_contract:pass or scope_contract:fail:<reason>")
 }
 
-func TestGoalVerificationRequiresScopeContractStatement(t *testing.T) {
+func TestShipVerificationRequiresScopeContractStatement(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Render("skills/goal-verification/SKILL.md.tmpl", nil)
+	body, err := tmpl.Render("skills/ship-verification/SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, body, "Scope Contract: pass|fail|not_applicable")

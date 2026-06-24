@@ -24,7 +24,7 @@ func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, clos
 func TestGovernanceRegistryCompleteness(t *testing.T) {
 	t.Parallel()
 	registry := definitionsToSortedSlice(defaultGovernanceRegistry)
-	require.Len(t, registry, 10)
+	require.Len(t, registry, 9)
 }
 
 func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
@@ -47,16 +47,18 @@ func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
 		[]string{"plan-audit", "research-orchestration"},
 		requiredSkillsForState(true, model.StateS1Plan, false),
 	)
-	// Non-discovery at S3_REVIEW returns the selected review gate skills.
+	// Non-discovery at S3_REVIEW returns the selected review gate skills plus
+	// the always-required ship-verification terminal gate.
 	assert.Equal(
 		t,
-		[]string{"code-quality-review", "goal-verification", "independent-review", "spec-compliance-review"},
+		[]string{"code-quality-review", "independent-review", "ship-verification", "spec-compliance-review"},
 		requiredSkillsForState(false, model.StateS3Review, false),
 	)
-	// Final closeout is folded into S3_REVIEW when closeout evidence is required.
+	// ship-verification is always required at S3_REVIEW regardless of closeout,
+	// since goal-verification and final-closeout are merged into it.
 	assert.Equal(
 		t,
-		[]string{"code-quality-review", "final-closeout", "goal-verification", "independent-review", "spec-compliance-review"},
+		[]string{"code-quality-review", "independent-review", "ship-verification", "spec-compliance-review"},
 		requiredSkillsForState(true, model.StateS3Review, true),
 	)
 }
@@ -75,7 +77,7 @@ func TestRequiredSkillsForStateWithRegistry_S3SecuritySelection(t *testing.T) {
 
 	assert.Equal(
 		t,
-		[]string{"code-quality-review", "goal-verification", "independent-review", "security-review", "spec-compliance-review"},
+		[]string{"code-quality-review", "independent-review", "security-review", "ship-verification", "spec-compliance-review"},
 		required,
 	)
 }
@@ -87,12 +89,12 @@ func TestSelectedReviewSkillsForWorkflowProfileFiltersCodeQualityOnly(t *testing
 
 	assert.Equal(
 		t,
-		[]string{"spec-compliance-review", "independent-review", "goal-verification", "security-review"},
+		[]string{"spec-compliance-review", "independent-review", "security-review"},
 		SelectedReviewSkillsForWorkflowProfile(selection, model.WorkflowProfileDocs),
 	)
 	assert.Equal(
 		t,
-		[]string{"spec-compliance-review", "code-quality-review", "independent-review", "goal-verification", "security-review"},
+		[]string{"spec-compliance-review", "code-quality-review", "independent-review", "security-review"},
 		SelectedReviewSkillsForWorkflowProfile(selection, model.WorkflowProfileCode),
 	)
 }
@@ -146,7 +148,7 @@ func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {
 
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 10)
+	require.Len(t, registry, 9)
 
 	defByName := map[string]Definition{}
 	for _, def := range registry {
@@ -175,7 +177,7 @@ func TestLoadGovernanceRegistryWithoutGeneratedSkillsUsesDefaults(t *testing.T) 
 	root := t.TempDir()
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 10)
+	require.Len(t, registry, 9)
 
 	def, ok := LookupDefinitionInRegistry(registry, "wave-orchestration")
 	require.True(t, ok)
@@ -199,7 +201,7 @@ body
 	// Unknown skills are silently skipped (not errors).
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 10)
+	require.Len(t, registry, 9)
 }
 
 func TestLoadGovernanceRegistryRejectsMissingFrontmatterForKnownGeneratedSkill(t *testing.T) {
@@ -222,7 +224,7 @@ func TestLoadGovernanceRegistryMinimalFrontmatter(t *testing.T) {
 
 	registry, err := LoadGovernanceRegistry(root)
 	require.NoError(t, err)
-	require.Len(t, registry, 10)
+	require.Len(t, registry, 9)
 
 	// Values come from Go registry defaults, not frontmatter overrides.
 	defByName := map[string]Definition{}

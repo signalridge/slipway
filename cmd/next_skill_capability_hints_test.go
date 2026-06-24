@@ -82,7 +82,7 @@ func TestCodebaseMapRelevanceAdvisoryMatrix(t *testing.T) {
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusMissing, skillName))
 	}
 	// Non-consuming skills never receive the relevance advisory.
-	for _, skillName := range []string{progression.SkillIntakeClarification, progression.SkillGoalVerification, ""} {
+	for _, skillName := range []string{progression.SkillIntakeClarification, progression.SkillShipVerification, ""} {
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPopulated, skillName))
 		assert.Empty(t, codebaseMapRelevanceAdvisory(artifact.CodebaseMapStatusPartial, skillName))
 	}
@@ -527,11 +527,17 @@ func TestAppendCatalogHintsDoesNotDuplicateSelectedReviewPeers(t *testing.T) {
 	assert.Empty(t, hints)
 }
 
-func TestAppendCatalogHintsGoalVerificationDropsRetiredFreshEvidence(t *testing.T) {
+func TestAppendCatalogHintsShipVerificationEmitsCoverageAnalysis(t *testing.T) {
 	t.Parallel()
-	hints := appendCatalogHints(nil, "goal-verification", nil, &nextView{})
+	hints := appendCatalogHints(nil, progression.SkillShipVerification, nil, &nextView{})
 	require.Len(t, hints, 1)
 	assert.Equal(t, "skill:coverage-analysis", hints[0].Name)
+}
+
+func TestAppendCatalogHintsRetiredGoalVerificationHostEmitsNothing(t *testing.T) {
+	t.Parallel()
+	hints := appendCatalogHints(nil, "goal-verification", nil, &nextView{})
+	assert.Empty(t, hints)
 }
 
 func TestSupportHintNameUsesExportedSkillPrefix(t *testing.T) {
@@ -543,7 +549,7 @@ func TestSupportHintNameUsesExportedSkillPrefix(t *testing.T) {
 
 func TestAppendCatalogHintsVerifyHostsDoNotEmitRetiredFreshEvidence(t *testing.T) {
 	t.Parallel()
-	for _, host := range []string{"final-closeout", "tdd-governance"} {
+	for _, host := range []string{"code-quality-review", "tdd-governance"} {
 		host := host
 		t.Run(host, func(t *testing.T) {
 			t.Parallel()

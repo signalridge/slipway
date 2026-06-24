@@ -5,7 +5,7 @@ Slipway routes work through a governed lifecycle:
 1. `S0_INTAKE`: capture intent, scope, open questions, and initial evidence.
 2. `S1_PLAN`: produce research, requirements, decision, task, and plan-audit artifacts. Plan-audit is the review that permits S2 to start; it reviews the plan bundle itself, not a frozen wave cache.
 3. `S2_IMPLEMENT`: execute computed waves. Slipway computes the wave schedule live from each task's declared dependencies and target files in the current `tasks.md`; authors never declare wave numbers. Dependency-free, file-disjoint tasks share a wave and are dispatched concurrently by default — `slipway next --json` marks such a wave `parallel: true`. Set `execution.parallelization: off` in `.slipway.yaml` to run waves sequentially instead.
-4. `S3_REVIEW`: verify implementation against artifacts, run selected review checks, repair feedback through separate subagents, author the `assurance.md` closeout record, and produce a done-ready outcome.
+4. `S3_REVIEW`: verify implementation against artifacts, run selected review checks, repair feedback through separate subagents, then run the single terminal `ship-verification` gate (one authoritative full suite, acceptance proof, freshness recheck, the `assurance.md` attestation, and reviewer-independence attestation) to produce a done-ready outcome.
 
 The active lifecycle state is stored in `artifacts/changes/<slug>/change.yaml`.
 Bundle-local lifecycle events stay under
@@ -60,7 +60,7 @@ slipway run --json --diagnostics
 
 ## Independence Attestation Tokens
 
-The review, verification, closeout, and wave-orchestration stages record a few
+The review, ship-verification, and wave-orchestration stages record a few
 engine-consumed tokens on the verification record's `references` (via
 `slipway evidence skill --reference ...`). Each is an error-severity blocker on
 `standard`/`strict` and advisory-only on `light` (realized as Pattern-A omission —
@@ -71,8 +71,9 @@ verdict; the engine remains the sole timestamp and run-version stamper.
 | Token | Attests | Enforced | Recovery when the gate fails closed |
 | --- | --- | --- | --- |
 | `context_origin:stage=<stage>=<handle>` across the chain participants, with selected S3 reviewers all using `stage=review` and review-finding fixes using `stage=fix` when present | each owned participant ran under distinct contexts on the shared worktree; selected reviewers are keyed by skill name and must be pairwise distinct; recorded fix handles must not collapse with implementation or review handles | standard/strict error, light advisory | re-run the owning reviewer or fix in a fresh native subagent so it re-emits a distinct `context_origin` handle |
-| `closeout:reviewer_independence=pass` on final-closeout | the closeout independence attestation the engine previously ignored is now present (Pattern-A) | standard/strict error, light advisory | re-run **final-closeout** and record the token |
-| final ordering `final-closeout >= every selected S3 peer` (always-on, no token) | final-closeout was stamped after the unordered selected S3 peer set, including goal-verification, independent of the opt-in reuse token | standard/strict error, light advisory | re-stamp the stale selected reviewer, then **final-closeout** (distinct `closeout_chain_order_invalid` code, not the reuse code) |
+| `closeout:reviewer_independence=pass` on ship-verification | the reviewer-independence attestation is present on the terminal ship record (Pattern-A); missing fails closed with `ship_verification_reviewer_independence_missing` | standard/strict error, light advisory | re-run **ship-verification** and record the token |
+| `closeout:assurance_complete=pass` on ship-verification | the host attests `assurance.md` is complete on the terminal ship record; missing fails closed with `ship_verification_assurance_attestation_missing` | standard/strict error, light advisory | re-run **ship-verification** and record the token |
+| terminal ordering `ship-verification >= every selected S3 peer` (always-on, no token) | the terminal ship record was stamped after every selected S3 review peer rather than before any of them, so the gate observed the final review evidence | every preset (always-on; no light carveout) | re-stamp the stale selected reviewer, then re-run **ship-verification** so its verdict timestamp is at or after every peer |
 | `degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>` on wave-orchestration | a `degraded_sequential` dispatch was paired with a genuine tool-unavailable justification | standard/strict error, light advisory | re-record wave-orchestration evidence with the justification reference, or re-run the wave with real concurrent dispatch |
 
 A bare `degraded_sequential` with no paired justification is rejected on every
@@ -80,10 +81,11 @@ path that synchronizes governed wave execution, including the
 `slipway evidence skill` path — not only advance/next.
 
 `context_origin:stage=<stage>=<handle>` is one chain-wide grammar that spans the
-whole governed chain. The S3 selected review set includes spec, independent, and
-goal-verification reviewers for every workflow profile; code-quality review joins
-when the profile requires code-quality review, and security review joins when the
-engine-derived security control selects it. All selected review hosts emit
+whole governed chain. The S3 selected review set includes spec and independent
+reviewers for every workflow profile; code-quality review joins when the profile
+requires code-quality review, and security review joins when the engine-derived
+security control selects it. The terminal `ship-verification` gate is not a
+selected peer — it runs last, after the peers converge. All selected review hosts emit
 `context_origin:stage=review=<handle>`; the R2 lattice keys each review
 participant by skill name, not by the shared `review` stage. The other
 participants are the S2 wave `executor`, the S1 plan-audit `audit_origin` (paired
@@ -95,7 +97,7 @@ so each edge is checked exactly once:
 | --- | --- | --- |
 | Plan gate (S1) | only the local `audit_origin != plan_origin` edge (plan-audit author vs auditor self-audit) | 1 |
 | Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable by workflow profile, selected security control, and optional fix handle |
-| Ship authority | no additional context-origin edges; ship owns final ordering and closeout presence attestations | 0 |
+| Ship authority | no additional context-origin edges; the terminal `ship-verification` gate owns the terminal ordering invariant plus the reviewer-independence and assurance-complete presence attestations | 0 |
 
 When a seam fails closed, re-run its owning stage or selected reviewer in a fresh
 native subagent so the stage re-emits a distinct `context_origin` handle; the
@@ -112,14 +114,14 @@ constraints, so no gate here is oversold as cryptographic distinct-context proof
 ## S3 Review Dispatch
 
 At `S3_REVIEW` the engine resolves one selected review set and exposes that set
-through the command surfaces. Spec, independent review, and goal-verification are
-selected for every workflow profile; code-quality review joins only when the
-profile requires code-quality review, and the security reviewer joins only when
-the engine-derived security control is selected. `slipway next` exposes the
-selected set, and host adapters fan those reviewers out as concurrent native
-subagents. Any conventional single primary skill is only a
-compatibility projection for surfaces that truly need one; it does not imply
-review ordering.
+through the command surfaces. Spec and independent review are selected for every
+workflow profile; code-quality review joins only when the profile requires
+code-quality review, and the security reviewer joins only when the engine-derived
+security control is selected. `slipway next` exposes the selected set, and host
+adapters fan those reviewers out as concurrent native subagents. Any conventional
+single primary skill is only a compatibility projection for surfaces that truly
+need one; it does not imply review ordering. The terminal `ship-verification`
+gate is dispatched after this peer set converges, never as a member of it.
 
 Selected reviewers are **unordered peers**: none blocks another, and requiredness,
 review authority, ship authority, and stale-evidence recovery all consume the
@@ -136,13 +138,12 @@ with `context_origin_handle_invalid`; collisions fail with
 `cross_stage_context_not_distinct`. Unselected security evidence on disk is
 silent and never becomes a hidden participant.
 
-Selected reviewer freshness is anchored by
-`verification/suite-result.yaml`. The file records the current
-`run_summary_version`, the full-suite proof digest, and any guardrail SAST proof
-digests shared by the selected reviewer set. A selected S3 review record is not
-fresh without a valid suite-result for the current execution summary run; when
-the full-suite or SAST digest changes, the selected peer set is conservatively
-staled.
+Selected reviewer freshness is anchored by the current diff, planning artifacts,
+and `run_summary_version`; there is no shared suite-result keystone for the peer
+set to consume. The one authoritative full suite — and any guardrail SAST
+baseline — is run by the terminal `ship-verification` gate, once, after the
+peers converge, and recorded on its own evidence record rather than a record
+shared with the reviewers.
 
 ## Read-Only Surfaces
 

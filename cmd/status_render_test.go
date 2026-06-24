@@ -95,9 +95,9 @@ func TestRenderStatusTextUsesStructuredBlockerMessages(t *testing.T) {
 		LifecycleStatus:   "active",
 		CurrentState:      model.StateS3Review,
 		EvidenceFreshness: "fresh",
-		Blockers:          model.ReasonCodesFromSpecs([]string{"required_skill_missing:final-closeout"}),
+		Blockers:          model.ReasonCodesFromSpecs([]string{"required_skill_missing:ship-verification"}),
 	})
-	assert.Contains(t, rendered, "required_skill_missing: Required governance skill evidence is missing: final-closeout")
+	assert.Contains(t, rendered, "required_skill_missing: Required governance skill evidence is missing: ship-verification")
 }
 
 func TestRenderStatusTextExplainsStaleExecutionEvidenceRemediation(t *testing.T) {

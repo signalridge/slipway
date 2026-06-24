@@ -54,10 +54,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"change_bundle_unreadable",
 		"change_is_done",
 		"change_not_active",
-		"closeout_assurance_attestation_missing",
-		"closeout_chain_order_invalid",
-		"closeout_goal_verification_reuse_invalid",
-		"closeout_reviewer_independence_missing",
 		"codebase_map_freshness_missing",
 		"codebase_map_freshness_partial",
 		"codebase_map_freshness_scaffold_only",
@@ -163,6 +159,10 @@ func canonicalReasonCodeSnapshot() []string {
 		"sensitive_evidence_missing",
 		"session_isolation_warning",
 		"ship_gate_blocked",
+		"ship_verification_assurance_attestation_missing",
+		"ship_verification_evidence_missing",
+		"ship_verification_ordering_invalid",
+		"ship_verification_reviewer_independence_missing",
 		"skill_prompt_surface_missing",
 		"skill_prompt_surface_unreadable",
 		"skill_registry_invalid",
@@ -185,7 +185,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"tasks_checklist_unreadable",
 		"tasks_plan_changed_since_task_evidence",
 		"unknown_reason_code",
-		"verification_evidence_missing",
 		"wave_execution_blocked",
 		"wave_execution_unavailable",
 		"wave_orchestration_run_summary_version_invalid",
@@ -304,41 +303,6 @@ func TestWaveTestImplDistinctnessVocabularyRetired(t *testing.T) {
 
 	assert.Falsef(t, IsCanonicalReasonCode(retired),
 		"%q must no longer be recognized as a canonical reason code", retired)
-}
-
-func TestSuiteResultDigestKeystoneContract(t *testing.T) {
-	t.Parallel()
-
-	result := SuiteResult{
-		RunSummaryVersion: 3,
-		FullSuiteDigest:   " sha256:full-suite ",
-		SASTDigests: map[string]string{
-			" external_api_contracts.safety_baseline ": " sha256:sast ",
-		},
-	}
-	result.Normalize()
-
-	assert.Equal(t, SuiteResultVersion, result.Version)
-	assert.Equal(t, "sha256:full-suite", result.FullSuiteDigest)
-	assert.Equal(t, map[string]string{
-		"external_api_contracts.safety_baseline": "sha256:sast",
-	}, result.SASTDigests)
-	require.NoError(t, result.Validate())
-
-	inputs, err := result.SharedReviewerInputDigests()
-	require.NoError(t, err)
-	runVersionDigest, err := ComputeInputHash(map[string]any{"run_summary_version": 3})
-	require.NoError(t, err)
-	assert.Equal(t, map[string]string{
-		"suite-result:run_summary_version":                         runVersionDigest,
-		"suite-result:full_suite":                                  "sha256:full-suite",
-		"suite-result:sast:external_api_contracts.safety_baseline": "sha256:sast",
-	}, inputs)
-
-	assert.ErrorContains(t, SuiteResult{Version: SuiteResultVersion}.Validate(), "run_summary_version")
-	assert.ErrorContains(t,
-		SuiteResult{Version: SuiteResultVersion, RunSummaryVersion: 1}.Validate(),
-		"full_suite_digest")
 }
 
 func TestReviewAlignmentAndNewChangeRecoveryVocabularyRegistered(t *testing.T) {
@@ -525,9 +489,9 @@ func TestMessageProseAssertionLintDetectsBypassShapes(t *testing.T) {
 			src: `package model
 
 func TestLintSample(t *testing.T) {
-	got := NewReasonCode("required_skill_missing", "goal-verification")
+	got := NewReasonCode("required_skill_missing", "example-skill")
 	assert.Equal(t, "prose", got.Message)
-	assert.Contains(t, NewReasonCode("required_skill_missing", "goal-verification").Message, "prose")
+	assert.Contains(t, NewReasonCode("required_skill_missing", "example-skill").Message, "prose")
 	assert.Equal(t, "prose", testReason().Message)
 
 	var finding HealthFinding
@@ -543,7 +507,7 @@ func TestLintSample(t *testing.T) {
 			src: `package model
 
 func TestLintSample(t *testing.T) {
-	assert.Contains(t, NewReasonCode("required_skill_missing", "goal-verification").Message, "prose")
+	assert.Contains(t, NewReasonCode("required_skill_missing", "example-skill").Message, "prose")
 	assert.Equal(t, "prose", testReason().Message)
 }
 `,
@@ -590,7 +554,7 @@ func TestMessageProseAssertionLintScopesRootsPerFunction(t *testing.T) {
 	source := `package model
 
 func TestReasonMessage(t *testing.T) {
-	reason := NewReasonCode("required_skill_missing", "goal-verification")
+	reason := NewReasonCode("required_skill_missing", "example-skill")
 	assert.Contains(t, reason.Message, "prose")
 }
 

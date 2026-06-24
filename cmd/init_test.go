@@ -55,7 +55,7 @@ func TestInitCommandToolsAll(t *testing.T) {
 		// Governance skills ARE in tool adapter dirs (namespace: slipway/<name>/)
 		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-worktree-preflight", "SKILL.md"))
 		require.NoError(t, err)
-		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-goal-verification", "SKILL.md"))
+		_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-ship-verification", "SKILL.md"))
 		require.NoError(t, err)
 
 		// Exported agent files should not be generated for any adapter.

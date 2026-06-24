@@ -33,7 +33,7 @@ func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *tes
 			progression.SkillSpecComplianceReview: passingRecord,
 			progression.SkillCodeQualityReview:    passingRecord,
 			progression.SkillIndependentReview:    passingRecord,
-			progression.SkillGoalVerification:     passingRecord,
+			progression.SkillShipVerification:     passingRecord,
 		},
 	}
 
@@ -145,9 +145,9 @@ func TestNextS3ReviewWithPassingPeerEvidenceReportsGoalVerificationHandoff(t *te
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 	require.NotNil(t, view.NextSkill)
-	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
-	assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:goal-verification")
-	assert.Equal(t, "skill_handoff:"+progression.SkillGoalVerification, view.ConfirmationRequirement.Reason)
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+	assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:ship-verification")
+	assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, view.ConfirmationRequirement.Reason)
 	for _, blocker := range view.Blockers {
 		if blocker.Code == "no_skill_required" {
 			assert.NotEqual(t, model.ReasonSeverityError, blocker.Severity)
@@ -411,7 +411,7 @@ func TestNextJSONAutoPassesByDefault(t *testing.T) {
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	// Advancement is tested via buildNextView with preview=false (run path).
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
@@ -445,7 +445,7 @@ func TestNextJSONNoAutoPassReportsEligibilityFromCurrentStateOnly(t *testing.T) 
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	// Advancement with no-auto-pass is tested via buildNextView (run path).
 	// autoSkipEvidence=false mirrors the original --json path.
@@ -534,10 +534,10 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		assert.Equal(t, model.StateS3Review, view.CurrentState)
 		if view.Advanced != nil {
-			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing goal-verification evidence")
+			assert.Equal(t, "query", view.Advanced.Action, "query-first next JSON must stay read-only while surfacing missing ship-verification evidence")
 		}
 		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
-		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+		assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
 	})
 }
 
@@ -572,14 +572,14 @@ func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	})
 }
 
-func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
+func TestNextJSONShipVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "goal verification hint contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification hint contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS3Review
@@ -606,7 +606,7 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.Name)
+		assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
 		require.Len(t, view.NextSkill.TechniqueHints, 1)
 		assert.Equal(t, "skill:coverage-analysis", view.NextSkill.TechniqueHints[0].Name)
 		for _, hint := range view.NextSkill.TechniqueHints {
@@ -629,23 +629,23 @@ func TestNextJSONGoalVerificationHintsDropRetiredFreshEvidence(t *testing.T) {
 	})
 }
 
-func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
+func TestRunJSONShipVerificationDropsRetiredFreshEvidenceHint(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "final closeout run hint contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification run hint contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.QualityMode = model.QualityModeFull
 		require.NoError(t, state.SaveChange(root, change))
 
 		markChangeReadyForDone(t, root, &change)
-		require.NoError(t, os.Remove(state.VerificationFilePath(root, slug, progression.SkillFinalCloseout)))
+		require.NoError(t, os.Remove(state.VerificationFilePath(root, slug, progression.SkillShipVerification)))
 		writeAssuranceMD(t, root, slug, validAssuranceContent())
-		// Refresh the summary after bundle mutations so full-closeout readiness
+		// Refresh the summary after bundle mutations so ship-verification readiness
 		// uses the latest evidence window.
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 
@@ -659,18 +659,24 @@ func TestRunJSONFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
 		var view nextView
 		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
-		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
-		assert.Empty(t, view.NextSkill.TechniqueHints)
+		assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+		// ship-verification carries only the coverage-analysis host hint; the
+		// retired fresh-verification-evidence hint must not appear.
+		require.Len(t, view.NextSkill.TechniqueHints, 1)
+		assert.Equal(t, "skill:coverage-analysis", view.NextSkill.TechniqueHints[0].Name)
+		for _, hint := range view.NextSkill.TechniqueHints {
+			assert.NotEqual(t, "skill:fresh-verification-evidence", hint.Name)
+		}
 	})
 }
 
-func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.T) {
+func TestAssembleSkillViewShipVerificationDropsRetiredFreshEvidenceHint(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	slug := createGovernedRequest(t, root, levelNonDiscovery, "final closeout hint contract")
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification hint contract")
 	change, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
 	change.CurrentState = model.StateS3Review
@@ -689,24 +695,27 @@ func TestAssembleSkillViewFinalCloseoutDropsRetiredFreshEvidenceHint(t *testing.
 		progression.AdvanceSummary{Action: "query", FromState: model.StateS3Review},
 		&change,
 		nil,
-		passingSelectedReviewAndGoalEvidenceForNextSkillTests(1),
+		passingSelectedReviewEvidenceForNextSkillTests(1),
 		nil,
 		true,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, view.NextSkill)
-	assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
-	assert.Empty(t, view.NextSkill.TechniqueHints)
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+	require.Len(t, view.NextSkill.TechniqueHints, 1)
+	assert.Equal(t, "skill:coverage-analysis", view.NextSkill.TechniqueHints[0].Name)
+	for _, hint := range view.NextSkill.TechniqueHints {
+		assert.NotEqual(t, "skill:fresh-verification-evidence", hint.Name)
+	}
 }
 
-func passingSelectedReviewAndGoalEvidenceForNextSkillTests(runVersion int) map[string]model.VerificationRecord {
+func passingSelectedReviewEvidenceForNextSkillTests(runVersion int) map[string]model.VerificationRecord {
 	now := time.Now().UTC()
 	out := map[string]model.VerificationRecord{}
 	for _, skillName := range []string{
 		progression.SkillSpecComplianceReview,
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,
-		progression.SkillGoalVerification,
 	} {
 		out[skillName] = model.VerificationRecord{
 			Verdict:    model.VerificationVerdictPass,
@@ -835,7 +844,6 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, view.NextSkill.SelectedReviewSkills)
 		require.NotNil(t, view.NextSkill.ReviewContext)
@@ -852,7 +860,6 @@ func TestNextReturnsReviewContextForArtifactReview(t *testing.T) {
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(view.ReviewBatch))
 		assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
@@ -950,7 +957,6 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 		}, view.NextSkill.SelectedReviewSkills)
 		assert.Contains(t, view.NextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.NotContains(t, view.NextSkill.RequiredTokens, "layer:R0=pass")
@@ -981,12 +987,12 @@ func TestRequiredSkillStaleIsActionableAndSetExtractsSkillNames(t *testing.T) {
 
 	blockers := []model.ReasonCode{
 		model.NewReasonCode("required_skill_stale", "plan-audit:assurance.md"),
-		model.NewReasonCode("required_skill_stale", "goal-verification:run_version"),
+		model.NewReasonCode("required_skill_stale", "ship-verification:run_version"),
 		model.NewReasonCode("required_skill_missing", "wave-orchestration"),
 	}
 	stale := requiredSkillStaleSet(blockers)
 	assert.True(t, stale["plan-audit"], "skill name is the first segment of the detail")
-	assert.True(t, stale["goal-verification"])
+	assert.True(t, stale["ship-verification"])
 	assert.NotContains(t, stale, "wave-orchestration", "non-stale blockers are excluded")
 }
 
@@ -1088,7 +1094,6 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 			progression.SkillSpecComplianceReview,
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}
 
@@ -1116,7 +1121,6 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.ElementsMatch(t, []string{
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(handoff.ReviewBatch))
 
@@ -1135,7 +1139,6 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.ElementsMatch(t, []string{
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(nextDiag.ReviewBatch))
 		assert.Equal(t, "review_batch", nextDiag.ConfirmationRequirement.Reason)
@@ -1174,7 +1177,6 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.ElementsMatch(t, []string{
 			progression.SkillCodeQualityReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(runView.ReviewBatch))
 		assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
@@ -1211,12 +1213,10 @@ func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.
 		selectedReviewSkills := []string{
 			progression.SkillSpecComplianceReview,
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}
 		pendingReviewSkills := []string{
 			progression.SkillIndependentReview,
-			progression.SkillGoalVerification,
 			progression.SkillSecurityReview,
 		}
 
@@ -1274,13 +1274,13 @@ func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.
 	})
 }
 
-func TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking(t *testing.T) {
+func TestRunJSONRoutesToShipVerificationAfterReviewSetWithoutDisplayPromotion(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
 
-	change := model.NewChange("optional-final-closeout")
+	change := model.NewChange("ship-verification-terminal")
 	change.QualityMode = model.QualityModeStandard
 	change.CurrentState = model.StateS3Review
 	change.PlanSubStep = model.PlanSubStepNone
@@ -1297,18 +1297,18 @@ func TestRunJSONDoesNotMarkOptionalFinalCloseoutAsBlocking(t *testing.T) {
 		progression.AdvanceSummary{Action: "blocked", FromState: model.StateS3Review, Blockers: []model.ReasonCode{model.NewReasonCode("ship_gate_blocked", "assurance.md")}},
 		&change,
 		nil,
-		passingSelectedReviewAndGoalEvidenceForNextSkillTests(1),
+		passingSelectedReviewEvidenceForNextSkillTests(1),
 		nil,
 		true,
 		handoffSkillViewOptions,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, view.NextSkill)
-	assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
-	assert.Equal(t, progression.SkillGoalVerification, view.NextSkill.DisplayName)
+	// The merge collapsed the goal->closeout two-skill display promotion into the
+	// single terminal ship-verification skill; there is no DisplayName promotion.
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+	assert.Empty(t, view.NextSkill.DisplayName)
 	assert.Empty(t, view.NextSkill.BlockingName)
-	assert.Contains(t, view.NextSkill.ResolutionReason, "passing goal-verification")
-	assert.NotContains(t, view.NextSkill.ResolutionReason, "blocking skill")
 }
 
 func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T) {
@@ -1891,7 +1891,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
@@ -1901,7 +1901,9 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.Equal(t, model.StateS3Review, view.CurrentState)
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
-	assert.Contains(t, view.Warnings, "optional_closeout_available: final-closeout evidence is missing or stale; run final-closeout before `slipway done` only if refreshed closeout evidence is desired")
+	// ship-verification is the single always-required terminal gate; once it
+	// passes there is no optional-closeout advisory to surface.
+	assert.NotContains(t, strings.Join(view.Warnings, "\n"), "optional_closeout_available")
 
 	cmd := commandForRoot(t, root, makeNextCmd())
 	cmd.SetArgs([]string{"--json", "--change", slug})
@@ -1915,7 +1917,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S3_REVIEW")
 }
 
-func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(t *testing.T) {
+func TestNextReturnsDoneReadyWithShipVerificationAttestationForStandardRequestPath(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
@@ -1938,8 +1940,7 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 
 	writePassingWaveEvidence(t, root, slug, 1)
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
-	writePassingFinalCloseoutEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{AutoSkipEvidence: true, Command: "run"})
 	require.NoError(t, err)
@@ -1949,18 +1950,18 @@ func TestNextReturnsDoneReadyWithFinalCloseoutAttestationForStandardRequestPath(
 	assert.Equal(t, model.StateS3Review, view.CurrentState)
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
-	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:final-closeout")
-	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "closeout_assurance_attestation_missing")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_gate_blocked:required_skill_missing:ship-verification")
+	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "ship_verification_assurance_attestation_missing")
 }
 
-func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.T) {
+func TestNextDiagnosticsSkillEvidenceRoutesToShipVerificationAfterReviewSet(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "standard closeout diagnostics contract")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "standard ship-verification diagnostics contract")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 
@@ -1979,7 +1980,7 @@ func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.
 
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		// Deliberately omit ship-verification so it is the next actionable skill.
 
 		cmd := commandForRoot(t, root, makeNextCmd())
 		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -1990,19 +1991,19 @@ func TestNextDiagnosticsSkillEvidenceUsesStandardCloseoutRequirement(t *testing.
 		var view nextView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
-		assert.Equal(t, progression.SkillFinalCloseout, view.NextSkill.Name)
-		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:final-closeout")
+		assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:ship-verification")
 
 		statusBySkill := map[string]skillEvidenceEntry{}
 		for _, entry := range view.SkillEvidence {
 			statusBySkill[entry.SkillName] = entry
 		}
-		require.Contains(t, statusBySkill, progression.SkillGoalVerification)
-		require.Contains(t, statusBySkill, progression.SkillFinalCloseout)
-		assert.True(t, statusBySkill[progression.SkillGoalVerification].HasEvidence)
-		assert.Equal(t, "passing", statusBySkill[progression.SkillGoalVerification].Status)
-		assert.False(t, statusBySkill[progression.SkillFinalCloseout].HasEvidence)
-		assert.Equal(t, "missing", statusBySkill[progression.SkillFinalCloseout].Status)
+		require.Contains(t, statusBySkill, progression.SkillSpecComplianceReview)
+		require.Contains(t, statusBySkill, progression.SkillShipVerification)
+		assert.True(t, statusBySkill[progression.SkillSpecComplianceReview].HasEvidence)
+		assert.Equal(t, "passing", statusBySkill[progression.SkillSpecComplianceReview].Status)
+		assert.False(t, statusBySkill[progression.SkillShipVerification].HasEvidence)
+		assert.Equal(t, "missing", statusBySkill[progression.SkillShipVerification].Status)
 	})
 }
 
@@ -2030,7 +2031,7 @@ func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T
 
 		writePassingWaveEvidence(t, root, slug, 1)
 		writePassingReviewEvidencePack(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		diagnosticsCmd := commandForRoot(t, root, makeNextCmd())
 		diagnosticsCmd.SetArgs([]string{"--json", "--diagnostics"})
@@ -3901,8 +3902,7 @@ func prepareStalePlanningRecoveryBaseFixture(t *testing.T, root string, currentS
 		"changed_files": []string{"cmd/done.go"},
 	})
 	writePassingReviewEvidencePack(t, root, slug, 1)
-	writePassingGoalVerificationEvidence(t, root, slug, 1)
-	writePassingFinalCloseoutEvidence(t, root, slug, 1)
+	writePassingShipVerificationEvidence(t, root, slug, 1)
 
 	return slug, change
 }

@@ -24,11 +24,13 @@ reviewers are unordered peers, neither gating the other. The attached
 ## When This Runs
 After wave execution, at `S3_REVIEW` the workflow dispatches the selected review
 set as concurrent native subagents from one dispatch point. The selected set
-includes spec-compliance-review, independent-review, and goal-verification. It
-adds code-quality-review when the workflow profile requires code-quality review,
-and adds security-review when the security control is selected. This review does
+includes spec-compliance-review and independent-review. It adds
+code-quality-review when the workflow profile requires code-quality review, and
+adds security-review when the security control is selected. This review does
 not gate or wait for any peer reviewer. `slipway next` returns the selected
 review set at `S3_REVIEW` independent of which review evidence is recorded first.
+The terminal `ship-verification` gate runs last, after this selected peer set
+has converged.
 
 ## Review Contract
 Do not trust prior summaries. Read artifacts, code, and tests yourself before
@@ -38,15 +40,6 @@ claiming alignment.
 - Do NOT trust claimed test results without rerunning or reading raw output
 - Do NOT trust "all criteria met" assertions without your own verification
 - Read actual implementation files, not only changed-file lists
-
-## S3 Suite-Result Keystone
-Selected S3 reviewer freshness depends on
-`verification/suite-result.yaml`. Before recording a passing review verdict,
-confirm that file exists, is valid, and matches the current
-`run_summary_version`. It carries the shared reviewer input digests for the full
-suite and guardrail SAST proof. If it is absent, malformed, or from a different
-run version, stop and require fresh suite-result proof before this review is
-recorded; otherwise the engine will stale the selected reviewer set.
 
 ## Read Context
 Run `slipway next --json` and locate `verification/execution-summary.yaml`.

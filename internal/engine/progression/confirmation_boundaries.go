@@ -21,6 +21,53 @@ func IsRequiredSkillBlockerCode(code string) bool {
 	}
 }
 
+// IsTerminalShipGateRequiredSkillBlocker reports a generic required-skill blocker
+// whose subject is the terminal ship-verification gate. Per REQ-001
+// ship-verification is NOT a selected review peer: its missing/stale/blocked
+// state is owned by `slipway done` / EvaluateShipAuthority, not by review
+// convergence. The review verdict uses this to drop the redundant requiredness.
+func IsTerminalShipGateRequiredSkillBlocker(reason model.ReasonCode) bool {
+	return IsRequiredSkillBlockerCode(reason.Code) &&
+		model.ParseBlocker(reason).Subject == SkillShipVerification
+}
+
+// DropTerminalShipGateRequiredSkillBlockers returns blockers without the terminal
+// ship-verification gate's generic required-skill entries. `slipway review` uses
+// it so review convergence does not fail on the terminal gate, which
+// `slipway done` / EvaluateShipAuthority still owns fail-closed. See REQ-001.
+func DropTerminalShipGateRequiredSkillBlockers(blockers []model.ReasonCode) []model.ReasonCode {
+	if len(blockers) == 0 {
+		return blockers
+	}
+	out := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if IsTerminalShipGateRequiredSkillBlocker(blocker) {
+			continue
+		}
+		out = append(out, blocker)
+	}
+	return out
+}
+
+// IsShipVerificationHandoffBlockerCode reports G_ship gate blockers that a fresh
+// ship-verification handoff resolves. `next` uses this so a malformed-but-passing
+// ship record (verdict pass yet missing an attestation/ordering/high-risk token)
+// still routes back to ship-verification: the generic required-skill check sees a
+// passing record, but these gate blockers stay active until ship-verification is
+// re-recorded.
+func IsShipVerificationHandoffBlockerCode(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "ship_verification_assurance_attestation_missing",
+		"ship_verification_reviewer_independence_missing",
+		"ship_verification_evidence_missing",
+		"ship_verification_ordering_invalid",
+		"high_risk_check_missing":
+		return true
+	default:
+		return false
+	}
+}
+
 // HostHandoffBlockerCanRide reports blockers that are the reason for the host
 // handoff itself rather than a separate governance stop.
 func HostHandoffBlockerCanRide(reason model.ReasonCode) bool {
@@ -29,15 +76,16 @@ func HostHandoffBlockerCanRide(reason model.ReasonCode) bool {
 }
 
 // ReviewCompanionBlockerCanRide reports governance blockers that are satisfied
-// by running the selected review or closeout handoff that carries them.
+// by running the selected review or ship-verification handoff that carries them.
 func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 	switch strings.TrimSpace(reason.Code) {
 	case "governance_action_required",
-		"closeout_assurance_attestation_missing",
-		"closeout_reviewer_independence_missing",
+		"ship_verification_assurance_attestation_missing",
+		"ship_verification_reviewer_independence_missing",
+		"ship_verification_evidence_missing",
+		"ship_verification_ordering_invalid",
 		"context_origin_handle_invalid",
-		"high_risk_check_missing",
-		"verification_evidence_missing":
+		"high_risk_check_missing":
 		return true
 	default:
 		return false
@@ -57,9 +105,8 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 	case SkillSpecComplianceReview,
 		SkillCodeQualityReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
 		SkillSecurityReview,
-		SkillFinalCloseout:
+		SkillShipVerification:
 		return true
 	default:
 		return false
@@ -82,8 +129,7 @@ func SkillIsPurePacingAutoSafe(skillName string) bool {
 		SkillSpecComplianceReview,
 		SkillCodeQualityReview,
 		SkillIndependentReview,
-		SkillGoalVerification,
-		SkillFinalCloseout:
+		SkillShipVerification:
 		return true
 	default:
 		return false

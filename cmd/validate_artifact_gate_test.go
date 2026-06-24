@@ -541,7 +541,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		require.NoError(t, artifact.ScaffoldGovernedBundleForChange(root, change, ""))
 		writePassingWaveEvidence(t, root, slug, 1)
-		writePassingGoalVerificationEvidence(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
@@ -551,7 +551,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 
 		var view validateView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Equal(t, "pass", view.SkillsReady["goal-verification"])
+		assert.Equal(t, "pass", view.SkillsReady["ship-verification"])
 		assert.False(t, view.CanAdvance)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:spec-compliance-review")
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:code-quality-review")

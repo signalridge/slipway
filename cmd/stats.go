@@ -7,27 +7,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 )
 
-type closeoutFreshnessStats struct {
+type shipVerificationFreshnessStats struct {
 	Missing []string `json:"missing,omitempty"`
 	Stale   []string `json:"stale,omitempty"`
 	Fresh   []string `json:"fresh,omitempty"`
 }
 
 type statsView struct {
-	ExecutionMode         string                 `json:"execution_mode"`
-	ActiveCount           int                    `json:"active_count"`
-	MissingReviewEvidence []string               `json:"missing_review_evidence,omitempty"`
-	StaleRunSummaries     []string               `json:"stale_run_summaries,omitempty"`
-	IntegrityIssues       []string               `json:"integrity_issues,omitempty"`
-	ArchiveCount          int                    `json:"archive_count"`
-	CodebaseMap           state.CodebaseMapStats `json:"codebase_map"`
-	CloseoutFreshness     closeoutFreshnessStats `json:"closeout_freshness"`
+	ExecutionMode             string                         `json:"execution_mode"`
+	ActiveCount               int                            `json:"active_count"`
+	MissingReviewEvidence     []string                       `json:"missing_review_evidence,omitempty"`
+	StaleRunSummaries         []string                       `json:"stale_run_summaries,omitempty"`
+	IntegrityIssues           []string                       `json:"integrity_issues,omitempty"`
+	ArchiveCount              int                            `json:"archive_count"`
+	CodebaseMap               state.CodebaseMapStats         `json:"codebase_map"`
+	ShipVerificationFreshness shipVerificationFreshnessStats `json:"ship_verification_freshness"`
 }
 
 func buildStatsView(root string, now time.Time) (statsView, error) {
@@ -69,11 +68,16 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 		if readiness.ReviewSurface != nil && hasMissingReviewEvidenceBlockers(readiness.ReviewSurface.SkillBlockers) {
 			view.MissingReviewEvidence = append(view.MissingReviewEvidence, change.Slug)
 		}
-		presetPolicy, err := governance.ResolvePresetPolicy(root, change)
-		if err != nil {
-			return statsView{}, err
-		}
-		if !presetPolicy.CloseoutRefreshRequired || change.CurrentState != model.StateS3Review {
+		// The merged ship-verification gate (G_ship) is required at S3 on every
+		// preset: it carries no CloseoutConditional, so the required-skill filter
+		// never drops it, and ComputeVerificationReadiness demands the ship record
+		// regardless of preset. Auto-pass only clears the gate once it is already
+		// Approved (its evidence exists) — it never synthesizes a ship record — so a
+		// reviews-passing but ship-missing change still fails closed on every preset,
+		// plain light included. Gate the freshness summary on S3 membership alone; a
+		// preset-derived predicate (CloseoutRefreshRequired or
+		// FinalCloseoutEvidenceRequired) would silently drop the light preset.
+		if change.CurrentState != model.StateS3Review {
 			continue
 		}
 
@@ -82,25 +86,31 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 			continue
 		}
 		switch {
-		case hasReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillFinalCloseout):
-			view.CloseoutFreshness.Missing = append(view.CloseoutFreshness.Missing, change.Slug)
-		// CloseoutFreshness is intentionally broader than StaleRunSummaries: it
-		// reflects ship-readiness for refreshed closeout evidence, not only the
-		// execution-summary authority.
+		case hasReason(shipAuthority.VerifySkillBlockers, "required_skill_missing", progression.SkillShipVerification):
+			view.ShipVerificationFreshness.Missing = append(view.ShipVerificationFreshness.Missing, change.Slug)
+		// ShipVerificationFreshness is intentionally broader than StaleRunSummaries: it
+		// reflects ship-readiness for the terminal ship-verification evidence, not only
+		// the execution-summary authority. A present-but-unattested or out-of-order
+		// ship-verification record is stale (its attestation/ordering blockers fail
+		// closed) rather than fresh.
 		case statsExecutionSummaryStale(readiness) ||
-			hasAnyRequiredSkillBlocker(shipAuthority.VerifySkillBlockers, progression.SkillGoalVerification, progression.SkillFinalCloseout):
-			view.CloseoutFreshness.Stale = append(view.CloseoutFreshness.Stale, change.Slug)
+			hasAnyRequiredSkillBlocker(shipAuthority.VerifySkillBlockers, progression.SkillShipVerification) ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_assurance_attestation_missing", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_reviewer_independence_missing", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_ordering_invalid", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_evidence_missing", ""):
+			view.ShipVerificationFreshness.Stale = append(view.ShipVerificationFreshness.Stale, change.Slug)
 		default:
-			view.CloseoutFreshness.Fresh = append(view.CloseoutFreshness.Fresh, change.Slug)
+			view.ShipVerificationFreshness.Fresh = append(view.ShipVerificationFreshness.Fresh, change.Slug)
 		}
 	}
 
 	sortStatsStrings(&view.MissingReviewEvidence)
 	sortStatsStrings(&view.StaleRunSummaries)
 	sortStatsStrings(&view.IntegrityIssues)
-	sortStatsStrings(&view.CloseoutFreshness.Missing)
-	sortStatsStrings(&view.CloseoutFreshness.Stale)
-	sortStatsStrings(&view.CloseoutFreshness.Fresh)
+	sortStatsStrings(&view.ShipVerificationFreshness.Missing)
+	sortStatsStrings(&view.ShipVerificationFreshness.Stale)
+	sortStatsStrings(&view.ShipVerificationFreshness.Fresh)
 	return view, nil
 }
 
@@ -207,13 +217,13 @@ func writeStatsText(w io.Writer, view statsView) error {
 	if len(view.IntegrityIssues) > 0 {
 		writer.Writef("Integrity Issues: %s\n", strings.Join(view.IntegrityIssues, ", "))
 	}
-	if len(view.CloseoutFreshness.Missing) > 0 || len(view.CloseoutFreshness.Stale) > 0 {
-		writer.Writef("Closeout Freshness:\n")
-		if len(view.CloseoutFreshness.Missing) > 0 {
-			writer.Writef("  missing: %s\n", strings.Join(view.CloseoutFreshness.Missing, ", "))
+	if len(view.ShipVerificationFreshness.Missing) > 0 || len(view.ShipVerificationFreshness.Stale) > 0 {
+		writer.Writef("Ship Verification Freshness:\n")
+		if len(view.ShipVerificationFreshness.Missing) > 0 {
+			writer.Writef("  missing: %s\n", strings.Join(view.ShipVerificationFreshness.Missing, ", "))
 		}
-		if len(view.CloseoutFreshness.Stale) > 0 {
-			writer.Writef("  stale:   %s\n", strings.Join(view.CloseoutFreshness.Stale, ", "))
+		if len(view.ShipVerificationFreshness.Stale) > 0 {
+			writer.Writef("  stale:   %s\n", strings.Join(view.ShipVerificationFreshness.Stale, ", "))
 		}
 	}
 	return writer.Err()

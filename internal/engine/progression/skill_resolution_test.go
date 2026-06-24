@@ -107,7 +107,7 @@ func TestResolveNextSkill_S3Review(t *testing.T) {
 		t,
 		"default-selection",
 		skills,
-		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification},
+		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview},
 	)
 }
 
@@ -126,7 +126,7 @@ func TestResolveNextSkill_S3Review_SelectedSecurityReview(t *testing.T) {
 		t,
 		"security-selected",
 		skills,
-		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification, SkillSecurityReview},
+		[]string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillSecurityReview},
 	)
 }
 
@@ -148,7 +148,7 @@ func TestResolveNextSkill_S3Review_DocsProfileSkipsCodeQualityReview(t *testing.
 		t,
 		"docs-profile",
 		skills,
-		[]string{SkillSpecComplianceReview, SkillIndependentReview, SkillGoalVerification, SkillSecurityReview},
+		[]string{SkillSpecComplianceReview, SkillIndependentReview, SkillSecurityReview},
 	)
 }
 
@@ -161,7 +161,7 @@ func TestResolveNextSkill_S3Review_ReviewSetIndependentOfEvidence(t *testing.T) 
 	t.Parallel()
 
 	base := model.Change{CurrentState: model.StateS3Review}
-	wantPair := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview, SkillGoalVerification}
+	wantPair := []string{SkillSpecComplianceReview, SkillCodeQualityReview, SkillIndependentReview}
 
 	// No recorded review evidence.
 	skills, _ := ResolveNextSkillWithReviewSelection(base, engineskill.ReviewSkillSelection{})

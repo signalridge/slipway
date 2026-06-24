@@ -91,8 +91,10 @@ slipway review --json
 slipway validate --json
 ```
 
-Selected reviewer evidence must be fresh for the current suite-result and
-execution summary inputs.
+Selected reviewer evidence must be fresh for the current diff, planning
+artifacts, and execution summary inputs. The one authoritative full suite is run
+by the terminal `ship-verification` gate after the peers converge, not from a
+peer-shared keystone.
 
 ## Scope Drift
 

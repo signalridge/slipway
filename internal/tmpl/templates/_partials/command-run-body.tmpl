@@ -52,11 +52,11 @@ or `slipway next --json`:
 ## Fresh Reviewer Pause Rule
 When `run` reaches a selected S3 peer reviewer, stop and hand off to a fresh reviewer agent.
 Follow `next_skill.selected_review_skills` from the current output. The
-baseline selected peer set is `spec-compliance-review`,
-`independent-review`, and `goal-verification`; it adds `code-quality-review`
+baseline selected peer set is `spec-compliance-review` and
+`independent-review`; it adds `code-quality-review`
 when selected by the workflow profile and `security-review` when selected by
 policy. Do not let the same long-running execution context review its own prior
-implementation work. `final-closeout` is the last closeout step after the
+implementation work. `ship-verification` is the last terminal step after the
 selected peer set, not a selected S3 peer.
 
 ## Fresh Context Boundary Rule (HARD RULE)
