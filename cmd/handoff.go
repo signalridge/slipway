@@ -24,7 +24,13 @@ func makeHandoffCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "handoff",
 		Short: desc("handoff"),
-		Args:  cobra.NoArgs,
+		Long: desc("handoff") + `
+
+Environment variables:
+  SLIPWAY_SESSION_OWNER  Set the session-owner label recorded in the handoff
+                         header. When unset, the owner falls back to USER, then
+                         USERNAME, then the machine hostname, then "unknown".`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runHandoffWrite(cmd, changeSlug, "")
 		},

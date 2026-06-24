@@ -304,7 +304,17 @@ func makeNextCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "next",
 		Short: desc("next"),
-		Args:  cobra.NoArgs,
+		Long: desc("next") + `
+
+Environment variables:
+  SLIPWAY_CONTEXT_WINDOW_TOKENS  Override the assumed context-window size (in
+                                 tokens) used to compute the context budget's
+                                 utilization, remaining percent, and guard
+                                 action (the same window the --context-guard
+                                 hook messages report). Must be a positive
+                                 integer; a malformed or non-positive value is
+                                 ignored and the built-in default window is used.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromCommand(cmd)
 			if err != nil {

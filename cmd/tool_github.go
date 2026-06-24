@@ -26,7 +26,14 @@ func makeFetchPRChecksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fetch-pr-checks",
 		Short: "Fetch GitHub PR check status using the selected GitHub backend",
-		Args:  cobra.NoArgs,
+		Long: `Fetch GitHub PR check status using the selected GitHub backend.
+
+Environment variables:
+  SLIPWAY_GITHUB_API_URL  Override the GitHub REST/GraphQL API base URL used by
+                          the --backend api / token-backed HTTP path (default
+                          https://api.github.com). Useful for GitHub Enterprise;
+                          a trailing slash is trimmed. The gh backend ignores it.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFetchPRChecks(cmd, repo, pr, backend)
 		},

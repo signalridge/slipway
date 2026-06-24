@@ -528,3 +528,110 @@ func TestAdvanceGoverned_AutoOffPresetPendingUnchanged(t *testing.T) {
 		t.Fatalf("expected pending suggestion preserved, got %q", reloaded.SuggestedWorkflowPreset)
 	}
 }
+
+// TestAdvanceGoverned_S2StaleWaveEvidenceRecommendsRunnableCommand is the issue
+// #324 regression (REQ-008/REQ-009). When a change is IN S2_IMPLEMENT with
+// stale-but-passing wave-orchestration evidence, the early stale-evidence repair
+// path must surface the owning-stage blockers via blockedAdvanceSummary, NOT the
+// review-alignment path that maps to the S3-only `slipway fix` command. Running
+// `slipway fix` in S2 yields fix_state_invalid, so the recommended recovery must
+// be RUNNABLE in S2.
+//
+// This asserts command-level behavior through the public recovery projection
+// (model.BuildRecovery) rather than the stale reason-code spelling: the
+// recommended primary_command must not be `slipway fix` and must be a
+// state-valid command for S2 (`slipway run`).
+func TestAdvanceGoverned_S2StaleWaveEvidenceRecommendsRunnableCommand(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s2-stale-wave-recovery")
+	change.CurrentState = model.StateS2Implement
+	change.WorkflowPreset = model.WorkflowPresetLight
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	// Materialize the wave plan and record passing wave-orchestration evidence
+	// plus its execution summary, then stamp the engine-owned input digest — a
+	// genuine passing S2 wave authority.
+	prePlan, err := state.MaterializeWavePlanAt(root, change, time.Unix(0, 0).UTC())
+	if err != nil {
+		t.Fatalf("materialize wave plan: %v", err)
+	}
+	capturedAt := time.Date(2026, 6, 4, 3, 0, 0, 0, time.UTC)
+	writeWaveDigestTaskEvidence(t, root, change, prePlan.TasksPlanHash, "test:wave", capturedAt)
+	summary := &model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 1,
+		CapturedAt:        capturedAt,
+		OverallVerdict:    model.ExecutionVerdictPass,
+		TasksPlanHash:     prePlan.TasksPlanHash,
+	}
+	summary.SyncDerivedFields()
+	if err := state.SaveExecutionSummary(root, change.Slug, *summary); err != nil {
+		t.Fatalf("save execution summary: %v", err)
+	}
+	waveRecord := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  capturedAt.Add(time.Minute),
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillWaveOrchestration, waveRecord)
+	if err := StampEvidenceDigestForSkill(root, change, SkillWaveOrchestration, waveRecord, summary); err != nil {
+		t.Fatalf("stamp wave-orchestration digest: %v", err)
+	}
+
+	// Stale the wave-orchestration authority: a genuine task-plan scope change to
+	// tasks.md plus a re-materialize makes the stored wave-plan digest stale while
+	// the verdict stays passing (required_skill_stale:wave-orchestration:*).
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		t.Fatalf("bundle dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(scopeOnlyDigestTasks()), 0o644); err != nil {
+		t.Fatalf("write tasks.md: %v", err)
+	}
+	if _, err := state.MaterializeWavePlanAt(root, change, time.Now().UTC()); err != nil {
+		t.Fatalf("re-materialize wave plan: %v", err)
+	}
+
+	summaryOut, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summaryOut.Action != "blocked" {
+		t.Fatalf("expected the stale wave-orchestration authority to block at S2, got %+v", summaryOut)
+	}
+
+	recovery := model.BuildRecovery(summaryOut.Blockers)
+	if recovery == nil {
+		t.Fatalf("expected a recovery projection for the stale S2 wave blockers, got nil (blockers %v)", summaryOut.Blockers)
+	}
+	if recovery.PrimaryCommand == "slipway fix" {
+		t.Fatalf("S2 stale wave-orchestration recovery must not recommend the S3-only `slipway fix` "+
+			"(fix_state_invalid in S2); got primary_command=%q for blockers %v",
+			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
+	}
+	// The recommended command must be runnable in S2: the state-valid driver for a
+	// stale owning-stage authority is `slipway run`.
+	if recovery.PrimaryCommand != "slipway run" {
+		t.Fatalf("expected an S2-runnable recovery command (`slipway run`), got primary_command=%q for blockers %v",
+			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
+	}
+
+	// The change must stay at S2_IMPLEMENT: the fix corrects only the recommended
+	// command, never the fail-closed stale-evidence gate.
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.CurrentState != model.StateS2Implement {
+		t.Fatalf("expected change held at S2_IMPLEMENT by the stale-evidence gate, got %s", reloaded.CurrentState)
+	}
+}

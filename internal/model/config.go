@@ -337,7 +337,10 @@ func (c Config) ToYAML() ([]byte, error) {
 		len(cfg.Governance.Controls) > 0 || len(cfg.Governance.DisabledControls) > 0 ||
 		cfg.Governance.Thresholds.IndependentReviewBlastRadius != "" ||
 		cfg.Governance.Thresholds.SecurityReviewBlastRadius != "" ||
-		cfg.Governance.Thresholds.WorktreeBlastRadius != ""
+		cfg.Governance.Thresholds.WorktreeBlastRadius != "" ||
+		// A set auto_provision_worktree (including an explicit false) must persist
+		// even when it is the only governance key, or `config set` silently drops it.
+		cfg.Governance.AutoProvisionWorktree != nil
 	if hasGovernance {
 		governanceNode, err := encodeYAMLNode(cfg.Governance)
 		if err != nil {
@@ -354,7 +357,10 @@ func (c Config) ToYAML() ([]byte, error) {
 		appendMappingEntry(root, "validation", validationNode)
 	}
 
-	if cfg.Context.TechStack != "" || cfg.Context.Conventions != "" || cfg.Context.TestCmd != "" || cfg.Context.BuildCmd != "" || len(cfg.Context.Languages) > 0 {
+	// Emit the context section whenever any context leaf is set. Reuse IsZero()
+	// (the single authority for "context is empty") instead of a hand-maintained
+	// field list, which previously omitted recent_work and dropped it on save.
+	if !cfg.Context.IsZero() {
 		contextNode, err := encodeYAMLNode(cfg.Context)
 		if err != nil {
 			return nil, err
