@@ -425,8 +425,10 @@ func TestShipVerificationTemplateRequiresReviewerIndependenceAndChainOrder(t *te
 	assert.NotContains(t, content, "goal-verification")
 	assert.NotContains(t, content, "closeout >= goal-verification >= latest(selected S3 review set)")
 	// The retired chain-order code is gone; the ordering invariant now fails closed
-	// with the canonical ship_verification_evidence_missing.
-	assert.Contains(t, content, "ship_verification_evidence_missing")
+	// with its own ship_verification_ordering_invalid code, not the generic
+	// ship_verification_evidence_missing.
+	assert.Contains(t, content, "ship_verification_ordering_invalid")
+	assert.NotContains(t, content, "ship_verification_evidence_missing")
 	assert.NotContains(t, content, "closeout_chain_order_invalid")
 	assert.Contains(t, content, "Advisory on light")
 }

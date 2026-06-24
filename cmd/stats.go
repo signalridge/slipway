@@ -93,6 +93,7 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 			hasAnyRequiredSkillBlocker(shipAuthority.VerifySkillBlockers, progression.SkillShipVerification) ||
 			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_assurance_attestation_missing", "") ||
 			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_reviewer_independence_missing", "") ||
+			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_ordering_invalid", "") ||
 			hasReason(shipAuthority.VerifySkillBlockers, "ship_verification_evidence_missing", ""):
 			view.CloseoutFreshness.Stale = append(view.CloseoutFreshness.Stale, change.Slug)
 		default:

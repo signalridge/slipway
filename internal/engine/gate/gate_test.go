@@ -100,6 +100,41 @@ func TestGuardrailHighRiskChecks(t *testing.T) {
 	assert.True(t, IsRegisteredCheckID("security_credentials.safety_baseline"))
 }
 
+// TestEvaluateGShipHighRiskChecks drives the high-risk safety gate end-to-end
+// through EvaluateGShip for a guardrail-domain change: a required SAST baseline
+// that is absent must block with high_risk_check_missing, an explicit failure
+// must block with high_risk_check_failed, and only a recorded pass clears the
+// gate. The catalog/unit legs are covered above; this pins the wired G_ship leg
+// so a sensitive-domain change cannot reach the ship decision without the SAST
+// baseline actually passing.
+func TestEvaluateGShipHighRiskChecks(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("slug")
+	change.CurrentState = model.StateS3Review
+	change.GuardrailDomain = model.GuardrailDomainAuthAuthZ
+	const baseline = "auth_authz.safety_baseline"
+
+	// Missing baseline -> fail closed; every other ship input is ready so the
+	// high-risk reason is the sole blocker.
+	missing := EvaluateGShip(change, true, true, true, nil, nil)
+	assert.Equal(t, model.GateStatusBlocked, missing.Status)
+	reason := findGateReasonCode(t, missing.ReasonCodes, "high_risk_check_missing")
+	assert.Equal(t, baseline, reason.Detail)
+
+	// Recorded explicit failure -> fail closed with the failed code.
+	failed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: false})
+	assert.Equal(t, model.GateStatusBlocked, failed.Status)
+	reason = findGateReasonCode(t, failed.ReasonCodes, "high_risk_check_failed")
+	assert.Equal(t, baseline, reason.Detail)
+
+	// Recorded pass -> the gate clears (no high-risk reason remains).
+	passed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: true})
+	assert.Equal(t, model.GateStatusApproved, passed.Status)
+	assert.False(t, hasGateReasonCode(passed.ReasonCodes, "high_risk_check_missing"))
+	assert.False(t, hasGateReasonCode(passed.ReasonCodes, "high_risk_check_failed"))
+}
+
 func findGateReasonCode(t *testing.T, reasons []model.ReasonCode, code string) model.ReasonCode {
 	t.Helper()
 

@@ -404,7 +404,7 @@ func addPlanningArtifactInputs(root string, change model.Change, inputs map[stri
 	seenAny := false
 	// assurance.md is not a plan-audit input: it is deferred to S3_REVIEW authoring
 	// (issue #141) and does not exist at plan-audit time. It remains an input to the
-	// final-closeout digest.
+	// terminal ship-verification digest (the merged goal-verification/final-closeout gate).
 	for _, rel := range []string{"intent.md", "requirements.md", "research.md", "decision.md"} {
 		path := filepath.Join(bundleDir, rel)
 		if _, err := os.Stat(path); err != nil {

@@ -59,10 +59,45 @@ func makeEvidenceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "evidence",
 		Short: desc("evidence"),
+		Args:  rejectRetiredEvidenceSubcommands,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Bare `slipway evidence` prints the subcommand help (exit 0). Unknown
+			// or retired positional tokens are rejected by the Args validator above.
+			return cmd.Help()
+		},
 	}
 	cmd.AddCommand(makeEvidenceTaskCmd())
 	cmd.AddCommand(makeEvidenceSkillCmd())
 	return cmd
+}
+
+// rejectRetiredEvidenceSubcommands fails closed on any positional argument that is
+// not a registered `evidence` subcommand. Cobra only auto-rejects unknown
+// subcommands on the ROOT command (legacyArgs gates on !HasParent), so a nested
+// parent like `evidence` would otherwise accept a stray token and silently no-op
+// into its own help with exit 0. That mattered for the retired `suite-result`
+// keystone: a stale script still running `slipway evidence suite-result` would get
+// exit 0 and believe suite proof was recorded when nothing happened. Fail closed
+// instead, and name the replacement for the retired token.
+func rejectRetiredEvidenceSubcommands(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	sub := strings.TrimSpace(args[0])
+	if sub == "suite-result" {
+		return newInvalidUsageError(
+			"evidence_suite_result_retired",
+			"`slipway evidence suite-result` was retired with the ship-verification merge",
+			"The authoritative test suite now runs exactly once inside the terminal ship-verification gate; record it with `slipway evidence skill --skill ship-verification ...`. Review peers no longer consume a shared suite-result keystone.",
+			map[string]any{"subcommand": sub},
+		)
+	}
+	return newInvalidUsageError(
+		"evidence_unknown_subcommand",
+		fmt.Sprintf("unknown command %q for \"slipway evidence\"", sub),
+		"Use `slipway evidence skill` or `slipway evidence task`; run `slipway evidence --help` to list subcommands.",
+		map[string]any{"subcommand": sub},
+	)
 }
 
 func makeEvidenceSkillCmd() *cobra.Command {

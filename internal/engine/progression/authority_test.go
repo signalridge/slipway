@@ -225,7 +225,7 @@ func TestShipReviewerIndependenceBlockers(t *testing.T) {
 // TestShipReviewSetOrderingBlockers covers the single retained S3 ordering
 // invariant: ship-verification must be stamped at or after every selected review
 // peer (spec/code/independent/security). A peer stamped after ship-verification is
-// a fail-closed ship_verification_evidence_missing blocker, advisory on light.
+// a fail-closed ship_verification_ordering_invalid blocker, advisory on light.
 func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	t.Parallel()
 
@@ -244,11 +244,19 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsBeforeShip, selectedReviewers, true),
 		"reviews stamped before ship-verification must pass")
 
+	// Boundary: a selected reviewer stamped at the EXACT ship-verification time
+	// must pass. The invariant is ship >= review (compared with After(), not a
+	// strict >), so an equal stamp is in order. Pins the >= boundary against a
+	// regression to a strict After()/Before() that would block equal timestamps.
+	reviewsAtShip := closeoutReuseReviewRecords(1, shipAt, shipAt)
+	assert.Empty(t, shipReviewSetOrderingBlockers(shipPassing, reviewsAtShip, selectedReviewers, true),
+		"a reviewer stamped at the exact ship-verification time must pass (ship >= review)")
+
 	// A selected reviewer stamped after ship-verification -> blocker.
 	reviewsAfterShip := closeoutReuseReviewRecords(1, shipAt.Add(time.Second), shipAt.Add(2*time.Second))
 	blockers := shipReviewSetOrderingBlockers(shipPassing, reviewsAfterShip, selectedReviewers, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "ship_verification_evidence_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, "selected reviewer evidence")
 
 	// Every selected reviewer must be ordered before ship-verification, not only
@@ -260,7 +268,7 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 	}
 	blockers = shipReviewSetOrderingBlockers(shipPassing, independentAfterShip, selectedReviewers, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "ship_verification_evidence_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillIndependentReview)
 
 	// Unselected security evidence after ship is silent unless the control selected it.
@@ -274,7 +282,7 @@ func TestShipReviewSetOrderingBlockers(t *testing.T) {
 
 	blockers = shipReviewSetOrderingBlockers(shipPassing, unselectedSecurityAfterShip, selectedReviewersWithSecurity, true)
 	require.Len(t, blockers, 1)
-	assert.Equal(t, "ship_verification_evidence_missing", blockers[0].Code)
+	assert.Equal(t, "ship_verification_ordering_invalid", blockers[0].Code)
 	assert.Contains(t, blockers[0].Detail, SkillSecurityReview)
 
 	// Genuinely-absent ship record: nothing to compare, no blocker (owned elsewhere).

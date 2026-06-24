@@ -526,6 +526,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required ship-verification evidence is missing; rerun ship-verification before done",
 	},
+	"ship_verification_ordering_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Ship-verification is stamped before a selected S3 review peer; rerun ship-verification after the peer",
+	},
 	"ship_verification_reviewer_independence_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The ship-verification reviewer-independence attestation is missing",

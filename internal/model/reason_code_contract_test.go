@@ -161,6 +161,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"ship_gate_blocked",
 		"ship_verification_assurance_attestation_missing",
 		"ship_verification_evidence_missing",
+		"ship_verification_ordering_invalid",
 		"ship_verification_reviewer_independence_missing",
 		"skill_prompt_surface_missing",
 		"skill_prompt_surface_unreadable",
@@ -488,9 +489,9 @@ func TestMessageProseAssertionLintDetectsBypassShapes(t *testing.T) {
 			src: `package model
 
 func TestLintSample(t *testing.T) {
-	got := NewReasonCode("required_skill_missing", "goal-verification")
+	got := NewReasonCode("required_skill_missing", "example-skill")
 	assert.Equal(t, "prose", got.Message)
-	assert.Contains(t, NewReasonCode("required_skill_missing", "goal-verification").Message, "prose")
+	assert.Contains(t, NewReasonCode("required_skill_missing", "example-skill").Message, "prose")
 	assert.Equal(t, "prose", testReason().Message)
 
 	var finding HealthFinding
@@ -506,7 +507,7 @@ func TestLintSample(t *testing.T) {
 			src: `package model
 
 func TestLintSample(t *testing.T) {
-	assert.Contains(t, NewReasonCode("required_skill_missing", "goal-verification").Message, "prose")
+	assert.Contains(t, NewReasonCode("required_skill_missing", "example-skill").Message, "prose")
 	assert.Equal(t, "prose", testReason().Message)
 }
 `,
@@ -553,7 +554,7 @@ func TestMessageProseAssertionLintScopesRootsPerFunction(t *testing.T) {
 	source := `package model
 
 func TestReasonMessage(t *testing.T) {
-	reason := NewReasonCode("required_skill_missing", "goal-verification")
+	reason := NewReasonCode("required_skill_missing", "example-skill")
 	assert.Contains(t, reason.Message, "prose")
 }
 

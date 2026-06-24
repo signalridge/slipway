@@ -433,7 +433,7 @@ func shipReviewSetOrderingBlockers(
 }
 
 func shipReviewSetOrderingInvalidBlocker(detail string) model.ReasonCode {
-	return model.NewReasonCode("ship_verification_evidence_missing", appendShipRecovery(detail))
+	return model.NewReasonCode("ship_verification_ordering_invalid", appendShipRecovery(detail))
 }
 
 // crossStageContextOwnedReviewStagesForSelectedSkills is the set of lattice

@@ -40,7 +40,7 @@ includes spec-compliance-review and independent-review; it
 adds code-quality-review when the workflow profile requires code-quality review,
 and adds security-review when the security control is selected. This invariant
 is always on. If ship-verification predates any selected peer, the ship gate
-fails closed with `ship_verification_evidence_missing`. Recovery: re-stamp the stale
+fails closed with `ship_verification_ordering_invalid`. Recovery: re-stamp the stale
 selected reviewer, then rerun ship-verification. Advisory on light. Do not
 serialize the adversarial peers behind ship-verification, and do not use a
 retired goal/closeout-stage context-origin handle.
@@ -234,7 +234,7 @@ The ship gate consumes the independence attestation.
   it, the ship gate fails closed with `ship_verification_reviewer_independence_missing`.
   Recovery: re-run ship-verification and record the token. Advisory on light.
 - **Terminal ordering (always-on invariant):** see Terminal Ordering Invariant
-  above; a stale-ordered record fails closed with `ship_verification_evidence_missing`.
+  above; a stale-ordered record fails closed with `ship_verification_ordering_invalid`.
 
 Both facets fail closed at error severity on standard/strict and are advisory on
 light. There is no bypass, force-close, or self-stamp path; the engine remains the

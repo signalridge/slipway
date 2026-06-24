@@ -248,6 +248,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"ship_gate_blocked":                               true,
 		"ship_verification_assurance_attestation_missing": true,
 		"ship_verification_evidence_missing":              true,
+		"ship_verification_ordering_invalid":              true,
 		"ship_verification_reviewer_independence_missing": true,
 		"tasks_checklist_invalid_format":                  true,
 		"unknown_reason_code":                             true,

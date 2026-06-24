@@ -74,11 +74,39 @@ func TestEvidenceRestampCommandIsNotRegistered(t *testing.T) {
 		initTestWorkspace(t, root)
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
-		cmd.SetArgs([]string{"restamp", "--json"})
-		err := cmd.Execute()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown command")
+		cmd.SetArgs([]string{"restamp"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr, "retired `evidence restamp` must fail closed as an unknown subcommand")
+		assert.Equal(t, "evidence_unknown_subcommand", cliErr.ErrorCode)
 	})
+}
+
+// TestEvidenceSuiteResultSubcommandFailsClosed pins the retired `suite-result`
+// keystone to a fail-closed error. The parent `evidence` command is nested under
+// the root, where Cobra's native unknown-subcommand rejection does not fire, so
+// without the explicit Args validator a stale `evidence suite-result` call would
+// no-op into help with exit 0 and falsely read as "suite proof recorded".
+func TestEvidenceSuiteResultSubcommandFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	cmd := commandForRoot(t, t.TempDir(), makeEvidenceCmd())
+	cmd.SetArgs([]string{"suite-result"})
+	cliErr := asCLIError(cmd.Execute())
+	require.NotNil(t, cliErr, "retired `evidence suite-result` must fail closed, not no-op into help")
+	assert.Equal(t, "evidence_suite_result_retired", cliErr.ErrorCode)
+	assert.Contains(t, cliErr.Remediation, "ship-verification")
+}
+
+// TestEvidenceUnknownSubcommandFailsClosed asserts any unregistered evidence token
+// fails closed rather than silently printing help with exit 0.
+func TestEvidenceUnknownSubcommandFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	cmd := commandForRoot(t, t.TempDir(), makeEvidenceCmd())
+	cmd.SetArgs([]string{"definitely-not-a-subcommand"})
+	cliErr := asCLIError(cmd.Execute())
+	require.NotNil(t, cliErr, "unknown evidence subcommand must fail closed")
+	assert.Equal(t, "evidence_unknown_subcommand", cliErr.ErrorCode)
 }
 
 // TestEvidenceTaskWrongStateBeforeImplement asserts task evidence is rejected from

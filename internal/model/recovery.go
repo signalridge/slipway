@@ -526,6 +526,15 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 		Priority:        10,
 	},
+	"ship_verification_ordering_invalid": {
+		// Detail carries a colon-bearing sentence (the out-of-order peer name), so
+		// the remediation/command are static and recovery treats the detail as
+		// opaque to avoid a misleading subject split.
+		Remediation:     "Ship-verification is stamped before a selected S3 review peer; re-stamp the stale reviewer, then re-run ship-verification so it observes the final review evidence.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+		Priority:        20,
+	},
 	"ship_verification_assurance_attestation_missing": {
 		// Detail carries a colon-bearing sentence, so this remediation/command are
 		// static and recovery treats the detail as opaque to avoid a misleading
