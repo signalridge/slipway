@@ -774,6 +774,13 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "skip `slipway next --json`", "%s: stale next bypass wording leaked", cfg.ID)
 		assert.NotContains(t, s, "skip lifecycle gates", "%s: stale lifecycle bypass wording leaked", cfg.ID)
 		assert.NotContains(t, s, "skip evidence checks", "%s: stale evidence bypass wording leaked", cfg.ID)
+		// REQ-002/REQ-003: the generated workflow skill must ship the fresh-session
+		// resume protocol that drives status -> --change -> handoff show -> next.
+		assert.Contains(t, s, "## Continuing A Change In A Fresh Session", "%s: missing fresh-session resume protocol section", cfg.ID)
+		assert.Contains(t, sText, "Run `slipway status --json` to discover the active change", "%s: resume protocol missing status --json step", cfg.ID)
+		assert.Contains(t, sText, "select the one you are resuming and pass `--change <slug>`", "%s: resume protocol missing multi-change --change selection step", cfg.ID)
+		assert.Contains(t, sText, "Run `slipway handoff show --change <slug>` and read the advisory narrative first", "%s: resume protocol missing handoff show step", cfg.ID)
+		assert.Contains(t, sText, "Then run `slipway next`", "%s: resume protocol missing next step", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(SkillIndexPath(cfg)), "%s: missing workflow skill index path", cfg.ID)
 		assert.Contains(t, s, "informational only", "%s: missing skill index authority boundary", cfg.ID)

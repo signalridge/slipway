@@ -492,11 +492,14 @@ func contextPressureMessage(result contextPressureResult) string {
 	switch result.State {
 	case contextPressureCritical:
 		return fmt.Sprintf(
-			"CONTEXT CRITICAL: usage is approximately %d%%. Context pressure is high; "+
-				"run `slipway handoff write` to refresh the per-change advisory handoff "+
-				"before continuing in a fresh context. "+
-				"The handoff is advisory; fresh sessions still run `slipway status --json` "+
-				"and `slipway next --json`.",
+			"CONTEXT CRITICAL: usage is approximately %d%% (>= 70%%). Author the per-change "+
+				"handoff NOW, before your next action, so the next session can continue: run "+
+				"`slipway handoff write --section \"Current Position\"`, "+
+				"`slipway handoff write --section \"Next Session Focus\"`, and "+
+				"`slipway handoff write --section \"Risks And Blockers\"` to capture your "+
+				"current judgment in those sections. "+
+				"The handoff is advisory; the next session still runs `slipway status --json` "+
+				"and `slipway next --json` before acting.",
 			result.Percent,
 		)
 	default:
