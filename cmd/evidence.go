@@ -432,6 +432,9 @@ func makeEvidenceTaskCmd() *cobra.Command {
 
 				wavePlan, err := loadCurrentWavePlanForCommand(root, change)
 				if err != nil {
+					if errors.Is(err, state.ErrWavePlanCacheUnreadable) {
+						return newWavePlanCacheUnreadableError(root, change, "task evidence", err)
+					}
 					return newStateIntegrityError(
 						"evidence_task_wave_plan_unavailable",
 						fmt.Sprintf("task evidence requires a current S2 wave projection for %q: %v", change.Slug, err),
@@ -697,6 +700,9 @@ func recordEvidenceTaskResultFiles(
 
 	wavePlan, err := loadCurrentWavePlanForCommand(root, change)
 	if err != nil {
+		if errors.Is(err, state.ErrWavePlanCacheUnreadable) {
+			return newWavePlanCacheUnreadableError(root, change, "task evidence", err)
+		}
 		return newStateIntegrityError(
 			"evidence_task_wave_plan_unavailable",
 			fmt.Sprintf("task evidence requires a current S2 wave projection for %q: %v", change.Slug, err),
@@ -1260,6 +1266,9 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 	}
 	wavePlan, err := loadCurrentWavePlanForCommand(root, change)
 	if err != nil {
+		if errors.Is(err, state.ErrWavePlanCacheUnreadable) {
+			return 0, newWavePlanCacheUnreadableError(root, change, "wave-orchestration evidence", err)
+		}
 		return 0, newStateIntegrityError(
 			"evidence_skill_wave_plan_unavailable",
 			fmt.Sprintf("wave-orchestration evidence requires a current S2 wave projection for %q: %v", change.Slug, err),

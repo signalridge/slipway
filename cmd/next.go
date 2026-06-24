@@ -246,6 +246,15 @@ type handoffRiskView struct {
 	Hints           []string `json:"hints,omitempty"`
 }
 
+// wavePlanView is the diagnostic-only, non-persistable projection surfaced as
+// input_context.wave_plan on `slipway next --json`. It is intentionally
+// distinct from the persistable, engine-owned wave-plan.yaml cache schema
+// (model.WavePlan): it carries view-only fields (WaveCount/wave_count and
+// Advisories/advisories) that model.WavePlan does not define. These view-only
+// fields must never be copied into the persisted cache — the cache parses with
+// KnownFields(true) and will fail closed (wave_plan_unreadable) on them. Treat
+// this struct as a read-side diagnostic surface only; do not round-trip it
+// through wave-plan.yaml.
 type wavePlanView struct {
 	TotalTasks int        `json:"total_tasks"`
 	WaveCount  int        `json:"wave_count"`

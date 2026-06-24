@@ -265,6 +265,22 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 	if change.CurrentState == model.StateS2Implement {
 		derived, _, err := MaterializeWavePlanTransactionOpAt(root, change, nowUTC())
 		if err != nil {
+			if errors.Is(err, ErrWavePlanCacheUnreadable) {
+				// A corrupt engine-owned wave-plan.yaml cache (for example one
+				// carrying view-only/unsupported fields) fails the strict loader and
+				// blocks rematerialization. Mirror the command surface: point at the
+				// engine-owned cache and the regenerate path, NOT at editing tasks.md.
+				findings = append(findings, HealthFinding{
+					Severity:   model.ReasonSeverityError,
+					Category:   "wave_execution",
+					Slug:       change.Slug,
+					Message:    "Derived wave plan is unreadable",
+					Repairable: true,
+					RepairHint: wavePlanRepairHint(),
+					Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_unreadable", err.Error())},
+				})
+				return findings, nil
+			}
 			findings = append(findings, HealthFinding{
 				Severity:   model.ReasonSeverityError,
 				Category:   "wave_execution",
