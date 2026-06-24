@@ -522,6 +522,14 @@ func crossStageContextParticipants(
 		participants[skillName] = model.ContextParticipant{Handle: handle.Handle}
 	}
 
+	// fix <- every selected reviewer's recorded context_origin:stage=fix handles,
+	// unioned into one set. The fix stage is multi-valued — a reviewer's record
+	// accumulates one handle per fresh-context repair subagent / batch — so the
+	// model exposes it as a never-fail-closed set rather than the single-valued
+	// handles map. Reading it through FixContextOriginHandleSetFromVerification
+	// (rather than the single-valued map, which no longer stores fix) collects
+	// every fix handle across all selected reviewers without poisoning a reviewer's
+	// own review-handle parse.
 	if _, want := stages[model.StageContextFix]; want {
 		fixHandles := map[string]struct{}{}
 		for _, skillName := range reviewParticipantSkillNames(stages) {
@@ -529,15 +537,9 @@ func crossStageContextParticipants(
 			if !ok || !record.IsPassing() {
 				continue
 			}
-			handles, ok := model.ContextOriginHandlesFromVerification(record)
-			if !ok {
-				continue
+			for handle := range model.FixContextOriginHandleSetFromVerification(record) {
+				fixHandles[handle] = struct{}{}
 			}
-			handle, ok := handles[model.StageContextFix]
-			if !ok || strings.TrimSpace(handle.Handle) == "" {
-				continue
-			}
-			fixHandles[handle.Handle] = struct{}{}
 		}
 		if len(fixHandles) > 0 {
 			participants[model.StageContextFix] = model.ContextParticipant{HandleSet: fixHandles}

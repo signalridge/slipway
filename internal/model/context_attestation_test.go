@@ -319,6 +319,28 @@ func TestReviewContextOriginHandleFromVerification(t *testing.T) {
 			wantOK:     true,
 			wantHandle: "ctx-reviewer",
 		},
+		{
+			name: "review handle reads through coexisting multiple distinct fix handles",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-review",
+					"context_origin:stage=fix=ctx-fix-1",
+					"context_origin:stage=fix=ctx-fix-2",
+				},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-review",
+		},
+		{
+			name: "record with only multiple fix handles has no review handle without failing closed",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=fix=ctx-fix-1",
+					"context_origin:stage=fix=ctx-fix-2",
+				},
+			},
+			wantOK: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -334,6 +356,71 @@ func TestReviewContextOriginHandleFromVerification(t *testing.T) {
 			}
 			assert.Equal(t, StageContextReview, got.Stage)
 			assert.Equal(t, tt.wantHandle, got.Handle)
+		})
+	}
+}
+
+func TestFixContextOriginHandleSetFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		record VerificationRecord
+		want   map[string]struct{}
+	}{
+		{
+			name: "single fix handle flattened to a set",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=fix=ctx-fix-1"},
+			},
+			want: map[string]struct{}{"ctx-fix-1": {}},
+		},
+		{
+			name: "distinct fix handles deduplicated",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=fix=ctx-fix-1",
+					"context_origin:stage=fix=ctx-fix-2",
+					"context_origin:stage=fix=ctx-fix-1",
+				},
+			},
+			want: map[string]struct{}{"ctx-fix-1": {}, "ctx-fix-2": {}},
+		},
+		{
+			name: "fix handles coexisting with other stages are still collected",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-review",
+					"context_origin:stage=fix=ctx-fix-1",
+					"context_origin:stage=fix=ctx-fix-2",
+				},
+			},
+			want: map[string]struct{}{"ctx-fix-1": {}, "ctx-fix-2": {}},
+		},
+		{
+			name: "no fix token yields non-nil empty set",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=review=ctx-review"},
+			},
+			want: map[string]struct{}{},
+		},
+		{
+			name: "empty references yields non-nil empty set",
+			record: VerificationRecord{
+				References: nil,
+			},
+			want: map[string]struct{}{},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := FixContextOriginHandleSetFromVerification(tt.record)
+			assert.NotNil(t, got)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

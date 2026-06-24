@@ -25,6 +25,7 @@ slipway fix --start-reexecution
 - Record reviewer evidence through `slipway evidence skill`, including both:
   - `context_origin:stage=review=<reviewer-handle>`
   - `context_origin:stage=fix=<repair-subagent-handle>`
+- A reviewer's evidence may accumulate multiple `context_origin:stage=fix=<repair-subagent-handle>` references — one per fresh-context repair subagent / batch — without invalidating the single `context_origin:stage=review` handle. The fix stage is multi-valued; the review stage stays single-valued.
 - Then run `slipway review` to close the finding.
 - Intent conflict is not a fix. If a reviewer records `new_change_required:intent_conflict`, start a new governed change.
 - Do not use `slipway repair` for review findings; `repair` is local integrity only.
