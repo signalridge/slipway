@@ -3,34 +3,36 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/model"
-	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
+// assertNoSessionStartChangeState pins REQ-004: the SessionStart hook must not
+// auto-inject any per-session change-state — neither the active-worktree
+// `next --json` view, nor the bound-elsewhere pointer, nor the handoff summary.
+func assertNoSessionStartChangeState(t *testing.T, body string) {
+	t.Helper()
+	assert.NotContains(t, body, "session_handoff")
+	assert.NotContains(t, body, "session_handoff_info")
+	assert.NotContains(t, body, "session_handoff_present")
+	assert.NotContains(t, body, "session_handoff_path")
+	assert.NotContains(t, body, `"current_state"`)
+	assert.NotContains(t, body, `"next_skill"`)
+	assert.NotContains(t, body, "bound to")
+	assert.NotContains(t, body, "--change")
+}
+
+func TestSessionStartHookEmitsOnlyEntrySkillPointer(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start compiled handoff")
-
-		handoffPath := state.ChangeHandoffPath(root, slug)
-		require.NoError(t, os.MkdirAll(filepath.Dir(handoffPath), 0o755))
-		writeCmd := commandForRoot(t, root, makeHandoffCmd())
-		writeCmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
-		writeCmd.SetIn(strings.NewReader("handoff body must not be embedded"))
-		writeCmd.SetOut(io.Discard)
-		require.NoError(t, writeCmd.Execute())
-		legacyPath := filepath.Join(state.GitRuntimeDir(root), "handoff.md")
-		require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
-		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy handoff body must not be embedded"), 0o644))
+		// An active change of this worktree must NOT cause any change-state
+		// auto-injection; only the entry-skill routing pointer is emitted.
+		createGovernedRequest(t, root, levelNonDiscovery, "session-start entry-skill only")
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
@@ -40,39 +42,10 @@ func TestSessionStartHookEmitsCompiledHandoff(t *testing.T) {
 
 		body := out.String()
 		assert.Contains(t, body, `<slipway-session-start tool="claude">`)
-		assert.Contains(t, body, `"slug": "`+slug+`"`)
 		assert.Contains(t, body, "slipway_entry_skill:")
-		assert.Contains(t, body, "session_handoff: slug="+slug)
-		assert.Contains(t, body, "path="+handoffPath)
-		assert.NotContains(t, body, "handoff body must not be embedded")
-		assert.NotContains(t, body, legacyPath)
-		assert.NotContains(t, body, "legacy handoff body must not be embedded")
-	})
-}
-
-func TestSessionStartHandoffSummaryUsesCommandOwnedBrief(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start command owned brief")
-
-		writeCmd := commandForRoot(t, root, makeHandoffCmd())
-		writeCmd.SetArgs([]string{"write", "--change", slug, "--section", "Next Session Focus"})
-		writeCmd.SetIn(strings.NewReader("hook should trim this body"))
-		writeCmd.SetOut(io.Discard)
-		require.NoError(t, writeCmd.Execute())
-
-		brief, ok, err := handoffBriefForChange(root, slug)
-		require.NoError(t, err)
-		require.True(t, ok)
-		expected := brief
-		if before, _, ok := strings.Cut(brief, " focus="); ok {
-			expected = before
-		}
-
-		summary := sessionStartHandoffSummary(root, slug)
-		assert.Equal(t, expected, summary)
-		assert.NotContains(t, summary, "hook should trim this body")
+		assert.Contains(t, body, `load the "slipway" skill`)
+		assertNoSessionStartChangeState(t, body)
+		assert.NotContains(t, body, "hook_diagnostic:")
 	})
 }
 
@@ -80,10 +53,7 @@ func TestSessionStartHookEmitsCodexAdditionalContext(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "codex session-start handoff")
-		writeCmd := commandForRoot(t, root, makeHandoffCmd())
-		writeCmd.SetOut(io.Discard)
-		require.NoError(t, writeCmd.Execute())
+		createGovernedRequest(t, root, levelNonDiscovery, "codex session-start entry skill")
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start", "--tool", "codex"})
@@ -99,37 +69,22 @@ func TestSessionStartHookEmitsCodexAdditionalContext(t *testing.T) {
 		var payload map[string]map[string]string
 		require.NoError(t, json.Unmarshal(out.Bytes(), &payload))
 		additionalContext := payload["hookSpecificOutput"]["additionalContext"]
-		assert.Contains(t, additionalContext, `"slug": "`+slug+`"`)
-		assert.Contains(t, additionalContext, "session_handoff: slug="+slug)
+		assert.Contains(t, additionalContext, "slipway_entry_skill:")
+		assertNoSessionStartChangeState(t, additionalContext)
 	})
 }
 
-func TestSessionStartHookReportsOnlyCurrentChangeHandoffAcrossBoundWorktrees(t *testing.T) {
+func TestSessionStartHookBoundElsewhereEmitsOnlyEntrySkill(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		initGitRepoForWorktreeTests(t, root)
 
-		currentSlug := createGovernedRequest(t, root, levelNonDiscovery, "current worktree handoff")
-		currentChange, err := state.LoadChange(root, currentSlug)
-		require.NoError(t, err)
-		currentChange.WorktreePath = root
-		require.NoError(t, state.SaveChange(root, currentChange))
-
-		otherWorktreePath := filepath.Join(t.TempDir(), "other-worktree")
-		runGit(t, root, "worktree", "add", otherWorktreePath, "-b", "other-worktree")
-		otherChange := model.NewChange("other-bound-change")
-		otherChange.CurrentState = model.StateS1Plan
-		otherChange.PlanSubStep = model.PlanSubStepBundle
-		otherChange.WorktreePath = otherWorktreePath
-		require.NoError(t, state.SaveChange(root, otherChange))
-
-		currentHandoffPath := state.ChangeHandoffPath(root, currentSlug)
-		otherHandoffPath := state.ChangeHandoffPath(root, otherChange.Slug)
-		require.NoError(t, os.MkdirAll(filepath.Dir(currentHandoffPath), 0o755))
-		require.NoError(t, os.MkdirAll(filepath.Dir(otherHandoffPath), 0o755))
-		require.NoError(t, os.WriteFile(currentHandoffPath, []byte("current body must not be embedded"), 0o644))
-		require.NoError(t, os.WriteFile(otherHandoffPath, []byte("other body must not be embedded"), 0o644))
+		// A change bound to another worktree must no longer produce a
+		// "session_handoff_info: ... bound to <worktree>" pointer; the hook emits
+		// only the entry-skill routing pointer.
+		worktreePath := t.TempDir() + "/bound-worktree"
+		runGit(t, root, "worktree", "add", worktreePath, "-b", "bound-worktree")
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
@@ -138,12 +93,9 @@ func TestSessionStartHookReportsOnlyCurrentChangeHandoffAcrossBoundWorktrees(t *
 		require.NoError(t, cmd.Execute())
 
 		body := out.String()
-		assert.Contains(t, body, `"slug": "`+currentSlug+`"`)
-		assert.Contains(t, body, "session_handoff_present: true")
-		assert.Contains(t, body, "session_handoff_path: "+currentHandoffPath)
-		assert.NotContains(t, body, otherHandoffPath)
-		assert.NotContains(t, body, "current body must not be embedded")
-		assert.NotContains(t, body, "other body must not be embedded")
+		assert.Contains(t, body, "slipway_entry_skill:")
+		assertNoSessionStartChangeState(t, body)
+		assert.NotContains(t, body, "hook_diagnostic: slipway next --json failed:")
 	})
 }
 
@@ -151,7 +103,7 @@ func TestSessionStartHookBareCommandOmitsUnknownToolAttribute(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "session-start bare command")
+		createGovernedRequest(t, root, levelNonDiscovery, "session-start bare command")
 
 		cmd := makeHookCmd()
 		cmd.SetArgs([]string{"session-start"})
@@ -163,35 +115,8 @@ func TestSessionStartHookBareCommandOmitsUnknownToolAttribute(t *testing.T) {
 		assert.Contains(t, body, `<slipway-session-start>`)
 		assert.NotContains(t, body, `tool="unknown"`)
 		assert.NotContains(t, body, `tool=""`)
-		assert.Contains(t, body, `"slug": "`+slug+`"`)
-	})
-}
-
-func TestSessionStartHookTreatsBoundWorktreeChangeAsInformational(t *testing.T) {
-	root := t.TempDir()
-	withWorkspace(t, root, func() {
-		initTestWorkspace(t, root)
-		initGitRepoForWorktreeTests(t, root)
-
-		worktreePath := filepath.Join(t.TempDir(), "bound-worktree")
-		runGit(t, root, "worktree", "add", worktreePath, "-b", "bound-worktree")
-		change := model.NewChange("bound-change")
-		change.WorktreePath = worktreePath
-		require.NoError(t, state.SaveChange(root, change))
-		normalizedWorktreePath, err := state.NormalizePath(worktreePath)
-		require.NoError(t, err)
-
-		cmd := makeHookCmd()
-		cmd.SetArgs([]string{"session-start", "--tool", "claude"})
-		var out bytes.Buffer
-		cmd.SetOut(&out)
-		require.NoError(t, cmd.Execute())
-
-		body := out.String()
-		assert.Contains(t, body, "session_handoff_info: no active change in this worktree")
-		assert.Contains(t, body, "active change bound-change is bound to "+normalizedWorktreePath)
-		assert.Contains(t, body, "use --change bound-change to act")
-		assert.NotContains(t, body, "hook_diagnostic: slipway next --json failed:")
+		assert.Contains(t, body, "slipway_entry_skill:")
+		assertNoSessionStartChangeState(t, body)
 	})
 }
 
@@ -212,14 +137,15 @@ func TestSessionStartHookSurfacesRootFailureDiagnostic(t *testing.T) {
 
 	body := out.String()
 	assert.Contains(t, body, `<slipway-session-start tool="bad&quot;tool">`)
+	assert.Contains(t, body, "slipway_entry_skill:")
 	assert.Contains(t, body, "hook_diagnostic: slipway root failed:")
 }
 
-// TestSessionStartHookFailsSilentOnUnusableInput pins REQ-003: the SessionStart
-// hook is inlined into automatic host hooks, so it must always exit 0 (Execute
-// returns nil, never panics) even when stdin is empty or malformed garbage. The
-// subcommand does not consume stdin, but the fail-silent contract must hold for
-// any host-supplied input.
+// TestSessionStartHookFailsSilentOnUnusableInput pins the fail-silent contract:
+// the SessionStart hook is inlined into automatic host hooks, so it must always
+// exit 0 (Execute returns nil, never panics) even when stdin is empty or
+// malformed garbage. The subcommand does not consume stdin, but the contract
+// must hold for any host-supplied input.
 func TestSessionStartHookFailsSilentOnUnusableInput(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

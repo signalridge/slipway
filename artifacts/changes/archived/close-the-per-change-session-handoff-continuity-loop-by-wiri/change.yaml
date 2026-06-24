@@ -1,0 +1,39 @@
+version: 1
+slug: close-the-per-change-session-handoff-continuity-loop-by-wiri
+description: 'Close the per-change session-handoff continuity loop by wiring its WRITE trigger and READ resume-protocol onto Slipway''s public surfaces. The `slipway handoff write/show` command already shipped (#312); today nothing auto-triggers a handoff write and no documented resume path tells a fresh session how to re-enter a specific change, so the loop stays 100% manual. v1 scope = two directive-only wires: (W2) escalate the context-pressure hook''s CRITICAL-threshold message from a soft suggestion into an imperative directive that tells the agent to author the handoff NOW via `slipway handoff write --section <name>` before its next action (covering long-stage mid-flight context death that stage-completion can''t); (R2) add a ''Continuing A Change In A Fresh Session'' resume-protocol section to the generated slipway workflow skill (status --json -> pick --change if multi-active -> handoff show --change <slug> -> next), plus a toolgen test guard asserting the section ships. No engine auto-write of bytes: the WRITE is auto-TRIGGERED at the right moment but the narrative judgment is authored by the agent, so handoff updated_at stays tied to real authoring and staleness stays honest. Deferred and explicitly out of scope: W1 stage-completion directive in cmd/run.go, R3 stripping session_start_hook auto change-state lines, and the engine metadata/fact auto-write floor. This alters public contracts (the host-automation hook message and the generated skill surface) so it runs through the governed flow for formal contract review.'
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-24T03:04:31.284117Z
+quality_mode: standard
+workflow_preset: light
+worktree_branch: feat/close-the-per-change-session-handoff-continuity-loop-by-wiri
+artifact_schema: core
+artifacts:
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: a657aa7e20468cef43fe90fa9383b831363a35649182805d8c3c20283950c09a
+        updated_at: 2026-06-24T03:19:25.923749239Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 1f4ffdc74b29be96396d650094ed97500039687e864a1da658fd491d16d185ca
+        updated_at: 2026-06-24T03:22:27.698165723Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 54bc3ba065bfa284dbd4bace2c818487ad3b46e795daeec359d57eb201b71419
+        updated_at: 2026-06-24T03:48:57.949148762Z
+evidence_refs:
+    code-quality-review: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/code-quality-review.yaml
+    goal-verification: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/goal-verification.yaml
+    independent-review: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/independent-review.yaml
+    intake-clarification: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/intake-clarification.yaml
+    plan-audit: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/plan-audit.yaml
+    spec-compliance-review: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/close-the-per-change-session-handoff-continuity-loop-by-wiri/artifacts/changes/close-the-per-change-session-handoff-continuity-loop-by-wiri/verification/wave-orchestration.yaml
