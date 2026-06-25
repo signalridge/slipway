@@ -49,7 +49,9 @@ export default defineConfig({
 					label: 'Explanation',
 					items: [
 						{ label: 'Design', slug: 'explanation/design' },
+						{ label: 'Design Philosophy (deep dive)', slug: 'design' },
 						{ label: 'Workflow', slug: 'explanation/workflow' },
+						{ label: 'Governed Workflow (deep dive)', slug: 'workflow' },
 					],
 				},
 			],
