@@ -88,7 +88,7 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 | コマンド | クラス | 目的 |
 | --- | --- | --- |
 | `slipway init` | mutation | `.slipway.yaml`、リポジトリローカルのランタイムレイアウト、および任意の AI ツールアダプターを初期化する。 |
-| `slipway config [list|get|set]` | mutation | リポジトリレベルの `.slipway.yaml` 設定キーを確認・更新する。CLI 専用で、生成されたアダプターのプロンプトサーフェスはありません。 |
+| `slipway config [list\|get\|set]` | mutation | リポジトリレベルの `.slipway.yaml` 設定キーを確認・更新する。CLI 専用で、生成されたアダプターのプロンプトサーフェスはありません。 |
 
 `docs/SURFACE-MANIFEST.json` は、アダプター、コマンド、スキル、JSON、ドキュメントの各行についてコミットされた生成サーフェスのインベントリです。マニフェストは Slipway 所有の Go 権威から再構築され、CI 向けの Go テストでチェックされます。
 

@@ -138,7 +138,7 @@ codebase-map 提示。
 | 命令 | 类别 | 用途 |
 | --- | --- | --- |
 | `slipway init` | mutation | 初始化 `.slipway.yaml`、仓库本地的运行时布局，以及可选的 AI 工具适配器。 |
-| `slipway config [list|get|set]` | mutation | 查看并更新仓库级 `.slipway.yaml` 配置键。它是 CLI-only，不生成适配器 prompt surface。 |
+| `slipway config [list\|get\|set]` | mutation | 查看并更新仓库级 `.slipway.yaml` 配置键。它是 CLI-only，不生成适配器 prompt surface。 |
 
 `docs/SURFACE-MANIFEST.json` 是已提交的生成面清单，记录适配器、命令、skill、JSON 和文档各类行。
 该清单由 Slipway 拥有的 Go 权威源重建，并由面向 CI 的 Go 测试核对：
