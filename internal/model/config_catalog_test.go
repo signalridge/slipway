@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"reflect"
 	"sort"
 	"strings"
@@ -52,6 +53,55 @@ func strictConfigLeafKeys(t *testing.T) []string {
 	walk(reflect.TypeOf(Config{}), "")
 	sort.Strings(keys)
 	return keys
+}
+
+func constrainedConfigLeafKeys(t *testing.T) []string {
+	t.Helper()
+	var keys []string
+	var walk func(rt reflect.Type, prefix string)
+	walk = func(rt reflect.Type, prefix string) {
+		for i := 0; i < rt.NumField(); i++ {
+			field := rt.Field(i)
+			tag := field.Tag.Get("yaml")
+			if tag == "-" || tag == "" {
+				continue
+			}
+			name := strings.Split(tag, ",")[0]
+			if name == "" {
+				continue
+			}
+			dotted := name
+			if prefix != "" {
+				dotted = prefix + "." + name
+			}
+			ft := field.Type
+			if ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				walk(ft, dotted)
+				continue
+			}
+			if isConstrainedConfigLeaf(dotted, ft) {
+				keys = append(keys, dotted)
+			}
+		}
+	}
+	walk(reflect.TypeOf(Config{}), "")
+	sort.Strings(keys)
+	return keys
+}
+
+func isConstrainedConfigLeaf(key string, ft reflect.Type) bool {
+	if key == "execution.parallelization" {
+		return true
+	}
+	switch ft {
+	case reflect.TypeOf(ArtifactSchemaName("")), reflect.TypeOf(WorkflowPreset("")), reflect.TypeOf(SignalLevel("")):
+		return true
+	default:
+		return false
+	}
 }
 
 // TestConfigCatalogCoversEveryStructLeaf is the drift guard: every strict-decoded
@@ -151,6 +201,23 @@ func TestConfigCatalogAllowedValuesEnriched(t *testing.T) {
 	}
 }
 
+func TestConfigCatalogConstrainedLeavesHaveAllowedValues(t *testing.T) {
+	byName := map[string]ConfigCatalogEntry{}
+	for _, entry := range ConfigCatalog() {
+		byName[entry.Name] = entry
+	}
+	for _, key := range constrainedConfigLeafKeys(t) {
+		entry, ok := byName[key]
+		if !ok {
+			t.Errorf("constrained config leaf %q has no ConfigCatalog() entry", key)
+			continue
+		}
+		if len(entry.AllowedValues) == 0 {
+			t.Errorf("constrained config leaf %q has no allowed_values enrichment", key)
+		}
+	}
+}
+
 func TestConfigGetValue(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Execution.LockWaitTimeoutSeconds = 42
@@ -179,6 +246,24 @@ func TestConfigGetValue(t *testing.T) {
 	}
 }
 
+func TestConfigGetValueRejectsSectionKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	for _, key := range []string{"execution", "governance.thresholds", "context"} {
+		t.Run(key, func(t *testing.T) {
+			_, err := ConfigGetValue(cfg, key)
+			if err == nil {
+				t.Fatal("expected section key to be rejected, got nil")
+			}
+			if !errors.Is(err, ErrUnknownConfigKey) {
+				t.Fatalf("section key error = %v, want ErrUnknownConfigKey", err)
+			}
+			if !strings.Contains(err.Error(), key) {
+				t.Errorf("section-key error should name the key, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestConfigSetValueValidApplies(t *testing.T) {
 	cfg := DefaultConfig()
 	updated, err := ConfigSetValue(cfg, "execution.lock_wait_timeout_seconds", "55")
@@ -195,6 +280,29 @@ func TestConfigSetValueValidApplies(t *testing.T) {
 	}
 	if updated.Defaults.ArtifactSchema != ArtifactSchemaCore {
 		t.Errorf("after set, artifact_schema = %q, want core", updated.Defaults.ArtifactSchema)
+	}
+}
+
+func TestConfigSetValueClonesPointerLeaves(t *testing.T) {
+	autoProvision := false
+	cfg := DefaultConfig()
+	cfg.Governance.AutoProvisionWorktree = &autoProvision
+
+	updated, err := ConfigSetValue(cfg, "governance.auto_provision_worktree", "true")
+	if err != nil {
+		t.Fatalf("ConfigSetValue returned error: %v", err)
+	}
+	if cfg.Governance.AutoProvisionWorktree == nil {
+		t.Fatal("input config pointer was cleared")
+	}
+	if *cfg.Governance.AutoProvisionWorktree {
+		t.Fatal("input config pointer value was mutated through aliasing")
+	}
+	if updated.Governance.AutoProvisionWorktree == nil || !*updated.Governance.AutoProvisionWorktree {
+		t.Fatalf("updated config auto_provision_worktree = %v, want true", updated.Governance.AutoProvisionWorktree)
+	}
+	if updated.Governance.AutoProvisionWorktree == cfg.Governance.AutoProvisionWorktree {
+		t.Fatal("updated config should not share the input pointer leaf")
 	}
 }
 
@@ -217,6 +325,20 @@ func TestConfigSetValueInvalidNoMutation(t *testing.T) {
 		t.Error("expected error for unknown key, got nil")
 	} else if !strings.Contains(err.Error(), "execution.nope") {
 		t.Errorf("unknown-key error should name the key, got: %v", err)
+	}
+
+	for _, key := range []string{"execution", "governance.thresholds", "context"} {
+		_, err := ConfigSetValue(cfg, key, "true")
+		if err == nil {
+			t.Errorf("expected error for section key %q, got nil", key)
+			continue
+		}
+		if !errors.Is(err, ErrUnknownConfigKey) {
+			t.Errorf("section key %q error = %v, want ErrUnknownConfigKey", key, err)
+		}
+		if !strings.Contains(err.Error(), key) {
+			t.Errorf("section-key error should name %q, got: %v", key, err)
+		}
 	}
 
 	// Non-integer value for an int field must fail.

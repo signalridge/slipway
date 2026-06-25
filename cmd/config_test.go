@@ -189,6 +189,42 @@ func TestConfigGetUnknownKeyErrorsToStderrNonZero(t *testing.T) {
 	})
 }
 
+func TestConfigSectionKeysRejectedAsUnknown(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		before, err := os.ReadFile(state.ConfigPath(root))
+		require.NoError(t, err)
+
+		for _, key := range []string{"execution", "governance.thresholds", "context"} {
+			t.Run("get/"+key, func(t *testing.T) {
+				out, _, err := runConfigCmd(t, root, "get", key)
+				require.Error(t, err, "section key must be a non-zero exit, not a rendered struct")
+				cliErr := asCLIError(err)
+				require.NotNil(t, cliErr)
+				assert.Equal(t, "config_key_unknown", cliErr.ErrorCode)
+				assert.Equal(t, key, cliErr.Details["key"])
+				assert.Empty(t, strings.TrimSpace(out), "section-key get must not print a value to stdout")
+			})
+
+			t.Run("set/"+key, func(t *testing.T) {
+				_, _, err := runConfigCmd(t, root, "set", key, "true")
+				require.Error(t, err, "section key must be rejected as unknown, not parsed as a value")
+				cliErr := asCLIError(err)
+				require.NotNil(t, cliErr)
+				assert.Equal(t, "config_key_unknown", cliErr.ErrorCode)
+				assert.Equal(t, key, cliErr.Details["key"])
+			})
+		}
+
+		after, err := os.ReadFile(state.ConfigPath(root))
+		require.NoError(t, err)
+		assert.Equal(t, string(before), string(after), "section-key set must leave the config file unchanged")
+	})
+}
+
 func TestConfigSetHappyPathRoundTrip(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

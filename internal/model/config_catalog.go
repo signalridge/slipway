@@ -266,10 +266,13 @@ func configLeafField(rv reflect.Value, key string) (reflect.Value, error) {
 				}
 				cur = cur.Elem()
 			}
+			if cur.Kind() == reflect.Struct {
+				return reflect.Value{}, fmt.Errorf("%w %q", ErrUnknownConfigKey, key)
+			}
 			return cur, nil
 		}
 	}
-	return reflect.Value{}, fmt.Errorf("unknown config key %q", key)
+	return reflect.Value{}, fmt.Errorf("%w %q", ErrUnknownConfigKey, key)
 }
 
 // structFieldByYAMLName returns the struct field whose yaml tag name matches
@@ -316,9 +319,14 @@ func configLeafFieldRead(rv reflect.Value, key string) (leaf reflect.Value, unse
 		if depth == len(segments)-1 {
 			if cur.Kind() == reflect.Pointer {
 				if cur.IsNil() {
-					return reflect.Zero(cur.Type().Elem()), true, nil
+					cur = reflect.Zero(cur.Type().Elem())
+					unset = true
+				} else {
+					cur = cur.Elem()
 				}
-				cur = cur.Elem()
+			}
+			if cur.Kind() == reflect.Struct {
+				return reflect.Value{}, false, fmt.Errorf("%w %q", ErrUnknownConfigKey, key)
 			}
 			return cur, unset, nil
 		}
@@ -382,8 +390,9 @@ func ConfigSetValue(cfg Config, key, value string) (Config, error) {
 		return cfg, fmt.Errorf("config key is required")
 	}
 	// Operate on a copy so a parse/validate failure never mutates the caller's
-	// config.
-	updated := cfg
+	// config. Clone pointer leaves before resolving so setting a non-nil pointer
+	// field cannot alias the input config.
+	updated := cloneConfigForSet(cfg)
 	leaf, err := configLeafField(reflect.ValueOf(&updated).Elem(), key)
 	if err != nil {
 		return cfg, err
@@ -398,6 +407,15 @@ func ConfigSetValue(cfg Config, key, value string) (Config, error) {
 		return cfg, err
 	}
 	return updated, nil
+}
+
+func cloneConfigForSet(cfg Config) Config {
+	updated := cfg
+	if cfg.Governance.AutoProvisionWorktree != nil {
+		autoProvision := *cfg.Governance.AutoProvisionWorktree
+		updated.Governance.AutoProvisionWorktree = &autoProvision
+	}
+	return updated
 }
 
 // assignScalar parses value into the leaf according to its kind. Collection

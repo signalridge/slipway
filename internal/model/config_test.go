@@ -15,6 +15,51 @@ func TestConfigExecutionForcedParallelDefault(t *testing.T) {
 	assert.False(t, ConfigExecution{Parallelization: ParallelizationOff}.ForcedParallel())
 }
 
+func TestConfigGovernanceIsZero(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, ConfigGovernance{}.IsZero(), "empty governance config should be zero")
+
+	autoProvision := false
+	tests := []struct {
+		name string
+		cfg  ConfigGovernance
+	}{
+		{
+			name: "preset",
+			cfg:  ConfigGovernance{DefaultPreset: WorkflowPresetStrict},
+		},
+		{
+			name: "policy pack",
+			cfg:  ConfigGovernance{PolicyPacks: []PolicyPack{{Name: "local", Path: "policy.yaml"}}},
+		},
+		{
+			name: "control mode",
+			cfg:  ConfigGovernance{Controls: map[ControlID]ControlMode{ControlIndependentReview: ControlModeAdvisory}},
+		},
+		{
+			name: "disabled control",
+			cfg:  ConfigGovernance{DisabledControls: []ControlID{ControlSecurityReview}},
+		},
+		{
+			name: "threshold",
+			cfg: ConfigGovernance{
+				Thresholds: ConfigGovernanceThresholds{IndependentReviewBlastRadius: SignalLevelMedium},
+			},
+		},
+		{
+			name: "auto provision pointer",
+			cfg:  ConfigGovernance{AutoProvisionWorktree: &autoProvision},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.False(t, tt.cfg.IsZero())
+		})
+	}
+}
+
 func TestConfigValidateParallelization(t *testing.T) {
 	t.Parallel()
 
