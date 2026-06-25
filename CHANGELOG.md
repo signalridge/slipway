@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0](https://github.com/signalridge/slipway/compare/v0.34.0...v0.35.0) (2026-06-25)
+
+
+### Features
+
+* **brand:** replace icon mark with pixel "Slipway" wordmark ([d62226d](https://github.com/signalridge/slipway/commit/d62226dc7b5a8049c317e5b0f430a8cc10b2569a))
+* **toolgen:** remove Gemini adapter support ([#331](https://github.com/signalridge/slipway/issues/331)) ([642a74a](https://github.com/signalridge/slipway/commit/642a74a9a86938bdc298557fa292c55e3cc6b75e))
+
 ## [0.34.0](https://github.com/signalridge/slipway/compare/v0.33.0...v0.34.0) (2026-06-25)
 
 
