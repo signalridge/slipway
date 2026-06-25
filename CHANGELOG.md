@@ -5,6 +5,29 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0](https://github.com/signalridge/slipway/compare/v0.33.0...v0.34.0) (2026-06-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* **governance:** governance evidence contract, CLI JSON, generated skills, and docs change; no compat shim — in-flight S3 changes re-run S3.
+
+### Features
+
+* **config:** public `slipway config` surface + env-var discoverability; fix S2 stale-wave recovery ([#315](https://github.com/signalridge/slipway/issues/315), [#324](https://github.com/signalridge/slipway/issues/324)) ([#329](https://github.com/signalridge/slipway/issues/329)) ([6b9607e](https://github.com/signalridge/slipway/commit/6b9607e55032dbbcea34ceb24e3b4d3e1dbe6d93))
+* **governance:** converge S3 review in place on plan edits ([#316](https://github.com/signalridge/slipway/issues/316)) ([b2c398f](https://github.com/signalridge/slipway/commit/b2c398f201d9861b950d0dca544df64f1ffede64))
+* **governance:** merge goal-verification + final-closeout into terminal ship-verification gate ([#322](https://github.com/signalridge/slipway/issues/322)) ([61d77ae](https://github.com/signalridge/slipway/commit/61d77ae12b47379d50fd3e66d28c99b68729ac45))
+* **handoff:** close session-handoff continuity loop (W2 pressure escalation, R2 resume protocol, R3 SessionStart cleanup) ([#323](https://github.com/signalridge/slipway/issues/323)) ([60955b4](https://github.com/signalridge/slipway/commit/60955b4f9a5a5dd8bed62e98cf22e64ac6edb7ea))
+
+
+### Bug Fixes
+
+* **governance:** point cache-unreadable remediation at the engine-owned wave-plan cache, not tasks.md ([#325](https://github.com/signalridge/slipway/issues/325)) ([#328](https://github.com/signalridge/slipway/issues/328)) ([d6636aa](https://github.com/signalridge/slipway/commit/d6636aa23e858e77ff1e78f8513c151cc92cef41))
+* **governance:** stop false reviewer context-origin diagnostic for multi-fix evidence ([#319](https://github.com/signalridge/slipway/issues/319)) ([#327](https://github.com/signalridge/slipway/issues/327)) ([e3faa45](https://github.com/signalridge/slipway/commit/e3faa455fad761e230cd593f1986a7b14dd82ee1))
+* **hooks:** harden against version skew — fail-silent floor + in-repo go-run ([#317](https://github.com/signalridge/slipway/issues/317)) ([39f1f17](https://github.com/signalridge/slipway/commit/39f1f17ddaac2b87ed1cc81efd95a9dff78f682b))
+* **hooks:** render in-repo go-run for codex & settings.json inline hooks ([#321](https://github.com/signalridge/slipway/issues/321)) ([d9acf7a](https://github.com/signalridge/slipway/commit/d9acf7a3b8c6d0406ef5c527f766e5b224fc6a53))
+* **toolgen:** prune stale command skills ([#330](https://github.com/signalridge/slipway/issues/330)) ([9f22529](https://github.com/signalridge/slipway/commit/9f225292abea90dfd2d4ccb7f04aeeb1b7772460))
+
 ## [0.33.0](https://github.com/signalridge/slipway/compare/v0.32.1...v0.33.0) (2026-06-23)
 
 
