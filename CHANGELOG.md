@@ -5,6 +5,14 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.0](https://github.com/signalridge/slipway/compare/v0.35.0...v0.36.0) (2026-06-25)
+
+
+### Features
+
+* **docs:** migrate docs site from MkDocs to Astro Starlight ([#333](https://github.com/signalridge/slipway/issues/333)) ([340baae](https://github.com/signalridge/slipway/commit/340baae48b76558a92a08904cd113ad617cb64de))
+* **docs:** surface legacy Design Philosophy and Governed Workflow deep-dives in sidebar ([#335](https://github.com/signalridge/slipway/issues/335)) ([801440c](https://github.com/signalridge/slipway/commit/801440c6f5e5a6f03feeb01c7229a3bf90333284))
+
 ## [0.35.0](https://github.com/signalridge/slipway/compare/v0.34.0...v0.35.0) (2026-06-25)
 
 
