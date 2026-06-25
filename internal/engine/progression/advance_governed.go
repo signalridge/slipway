@@ -84,6 +84,15 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			// S2 owns implementation evidence. Upstream intake/planning drift is
 			// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
 			// evidence replay here creates an impossible forward-only dead end.
+		} else if fromState == model.StateS2Implement {
+			// In S2 the owning stage still holds this evidence (e.g. a stale
+			// wave-orchestration authority). Surface its blockers directly — whose
+			// remediation is the state-valid `slipway run` — instead of the
+			// review-alignment path, which maps to the S3-only `slipway fix` and
+			// would yield fix_state_invalid here. This only changes the recommended
+			// command; the stale-evidence gate stays fail-closed and S3 keeps the
+			// forward-only review-alignment path below (issue #324).
+			return blockedAdvanceSummary(fromState, target.Blockers), nil
 		} else {
 			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
 		}

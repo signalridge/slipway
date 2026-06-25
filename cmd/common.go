@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -181,6 +183,10 @@ func hasRepairableWorkspaceMarkers(root string) bool {
 }
 
 func loadConfigAtRoot(root string) (model.Config, error) {
+	return loadConfigAtRootWithStderr(root, os.Stderr)
+}
+
+func loadConfigAtRootWithStderr(root string, stderr io.Writer) (model.Config, error) {
 	cfgPath := state.ConfigPath(root)
 	cfg, err := model.LoadConfig(cfgPath)
 	if err != nil {
@@ -192,7 +198,28 @@ func loadConfigAtRoot(root string) (model.Config, error) {
 			map[string]any{"path": cfgPath},
 		)
 	}
+	// Surface (rather than silently swallow) unrecognized top-level config keys so a
+	// typo'd or stale key is visible. This must go to STDERR, never stdout:
+	// loadConfigAtRoot is on every `--json` code path, and writing to stdout would
+	// corrupt machine-readable output. Emitted once per load, only when keys exist.
+	warnUnknownTopLevelConfigKeys(stderr, cfgPath, cfg)
 	return cfg, nil
+}
+
+// warnUnknownTopLevelConfigKeys writes a single concise warning naming every
+// unrecognized top-level key captured during config decode. It is a no-op when
+// there are no unknown keys. The sink is always a stderr writer so the warning
+// can never corrupt `--json` stdout.
+func warnUnknownTopLevelConfigKeys(stderr io.Writer, cfgPath string, cfg model.Config) {
+	if len(cfg.UnknownTopLevel) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(cfg.UnknownTopLevel))
+	for key := range cfg.UnknownTopLevel {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	fmt.Fprintf(stderr, "warning: %s has unknown top-level config keys (ignored): %s\n", cfgPath, strings.Join(keys, ", "))
 }
 
 func wrapRequiredSkillsEvaluationError(operation, slug string, err error) error {

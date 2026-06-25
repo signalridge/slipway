@@ -15,6 +15,51 @@ func TestConfigExecutionForcedParallelDefault(t *testing.T) {
 	assert.False(t, ConfigExecution{Parallelization: ParallelizationOff}.ForcedParallel())
 }
 
+func TestConfigGovernanceIsZero(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, ConfigGovernance{}.IsZero(), "empty governance config should be zero")
+
+	autoProvision := false
+	tests := []struct {
+		name string
+		cfg  ConfigGovernance
+	}{
+		{
+			name: "preset",
+			cfg:  ConfigGovernance{DefaultPreset: WorkflowPresetStrict},
+		},
+		{
+			name: "policy pack",
+			cfg:  ConfigGovernance{PolicyPacks: []PolicyPack{{Name: "local", Path: "policy.yaml"}}},
+		},
+		{
+			name: "control mode",
+			cfg:  ConfigGovernance{Controls: map[ControlID]ControlMode{ControlIndependentReview: ControlModeAdvisory}},
+		},
+		{
+			name: "disabled control",
+			cfg:  ConfigGovernance{DisabledControls: []ControlID{ControlSecurityReview}},
+		},
+		{
+			name: "threshold",
+			cfg: ConfigGovernance{
+				Thresholds: ConfigGovernanceThresholds{IndependentReviewBlastRadius: SignalLevelMedium},
+			},
+		},
+		{
+			name: "auto provision pointer",
+			cfg:  ConfigGovernance{AutoProvisionWorktree: &autoProvision},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.False(t, tt.cfg.IsZero())
+		})
+	}
+}
+
 func TestConfigValidateParallelization(t *testing.T) {
 	t.Parallel()
 
@@ -79,4 +124,46 @@ func TestConfigExecutionAutoEnabledYAMLRoundTrip(t *testing.T) {
 	back, err := ParseConfigYAML(out)
 	require.NoError(t, err)
 	assert.True(t, back.Execution.AutoEnabled(), "auto round-trips losslessly")
+}
+
+// TestConfigToYAMLPersistsIsolatedGovernancePointer guards against ToYAML
+// dropping auto_provision_worktree when it is the ONLY governance key set — the
+// silent-loss path `config set governance.auto_provision_worktree` exposes.
+func TestConfigToYAMLPersistsIsolatedGovernancePointer(t *testing.T) {
+	t.Parallel()
+
+	for _, want := range []bool{false, true} {
+		cfg := DefaultConfig()
+		v := want
+		cfg.Governance.AutoProvisionWorktree = &v
+
+		out, err := cfg.ToYAML()
+		require.NoError(t, err)
+		assert.Contains(t, string(out), "auto_provision_worktree", "isolated governance pointer must be emitted")
+
+		back, err := ParseConfigYAML(out)
+		require.NoError(t, err)
+		require.NotNil(t, back.Governance.AutoProvisionWorktree, "auto_provision_worktree must survive the round-trip")
+		assert.Equal(t, want, *back.Governance.AutoProvisionWorktree)
+		assert.Equal(t, want, back.Governance.AutoProvisionWorktreeEnabled())
+	}
+}
+
+// TestConfigToYAMLPersistsIsolatedContextRecentWork guards against ToYAML
+// dropping context.recent_work when it is the only context leaf set — the
+// predicate used to omit recent_work even though ProjectContext.IsZero() counts
+// it.
+func TestConfigToYAMLPersistsIsolatedContextRecentWork(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.Context.RecentWork = "shipped PR1"
+
+	out, err := cfg.ToYAML()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "recent_work", "isolated context.recent_work must be emitted")
+
+	back, err := ParseConfigYAML(out)
+	require.NoError(t, err)
+	assert.Equal(t, "shipped PR1", back.Context.RecentWork)
 }

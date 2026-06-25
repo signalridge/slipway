@@ -23,7 +23,12 @@ func makeRunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: desc("run"),
-		Args:  cobra.NoArgs,
+		Long: desc("run") + `
+
+Repo-level configuration keys (including execution.auto, which --auto / --no-auto
+override for a single run) are inspected and changed with ` + "`slipway config`" + `
+(list/get/set).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromCommand(cmd)
 			if err != nil {
