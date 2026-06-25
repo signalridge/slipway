@@ -30,6 +30,10 @@
 [Installation](docs/installation.md) |
 [Release Notes](CHANGELOG.md)
 
+<br/>
+
+**English** · [简体中文](README.zh.md) · [日本語](README.ja.md)
+
 </div>
 
 # Slipway

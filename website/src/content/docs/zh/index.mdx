@@ -1,0 +1,55 @@
+---
+title: Slipway
+description: 面向 AI 辅助软件交付的治理 CLI——在真正干活的仓库里，为本地 AI agent 的工作提供持久的生命周期、当前状态权威与可核验的收尾。
+template: splash
+hero:
+  tagline: 在代码真正落地的那个仓库里，给本地 AI agent 的工作配上持久的生命周期、当前状态权威，以及有证据支撑的收尾。
+  image:
+    file: ../../../assets/slipway-wordmark.svg
+  actions:
+    - text: 从这里开始
+      link: /slipway/zh/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: 在 GitHub 上查看
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway 是一个轻量的治理控制面，服务于本地的 AI 辅助开发。它不取代你的 AI 编码工具、项目看板或 Git，而是把每一次变更绑定到一条生命周期、一份当前权威文件，以及一份会话结束后仍可查证的证据上，让 agent 的工作变得可读、可追溯。
+
+你用自然语言驱动它。一次性跑完 `slipway init` 之后，只要告诉 AI agent 你想做什么，生成的适配器就会把这个请求送进受管生命周期——没有命令序列需要背。一次变更到底有没有做完，由 Slipway 说了算；文档里出现的那些命令，是 agent 替你跑的，你也可以随时自己跑。
+
+<CardGrid stagger>
+	<Card title="教程" icon="open-book">
+		从零到一条受管变更，一步步带着你跑，命令都能直接复制。
+
+		[第一个受管变更](/slipway/zh/tutorials/first-governed-change/) ·
+		[接入既有代码库](/slipway/zh/tutorials/onboarding-existing-codebase/)
+	</Card>
+	<Card title="操作指南" icon="setting">
+		完成某一项具体的运维任务。
+
+		[安装与刷新适配器](/slipway/zh/how-to/install-and-refresh-adapters/) ·
+		[恢复与排错](/slipway/zh/how-to/recover-and-troubleshoot/)
+	</Card>
+	<Card title="参考" icon="document">
+		命令、适配器与贡献流程的权威事实。
+
+		[命令](/slipway/zh/reference/commands/) ·
+		[AI 工具适配器](/slipway/zh/reference/ai-tools/)
+	</Card>
+	<Card title="原理" icon="puzzle">
+		受管工作流背后的设计思路。
+
+		[设计](/slipway/zh/explanation/design/) ·
+		[工作流](/slipway/zh/explanation/workflow/)
+	</Card>
+</CardGrid>
+
+## 为什么用 Slipway
+
+“做完了”这件事，Slipway 故意让它很难糊弄过去：每个受管阶段都各自产出证据，引擎不会照单全收，而是自己重新推导一遍。先跟着[教程](/slipway/zh/tutorials/first-governed-change/)把这个闭环跑一遍，等需要确切的命令语法时，再去翻[参考](/slipway/zh/reference/commands/)。
