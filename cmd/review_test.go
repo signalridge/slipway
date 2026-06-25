@@ -106,19 +106,14 @@ func TestReviewAllowsAllWhenChangedOnlyIsExplicitlyFalse(t *testing.T) {
 	})
 }
 
-func TestReviewRejectsUnsupportedArtifactFlag(t *testing.T) {
+func TestReviewHelpDoesNotExposeArtifactFlag(t *testing.T) {
 	t.Parallel()
 
-	err := func() error {
-		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--artifact", "artifacts/changes/example/requirements.md"})
-		return cmd.Execute()
-	}()
-	cliErr := asCLIError(err)
-	require.NotNil(t, cliErr)
-	assert.Equal(t, "unsupported_flag", cliErr.ErrorCode)
-	assert.Equal(t, categoryInvalidUsage, cliErr.Category)
-	assert.Equal(t, exitCodeInvalidUsage, cliErr.ExitCode)
+	cmd := makeReviewCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Help())
+	assert.NotContains(t, out.String(), "--artifact")
 }
 
 func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {

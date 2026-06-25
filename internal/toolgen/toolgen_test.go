@@ -120,8 +120,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 23 commands across the same public groups as root help.
-	assert.Len(t, commandRegistry, 23)
+	// Verify registry has 24 commands across the same public groups as root help.
+	assert.Len(t, commandRegistry, 24)
 
 	// Verify all registry entries have the required fields.
 	validTiers := []string{"core", "discovery", "situational", "helpers", "diagnostics", "setup"}
@@ -164,9 +164,9 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 8, sit, "expected 8 situational commands")
 	assert.Equal(t, 1, helpers, "expected 1 helper command")
 	assert.Equal(t, 2, diag, "expected 2 diagnostics commands")
-	assert.Equal(t, 1, setup, "expected 1 setup command")
+	assert.Equal(t, 2, setup, "expected 2 setup commands")
 	assert.Equal(t, 5, query, "expected 5 query commands")
-	assert.Equal(t, 18, mutation, "expected 18 mutation commands")
+	assert.Equal(t, 19, mutation, "expected 19 mutation commands")
 
 	var fixDef CommandDef
 	var foundFix bool
@@ -193,6 +193,7 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		assert.True(t, ids[i-1] < ids[i], "commandIDs not sorted: %s >= %s", ids[i-1], ids[i])
 	}
 	assert.NotContains(t, ids, "tool")
+	assert.NotContains(t, ids, "config")
 }
 
 func TestEvidenceCommandArgumentsUseResultFileOnlyTaskSurface(t *testing.T) {
@@ -822,10 +823,11 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, diagnosticsSection, "### `slipway codebase-map`", "%s: codebase-map must not be diagnostic", cfg.ID)
 		setupSection := referenceSectionFor(ref, "## Setup")
 		assert.Contains(t, setupSection, "### `slipway init`", "%s: init must be in setup", cfg.ID)
+		assert.NotContains(t, setupSection, "### `slipway config`", "%s: config must remain CLI-only, not a generated prompt command", cfg.ID)
 		assert.Contains(t, ref, "Can be used with or without an active change.", "%s: missing explicit status prerequisite", cfg.ID)
 		assert.Contains(t, ref, "an active change must exist, or pass `--change <slug>` when supported.", "%s: missing helper-default prerequisite", cfg.ID)
-		assert.Contains(t, refText, "every non-hidden, non-help, non-exempt Cobra flag appears here", "%s: missing exempt-flag completeness wording", cfg.ID)
-		assert.Contains(t, ref, "`review --artifact`", "%s: missing documented flag exemption", cfg.ID)
+		assert.Contains(t, refText, "every non-hidden, non-help Cobra flag appears here unless it belongs to the narrow manual `evidence task` ledger surface", "%s: missing flag completeness wording", cfg.ID)
+		assert.NotContains(t, ref, "`review --artifact`", "%s: stale review artifact exemption leaked", cfg.ID)
 		assert.NotContains(t, refText, "every non-hidden Cobra flag appears here", "%s: stale all-visible-flags completeness wording leaked", cfg.ID)
 
 		// instructions reads embedded templates only; its reference section must

@@ -17,6 +17,7 @@ func TestSurfacedCommandsMatchToolgenDescriptions(t *testing.T) {
 		"abort":        makeAbortCmd,
 		"cancel":       makeCancelCmd,
 		"codebase-map": makeCodebaseMapCmd,
+		"config":       makeConfigCmd,
 		"done":         makeDoneCmd,
 		"evidence":     makeEvidenceCmd,
 		"fix":          makeFixCmd,

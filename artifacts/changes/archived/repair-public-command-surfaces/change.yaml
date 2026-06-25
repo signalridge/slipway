@@ -1,0 +1,62 @@
+version: 1
+slug: repair-public-command-surfaces
+description: repair public command surfaces
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-25T16:06:56.624408Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/repair-public-command-surfaces
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 0cb925d197bec5a9d230eda904f974396965746b896ae5bfb82ecd24da1af9b9
+        updated_at: 2026-06-25T17:02:15.980721306Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: ec35e6f86e85e5fa5b41c0f2d810ff18f7f045f2a986196d96edc0955a80217b
+        updated_at: 2026-06-25T16:18:01.218611428Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 405e75d3656a343bc065841198b16f70388ca9b4a723bc485583bed951f6ce6c
+        updated_at: 2026-06-25T16:10:22.782366937Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: be819ecb608263f07768a3c5edaf6392fa06187963ec9c55870436050fe0d7fb
+        updated_at: 2026-06-25T16:18:20.977725773Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: dc50dcf2426157c6c5ba30adc6460a66166dee2f428d8a72c67fe1cbf860af16
+        updated_at: 2026-06-25T16:15:46.503756918Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 78df86b4777abf9511c69b2fa1fa42524ccd04ea6f3ab9ce18184949a282eab9
+        updated_at: 2026-06-25T16:42:19.838167264Z
+evidence_refs:
+    code-quality-review: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/code-quality-review.yaml
+    independent-review: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/independent-review.yaml
+    intake-clarification: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/intake-clarification.yaml
+    plan-audit: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/plan-audit.yaml
+    research-orchestration: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/research-orchestration.yaml
+    security-review: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/security-review.yaml
+    ship-verification: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/repair-public-command-surfaces/artifacts/changes/repair-public-command-surfaces/verification/wave-orchestration.yaml

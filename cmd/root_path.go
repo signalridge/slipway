@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func makeRootPathCmd() *cobra.Command {
+func makeHiddenRootPathCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:    "root",
 		Short:  "Print the canonical slipway scope root",

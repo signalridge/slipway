@@ -83,9 +83,7 @@ var helpGroups = []commandGroup{
 		Description: "Workspace and environment setup commands.",
 		Commands: []groupedCommand{
 			{Name: "init", Description: desc("init")},
-			// config is not in the toolgen command registry, so its description is
-			// sourced from the local const rather than desc().
-			{Name: "config", Description: configShortDescription},
+			{Name: "config", Description: desc("config")},
 		},
 	},
 }
@@ -198,7 +196,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(makeHandoffCmd())
 	cmd.AddCommand(makeHealthCmd())
 	cmd.AddCommand(makeInstructionsCmd())
-	cmd.AddCommand(makeRootPathCmd())
+	cmd.AddCommand(makeHiddenRootPathCmd())
 	cmd.AddCommand(makeDoneCmd())
 	cmd.AddCommand(makeAbortCmd())
 	cmd.AddCommand(makeCancelCmd())

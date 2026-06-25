@@ -108,6 +108,7 @@ For cross-session continuity, use the command-owned advisory handoff:
 
 ```bash
 slipway handoff write
+printf 'Current implementation context...\n' | slipway handoff write --section "Current Position"
 slipway handoff show --brief
 slipway handoff show
 ```

@@ -1,12 +1,12 @@
 # Command Reference
 
-This page is the Diataxis reference entry for Slipway commands. The detailed
-legacy reference remains available at [Commands](../commands.md); this wrapper
+This page is the Diataxis reference entry for Slipway commands. The expanded
+operator reference remains available at [Commands](../commands.md); this page
 keeps the generated surface manifest anchored under `docs/reference/`.
 
 Most routed commands support `--json` when structured output is useful.
-`slipway validate` emits JSON for its main report, and `slipway init` is
-setup-only.
+`slipway validate` emits JSON for its main report, `slipway init` is
+setup-only, and `slipway config` is a public CLI-only setup/config surface.
 
 ## Command Index
 
@@ -35,6 +35,7 @@ setup-only.
 | `slipway health` | query | Show repo-local integrity findings. |
 | `slipway instructions` | query | Show artifact or codebase-map authoring contracts. |
 | `slipway init` | mutation | Initialize runtime layout and optional adapters. |
+| `slipway config` | mutation | Inspect and set repo-level configuration keys. |
 
 ## JSON Surface Tokens
 
@@ -64,10 +65,21 @@ slipway evidence task --result-file task-result.json [--result-file next-task-re
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json
+slipway config --json
 ```
 
 Use `--diagnostics` with `next` or `run` when you need blocker detail,
 artifact-readiness detail, transition traces, or context-budget diagnostics.
+
+## Subcommand And Mode Highlights
+
+- `slipway handoff write` writes advisory continuation notes; pass `--section <name>` to replace one named section from stdin.
+- `slipway handoff show --json` emits the current per-change handoff in structured form.
+- `slipway evidence task --result-file <path> --json` imports compact executor task results; repeat `--result-file` for an atomic batch.
+- `slipway evidence skill --skill <name> --verdict pass --json` records governed skill evidence at the stage that owns that skill.
+- `slipway status --stats --json` reports workspace diagnostics without reviving the retired top-level `stats` command.
+- `slipway health --doctor --json` adds repair-oriented diagnostics to the health report.
+- `slipway config`, `slipway config list --json`, `slipway config get <key> --json`, and `slipway config set <key> <value>` inspect or update `.slipway.yaml`; `config` is intentionally CLI-only and has no generated adapter prompt surface.
 
 ## Read-Only Authority
 
@@ -110,8 +122,8 @@ moving without a fresh human stop at every routine handoff. Enable it per repo
 with the `execution.auto` config, or override it for a single invocation:
 
 ```bash
-slipway run --auto --json
-slipway run --no-auto --json
+slipway run --json --auto
+slipway run --json --no-auto
 ```
 
 `--auto` and `--no-auto` take precedence over the `execution.auto` config for
