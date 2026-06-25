@@ -79,18 +79,26 @@ slipway init --tools codex
 Other adapter IDs are `claude`, `codex`, `cursor`, `opencode`,
 `copilot`, `kilo`, `kiro`, `pi`, `qwen`, `windsurf`, `all`, and `none`.
 
-For non-trivial work, create a governed change:
+That one-time setup is the whole installation. From there you do not drive
+Slipway by hand. In your AI-tool session, describe the change in plain language:
+
+> Add a `--dry-run` mode to the export command.
+
+The adapter that `slipway init` generated routes that request into the governed
+lifecycle. The entry skill picks up the change, and the agent runs `slipway`
+intake, planning, implementation, review, and the done gate for you. It stops
+only when Slipway returns a skill handoff, checkpoint, blocker, or done-ready
+state that needs your decision.
+
+You stay in plain language; Slipway stays the authority on whether the change is
+actually done. You never memorize the command sequence or hold lifecycle state
+in your head — that is the agent's job, backed by the CLI. The read-only
+surfaces are there whenever you want to see what the agent sees:
 
 ```bash
-slipway new "add a dry-run mode to export" --preset standard
 slipway status --json
 slipway next --json --diagnostics
-slipway run --json --diagnostics
 ```
-
-In an AI-tool session, you usually describe the change in plain language. The
-generated entry skill should call the same CLI surfaces and stop when Slipway
-returns a skill handoff, blocker, checkpoint, or done-ready state.
 
 For cross-session continuity, use the command-owned advisory handoff:
 
@@ -107,6 +115,9 @@ not snapshot lifecycle state or the next action. Fresh sessions still run
 
 <details>
 <summary><strong>Command-first lifecycle</strong></summary>
+
+Prefer to drive the lifecycle yourself, or scripting it in CI? These are the
+same commands the agent runs for you, exposed for direct use:
 
 ```bash
 slipway new "refresh governance docs" --preset standard
@@ -346,6 +357,16 @@ go vet ./...
 CI runs Markdown/YAML/action linting, Go linting, Slipway testlint, Go tests
 across platforms, race tests, kernel coverage, build checks, security scans, Nix
 checks, and the docs workflow.
+
+## Contributing
+
+Contributions go through a fork-and-pull-request workflow. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the contribution flow and
+[docs/contributing.md](docs/contributing.md) for development details.
+
+## License
+
+Slipway is licensed under the [BSD 3-Clause License](LICENSE).
 
 ## Repository Status
 
