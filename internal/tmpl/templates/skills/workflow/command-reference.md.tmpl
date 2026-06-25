@@ -8,9 +8,9 @@ The rendered values come through the same helper path used by generated command
 surfaces, so helper-default prerequisites stay aligned with the CLI-facing
 surfaces instead of drifting into hand-maintained prose. The argument summaries
 are completeness-guarded: a reverse flag-contract test asserts every non-hidden,
-non-help, non-exempt Cobra flag appears here, so a newly added flag cannot
-silently drift out of this reference. Documented exemptions such as
-`review --artifact` are intentionally absent from the generated summary.
+non-help Cobra flag appears here unless it belongs to the narrow manual
+`evidence task` ledger surface, so a newly added command flag cannot silently
+drift out of this reference.
 
 The CLI remains authoritative. This document is a generated lookup aid for the
 single workflow entry skill.

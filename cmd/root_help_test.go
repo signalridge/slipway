@@ -38,7 +38,19 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	// The config public surface must be discoverable from the root help, not only
 	// `slipway help config`; this is the whole point of a discoverability change.
 	assert.Contains(t, help, "config")
-	assert.Contains(t, help, configShortDescription)
+	assert.Contains(t, help, desc("config"))
+}
+
+func TestRootHelpGroupsUseRegistryDescriptions(t *testing.T) {
+	t.Parallel()
+
+	for _, group := range helpGroups {
+		for _, entry := range group.Commands {
+			description := desc(entry.Name)
+			require.NotEmptyf(t, description, "root help entry %q must be registered in toolgen commandRegistry", entry.Name)
+			assert.Equal(t, description, entry.Description, "root help entry %q must use the registry description", entry.Name)
+		}
+	}
 }
 
 func TestProgressionCommandsDoNotExposeQuickBypass(t *testing.T) {

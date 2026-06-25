@@ -94,6 +94,13 @@
     },
     {
       "kind": "command",
+      "name": "config",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway config"
+    },
+    {
+      "kind": "command",
       "name": "delete",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
@@ -280,6 +287,13 @@
       "source": "cmd/codebase_map.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway codebase-map --json"
+    },
+    {
+      "kind": "json-contract",
+      "name": "config-json",
+      "source": "cmd/config.go",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway config --json"
     },
     {
       "kind": "json-contract",

@@ -138,6 +138,7 @@ codebase-map 提示。
 | 命令 | 类别 | 用途 |
 | --- | --- | --- |
 | `slipway init` | mutation | 初始化 `.slipway.yaml`、仓库本地的运行时布局，以及可选的 AI 工具适配器。 |
+| `slipway config [list|get|set]` | mutation | 查看并更新仓库级 `.slipway.yaml` 配置键。它是 CLI-only，不生成适配器 prompt surface。 |
 
 `docs/SURFACE-MANIFEST.json` 是已提交的生成面清单，记录适配器、命令、skill、JSON 和文档各类行。
 该清单由 Slipway 拥有的 Go 权威源重建，并由面向 CI 的 Go 测试核对：
@@ -184,6 +185,8 @@ slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
+slipway handoff show --json
+slipway config --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -195,11 +198,13 @@ slipway health --doctor --json
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
+| config JSON | `slipway config --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
+| handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
 | implement JSON | `slipway implement --json` |
 | instructions JSON | `slipway instructions <artifact> --json` |
@@ -210,7 +215,7 @@ slipway health --doctor --json
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
-| run JSON | `slipway run [--auto\|--no-auto] --json` |
+| run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
 

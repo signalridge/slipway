@@ -168,6 +168,7 @@ codebase-map advisory.
 | Command | Class | Purpose |
 | --- | --- | --- |
 | `slipway init` | mutation | Initialize `.slipway.yaml`, the repo-local runtime layout, and optional AI-tool adapters. |
+| `slipway config [list|get|set]` | mutation | Inspect and update repo-level `.slipway.yaml` configuration keys. CLI-only; no generated adapter prompt surface. |
 
 `docs/SURFACE-MANIFEST.json` is the committed generated-surface inventory for
 adapter, command, skill, JSON, and documentation rows. The manifest is rebuilt
@@ -222,6 +223,8 @@ slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
+slipway handoff show --json
+slipway config --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -233,11 +236,13 @@ Stable manifest tokens for JSON contract coverage:
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
+| config JSON | `slipway config --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
+| handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
 | implement JSON | `slipway implement --json` |
 | instructions JSON | `slipway instructions <artifact> --json` |
@@ -248,7 +253,7 @@ Stable manifest tokens for JSON contract coverage:
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
-| run JSON | `slipway run [--auto\|--no-auto] --json` |
+| run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
 

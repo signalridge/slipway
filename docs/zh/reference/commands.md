@@ -1,10 +1,11 @@
 # 命令参考
 
-本页是 Slipway 命令的 Diataxis 参考入口。详细的旧版参考仍然保留在
-[命令](../commands.md)；这层封装让生成的命令面清单锚定在 `docs/reference/` 之下。
+本页是 Slipway 命令的 Diataxis 参考入口。展开版操作参考仍然保留在
+[命令](../commands.md)；本页让生成的命令面清单锚定在 `docs/reference/` 之下。
 
 大多数路由命令在需要结构化输出时都支持 `--json`。
-`slipway validate` 的主报告以 JSON 形式输出，而 `slipway init` 仅用于初始化配置。
+`slipway validate` 的主报告以 JSON 形式输出，`slipway init` 仅用于初始化配置，
+`slipway config` 是公开的纯 CLI 初始化/配置面。
 
 ## 命令索引
 
@@ -33,6 +34,7 @@
 | `slipway health` | query | 显示仓库本地的完整性检查结果。 |
 | `slipway instructions` | query | 显示制品或 codebase-map 的编写约定。 |
 | `slipway init` | mutation | 初始化运行时布局与可选适配器。 |
+| `slipway config` | mutation | 查看并设置仓库级配置键。 |
 
 ## JSON 命令面标记
 
@@ -61,10 +63,21 @@ slipway evidence task --result-file task-result.json [--result-file next-task-re
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json
+slipway config --json
 ```
 
 当你需要查看阻塞项细节、制品就绪度细节、状态转换轨迹或上下文预算诊断时，
 请在 `next` 或 `run` 上加 `--diagnostics`。
+
+## 子命令与模式要点
+
+- `slipway handoff write` 写入咨询性的续作笔记；加 `--section <name>` 时，会从 stdin 替换指定小节。
+- `slipway handoff show --json` 以结构化形式输出当前变更的 handoff。
+- `slipway evidence task --result-file <path> --json` 导入紧凑的执行任务结果；重复 `--result-file` 可进行原子批量导入。
+- `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。
+- `slipway status --stats --json` 报告工作区诊断，不重新引入已退休的顶层 `stats` 命令。
+- `slipway health --doctor --json` 在 health 报告中加入面向修复的诊断。
+- `slipway config`、`slipway config list --json`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看或更新 `.slipway.yaml`；`config` 刻意保持 CLI-only，不生成适配器 prompt surface。
 
 ## 只读类命令
 
@@ -106,8 +119,8 @@ slipway run --json --diagnostics
 配置项按仓库启用它，也可以为单次调用覆盖它：
 
 ```bash
-slipway run --auto --json
-slipway run --no-auto --json
+slipway run --json --auto
+slipway run --json --no-auto
 ```
 
 对那一次运行而言，`--auto` 和 `--no-auto` 的优先级高于 `execution.auto` 配置。

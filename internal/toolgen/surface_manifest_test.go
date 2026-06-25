@@ -163,6 +163,80 @@ func TestSurfaceManifestDocsTokensExist(t *testing.T) {
 	}
 }
 
+func TestJSONContractTokensExistInDetailedCommandDocs(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := toolgenRepoRoot(t)
+	docsPaths := []string{
+		"docs/commands.md",
+		"docs/ja/commands.md",
+		"docs/zh/commands.md",
+	}
+	docsContent := map[string]string{}
+	for _, docsPath := range docsPaths {
+		docsContent[docsPath] = readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+	}
+
+	for _, row := range BuildSurfaceManifest().Rows {
+		if row.Kind != "json-contract" {
+			continue
+		}
+		for _, docsPath := range docsPaths {
+			assert.Containsf(t, docsContent[docsPath], row.Token,
+				"%s must include JSON token %q for %s/%s", docsPath, row.Token, row.Kind, row.Name)
+		}
+	}
+}
+
+func TestDesignDocsNameEveryRegisteredAdapter(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := toolgenRepoRoot(t)
+	docsPaths := []string{
+		"docs/design.md",
+		"docs/ja/design.md",
+		"docs/zh/design.md",
+		"docs/explanation/design.md",
+		"docs/ja/explanation/design.md",
+		"docs/zh/explanation/design.md",
+		"docs/assets/diagrams/tool-adapters.svg",
+	}
+	for _, docsPath := range docsPaths {
+		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+		for _, cfg := range Registry() {
+			name := adapterDocsDisplayName(cfg.ID)
+			assert.Containsf(t, content, name, "%s must name adapter %s", docsPath, name)
+		}
+	}
+}
+
+func adapterDocsDisplayName(id string) string {
+	switch id {
+	case "claude":
+		return "Claude"
+	case "codex":
+		return "Codex"
+	case "copilot":
+		return "Copilot"
+	case "cursor":
+		return "Cursor"
+	case "kilo":
+		return "Kilo"
+	case "kiro":
+		return "Kiro"
+	case "opencode":
+		return "OpenCode"
+	case "pi":
+		return "Pi"
+	case "qwen":
+		return "Qwen"
+	case "windsurf":
+		return "Windsurf"
+	default:
+		return id
+	}
+}
+
 func readSurfaceManifestFixture(t *testing.T, path string) string {
 	t.Helper()
 
