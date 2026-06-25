@@ -1,0 +1,11 @@
+{
+  "task_id": "t-01",
+  "verdict": "pass",
+  "evidence_ref": "red-test:go test ./internal/toolgen -run TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent -count=1 failed on retired command-skill residue; contract-test:go test ./cmd -run TestGeneratedCommandSkillIDsResolveOnLiveRootCommands -count=1 passed; review-repair:s3-review-repair:fix-stale-command-skills added before-footer user-modified manifestless preservation and realistic generated-shape retired skill prune coverage; final repair added exact current-rendered candidate coverage plus exact legacy generated stats/learn/checkpoint/pivot samples and shape-preserving user-edit preservation; rerun go test ./internal/toolgen -run TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent -count=1 passed; rerun go test ./cmd -run TestGeneratedCommandSkillIDsResolveOnLiveRootCommands -count=1 passed",
+  "changed_files": [
+    "internal/toolgen/toolgen_test.go",
+    "cmd/template_flag_contract_test.go"
+  ],
+  "blockers": [],
+  "session_id": "codex-inline-wave-1-t-01+repair-019efd7e-c213-7fd2-949b-595af1d657b9+019efd85-8cb9-7530-9d21-9aa7180e64dc+019efda3-1eed-7752-95f3-aecd6004c43f+019efdac-fdcd-7353-b391-d6e23f2f0bed"
+}

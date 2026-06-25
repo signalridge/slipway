@@ -1,0 +1,46 @@
+version: 1
+slug: fix-stale-command-skills
+description: fix stale command skills
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-25T04:39:19.212354Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/fix-stale-command-skills
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: d5ec9598c15f5c4c1518fddc980ca6983acd3a433ae0a2692c464cc394d10c31
+        updated_at: 2026-06-25T08:23:14.105481995Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: c82e480b966c6ff128e3b9ea9cf4a5fa900aa1253f7047f301b1a2f57fe03204
+        updated_at: 2026-06-25T05:22:11.547242234Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 1771f6e8e151982dcb7415583e6c787734034f67b608b50a165aab2a5088c2e0
+        updated_at: 2026-06-25T05:21:16.778018051Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: f6807b58902942875e29b15d40feda5b4bc466f7c044535ccfd6cd77aa27e742
+        updated_at: 2026-06-25T06:08:03.257455554Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/code-quality-review.yaml
+    independent-review: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/plan-audit.yaml
+    ship-verification: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-stale-command-skills/artifacts/changes/fix-stale-command-skills/verification/wave-orchestration.yaml

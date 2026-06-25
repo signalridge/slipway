@@ -1,0 +1,10 @@
+{
+  "task_id": "t-02",
+  "verdict": "pass",
+  "evidence_ref": "green-test:go test ./internal/toolgen -run TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent -count=1; contract-test:go test ./cmd -run TestGeneratedCommandSkillIDsResolveOnLiveRootCommands -count=1; review-repair:s3-review-repair:fix-stale-command-skills tightened manifestless retired command-skill cleanup to exact generated-content matching: current rendered command-skill candidates rewritten to retired IDs plus exact legacy generated stats/learn/checkpoint/pivot signatures; user content before/after footer and shape-preserving legacy edits are preserved; manifest-tracked cleanup stays on ownership fail-closed path; rerun go test ./internal/toolgen -run TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent -count=1 passed; black-box root stale samples codex/kiro/qwen stats/learn/checkpoint plus codex pivot all pruned",
+  "changed_files": [
+    "internal/toolgen/toolgen.go"
+  ],
+  "blockers": [],
+  "session_id": "codex-inline-wave-2-t-02+repair-019efd7e-c213-7fd2-949b-595af1d657b9+019efd85-8cb9-7530-9d21-9aa7180e64dc+019efda3-1eed-7752-95f3-aecd6004c43f+019efdac-fdcd-7353-b391-d6e23f2f0bed"
+}

@@ -1,0 +1,12 @@
+{
+  "task_id": "t-03",
+  "verdict": "pass",
+  "evidence_ref": "verification:go test ./internal/toolgen -run 'TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent|TestGenerateRefreshPreservesUnknownCleanupTargetsAndRefusesManagedModified|TestGenerateRefreshWithoutOwnershipManifestBootstrapsIntoTrackedState|TestGeneratedAdapterSurfacesStayInSyncWithRegistry|TestCodexCommandSkills|TestCodexCommandSkillsUseCommandRegistryArguments|TestCodexCommandSkillsIncludeTierAndSurface' -count=1; go test ./cmd -run 'TestGeneratedCommandSkillIDsResolveOnLiveRootCommands|TestTemplateFlagsMatchCobraCommands|TestCobraFlagsCoveredByRegistryArguments|TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands' -count=1; go test ./internal/toolgen/cmd/gen-surface-manifest -count=1; go run ./internal/toolgen/cmd/gen-surface-manifest --check; git diff --check; black-box copied real root stale samples into a temp repo and refresh pruned codex/kiro/qwen stats/learn/checkpoint plus codex pivot",
+  "changed_files": [
+    "internal/toolgen/toolgen_test.go",
+    "cmd/template_flag_contract_test.go",
+    "docs/SURFACE-MANIFEST.json"
+  ],
+  "blockers": [],
+  "session_id": "codex-inline-wave-3-t-03+repair-019efd7e-c213-7fd2-949b-595af1d657b9+019efd85-8cb9-7530-9d21-9aa7180e64dc+019efda3-1eed-7752-95f3-aecd6004c43f+019efdac-fdcd-7353-b391-d6e23f2f0bed"
+}

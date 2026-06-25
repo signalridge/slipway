@@ -1340,6 +1340,582 @@ func TestGenerateRefreshPrunesOnlyGeneratedTopLevelSkillEntries(t *testing.T) {
 	assert.NoError(t, err, "skill index should live under workflow references")
 }
 
+func TestGenerateRefreshPrunesRetiredCommandSkillDirsByContent(t *testing.T) {
+	retiredSkills := []struct {
+		id       string
+		sourceID string
+	}{
+		{id: "synthetic-query-retired-command", sourceID: "next"},
+		{id: "synthetic-mutation-retired-command", sourceID: "new"},
+		{id: "synthetic-setup-retired-command", sourceID: "init"},
+		{id: "synthetic-never-enumerated-retired-command", sourceID: "preset"},
+	}
+
+	t.Run("manifest absent residue from a real generated command body is pruned", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["codex"]
+
+		require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+		id := "synthetic-realistic-retired"
+		sourceID := "next"
+		sourceSkill, err := os.ReadFile(commandSkillPath(root, cfg, sourceID))
+		require.NoError(t, err)
+		skillPath := commandSkillPath(root, cfg, id)
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(
+			skillPath,
+			[]byte(rewriteGeneratedCommandSkillIdentityForTest(t, string(sourceSkill), cfg, sourceID, id)),
+			0o644,
+		))
+
+		require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+		_, err = os.Stat(filepath.Dir(skillPath))
+		assert.True(t, os.IsNotExist(err), "refresh should prune realistic manifestless generated command skill residue")
+		assertNoOrphanCommandSkills(t, root, cfg)
+	})
+
+	t.Run("manifest absent realistic legacy stats sample is pruned", func(t *testing.T) {
+		for _, cfg := range commandSkillHostConfigs(t) {
+			t.Run(cfg.ID, func(t *testing.T) {
+				root := t.TempDir()
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				skillPath := commandSkillPath(root, cfg, "stats")
+				require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+				require.NoError(t, os.WriteFile(
+					skillPath,
+					[]byte(realisticLegacyRetiredCommandSkillForTest(t, cfg, "stats")),
+					0o644,
+				))
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				_, err := os.Stat(filepath.Dir(skillPath))
+				assert.True(t, os.IsNotExist(err), "%s refresh should prune realistic legacy stats residue", cfg.ID)
+				assertNoOrphanCommandSkills(t, root, cfg)
+			})
+		}
+	})
+
+	t.Run("manifest absent legacy generated command samples are pruned", func(t *testing.T) {
+		legacyIDs := []string{"stats", "learn", "checkpoint", "pivot"}
+		for _, cfg := range commandSkillHostConfigs(t) {
+			t.Run(cfg.ID, func(t *testing.T) {
+				root := t.TempDir()
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				for _, id := range legacyIDs {
+					skillPath := commandSkillPath(root, cfg, id)
+					require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+					require.NoError(t, os.WriteFile(
+						skillPath,
+						[]byte(realisticLegacyRetiredCommandSkillForTest(t, cfg, id)),
+						0o644,
+					))
+				}
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				for _, id := range legacyIDs {
+					_, err := os.Stat(filepath.Dir(commandSkillPath(root, cfg, id)))
+					assert.True(t, os.IsNotExist(err), "%s refresh should prune realistic legacy command skill %s", cfg.ID, id)
+				}
+				assertNoOrphanCommandSkills(t, root, cfg)
+			})
+		}
+	})
+
+	t.Run("manifest absent residue for every command skill host", func(t *testing.T) {
+		for _, cfg := range commandSkillHostConfigs(t) {
+			t.Run(cfg.ID, func(t *testing.T) {
+				root := t.TempDir()
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				for _, retired := range retiredSkills {
+					skillPath := commandSkillPath(root, cfg, retired.id)
+					require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+					require.NoError(t, os.WriteFile(
+						skillPath,
+						[]byte(generatedRetiredCommandSkill(t, cfg, retired.sourceID, retired.id)),
+						0o644,
+					))
+				}
+				userOwnedSkill := commandSkillPath(root, cfg, "user-owned")
+				require.NoError(t, os.MkdirAll(filepath.Dir(userOwnedSkill), 0o755))
+				require.NoError(t, os.WriteFile(userOwnedSkill, []byte("keep user-owned skill"), 0o644))
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				for _, retired := range retiredSkills {
+					_, err := os.Stat(filepath.Dir(commandSkillPath(root, cfg, retired.id)))
+					assert.True(t, os.IsNotExist(err), "%s refresh should remove retired generated command skill %s", cfg.ID, retired.id)
+				}
+				_, err := os.Stat(userOwnedSkill)
+				assert.NoError(t, err, "%s refresh must preserve adjacent user-owned skill dirs", cfg.ID)
+				assertNoOrphanCommandSkills(t, root, cfg)
+			})
+		}
+	})
+
+	t.Run("manifest tracked residue is pruned", func(t *testing.T) {
+		for _, cfg := range commandSkillHostConfigs(t) {
+			t.Run(cfg.ID, func(t *testing.T) {
+				root := t.TempDir()
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				id := "synthetic-manifest-tracked-retired-command"
+				skillPath := commandSkillPath(root, cfg, id)
+				require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+				require.NoError(t, os.WriteFile(skillPath, []byte(generatedRetiredCommandSkill(t, cfg, "new", id)), 0o644))
+				addOwnershipManifestFiles(t, root, cfg, skillPath)
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				_, err := os.Stat(filepath.Dir(skillPath))
+				assert.True(t, os.IsNotExist(err), "%s refresh should prune manifest-tracked retired generated command skill", cfg.ID)
+				assertNoOrphanCommandSkills(t, root, cfg)
+			})
+		}
+	})
+
+	t.Run("manifest absent user modified generated shape is preserved", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["codex"]
+
+		require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+		afterFooterID := "synthetic-user-modified-after-footer-command"
+		afterFooterSkill := commandSkillPath(root, cfg, afterFooterID)
+		require.NoError(t, os.MkdirAll(filepath.Dir(afterFooterSkill), 0o755))
+		require.NoError(t, os.WriteFile(afterFooterSkill, []byte(userModifiedRetiredCommandSkill(t, cfg, "next", afterFooterID)), 0o644))
+		beforeFooterID := "synthetic-user-modified-before-footer-command"
+		beforeFooterSkill := commandSkillPath(root, cfg, beforeFooterID)
+		require.NoError(t, os.MkdirAll(filepath.Dir(beforeFooterSkill), 0o755))
+		require.NoError(t, os.WriteFile(
+			beforeFooterSkill,
+			[]byte(userModifiedRetiredCommandSkillBeforeFooter(t, cfg, "new", beforeFooterID)),
+			0o644,
+		))
+		shapePreservingID := "synthetic-user-modified-shape-command"
+		shapePreservingSkill := commandSkillPath(root, cfg, shapePreservingID)
+		require.NoError(t, os.MkdirAll(filepath.Dir(shapePreservingSkill), 0o755))
+		require.NoError(t, os.WriteFile(
+			shapePreservingSkill,
+			[]byte(userModifiedRetiredCommandSkillBullet(t, cfg, "next", shapePreservingID)),
+			0o644,
+		))
+
+		require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+		got, err := os.ReadFile(afterFooterSkill)
+		require.NoError(t, err, "refresh must preserve user-modified generated-shape content under retired command names")
+		assert.Contains(t, string(got), "local operator notes")
+		got, err = os.ReadFile(beforeFooterSkill)
+		require.NoError(t, err, "refresh must preserve user-modified generated-shape content before the footer")
+		assert.Contains(t, string(got), "local operator notes")
+		got, err = os.ReadFile(shapePreservingSkill)
+		require.NoError(t, err, "refresh must preserve shape-preserving user-modified generated content")
+		assert.Contains(t, string(got), "local operator override")
+	})
+
+	t.Run("manifest absent user modified realistic legacy stats sample is preserved", func(t *testing.T) {
+		for _, cfg := range commandSkillHostConfigs(t) {
+			t.Run(cfg.ID, func(t *testing.T) {
+				root := t.TempDir()
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				id := "stats"
+				skillPath := commandSkillPath(root, cfg, id)
+				require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+				sample := realisticLegacyRetiredCommandSkillForTest(t, cfg, id)
+				footer := commandSkillFooter(id)
+				require.Contains(t, sample, footer)
+				modified := replaceOnceForTest(
+					t,
+					sample,
+					"Show repo-wide governance freshness and workflow statistics across every change.",
+					"Show repo-wide governance freshness and local operator notes across every change.",
+				)
+				require.Contains(t, modified, footer)
+				require.NoError(t, os.WriteFile(skillPath, []byte(modified), 0o644))
+
+				require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+				got, err := os.ReadFile(skillPath)
+				require.NoError(t, err, "%s refresh must preserve user-modified realistic legacy stats content", cfg.ID)
+				assert.Equal(t, modified, string(got))
+			})
+		}
+	})
+
+	t.Run("manifest tracked user modified generated shape refuses deletion", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := toolRegistry["codex"]
+
+		require.NoError(t, Generate(root, []string{cfg.ID}, true))
+
+		id := "synthetic-manifest-tracked-user-modified-command"
+		skillPath := commandSkillPath(root, cfg, id)
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, []byte(generatedRetiredCommandSkill(t, cfg, "next", id)), 0o644))
+		addOwnershipManifestFiles(t, root, cfg, skillPath)
+		require.NoError(t, os.WriteFile(skillPath, []byte(userModifiedRetiredCommandSkill(t, cfg, "next", id)), 0o644))
+
+		err := Generate(root, []string{cfg.ID}, true)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "managed-modified")
+
+		got, readErr := os.ReadFile(skillPath)
+		require.NoError(t, readErr)
+		assert.Contains(t, string(got), "local operator notes")
+	})
+}
+
+func commandSkillHostConfigs(t *testing.T) []ToolConfig {
+	t.Helper()
+
+	var out []ToolConfig
+	for _, cfg := range Registry() {
+		if cfg.CommandSkillSurface {
+			out = append(out, cfg)
+		}
+	}
+	require.NotEmpty(t, out)
+	return out
+}
+
+func commandSkillPath(root string, cfg ToolConfig, id string) string {
+	return filepath.Join(root, SkillPath(cfg, id))
+}
+
+func assertNoOrphanCommandSkills(t *testing.T, root string, cfg ToolConfig) {
+	t.Helper()
+
+	skillsRoot := filepath.Join(root, cfg.SkillsDir)
+	err := filepath.WalkDir(skillsRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || d.Name() != "SKILL.md" {
+			return walkErr
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		fm, _, err := splitSkillFrontmatter(string(raw))
+		if err != nil {
+			return nil
+		}
+		var meta struct {
+			CommandID string `yaml:"command_id"`
+			Surface   string `yaml:"surface"`
+		}
+		if err := yaml.Unmarshal([]byte(fm), &meta); err != nil {
+			return nil
+		}
+		id := strings.TrimSpace(meta.CommandID)
+		if id == "" || strings.TrimSpace(meta.Surface) != "skill" {
+			return nil
+		}
+		if _, ok := commandRegistryMap[id]; !ok {
+			t.Fatalf("%s refresh left orphan command skill %s at %s", cfg.ID, id, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+func generatedRetiredCommandSkill(t *testing.T, cfg ToolConfig, sourceID, id string) string {
+	t.Helper()
+
+	content, err := renderCommandSkill(cfg, sourceID)
+	require.NoError(t, err)
+	return rewriteGeneratedCommandSkillIdentityForTest(t, content, cfg, sourceID, id)
+}
+
+func realisticLegacyRetiredCommandSkillForTest(t *testing.T, cfg ToolConfig, id string) string {
+	t.Helper()
+
+	sample := realisticLegacyCodexRetiredCommandSkillForTest(t, id)
+	return replaceOnceForTest(
+		t,
+		sample,
+		fmt.Sprintf("trigger: \"$slipway-%s\"", id),
+		"trigger: \""+commandTrigger(cfg, id)+"\"",
+	)
+}
+
+func realisticLegacyCodexRetiredCommandSkillForTest(t *testing.T, id string) string {
+	t.Helper()
+
+	switch id {
+	case "stats":
+		return legacyRetiredCommandSkillSampleForTest(
+			"---",
+			"name: slipway-stats",
+			"description: \"Show repo-wide governance freshness and workflow statistics\"",
+			"install_profiles:",
+			"  - full",
+			"requires: []",
+			"command_id: \"stats\"",
+			"trigger: \"$slipway-stats\"",
+			"class: \"query\"",
+			"tier: \"diagnostics\"",
+			"surface: \"skill\"",
+			"---",
+			"# Stats",
+			"",
+			"Show repo-wide governance freshness and workflow statistics across every change.",
+			"",
+			"## Invocation",
+			"```bash",
+			"slipway stats --json",
+			"```",
+			"",
+			"## Contract",
+			"- Read-only repo-wide observability: active/archived counts, freshness summaries,",
+			"  and workflow statistics. It is not scoped to a single change — use",
+			"  `slipway status` for the active change.",
+			"",
+			"## Flags",
+			"- `--json`: JSON output",
+			"",
+			"## Arguments",
+			"```text",
+			"[--json]",
+			"```",
+			"",
+			"## Prerequisites",
+			"- `.slipway.yaml` must exist (run `slipway init` first)",
+			"",
+			"Invoke the authoritative `slipway stats` CLI surface directly; do not reimplement Slipway lifecycle semantics.",
+		)
+	case "learn":
+		return legacyRetiredCommandSkillSampleForTest(
+			"---",
+			"name: slipway-learn",
+			"description: \"Preview governance learning proposals from lifecycle evidence\"",
+			"install_profiles:",
+			"  - full",
+			"requires: []",
+			"command_id: \"learn\"",
+			"trigger: \"$slipway-learn\"",
+			"class: \"query\"",
+			"tier: \"diagnostics\"",
+			"surface: \"skill\"",
+			"---",
+			"# Learn",
+			"",
+			"Preview read-only governance learning proposals derived from accumulated",
+			"lifecycle evidence.",
+			"",
+			"## Invocation",
+			"```bash",
+			"slipway learn --preview --json",
+			"```",
+			"",
+			"## Contract",
+			"- Read-only and non-mutating: it surfaces *proposed* governance adjustments for",
+			"  human review; it never applies them. Proposals are advisory only.",
+			"- `--preview` is the default. This is a maintainer/observability surface, not a",
+			"  step in driving a single change.",
+			"",
+			"## Flags",
+			"- `--preview`: generate read-only governance learning proposals (default true)",
+			"- `--json`: JSON output",
+			"",
+			"## Arguments",
+			"```text",
+			"[--preview] [--json]",
+			"```",
+			"",
+			"## Prerequisites",
+			"- `.slipway.yaml` must exist (run `slipway init` first)",
+			"",
+			"Invoke the authoritative `slipway learn` CLI surface directly; do not reimplement Slipway lifecycle semantics.",
+		)
+	case "checkpoint":
+		return legacyRetiredCommandSkillSampleForTest(
+			"---",
+			"name: slipway-checkpoint",
+			"description: \"Set an active checkpoint to pause wave execution and request user input\"",
+			"install_profiles:",
+			"  - full",
+			"requires: []",
+			"command_id: \"checkpoint\"",
+			"trigger: \"$slipway-checkpoint\"",
+			"class: \"mutation\"",
+			"tier: \"situational\"",
+			"surface: \"skill\"",
+			"---",
+			"# Checkpoint",
+			"",
+			"Pause wave execution and request user input for a specific task.",
+			"",
+			"## Invocation",
+			"```bash",
+			"slipway checkpoint --task-id <task_id> [--type <type>] [--allowed-responses <responses>] --json",
+			"```",
+			"",
+			"## Contract",
+			"- Sets an active checkpoint on the current governed change.",
+			"- Only valid during `S2_IMPLEMENT` state.",
+			"- Only one checkpoint can be active at a time.",
+			"- Resume with `slipway run --resume-response \"<response>\"`.",
+			"- After checkpoint resume, a **fresh subagent MUST be spawned** — do NOT continue in the same context.",
+			"",
+			"## When to Use",
+			"- Task encounters a blocker requiring human judgment (architectural decision, ambiguous requirement).",
+			"- Task encounters deviation that requires user decision.",
+			"- Retry budget exhausted — surface failure to user for decision.",
+			"",
+			"## Flags",
+			"- `--task-id <id>`: ID of the paused task (required)",
+			"- `--type <type>`: Checkpoint type — `human_verify` (default), `decision`, `human_action`",
+			"- `--allowed-responses <responses>`: Comma-separated allowed response values (required for `type=decision`)",
+			"- `--json`: JSON output",
+			"- `--change <slug>`: target a specific active change",
+			"",
+			"## Arguments",
+			"```text",
+			"--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]",
+			"```",
+			"",
+			"## Prerequisites",
+			"- `.slipway.yaml` must exist (run `slipway init` first)",
+			"- An active governed change must be in S2_IMPLEMENT with a materialized wave plan (run `slipway repair` if `wave-plan.yaml` is missing).",
+			"",
+			"Invoke the authoritative `slipway checkpoint` CLI surface directly; do not reimplement Slipway lifecycle semantics.",
+		)
+	case "pivot":
+		return legacyRetiredCommandSkillSampleForTest(
+			"---",
+			"name: slipway-pivot",
+			"description: \"Reroute or rescope an active change\"",
+			"command_id: \"pivot\"",
+			"trigger: \"$slipway-pivot\"",
+			"class: \"mutation\"",
+			"tier: \"situational\"",
+			"surface: \"skill\"",
+			"---",
+			"# Pivot",
+			"",
+			"Reroute (re-evaluate the routing/discovery decision) or rescope (reopen intake to",
+			"amend scope) an active change. Both set `needs_discovery=true` and clear",
+			"execution residue.",
+			"",
+			"## Invocation",
+			"```bash",
+			"slipway pivot --reroute",
+			"slipway pivot --rescope",
+			"```",
+			"",
+			"## Contract",
+			"- Show pivot summary with before/after state.",
+			"- Confirm pivot action with user before executing.",
+			"- `--reroute` (the default when no flag is given) is valid in `S1_PLAN`,",
+			"  `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`; it returns the change to `S1_PLAN`",
+			"  with discovery forced on. An invalid state is blocked (`pivot_state_invalid`).",
+			"- `--rescope` is valid in `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`; it returns",
+			"  the change to `S0_INTAKE` (intake/clarify) and clears the intent",
+			"  `## Approved Summary` so it must be re-confirmed. Before execution",
+			"  (`S0_INTAKE`/`S1_PLAN`) and terminal states are blocked",
+			"  (`rescope_state_invalid`).",
+			"",
+			"## Flags",
+			"- `--reroute`: Re-evaluate routing/discovery and re-enter `S1_PLAN` (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY).",
+			"- `--rescope`: Reopen intake — return to `S0_INTAKE` to amend scope, clearing the Approved Summary (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY).",
+			"- `--json`: JSON output",
+			"- `--change <slug>`: target a specific active change",
+			"",
+			"## Arguments",
+			"```text",
+			"[--reroute|--rescope] [--json] [--change <slug>]",
+			"```",
+			"",
+			"## Prerequisites",
+			"- `.slipway.yaml` must exist (run `slipway init` first)",
+			"- an active change must exist, or pass `--change <slug>` when supported.",
+			"",
+			"Invoke the authoritative `slipway pivot` CLI surface directly; do not reimplement Slipway lifecycle semantics.",
+		)
+	default:
+		t.Fatalf("unknown realistic legacy command skill sample %q", id)
+		return ""
+	}
+}
+
+func legacyRetiredCommandSkillSampleForTest(lines ...string) string {
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func rewriteGeneratedCommandSkillIdentityForTest(t *testing.T, content string, cfg ToolConfig, sourceID, id string) string {
+	t.Helper()
+
+	content = normalizeTemplateLineEndings(content)
+	for _, replacement := range []struct {
+		old string
+		new string
+	}{
+		{
+			old: "name: " + adapterSkillName(sourceID) + "\n",
+			new: "name: " + adapterSkillName(id) + "\n",
+		},
+		{
+			old: "command_id: \"" + sourceID + "\"\n",
+			new: "command_id: \"" + id + "\"\n",
+		},
+		{
+			old: "trigger: \"" + commandTrigger(cfg, sourceID) + "\"\n",
+			new: "trigger: \"" + commandTrigger(cfg, id) + "\"\n",
+		},
+		{
+			old: commandSkillFooter(sourceID),
+			new: commandSkillFooter(id),
+		},
+	} {
+		require.Equal(t, 1, strings.Count(content, replacement.old), "test fixture should contain one generated identity marker %q", replacement.old)
+		content = strings.Replace(content, replacement.old, replacement.new, 1)
+	}
+	return content
+}
+
+func userModifiedRetiredCommandSkill(t *testing.T, cfg ToolConfig, sourceID, id string) string {
+	t.Helper()
+
+	return generatedRetiredCommandSkill(t, cfg, sourceID, id) + "\nlocal operator notes\n"
+}
+
+func userModifiedRetiredCommandSkillBeforeFooter(t *testing.T, cfg ToolConfig, sourceID, id string) string {
+	t.Helper()
+
+	footer := commandSkillFooter(id)
+	return replaceOnceForTest(t, generatedRetiredCommandSkill(t, cfg, sourceID, id), "\n"+footer, "\nlocal operator notes\n\n"+footer)
+}
+
+func userModifiedRetiredCommandSkillBullet(t *testing.T, cfg ToolConfig, sourceID, id string) string {
+	t.Helper()
+
+	return replaceOnceForTest(
+		t,
+		generatedRetiredCommandSkill(t, cfg, sourceID, id),
+		"- `next_skill.name` is the authoritative governed-host handoff.",
+		"- `next_skill.name` is a local operator override.",
+	)
+}
+
+func replaceOnceForTest(t *testing.T, content, old, new string) string {
+	t.Helper()
+
+	require.Equal(t, 1, strings.Count(content, old), "test fixture should contain one copy of %q", old)
+	return strings.Replace(content, old, new, 1)
+}
+
 func TestGenerateRefreshDoesNotPruneSkillDirsWithoutGeneratedAdapterMarker(t *testing.T) {
 	root := t.TempDir()
 
