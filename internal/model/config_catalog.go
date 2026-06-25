@@ -43,8 +43,9 @@ type ConfigCatalogEntry struct {
 	// Type is the underlying scalar/collection kind: bool, int, string,
 	// []string, or map.
 	Type string `json:"type"`
-	// Default is the rendered default value sourced from DefaultConfig(); empty
-	// when the field has no default (zero value emitted only when set).
+	// Default is the rendered default value sourced from DefaultConfig(); false
+	// booleans are explicit defaults, while zero ints and empty collections are
+	// omitted when they do not carry a meaningful default.
 	Default string `json:"default,omitempty"`
 	// AllowedValues enumerates the permitted values for constrained keys; nil
 	// when the key is free-form.
@@ -203,8 +204,8 @@ func configTypeName(ft reflect.Type) string {
 	}
 }
 
-// renderDefault renders a leaf's default value as a string. Zero values for
-// numbers/strings/bools render as "0"/""/"false"; empty collections render as
+// renderDefault renders a leaf's default value as a string. False booleans are
+// explicit defaults; zero ints, empty strings, and empty collections render as
 // "" so the catalog default column stays compact.
 func renderDefault(fv reflect.Value) string {
 	if !fv.IsValid() {
@@ -215,7 +216,7 @@ func renderDefault(fv reflect.Value) string {
 		if fv.Bool() {
 			return "true"
 		}
-		return ""
+		return "false"
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if fv.Int() == 0 {
 			return ""

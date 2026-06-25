@@ -71,6 +71,26 @@ func TestConfigListJSONShape(t *testing.T) {
 		assert.Equal(t, "string", entry.Type)
 		assert.Equal(t, "defaults", entry.Scope)
 		assert.Equal(t, []string{"core", "expanded", "custom"}, entry.AllowedValues)
+
+		entry, ok = byName["execution.auto"]
+		require.True(t, ok, "expected execution.auto in JSON catalog")
+		assert.Equal(t, "bool", entry.Type)
+		assert.Equal(t, "false", entry.Default, "false is a real default value and must not be omitted")
+	})
+}
+
+func TestConfigHelpDisclosesSetRewrite(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		out, errOut, err := runConfigCmd(t, root, "--help")
+		require.NoError(t, err)
+		assert.Empty(t, errOut)
+		assert.Contains(t, out, "rewrites .slipway.yaml as deterministic YAML")
+		assert.Contains(t, out, "comments and the")
+		assert.Contains(t, out, "original key ordering are not preserved")
 	})
 }
 
@@ -120,6 +140,29 @@ func TestConfigGetJSONShape(t *testing.T) {
 	})
 }
 
+func TestConfigJSONWarnsUnknownTopLevelOnStderr(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte(`unknown_block:
+  retained: true
+execution:
+  lock_wait_timeout_seconds: 37
+`), 0o644))
+
+		out, errOut, err := runConfigCmd(t, root, "get", "execution.lock_wait_timeout_seconds", "--json")
+		require.NoError(t, err)
+		assert.Contains(t, errOut, "warning:")
+		assert.Contains(t, errOut, "unknown_block")
+
+		var payload configGetView
+		require.NoError(t, json.Unmarshal([]byte(out), &payload), "warning must not corrupt JSON stdout")
+		assert.Equal(t, "execution.lock_wait_timeout_seconds", payload.Key)
+		assert.Equal(t, "37", payload.Value, "valid config remainder must still load")
+	})
+}
+
 func TestConfigGetUnknownKeyErrorsToStderrNonZero(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -165,6 +208,54 @@ func TestConfigSetHappyPathRoundTrip(t *testing.T) {
 		out, _, err := runConfigCmd(t, root, "get", "execution.lock_wait_timeout_seconds")
 		require.NoError(t, err)
 		assert.Equal(t, "55", strings.TrimSpace(out))
+	})
+}
+
+func TestConfigSetEchoesPersistedEffectiveValue(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		tests := []struct {
+			name  string
+			key   string
+			value string
+			want  string
+		}{
+			{
+				name:  "non-positive timeout normalizes to default",
+				key:   "execution.lock_wait_timeout_seconds",
+				value: "0",
+				want:  "10",
+			},
+			{
+				name:  "non-positive audit iterations normalize to default",
+				key:   "execution.max_plan_audit_iterations",
+				value: "0",
+				want:  "3",
+			},
+			{
+				name:  "boolean input renders canonically",
+				key:   "execution.auto",
+				value: "TRUE",
+				want:  "true",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				out, errOut, err := runConfigCmd(t, root, "set", tt.key, tt.value)
+				require.NoError(t, err)
+				assert.Empty(t, errOut)
+				assert.Equal(t, "set "+tt.key+" = "+tt.want, strings.TrimSpace(out))
+
+				getOut, getErrOut, err := runConfigCmd(t, root, "get", tt.key)
+				require.NoError(t, err)
+				assert.Empty(t, getErrOut)
+				assert.Equal(t, tt.want, strings.TrimSpace(getOut))
+			})
+		}
 	})
 }
 
@@ -329,10 +420,23 @@ func TestConfigListTextSurfacesEffectiveDefaultsAndDescriptions(t *testing.T) {
 		assert.Contains(t, out, "Whether `slipway new` provisions", "descriptions must render in the text table")
 		// auto_provision_worktree resolves to its effective default (enabled), not
 		// the bare zero value, on the same line as the key.
+		assertConfigListLineContains(t, out, "execution.auto", "false")
 		for _, line := range strings.Split(out, "\n") {
 			if strings.HasPrefix(line, "governance.auto_provision_worktree") {
 				assert.Contains(t, line, "true", "auto_provision_worktree default must render as enabled")
 			}
 		}
+		assertConfigListLineContains(t, out, "validation.enforce_rfc2119", "false")
 	})
+}
+
+func assertConfigListLineContains(t *testing.T, output, key, want string) {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, key) {
+			assert.Contains(t, line, want)
+			return
+		}
+	}
+	t.Fatalf("config list output missing line for %s:\n%s", key, output)
 }

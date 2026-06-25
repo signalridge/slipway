@@ -119,6 +119,12 @@ func TestConfigCatalogDefaultsMatchDefaultConfig(t *testing.T) {
 	if got := byName["execution.max_plan_audit_iterations"].Default; got != "3" {
 		t.Errorf("execution.max_plan_audit_iterations default = %q, want %q", got, "3")
 	}
+	if got := byName["execution.auto"].Default; got != "false" {
+		t.Errorf("execution.auto default = %q, want %q", got, "false")
+	}
+	if got := byName["validation.enforce_rfc2119"].Default; got != "false" {
+		t.Errorf("validation.enforce_rfc2119 default = %q, want %q", got, "false")
+	}
 }
 
 // TestConfigCatalogAllowedValuesEnriched verifies constrained keys carry their

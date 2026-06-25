@@ -183,6 +183,10 @@ func hasRepairableWorkspaceMarkers(root string) bool {
 }
 
 func loadConfigAtRoot(root string) (model.Config, error) {
+	return loadConfigAtRootWithStderr(root, os.Stderr)
+}
+
+func loadConfigAtRootWithStderr(root string, stderr io.Writer) (model.Config, error) {
 	cfgPath := state.ConfigPath(root)
 	cfg, err := model.LoadConfig(cfgPath)
 	if err != nil {
@@ -198,7 +202,7 @@ func loadConfigAtRoot(root string) (model.Config, error) {
 	// typo'd or stale key is visible. This must go to STDERR, never stdout:
 	// loadConfigAtRoot is on every `--json` code path, and writing to stdout would
 	// corrupt machine-readable output. Emitted once per load, only when keys exist.
-	warnUnknownTopLevelConfigKeys(os.Stderr, cfgPath, cfg)
+	warnUnknownTopLevelConfigKeys(stderr, cfgPath, cfg)
 	return cfg, nil
 }
 

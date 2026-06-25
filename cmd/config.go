@@ -41,6 +41,9 @@ Keys are the dotted leaves of .slipway.yaml (the same surface strict decoding
 accepts). With no subcommand, config lists every key; use list/get/set to read
 or update individual keys.
 
+config set rewrites .slipway.yaml as deterministic YAML; comments and the
+original key ordering are not preserved.
+
   config [list] [--json]   Enumerate every key (name, type, default,
                            allowed-values, scope).
   config get <key> [--json]
@@ -107,7 +110,7 @@ func loadConfigForCommand(cmd *cobra.Command) (string, model.Config, error) {
 	if err != nil {
 		return "", model.Config{}, err
 	}
-	cfg, err := loadConfigAtRoot(root)
+	cfg, err := loadConfigAtRootWithStderr(root, cmd.ErrOrStderr())
 	if err != nil {
 		return "", model.Config{}, err
 	}
@@ -204,7 +207,19 @@ func runConfigSet(cmd *cobra.Command, key, value string) error {
 			map[string]any{"path": state.ConfigPath(root), "key": key},
 		)
 	}
-	_, err = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %s\n", key, value)
+	displayCfg := updated
+	displayCfg.Normalize()
+	displayValue, err := model.ConfigGetValue(displayCfg, key)
+	if err != nil {
+		return newStateIntegrityError(
+			"config_value_resolution_failure",
+			fmt.Sprintf("failed to resolve persisted config value for %q: %v", key, err),
+			"Run `slipway config get` for the key to inspect the persisted value.",
+			"",
+			map[string]any{"path": state.ConfigPath(root), "key": key},
+		)
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "set %s = %s\n", key, displayValue)
 	return err
 }
 
