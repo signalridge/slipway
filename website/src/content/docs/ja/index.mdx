@@ -1,0 +1,55 @@
+---
+title: Slipway
+description: AI 支援によるソフトウェア開発のためのガバナンス CLI。作業が実際に行われるリポジトリの中で、ローカルの AI エージェントに永続的なライフサイクル、現在状態の権威、そして証拠に裏づけられたクローズアウトを与えます。
+template: splash
+hero:
+  tagline: コードが実際に書かれるリポジトリの中で、ローカルの AI エージェントの作業に永続的なライフサイクル、現在状態の権威、証拠に裏づけられたクローズアウトを与えます。
+  image:
+    file: ../../../assets/slipway-wordmark.svg
+  actions:
+    - text: はじめに
+      link: /slipway/ja/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: GitHub で見る
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway は、ローカルでの AI 支援開発を対象にした小さなガバナンス用コントロールプレーンです。AI コーディングツールやプロジェクト管理ツール、Git を置き換えるものではありません。すべての変更をライフサイクル、現在の権威ファイル、そしてセッションが終わったあとでも確認できる証拠に結びつけることで、エージェントの作業を読み取れるものにします。
+
+操作は自然言語で行います。一度だけ `slipway init` を実行すれば、あとは作りたいものを AI エージェントに伝えるだけで、生成されたアダプターがそのリクエストをガバナンス済みのライフサイクルへ流してくれます。覚えておくべきコマンドの並びはありません。変更が本当に完了したかどうかの判断は、最後まで Slipway が握ります。ドキュメントに出てくるコマンドは、エージェントがあなたの代わりに実行するものであり、好きなときに自分で実行することもできます。
+
+<CardGrid stagger>
+	<Card title="チュートリアル" icon="open-book">
+		ゼロから 1 件のガバナンス変更まで、コマンドをコピーしながら順に進められます。
+
+		[初めてのガバナンス変更](/slipway/ja/tutorials/first-governed-change/) ·
+		[既存コードベースの導入](/slipway/ja/tutorials/onboarding-existing-codebase/)
+	</Card>
+	<Card title="ハウツー" icon="setting">
+		特定の運用タスクを片づけます。
+
+		[アダプターの導入と更新](/slipway/ja/how-to/install-and-refresh-adapters/) ·
+		[復旧とトラブルシューティング](/slipway/ja/how-to/recover-and-troubleshoot/)
+	</Card>
+	<Card title="リファレンス" icon="document">
+		コマンド・アダプター・コントリビュートに関する確かな事実。
+
+		[コマンド](/slipway/ja/reference/commands/) ·
+		[AI ツールアダプター](/slipway/ja/reference/ai-tools/)
+	</Card>
+	<Card title="解説" icon="puzzle">
+		ガバナンスワークフローの背後にある設計の考え方。
+
+		[設計](/slipway/ja/explanation/design/) ·
+		[ワークフロー](/slipway/ja/explanation/workflow/)
+	</Card>
+</CardGrid>
+
+## なぜ Slipway なのか
+
+「完了した」とごまかすことは、あえて難しくしてあります。ガバナンス下の各ステージはそれぞれ証拠を持ち、エンジンはそれを鵜呑みにせず、自分で導出し直します。まずは[チュートリアル](/slipway/ja/tutorials/first-governed-change/)でこのループを体験し、正確なコマンド構文が必要になったら[リファレンス](/slipway/ja/reference/commands/)を参照してください。

@@ -24,7 +24,9 @@ const PUBLIC_ASSETS = path.resolve(SCRIPT_DIR, '../public/assets');
 // Must match `base` in astro.config.mjs (project Pages path).
 const BASE = '/slipway';
 
-const KEEP_IN_OUT = new Set(['index.mdx']);
+// Hand-authored pages preserved across regeneration (the splash landing pages,
+// one per locale). Everything else under OUT_DIR is generated and wiped.
+const KEEP_IN_OUT = new Set(['index.mdx', 'zh/index.mdx', 'ja/index.mdx']);
 const IMAGE_EXT = /\.(svg|png|jpe?g|gif|webp|avif)$/i;
 
 async function walk(dir, rootRel = '') {
@@ -126,19 +128,31 @@ function transform(raw, rel) {
   return `${fm.join('\n')}\n${body.replace(/\n*$/, '\n')}`;
 }
 
-async function cleanGenerated() {
-  await fs.mkdir(OUT_DIR, { recursive: true });
-  for (const entry of await fs.readdir(OUT_DIR, { withFileTypes: true })) {
-    if (KEEP_IN_OUT.has(entry.name)) continue;
-    await fs.rm(path.join(OUT_DIR, entry.name), { recursive: true, force: true });
+// Recursively remove generated output while preserving the hand-authored splash
+// pages listed in KEEP_IN_OUT (which now live at nested per-locale paths). A
+// directory is removed only once it is empty after its generated children go.
+async function cleanGenerated(dir = OUT_DIR, rootRel = '') {
+  await fs.mkdir(dir, { recursive: true });
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    const rel = path.posix.join(rootRel, entry.name);
+    if (KEEP_IN_OUT.has(rel)) continue;
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await cleanGenerated(abs, rel);
+      if ((await fs.readdir(abs)).length === 0) await fs.rm(abs, { recursive: true, force: true });
+    } else {
+      await fs.rm(abs, { force: true });
+    }
   }
-  await fs.rm(PUBLIC_ASSETS, { recursive: true, force: true });
+  if (rootRel === '') await fs.rm(PUBLIC_ASSETS, { recursive: true, force: true });
 }
 
 async function main() {
   await cleanGenerated();
 
-  const files = (await walk(DOCS_DIR)).filter((rel) => rel !== 'index.md');
+  // Skip every locale's landing page (`index.md`, at any depth): the splash is
+  // the hand-authored `index.mdx` preserved per locale.
+  const files = (await walk(DOCS_DIR)).filter((rel) => path.posix.basename(rel) !== 'index.md');
   for (const rel of files) {
     const raw = await fs.readFile(path.join(DOCS_DIR, rel), 'utf8');
     const outPath = path.join(OUT_DIR, rel);
