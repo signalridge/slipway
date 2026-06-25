@@ -4,6 +4,13 @@ Slipway is a governance CLI for AI-assisted software delivery. It gives local
 AI-agent work a durable lifecycle, current-state authority, and evidence-backed
 closeout inside the repository where the work happens.
 
+You drive it in plain language. After a one-time `slipway init`, you tell your
+AI agent what you want to build, and the generated adapter routes that request
+through the governed lifecycle — no command sequence to memorize. Slipway stays
+the authority on whether the change is actually done; the commands throughout
+these docs are what the agent runs for you, and what you can run directly
+whenever you want.
+
 New users should begin with [Start Here](start-here.md). If you already know
 your situation, use [Real-World Scenarios](real-world-scenarios.md) to choose a
 workflow.
