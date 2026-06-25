@@ -1,0 +1,145 @@
+# コマンドリファレンス
+
+このページは Slipway コマンドの Diataxis リファレンスの入口です。詳細な
+従来のリファレンスは引き続き [コマンド](../commands.md) で参照できます。この
+ラッパーは、生成されたサーフェスマニフェストを `docs/reference/` 配下に
+アンカーしておくためのものです。
+
+ルーティングされるコマンドのほとんどは、構造化された出力が必要なときに `--json` を
+サポートします。`slipway validate` はメインのレポートを JSON で出力し、
+`slipway init` はセットアップ専用です。
+
+## コマンド一覧
+
+| コマンド | クラス | 用途 |
+| --- | --- | --- |
+| `slipway new` | mutation | ガバナンス対象の変更を作成する。 |
+| `slipway intake` | mutation | インテイクの明確化と承認を実行する。 |
+| `slipway plan` | mutation | 計画アーティファクトを作成または修正する。 |
+| `slipway implement` | mutation | S2 の実装ウェーブオーケストレーションを実行する。 |
+| `slipway review` | mutation | S3 のレビュー収束を実行する。 |
+| `slipway fix` | mutation | S3 の指摘に対する修正をディスパッチする。 |
+| `slipway done` | mutation | done-ready の変更をアーカイブする。 |
+| `slipway next` | query | 前進せずに次のスキルやブロッカーを確認する。 |
+| `slipway run` | mutation | 停止条件に達するまで現在のステージを進める。 |
+| `slipway status` | query | ライフサイクルの状態と次のアクションを表示する。 |
+| `slipway codebase-map` | mutation | 永続的なリポジトリスコープのコンテキストを作成または更新する。 |
+| `slipway handoff` | mutation | 変更ごとの参考用継続メモを書き込む、または表示する。 |
+| `slipway preset` | mutation | アクティブなプリセットを確認または変更する。 |
+| `slipway validate` | query | 前進せずにレディネスを再計算する。 |
+| `slipway abort` | mutation | アクティブな実行セッションを中断する。 |
+| `slipway cancel` | mutation | アクティブな変更をキャンセルしてアーカイブする。 |
+| `slipway delete` | mutation | 放棄されたガバナンス対象のローカル状態を破棄する。 |
+| `slipway repair` | mutation | 範囲を限定したローカルの整合性修復を実行する。 |
+| `slipway evidence` | mutation | サポートされているタスクまたはスキルのエビデンスを記録する。 |
+| `slipway tool` | mutation | 生成されたスキルが使う CLI 専用のヘルパーツールを実行する。 |
+| `slipway health` | query | リポジトリローカルの整合性の指摘を表示する。 |
+| `slipway instructions` | query | アーティファクトまたは codebase-map のオーサリング契約を表示する。 |
+| `slipway init` | mutation | ランタイムレイアウトとオプションのアダプターを初期化する。 |
+
+## JSON サーフェストークン
+
+生成されたサーフェスマニフェストは、すべての JSON 契約がドキュメント内で見つかる
+ことを確認します。そのため、以下の例はそのままの形で残しています。
+
+```bash
+slipway new --json
+slipway intake --json
+slipway plan --json
+slipway implement --json
+slipway review --json
+slipway fix --json
+slipway next --json
+slipway run --json
+slipway status --json
+slipway handoff show --json
+slipway validate --json
+slipway done --json
+slipway codebase-map --json
+slipway preset <level> --json
+slipway abort --json
+slipway cancel --json
+slipway delete --change <slug> --json
+slipway repair --json
+slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
+slipway evidence skill --skill <name> --verdict pass --json
+slipway health --json
+slipway instructions <artifact> --json
+```
+
+ブロッカーの詳細、アーティファクトのレディネスの詳細、トランジショントレース、
+コンテキスト予算の診断が必要なときは、`next` や `run` に `--diagnostics` を付けて
+ください。
+
+## 読み取り専用の権限
+
+以下のコマンドは、ライフサイクルの権限を変更せずに状態を確認します。
+
+```bash
+slipway status --json
+slipway validate --json
+slipway next --json --diagnostics
+```
+
+mutation コマンドを選ぶ前に、これらを使ってください。
+
+## 状態を変更するステージコマンド
+
+以下のコマンドは、ガバナンス対象の状態を前進または変更できます。
+
+```bash
+slipway intake --json
+slipway plan --json
+slipway implement --json
+slipway review --json
+slipway fix --json
+slipway done --json
+slipway run --json --diagnostics
+```
+
+mutation が fail-closed になった場合は、現在の読み取り専用チェックを再実行し、
+指定された復旧コマンドに従ってください。
+
+設定レベルの `execution.auto` は `intake`、`plan`、`implement` に適用されます。
+これらのステージコマンドは、呼び出しごとの `--auto` や `--no-auto` の
+オーバーライドフラグを受け付けません。1 回の実行だけオーバーライドしたいときは、
+`slipway run --auto` または `slipway run --no-auto` を使ってください。
+
+## run の自動モード
+
+`slipway run` は、ペーシングのみの一時停止を自動で進められます。これにより、
+ルーティンなハンドオフのたびに人間が新たに停止しなくても、ガバナンス対象の変更を
+動かし続けられます。リポジトリごとに `execution.auto` 設定で有効にするか、1 回の
+呼び出しだけオーバーライドできます。
+
+```bash
+slipway run --auto --json
+slipway run --no-auto --json
+```
+
+`--auto` と `--no-auto` は、その 1 回の実行に限り `execution.auto` 設定より
+優先されます。auto では、Slipway は事前承認に基づいてペーシングのみの一時停止
+（`security-review` を含まないレビューバッチ、機微でない／セキュリティレビューでない
+スキルのハンドオフ）を自動で進め、保留中のワークフロープリセットのアップグレード
+のみを自動で承認します（ダウングレードは決して行いません）。`security-review` の
+境界、機微およびガードレールの確認、インテイクの Approved Summary、そしてすべての
+エビデンスゲートは依然としてハードストップであり、自動では進められません。
+
+## サーフェスマニフェスト
+
+`docs/SURFACE-MANIFEST.json` は、Slipway が所有する Go の権威ソースから再生成
+されます。
+
+```bash
+go run ./internal/toolgen/cmd/gen-surface-manifest --write
+go run ./internal/toolgen/cmd/gen-surface-manifest --check
+```
+
+コマンド、JSON 出力契約、またはドキュメントに面したサーフェスを追加・変更する
+ときは、そのトークンをマニフェスト行の `docs` ファイルに残してください。
+
+## 詳細
+
+詳細なコマンドリファレンスは引き続き [コマンド](../commands.md) にあり、作成
+オプション、ディスカバリーコマンド、診断、出力フラグ、よく使う JSON 呼び出しを
+含みます。
