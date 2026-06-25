@@ -340,7 +340,7 @@ golangci-lint run --timeout=5m
 go test -timeout=20m ./... -count=1
 go build ./...
 go vet ./...
-mkdocs build --strict
+(cd website && npm run build)
 ```
 
 CI runs Markdown/YAML/action linting, Go linting, Slipway testlint, Go tests

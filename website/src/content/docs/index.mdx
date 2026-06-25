@@ -1,0 +1,59 @@
+---
+title: Slipway
+description: Governance CLI for AI-assisted software delivery — a durable lifecycle, current-state authority, and evidence-backed closeout inside the repo where the work happens.
+template: splash
+hero:
+  tagline: Give local AI-agent work a durable lifecycle, current-state authority, and evidence-backed closeout — inside the repository where the work happens.
+  image:
+    file: ../../assets/slipway-wordmark.svg
+  actions:
+    - text: Start Here
+      link: /slipway/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway is a small governance control plane for local AI-assisted development. It does
+not replace your AI coding tool, project tracker, or Git — it makes agent work legible
+by binding every change to a lifecycle, a current authority file, and evidence that can
+be inspected after the session ends.
+
+<CardGrid stagger>
+	<Card title="Tutorials" icon="open-book">
+		Guided, copy-pasteable runs from zero to one governed change.
+
+		[First governed change](/slipway/tutorials/first-governed-change/) ·
+		[Onboarding an existing codebase](/slipway/tutorials/onboarding-existing-codebase/)
+	</Card>
+	<Card title="How-To" icon="setting">
+		Complete a specific operational task.
+
+		[Install & refresh adapters](/slipway/how-to/install-and-refresh-adapters/) ·
+		[Recover & troubleshoot](/slipway/how-to/recover-and-troubleshoot/)
+	</Card>
+	<Card title="Reference" icon="document">
+		Authoritative command, adapter, and contributor facts.
+
+		[Commands](/slipway/reference/commands/) ·
+		[AI tool adapters](/slipway/reference/ai-tools/)
+	</Card>
+	<Card title="Explanation" icon="puzzle">
+		The design reasoning behind the governed workflow.
+
+		[Design](/slipway/explanation/design/) ·
+		[Workflow](/slipway/explanation/workflow/)
+	</Card>
+</CardGrid>
+
+## Why Slipway
+
+Completion is deliberately hard to fake: every governed stage owns evidence that the
+engine re-derives instead of trusting. Start with the [tutorials](/slipway/tutorials/first-governed-change/)
+to experience that loop, then reach for the [reference](/slipway/reference/commands/) when
+you need exact command syntax.

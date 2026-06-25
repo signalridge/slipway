@@ -157,10 +157,12 @@ Use the full proof before closeout:
 go test -timeout=20m ./... -count=1
 go build ./...
 go vet ./...
-mkdocs build --strict
+(cd website && npm run build)
 ```
 
-Run docs build only when MkDocs dependencies are available locally. CI installs MkDocs dependencies for docs verification.
+Run the docs build (Astro Starlight) only when Node dependencies are available
+locally; run `cd website && npm install` first. CI runs the same docs build for
+verification.
 
 ## Adapter Refresh
 
