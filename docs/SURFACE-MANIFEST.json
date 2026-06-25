@@ -31,13 +31,6 @@
     },
     {
       "kind": "adapter",
-      "name": "gemini",
-      "source": "internal/toolgen/toolgen.go:toolRegistry",
-      "docs": "docs/reference/ai-tools.md",
-      "token": "`gemini`"
-    },
-    {
-      "kind": "adapter",
       "name": "kilo",
       "source": "internal/toolgen/toolgen.go:toolRegistry",
       "docs": "docs/reference/ai-tools.md",

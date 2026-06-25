@@ -16,7 +16,6 @@ files route back to the CLI; they are not separate governance engines.
 | `codex` | `.codex/skills/slipway-*/SKILL.md` | `$slipway-<command>` or `/skills` |
 | `copilot` | `.github/skills/slipway-*/SKILL.md` | `/slipway-<command>` |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `/slipway-<command>` |
-| `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `/slipway-<command>` |
 | `kilo` | `.kilocode/skills/slipway-*/SKILL.md` | `/slipway:<command>` |
 | `kiro` | `.kiro/skills/slipway-*/SKILL.md` | `@slipway:<command>` or host skill picker |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `/slipway-<command>` |
@@ -46,7 +45,6 @@ workflow files:
 - Claude: `.claude/commands/slipway/<id>.md`
 - Copilot: `.github/prompts/slipway-<id>.prompt.md`
 - Cursor: `.cursor/commands/slipway-<id>.md`
-- Gemini: `.gemini/commands/slipway/<id>.toml`
 - Kilo: `.kilocode/workflows/slipway-<id>.md`
 - OpenCode: `.opencode/commands/slipway-<id>.md`
 - Pi: `.pi/prompts/slipway-<id>.md`
@@ -90,7 +88,7 @@ skills call helper subcommands directly when required.
 Settings-capable adapters merge host settings instead of asking agents to
 hand-edit generated files:
 
-- Claude and Gemini register bare inline `slipway hook ...` settings commands.
+- Claude registers bare inline `slipway hook ...` settings commands.
 - Pi writes `.pi/settings.json` with `enableSkillCommands=true` and registers
   `./skills` and `./prompts`.
 - Qwen writes `.qwen/settings.json` to register the session-start hook.

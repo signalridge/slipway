@@ -38,7 +38,7 @@ and `next` output from the owning worktree.
 
 ## Why Adapters Are Thin
 
-Generated Claude, Codex, Cursor, Gemini, and OpenCode files help an AI tool find
+Generated Claude, Codex, Cursor, and OpenCode files help an AI tool find
 the right command or skill. They do not own lifecycle semantics. If a generated
 adapter and the CLI disagree, refresh the adapter and trust the current CLI.
 

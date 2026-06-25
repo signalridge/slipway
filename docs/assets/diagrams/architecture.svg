@@ -74,7 +74,7 @@
   <rect class="adapter" x="520" y="196" width="330" height="66" rx="13"/>
   <circle cx="540" cy="218" r="5" fill="var(--exec-pill)"/>
   <text class="title" x="556" y="224" font-size="14.5">Generated adapters</text>
-  <text class="sub" x="556" y="243" font-size="11">Claude &#183; Codex &#183; Cursor &#183; Gemini &#183; OpenCode</text>
+  <text class="sub" x="556" y="243" font-size="11">Claude &#183; Codex &#183; Cursor &#183; OpenCode</text>
 
   <!-- L3 CONTROL PLANE -->
   <text class="tag" x="130" y="292" font-size="9.5">CONTROL PLANE</text>

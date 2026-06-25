@@ -23,7 +23,7 @@ type frozenHookContract struct {
 	Path  string
 	// Registered is true when the host registers an inline `slipway hook ...`
 	// command for this event in settings.json. Settings-capable hosts (claude,
-	// gemini) register; file-by-path hosts (cursor, opencode) do not.
+	// qwen) register; file-by-path hosts (cursor, opencode) do not.
 	Registered bool
 	// InlineCommand is the bare inline command expected in settings.json for a
 	// registered hook. Empty for unregistered (file-by-path) hooks.
@@ -78,7 +78,6 @@ var frozenToolOrder = []string{
 	"codex",
 	"copilot",
 	"cursor",
-	"gemini",
 	"kilo",
 	"kiro",
 	"opencode",
@@ -144,23 +143,6 @@ var frozenToolContracts = map[string]frozenToolContract{
 			Path:          ".cursor/hooks/slipway-session-start",
 			Registered:    false,
 			EmitsLauncher: true,
-		},
-	},
-	"gemini": {
-		OwnershipRoot: ".gemini",
-		CommandBase:   frozenSurfaceRoot,
-		CommandRoot:   ".gemini/commands",
-		CommandStyle:  "nested",
-		CommandExt:    ".toml",
-		TriggerPrefix: "/slipway-",
-		TriggerStyle:  "slash-hyphen",
-		SettingsPath:  ".gemini/settings.json",
-		SessionHook: frozenHookContract{
-			Event:         "SessionStart",
-			Path:          ".gemini/hooks/slipway-session-start",
-			Registered:    true,
-			InlineCommand: sessionStartHookCommand,
-			EmitsLauncher: false,
 		},
 	},
 	"kilo": {
@@ -385,7 +367,7 @@ func assertFrozenHookContract(t *testing.T, root, settingsPath string, hook froz
 	}
 
 	// Launcher emission is keyed on whether the host owns a settings.json.
-	// Settings-capable hosts (claude, gemini) emit NO launcher files; file-by-path
+	// Settings-capable hosts (claude, qwen) emit NO launcher files; file-by-path
 	// hosts (cursor, opencode) still emit the extensionless + .ps1 + .cmd family.
 	for _, suffix := range []string{"", ".ps1", ".cmd", ".sh"} {
 		p := filepath.Join(root, filepath.FromSlash(hook.Path+suffix))
