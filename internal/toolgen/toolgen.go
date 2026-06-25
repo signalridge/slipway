@@ -304,10 +304,17 @@ var commandRegistry = []CommandDef{
 		}},
 	{ID: "done", Class: CommandClassMutation, Description: "Finalize a done-ready change and archive it", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--all-ready] [--change <slug>]"},
-	// Setup (1)
+	// Setup (2)
 	{ID: "init", Class: CommandClassMutation, Description: "Initialize runtime layout and optional tool artifacts", Tier: "setup", HasPromptSurface: true,
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
+	{ID: "config", Class: CommandClassMutation, Description: "Inspect and set repo-level Slipway configuration keys", Tier: "setup", HasPromptSurface: false,
+		Arguments:     "[list [--json] | get <key> [--json] | set <key> <value>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"},
+		Notes: []string{
+			"`slipway config` is intentionally CLI-only: it is part of the public command inventory and JSON contracts, but Slipway does not export `$slipway-config` or host command prompt wrappers.",
+			"`slipway config` without a subcommand behaves as `slipway config list`.",
+		}},
 	// Situational (7)
 	{ID: "cancel", Class: CommandClassMutation, Description: "Cancel an active change and archive terminal state", Tier: "situational", HasPromptSurface: true,
 		Arguments: "[--json] [--change <slug>]"},
@@ -438,6 +445,11 @@ func CommandDescription(id string) string {
 		return def.Description
 	}
 	return ""
+}
+
+// CommandDefinitions returns a copy of the public command metadata registry.
+func CommandDefinitions() []CommandDef {
+	return slices.Clone(commandRegistry)
 }
 
 // promptSurfaceIDs returns IDs of commands that have generated prompt surfaces.

@@ -10,13 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// configShortDescription is the one-line summary for the `config` command. The
-// `config` command is not part of the toolgen command registry that drives the
-// generated skill/adapter surfaces, so its Short is sourced here rather than via
-// desc(); the command-description contract test enumerates only registry-backed
-// commands and does not cover `config`.
-const configShortDescription = "Inspect and set repo-level Slipway configuration keys"
-
 // configGetView is the JSON shape emitted by `config get --json`.
 type configGetView struct {
 	Key   string `json:"key"`
@@ -30,12 +23,12 @@ func makeConfigCmd() *cobra.Command {
 	var listJSON bool
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: configShortDescription,
+		Short: desc("config"),
 		// Mirror the root command: errors surface as structured CLIError JSON on
 		// stderr, never a usage wall on stdout. Subcommands inherit these.
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Long: configShortDescription + `
+		Long: desc("config") + `
 
 Keys are the dotted leaves of .slipway.yaml (the same surface strict decoding
 accepts). With no subcommand, config lists every key; use list/get/set to read

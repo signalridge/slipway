@@ -88,6 +88,7 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 | コマンド | クラス | 目的 |
 | --- | --- | --- |
 | `slipway init` | mutation | `.slipway.yaml`、リポジトリローカルのランタイムレイアウト、および任意の AI ツールアダプターを初期化する。 |
+| `slipway config [list\|get\|set]` | mutation | リポジトリレベルの `.slipway.yaml` 設定キーを確認・更新する。CLI 専用で、生成されたアダプターのプロンプトサーフェスはありません。 |
 
 `docs/SURFACE-MANIFEST.json` は、アダプター、コマンド、スキル、JSON、ドキュメントの各行についてコミットされた生成サーフェスのインベントリです。マニフェストは Slipway 所有の Go 権威から再構築され、CI 向けの Go テストでチェックされます。
 
@@ -122,6 +123,8 @@ slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
+slipway handoff show --json
+slipway config --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -133,11 +136,13 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
+| config JSON | `slipway config --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
+| handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
 | implement JSON | `slipway implement --json` |
 | instructions JSON | `slipway instructions <artifact> --json` |
@@ -148,7 +153,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | preset JSON | `slipway preset <level> --json` |
 | repair JSON | `slipway repair --json` |
 | review JSON | `slipway review --json` |
-| run JSON | `slipway run [--auto\|--no-auto] --json` |
+| run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
 

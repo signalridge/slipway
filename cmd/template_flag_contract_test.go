@@ -44,6 +44,7 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 		"abort":     makeAbortCmd(),
 		"repair":    makeRepairCmd(),
 		"evidence":  makeEvidenceCmd(),
+		"config":    makeConfigCmd(),
 	}
 
 	// Collect registered flags per command.
@@ -305,13 +306,13 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 		"evidence":     makeEvidenceCmd(),
 		"health":       makeHealthCmd(),
 		"codebase-map": makeCodebaseMapCmd(),
+		"config":       makeConfigCmd(),
 	}
 
 	// Flags intentionally omitted from the human-facing Arguments summary.
 	// Keep this list small and justified — it is the only sanctioned way for a
 	// real flag to be absent from the reference.
 	exempt := map[string]map[string]bool{
-		"review": {"artifact": true}, // documented as "unsupported in MVP"
 		// `evidence task` still exposes manual-mode flags in Cobra and black-box
 		// help, but generated Arguments intentionally teach the result-file-only
 		// agent surface.

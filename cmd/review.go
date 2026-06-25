@@ -15,7 +15,6 @@ import (
 type reviewOptions struct {
 	changedOnly bool
 	all         bool
-	artifact    string
 	focus       string
 }
 
@@ -74,14 +73,6 @@ func makeReviewCmd() *cobra.Command {
 			}
 			reviewAll := opts.all || !opts.changedOnly
 
-			if opts.artifact != "" {
-				return newInvalidUsageError(
-					"unsupported_flag",
-					"`--artifact` is not supported in MVP; use default changed-only review or --all",
-					"Remove `--artifact` flag and use `--all` or default changed-only review.",
-					nil,
-				)
-			}
 			if err := validateFocus("review", opts.focus); err != nil {
 				return err
 			}
@@ -143,7 +134,6 @@ func makeReviewCmd() *cobra.Command {
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
 	cmd.Flags().BoolVar(&opts.changedOnly, "changed-only", true, "Review only changed/stale units")
 	cmd.Flags().BoolVar(&opts.all, "all", false, "Run full review")
-	cmd.Flags().StringVar(&opts.artifact, "artifact", "", "Artifact path (unsupported in MVP)")
 	cmd.Flags().StringVar(&opts.focus, "focus", "", "Review focus (e.g. sast, calibration)")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic review details")

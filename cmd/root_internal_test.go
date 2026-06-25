@@ -35,7 +35,7 @@ func TestRootCommandPrintsCanonicalScopeRoot(t *testing.T) {
 
 		var out bytes.Buffer
 		var errOut bytes.Buffer
-		cmd := makeRootPathCmd()
+		cmd := makeHiddenRootPathCmd()
 		cmd.SetOut(&out)
 		cmd.SetErr(&errOut)
 		cmd.SetArgs([]string{})
