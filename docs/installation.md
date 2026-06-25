@@ -264,11 +264,11 @@ slipway init --tools all
 slipway init --tools none
 ```
 
-Supported tool IDs are `claude`, `codex`, `copilot`, `cursor`, `gemini`,
+Supported tool IDs are `claude`, `codex`, `copilot`, `cursor`,
 `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`.
 
 Representative generated adapter directories include `.claude/skills`,
-`.codex/skills`, `.github/skills`, `.cursor/skills`, `.gemini/skills`,
+`.codex/skills`, `.github/skills`, `.cursor/skills`,
 `.kilocode/skills`, `.kiro/skills`, `.opencode/skills`, `.pi/skills`,
 `.qwen/skills`, and `.windsurf/skills`. Copilot also writes command prompts
 under `.github/prompts` and keeps its generated ownership state under
@@ -327,7 +327,7 @@ The rest of this section is the canonical guidance the agent will read after fet
 
 ### Initialize
 
-- Ask which AI-tool adapters this repository uses if it is unclear. Supported tool IDs are `claude`, `codex`, `copilot`, `cursor`, `gemini`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`.
+- Ask which AI-tool adapters this repository uses if it is unclear. Supported tool IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`.
 - Run one of `slipway init --tools <tool-id>`, `slipway init --tools claude,codex,opencode`, `slipway init --tools copilot,kiro,pi,qwen,windsurf,kilo`, or `slipway init --tools all`.
 - If Slipway-generated adapter files already exist, use `slipway init --tools <detected-tools> --refresh` instead.
 - Do NOT overwrite unrelated user-owned AI-tool files. If a generated path would collide with user-owned content, stop and report instead of overwriting.
@@ -341,7 +341,7 @@ The rest of this section is the canonical guidance the agent will read after fet
 ### Report
 
 - Which install path succeeded, and which earlier paths were skipped or failed.
-- Newly generated files, especially `.slipway.yaml` and any selected adapter directories such as `.claude/skills`, `.codex/skills`, `.github/skills`, `.cursor/skills`, `.gemini/skills`, `.kilocode/skills`, `.kiro/skills`, `.opencode/skills`, `.pi/skills`, `.qwen/skills`, or `.windsurf/skills`.
+- Newly generated files, especially `.slipway.yaml` and any selected adapter directories such as `.claude/skills`, `.codex/skills`, `.github/skills`, `.cursor/skills`, `.kilocode/skills`, `.kiro/skills`, `.opencode/skills`, `.pi/skills`, `.qwen/skills`, or `.windsurf/skills`.
 - Any unresolved follow-ups the user should know about (for example, a missing release on this platform or `slipway init` choices that still need a human decision).
 
 For OpenCode specifically, the expected generated project surfaces are:
@@ -356,7 +356,7 @@ OpenCode commands use slash-hyphen spelling such as `/slipway-new`, `/slipway-ne
 
 Adapters that use generated hook launchers, including Cursor and OpenCode,
 receive native launcher files for POSIX, PowerShell, and `cmd.exe` under their
-`hooks/` directory. Settings-capable hook hosts (Claude, Gemini, and Qwen)
+`hooks/` directory. Settings-capable hook hosts (Claude and Qwen)
 instead register bare inline `slipway hook ...` commands directly in
 `settings.json` and get no launcher file. Pi settings register skills and
 prompts, not hooks. Either way, no generated hook requires bash, Python, `jq`,
@@ -378,7 +378,7 @@ git status --short --branch
 In a repository initialized with adapters, inspect generated files:
 
 ```bash
-find .claude .codex .github/skills .github/prompts .github/copilot .cursor .gemini .kilocode .kiro .opencode .pi .qwen .windsurf -maxdepth 3 -type f 2>/dev/null
+find .claude .codex .github/skills .github/prompts .github/copilot .cursor .kilocode .kiro .opencode .pi .qwen .windsurf -maxdepth 3 -type f 2>/dev/null
 ```
 
 Codex command surfaces are generated as skills under

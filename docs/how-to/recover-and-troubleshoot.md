@@ -134,7 +134,7 @@ slipway init --refresh
 Then inspect the diff:
 
 ```bash
-git status --short .claude .codex .cursor .gemini .opencode
+git status --short .claude .codex .cursor .opencode
 ```
 
 Generated adapters are handoff aids. If adapter behavior and CLI behavior

@@ -36,6 +36,10 @@ func TestInitCommandToolsAll(t *testing.T) {
 		_, err := os.Stat(filepath.Join(root, ".claude", "slipway", ".adapter-generated"))
 		require.NoError(t, err)
 
+		removedRoot := ".ge" + "mini"
+		_, err = os.Stat(filepath.Join(root, removedRoot))
+		assert.True(t, os.IsNotExist(err), "removed tool root should not be generated")
+
 		// Command entries in tool dirs (Cursor/OpenCode: flat path, others: nested)
 		_, err = os.Stat(filepath.Join(root, ".cursor", "commands", "slipway-new.md"))
 		require.NoError(t, err)
@@ -63,8 +67,6 @@ func TestInitCommandToolsAll(t *testing.T) {
 		assert.True(t, os.IsNotExist(err), "claude should not have exported agents")
 		_, err = os.Stat(filepath.Join(root, ".cursor", "agents"))
 		assert.True(t, os.IsNotExist(err), "cursor should not have agents")
-		_, err = os.Stat(filepath.Join(root, ".gemini", "agents"))
-		assert.True(t, os.IsNotExist(err), "gemini should not have exported agents")
 		_, err = os.Stat(filepath.Join(root, ".opencode", "agents"))
 		assert.True(t, os.IsNotExist(err), "opencode should not have exported agents")
 		_, err = os.Stat(filepath.Join(root, ".codex", "agents"))
@@ -75,10 +77,6 @@ func TestInitCommandToolsAll(t *testing.T) {
 		require.NoError(t, err, "codex should create project-local hook config")
 		assert.Contains(t, string(config), "[[hooks.SessionStart]]")
 		assert.Contains(t, string(config), "inert until Codex trusts this repo and each hook")
-
-		// Gemini commands should be TOML
-		_, err = os.Stat(filepath.Join(root, ".gemini", "commands", "slipway", "new.toml"))
-		require.NoError(t, err)
 
 		// OpenCode command names come from file names, so use flat markdown.
 		_, err = os.Stat(filepath.Join(root, ".opencode", "commands", "slipway-new.md"))

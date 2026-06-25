@@ -13,7 +13,7 @@ You will add one short "Usage" section to a disposable README.
 - A working `slipway` binary.
 - Git installed.
 - An AI coding tool that can read the generated Slipway skill or command
-  surface, such as Codex, Claude, Cursor, Gemini, or OpenCode.
+  surface, such as Codex, Claude, Cursor, or OpenCode.
 
 If you are working from a Slipway source checkout instead of an installed
 binary, replace `slipway` with `go run .` from that checkout.
