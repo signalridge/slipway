@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 // TestTemplateFlagsMatchCobraCommands verifies that every --flag referenced
@@ -185,6 +187,92 @@ func TestGeneratedCommandEntriesExposeChangeSelectorForSupportedCommands(t *test
 		require.NoError(t, err)
 		assert.Contains(t, string(raw), "--change <slug>", "generated command entry for %s must surface the explicit change selector", id)
 	}
+}
+
+func TestGeneratedCommandSkillIDsResolveOnLiveRootCommands(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	var toolIDs []string
+	for _, cfg := range toolgen.Registry() {
+		if cfg.CommandSkillSurface {
+			toolIDs = append(toolIDs, cfg.ID)
+		}
+	}
+	require.NotEmpty(t, toolIDs)
+	require.NoError(t, toolgen.Generate(root, toolIDs, true))
+
+	liveRootCommands := map[string]struct{}{}
+	for _, cmd := range newRootCmd().Commands() {
+		liveRootCommands[cmd.Name()] = struct{}{}
+	}
+
+	found := map[string]struct{}{}
+	for _, cfg := range toolgen.Registry() {
+		if !cfg.CommandSkillSurface {
+			continue
+		}
+		skillsRoot := filepath.Join(root, cfg.SkillsDir)
+		err := filepath.WalkDir(skillsRoot, func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() || d.Name() != "SKILL.md" {
+				return walkErr
+			}
+			meta, ok, err := generatedCommandSkillMetadata(path)
+			if err != nil || !ok {
+				return err
+			}
+			found[cfg.ID+"/"+meta.CommandID] = struct{}{}
+			_, resolves := liveRootCommands[meta.CommandID]
+			assert.Truef(t, resolves,
+				"%s generated command skill %s points at command_id %q, but newRootCmd().Commands() does not register it",
+				cfg.ID, path, meta.CommandID)
+			assert.Equal(t, "slipway-"+meta.CommandID, filepath.Base(filepath.Dir(path)),
+				"%s generated command skill path must match command_id", cfg.ID)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+	require.NotEmpty(t, found, "expected generated command-skill metadata for at least one host")
+}
+
+type commandSkillMetadata struct {
+	CommandID string `yaml:"command_id"`
+	Surface   string `yaml:"surface"`
+}
+
+func generatedCommandSkillMetadata(path string) (commandSkillMetadata, bool, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return commandSkillMetadata{}, false, err
+	}
+	block, ok := leadingFrontmatterBlock(string(raw))
+	if !ok {
+		return commandSkillMetadata{}, false, nil
+	}
+	var meta commandSkillMetadata
+	if err := yaml.Unmarshal([]byte(block), &meta); err != nil {
+		return commandSkillMetadata{}, false, err
+	}
+	if strings.TrimSpace(meta.CommandID) == "" || strings.TrimSpace(meta.Surface) != "skill" {
+		return commandSkillMetadata{}, false, nil
+	}
+	meta.CommandID = strings.TrimSpace(meta.CommandID)
+	meta.Surface = strings.TrimSpace(meta.Surface)
+	return meta, true, nil
+}
+
+func leadingFrontmatterBlock(content string) (string, bool) {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.TrimLeft(content, "\n")
+	if !strings.HasPrefix(content, "---\n") {
+		return "", false
+	}
+	rest := strings.TrimPrefix(content, "---\n")
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		return "", false
+	}
+	return rest[:end], true
 }
 
 // TestCobraFlagsCoveredByRegistryArguments is the reverse contract of
