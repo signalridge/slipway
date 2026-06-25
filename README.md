@@ -55,7 +55,7 @@ then makes the CLI recompute whether those pieces still agree.
 | Capability | What it changes |
 | --- | --- |
 | **Compiled done gate** | `slipway done` rechecks current review, verification, scope, and guardrail proof before archive. Missing or stale evidence blocks finalization. |
-| **Thin AI adapters** | Generated host-adapter files (Claude, Codex, Cursor, Gemini, OpenCode, Copilot, Kilo, Kiro, Pi, Qwen, Windsurf) route agents back to the CLI instead of becoming separate workflow engines. |
+| **Thin AI adapters** | Generated host-adapter files (Claude, Codex, Cursor, OpenCode, Copilot, Kilo, Kiro, Pi, Qwen, Windsurf) route agents back to the CLI instead of becoming separate workflow engines. |
 | **Plain-language entry** | After `slipway init --tools <id>`, users can describe a change normally; the generated entry skill routes the agent into the governed lifecycle. |
 | **Current-worktree authority** | `status`, `validate`, and `next` recompute state from the owning worktree instead of trusting stale summaries or archived records. |
 | **Context isolation checks** | Plan audit, implementation, selected S3 review peers, repair, and the terminal `ship-verification` gate carry distinct context-origin evidence and ordering checks. |
@@ -76,7 +76,7 @@ go install github.com/signalridge/slipway@latest
 slipway init --tools codex
 ```
 
-Other adapter IDs are `claude`, `codex`, `cursor`, `gemini`, `opencode`,
+Other adapter IDs are `claude`, `codex`, `cursor`, `opencode`,
 `copilot`, `kilo`, `kiro`, `pi`, `qwen`, `windsurf`, `all`, and `none`.
 
 For non-trivial work, create a governed change:
@@ -245,7 +245,6 @@ customizations.
 | Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/settings.json` hook entries |
 | Codex | `.codex/skills/slipway-*/SKILL.md` entry, command, and governance skills; `.codex/config.toml` SessionStart and UserPromptSubmit hook entries |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, session-start hook launchers |
-| Gemini | `.gemini/skills/slipway-*/SKILL.md`, `.gemini/commands/slipway/*.toml`, `.gemini/settings.json` hook entries |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, session-start hook launchers |
 | Copilot | `.github/skills/slipway-*/SKILL.md`, `.github/prompts/slipway-*.prompt.md`, `.github/copilot/slipway` managed state |
 | Kilo | `.kilocode/skills/slipway-*/SKILL.md`, `.kilocode/workflows/slipway-*.md` |

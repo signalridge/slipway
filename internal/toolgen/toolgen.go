@@ -23,13 +23,13 @@ import (
 const skillIndexFileName = "skill-index.md"
 
 // ToolConfig describes a tool adapter target (Claude, Cursor, Codex, OpenCode,
-// Gemini, and other generated AI-tool hosts).
+// and other generated AI-tool hosts).
 type ToolConfig struct {
 	ID               string
 	SkillsDir        string
 	CommandsDir      string // "" = no project-local commands (Codex/Qwen/Kiro)
 	CommandStyle     string // "nested", "flat", "" = no project-local commands
-	CommandFormat    string // "md" (default), "toml" (Gemini)
+	CommandFormat    string // "md" (default), "toml"
 	CommandExtension string // optional full extension override, for example ".prompt.md"
 	// CommandSkillSurface, when true, generates one host skill per Slipway command
 	// under SkillsDir (slipway-<command>/SKILL.md) instead of project-local command
@@ -135,21 +135,6 @@ var toolRegistry = map[string]ToolConfig{
 		TriggerStyle:  "slash-hyphen",
 		AutoDetectPath: []string{
 			".opencode",
-		},
-	},
-	"gemini": {
-		ID:            "gemini",
-		SkillsDir:     ".gemini/skills",
-		CommandsDir:   ".gemini/commands",
-		CommandStyle:  "nested",
-		CommandFormat: "toml",
-		SettingsPath:  ".gemini/settings.json",
-		SessionEvent:  "SessionStart",
-		SessionHook:   ".gemini/hooks/slipway-session-start",
-		TriggerPrefix: "/slipway-",
-		TriggerStyle:  "slash-hyphen",
-		AutoDetectPath: []string{
-			".gemini",
 		},
 	},
 	"kilo": {
@@ -1207,7 +1192,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 
 	// Settings registration is keyed on whether the host owns a settings.json.
 	//
-	//   - Settings-capable hosts (claude, gemini): register each hook event as a
+	//   - Settings-capable hosts (claude, qwen): register each hook event as a
 	//     bare inline `slipway hook <subcommand>` command directly in
 	//     settings.json. No launcher script files are written, and on refresh any
 	//     previously generated launcher files are pruned.

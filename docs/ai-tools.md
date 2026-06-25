@@ -4,7 +4,7 @@
 
 <div align="center" markdown>
 
-![Slipway tool adapters: slipway init --tools generates per-tool adapter bundles for Claude, Codex, Copilot, Cursor, Gemini, Kilo, Kiro, OpenCode, Pi, Qwen, and Windsurf plus the .slipway.yaml runtime config; each adapter's generated skills and commands route governed actions to the slipway CLI](assets/diagrams/tool-adapters.svg)
+![Slipway tool adapters: slipway init --tools generates per-tool adapter bundles for Claude, Codex, Copilot, Cursor, Kilo, Kiro, OpenCode, Pi, Qwen, and Windsurf plus the .slipway.yaml runtime config; each adapter's generated skills and commands route governed actions to the slipway CLI](assets/diagrams/tool-adapters.svg)
 
 </div>
 
@@ -16,7 +16,6 @@
 | `codex` | `.codex/skills/slipway-*/SKILL.md` | `.codex/skills/slipway-*/SKILL.md` | `$slipway-<command>` (or `/skills`) |
 | `copilot` | `.github/skills/slipway-*/SKILL.md` | `.github/prompts/slipway-<command>.prompt.md` | `/slipway-<command>` |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `.cursor/commands/*.md` | `/slipway-<command>` |
-| `gemini` | `.gemini/skills/slipway-*/SKILL.md` | `.gemini/commands/slipway/*.toml` | `/slipway-<command>` |
 | `kilo` | `.kilocode/skills/slipway-*/SKILL.md` | `.kilocode/workflows/slipway-<command>.md` | `/slipway:<command>` |
 | `kiro` | `.kiro/skills/slipway-*/SKILL.md` | `.kiro/skills/slipway-<command>/SKILL.md` | `@slipway:<command>` or host skill picker |
 | `opencode` | `.opencode/skills/slipway-*/SKILL.md` | `.opencode/commands/slipway-*.md` | `/slipway-<command>` |
@@ -55,7 +54,7 @@ slipway init --refresh
 ```
 
 Slipway detects adapters by its generated sentinel, not by a bare `.claude`,
-`.codex`, `.cursor`, `.gemini`, `.opencode`, `.pi`, `.qwen`, `.kiro`,
+`.codex`, `.cursor`, `.opencode`, `.pi`, `.qwen`, `.kiro`,
 `.windsurf`, or `.kilocode` directory alone. The ownership manifest protects
 generated files during refresh; sentinel-only legacy adapters can be
 bootstrapped into manifest tracking, while missing-sentinel path collisions stay
@@ -71,7 +70,7 @@ skills beside generated files.
 Commands that opt into generated host prompts ship a command surface on every
 tool:
 
-- Prompt and workflow files on Claude, Copilot, Cursor, Gemini, Kilo, OpenCode,
+- Prompt and workflow files on Claude, Copilot, Cursor, Kilo, OpenCode,
   Pi, and Windsurf.
 - Per-command skills on Codex, Kiro, and Qwen.
 
@@ -207,15 +206,14 @@ Windsurf and Kilo expose commands as workflow files under
 
 ## Settings-Capable Hosts
 
-Claude (`.claude/settings.json`), Gemini (`.gemini/settings.json`), and Qwen
-(`.qwen/settings.json`) register hooks inline in their own settings file rather
-than through launcher scripts. Slipway writes bare `slipway hook ...` commands
-directly into `settings.json`:
+Claude (`.claude/settings.json`) and Qwen (`.qwen/settings.json`) register hooks
+inline in their own settings file rather than through launcher scripts. Slipway
+writes bare `slipway hook ...` commands directly into `settings.json`:
 
 - `slipway hook context-pressure` on `PostToolUse`
 - `slipway hook session-start` on `SessionStart`
 
-Claude registers both hooks. Gemini and Qwen register `SessionStart` only. No
+Claude registers both hooks. Qwen registers `SessionStart` only. No
 launcher file is generated for these settings-registered hooks; the command
 resolves the `slipway` binary on `PATH` and hook behavior lives in that binary.
 Pi settings are registration-only for skills and prompts, not hook settings.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -60,10 +61,10 @@ func loadHydrateReferencesFromFS(t *testing.T, src fs.FS, name string) []hydrate
 	return fm.HydrateReferences
 }
 
-func TestRegistryHasElevenTools(t *testing.T) {
+func TestRegistryHasTenTools(t *testing.T) {
 	t.Parallel()
 	registry := Registry()
-	require.Len(t, registry, 11)
+	require.Len(t, registry, 10)
 
 	ids := make([]string, len(registry))
 	for i, cfg := range registry {
@@ -74,7 +75,6 @@ func TestRegistryHasElevenTools(t *testing.T) {
 		"codex",
 		"copilot",
 		"cursor",
-		"gemini",
 		"kilo",
 		"kiro",
 		"opencode",
@@ -93,7 +93,6 @@ func TestResolveTools(t *testing.T) {
 		"codex",
 		"copilot",
 		"cursor",
-		"gemini",
 		"kilo",
 		"kiro",
 		"opencode",
@@ -112,6 +111,11 @@ func TestResolveTools(t *testing.T) {
 
 	_, err = ResolveTools("unknown")
 	require.Error(t, err)
+
+	removedTool := "ge" + "mini"
+	_, err = ResolveTools(removedTool)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported tool "+strconv.Quote(removedTool))
 }
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
@@ -585,7 +589,7 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		}
 
 		// Hook emission is keyed on whether the host owns hook settings.
-		// Settings-capable hook hosts (claude, gemini, qwen) register a bare
+		// Settings-capable hook hosts (claude, qwen) register a bare
 		// inline command and emit NO launcher files. Pi has settings registration
 		// without hook semantics. File-by-path hosts (cursor, opencode) still emit
 		// the session-start launcher family. Skill-only/no-hook hosts emit none.
@@ -1656,29 +1660,9 @@ func TestGeneratedHandoffSkillIsHookAgnostic(t *testing.T) {
 	assert.Contains(t, s, "`slipway status` and `slipway next` remain lifecycle authority")
 }
 
-func TestGeminiTOMLCommandFormat(t *testing.T) {
-	t.Parallel()
+func TestHookSettingsRegistrationForSettingsCapableHosts(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, Generate(root, []string{"gemini"}, true))
-
-	// Gemini commands should use .toml extension.
-	path := filepath.Join(root, ".gemini", "commands", "slipway", "new.toml")
-	content, err := os.ReadFile(path)
-	require.NoError(t, err)
-
-	s := string(content)
-	assert.Contains(t, s, `description = "`)
-	assert.Contains(t, s, `prompt = """`)
-
-	// No .md command files should exist.
-	mdPath := filepath.Join(root, ".gemini", "commands", "slipway", "new.md")
-	_, err = os.Stat(mdPath)
-	assert.True(t, os.IsNotExist(err), "gemini should not have .md command files")
-}
-
-func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, Generate(root, []string{"claude", "gemini"}, true))
+	require.NoError(t, Generate(root, []string{"claude", "qwen"}, true))
 
 	// Claude registers BOTH the inline session-start and context-pressure
 	// commands directly in settings.json, with no launcher path, no
@@ -1698,26 +1682,26 @@ func TestHookSettingsRegistrationForClaudeAndGemini(t *testing.T) {
 	assert.NotContains(t, claude, "||", "claude settings must not require shell fallback operators")
 	assert.NotContains(t, claude, "&&", "claude settings must not require shell fallback operators")
 
-	// Gemini registers ONLY the inline session-start command (no PostToolUse).
-	geminiSettings, err := os.ReadFile(filepath.Join(root, ".gemini", "settings.json"))
+	// Qwen registers ONLY the inline session-start command (no PostToolUse).
+	qwenSettings, err := os.ReadFile(filepath.Join(root, ".qwen", "settings.json"))
 	require.NoError(t, err)
-	gemini := string(geminiSettings)
-	assert.Contains(t, gemini, "SessionStart")
-	assert.Contains(t, gemini, sessionStartHookCommand)
-	assert.NotContains(t, gemini, "PostToolUse")
-	assert.NotContains(t, gemini, contextPressureHookCommand)
-	assert.NotContains(t, gemini, ".gemini/hooks/", "gemini settings must not reference a launcher path")
-	assert.NotContains(t, gemini, "slipway-session-start", "gemini settings must not name a launcher file")
-	assert.NotContains(t, gemini, "--tool", "gemini settings must use the bare inline command")
-	assert.NotContains(t, gemini, "bash", "gemini settings must not require bash")
-	assert.NotContains(t, gemini, "||", "gemini settings must not require shell fallback operators")
+	qwen := string(qwenSettings)
+	assert.Contains(t, qwen, "SessionStart")
+	assert.Contains(t, qwen, sessionStartHookCommand)
+	assert.NotContains(t, qwen, "PostToolUse")
+	assert.NotContains(t, qwen, contextPressureHookCommand)
+	assert.NotContains(t, qwen, ".qwen/hooks/", "qwen settings must not reference a launcher path")
+	assert.NotContains(t, qwen, "slipway-session-start", "qwen settings must not name a launcher file")
+	assert.NotContains(t, qwen, "--tool", "qwen settings must use the bare inline command")
+	assert.NotContains(t, qwen, "bash", "qwen settings must not require bash")
+	assert.NotContains(t, qwen, "||", "qwen settings must not require shell fallback operators")
 
 	// Neither settings-capable host emits any launcher file (extensionless +
 	// .ps1/.cmd/.sh) for either hook event.
 	for _, base := range []string{
 		filepath.Join(".claude", "hooks", "slipway-session-start"),
 		filepath.Join(".claude", "hooks", "slipway-context-pressure-post-tool-use"),
-		filepath.Join(".gemini", "hooks", "slipway-session-start"),
+		filepath.Join(".qwen", "hooks", "slipway-session-start"),
 	} {
 		for _, suffix := range []string{"", ".ps1", ".cmd", ".sh"} {
 			p := filepath.Join(root, base+suffix)
@@ -1732,7 +1716,7 @@ func TestGenerateRefreshPrunesOrphanedHookLaunchersForSettingsCapableHosts(t *te
 	root := t.TempDir()
 
 	// Seed the full orphaned launcher family (extensionless + .ps1 + .cmd + .sh)
-	// for both settings-capable hosts (claude, gemini), plus the same for the
+	// for both settings-capable hosts (claude, qwen), plus the same for the
 	// file-by-path hosts (cursor, opencode) which legitimately re-emit launchers.
 	settingsCapableOrphans := []string{
 		filepath.Join(root, ".claude", "hooks", "slipway-session-start"),
@@ -1743,10 +1727,10 @@ func TestGenerateRefreshPrunesOrphanedHookLaunchersForSettingsCapableHosts(t *te
 		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.ps1"),
 		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.cmd"),
 		filepath.Join(root, ".claude", "hooks", "slipway-context-pressure-post-tool-use.sh"),
-		filepath.Join(root, ".gemini", "hooks", "slipway-session-start"),
-		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.ps1"),
-		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.cmd"),
-		filepath.Join(root, ".gemini", "hooks", "slipway-session-start.sh"),
+		filepath.Join(root, ".qwen", "hooks", "slipway-session-start"),
+		filepath.Join(root, ".qwen", "hooks", "slipway-session-start.ps1"),
+		filepath.Join(root, ".qwen", "hooks", "slipway-session-start.cmd"),
+		filepath.Join(root, ".qwen", "hooks", "slipway-session-start.sh"),
 	}
 	fileByPathSeeds := []string{
 		filepath.Join(root, ".cursor", "hooks", "slipway-session-start.sh"),
@@ -1757,9 +1741,9 @@ func TestGenerateRefreshPrunesOrphanedHookLaunchersForSettingsCapableHosts(t *te
 		require.NoError(t, os.WriteFile(p, []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755))
 	}
 	addOwnershipManifestFiles(t, root, toolRegistry["claude"], settingsCapableOrphans[:8]...)
-	addOwnershipManifestFiles(t, root, toolRegistry["gemini"], settingsCapableOrphans[8:]...)
+	addOwnershipManifestFiles(t, root, toolRegistry["qwen"], settingsCapableOrphans[8:]...)
 
-	require.NoError(t, Generate(root, []string{"claude", "gemini", "cursor", "opencode"}, true))
+	require.NoError(t, Generate(root, []string{"claude", "qwen", "cursor", "opencode"}, true))
 
 	// Settings-capable hosts no longer emit launchers; every orphaned launcher
 	// file is pruned on refresh.
@@ -1800,7 +1784,7 @@ func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
 	assert.Contains(t, nextEntry, ".slipway.yaml` must exist")
 	assert.Contains(t, nextEntry, "an active change must exist")
 
-	initEntry, err := renderCommandEntry(toolRegistry["gemini"], "init")
+	initEntry, err := renderCommandEntry(toolRegistry["claude"], "init")
 	require.NoError(t, err)
 	assert.NotContains(t, initEntry, ".slipway.yaml` must exist")
 	assert.NotContains(t, initEntry, "an active change must exist")
@@ -2052,15 +2036,15 @@ func TestCodexCommandSkillsIncludeTierAndSurface(t *testing.T) {
 func TestGeneratedCommandEntriesIncludeClassMetadata(t *testing.T) {
 	root := t.TempDir()
 
-	require.NoError(t, Generate(root, []string{"claude", "gemini", "codex"}, true))
+	require.NoError(t, Generate(root, []string{"claude", "cursor", "codex"}, true))
 
 	claudeStatus, err := os.ReadFile(filepath.Join(root, ".claude", "commands", "slipway", "status.md"))
 	require.NoError(t, err)
 	assert.Contains(t, string(claudeStatus), `class: "query"`)
 
-	geminiRun, err := os.ReadFile(filepath.Join(root, ".gemini", "commands", "slipway", "run.toml"))
+	cursorRun, err := os.ReadFile(filepath.Join(root, ".cursor", "commands", "slipway-run.md"))
 	require.NoError(t, err)
-	assert.Contains(t, string(geminiRun), `class = "mutation"`)
+	assert.Contains(t, string(cursorRun), `class: "mutation"`)
 
 	codexAbort, err := os.ReadFile(codexCommandSkillPath(root, "abort"))
 	require.NoError(t, err)

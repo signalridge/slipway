@@ -9,7 +9,7 @@ Slipway is a small governance control plane for local AI-assisted development. I
 | Local-first | The repository contains the active state and audit trail. A hosted service can be useful later, but it is not required to understand a change. |
 | One authority | `change.yaml` owns current lifecycle state. Lifecycle logs explain how state changed; they do not replace current state. |
 | Bounded autonomy | Agents can move work forward, but Slipway exposes gates, blockers, review requirements, and done-ready proof. |
-| Adapter thinness | Claude, Codex, Cursor, Gemini, and OpenCode surfaces route into the CLI. They should not become separate governance engines. |
+| Adapter thinness | Claude, Codex, Cursor, and OpenCode surfaces route into the CLI. They should not become separate governance engines. |
 | Artifact traceability | Intent, research, requirements, decisions, tasks, execution evidence, review evidence, and assurance remain connected. |
 | Fresh verification | A completion claim is valid only when current evidence proves the current worktree state. |
 

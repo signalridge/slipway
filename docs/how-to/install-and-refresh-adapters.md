@@ -54,7 +54,7 @@ Inspect the diff before committing generated files:
 
 ```bash
 git status --short
-git diff -- .slipway.yaml .claude .codex .cursor .gemini .opencode
+git diff -- .slipway.yaml .claude .codex .cursor .opencode
 ```
 
 Commit `.slipway.yaml` when the repo should share Slipway defaults. Commit
@@ -81,14 +81,14 @@ slipway init --tools all --refresh
 ```
 
 Refresh detects Slipway generated markers. It does not treat a bare `.claude`,
-`.codex`, `.cursor`, `.gemini`, or `.opencode` directory as owned by Slipway.
+`.codex`, `.cursor`, or `.opencode` directory as owned by Slipway.
 
 ## Preserve User-Owned Files
 
 Before accepting a refresh diff, check adjacent host config:
 
 ```bash
-git status --short .claude .codex .cursor .gemini .opencode
+git status --short .claude .codex .cursor .opencode
 ```
 
 Generated files route to the CLI. User-owned host settings, local prompts,
