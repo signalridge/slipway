@@ -205,36 +205,30 @@ func TestDesignDocsNameEveryRegisteredAdapter(t *testing.T) {
 		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
 		for _, cfg := range Registry() {
 			name := adapterDocsDisplayName(cfg.ID)
-			assert.Containsf(t, content, name, "%s must name adapter %s", docsPath, name)
+			assert.Containsf(t, content, name, "%s must name adapter %s (id %s)", docsPath, name, cfg.ID)
 		}
 	}
 }
 
 func adapterDocsDisplayName(id string) string {
-	switch id {
-	case "claude":
-		return "Claude"
-	case "codex":
-		return "Codex"
-	case "copilot":
-		return "Copilot"
-	case "cursor":
-		return "Cursor"
-	case "kilo":
-		return "Kilo"
-	case "kiro":
-		return "Kiro"
+	switch strings.TrimSpace(id) {
 	case "opencode":
 		return "OpenCode"
-	case "pi":
-		return "Pi"
-	case "qwen":
-		return "Qwen"
-	case "windsurf":
-		return "Windsurf"
-	default:
-		return id
 	}
+	return adapterDocsTitleCase(id)
+}
+
+func adapterDocsTitleCase(id string) string {
+	parts := strings.FieldsFunc(strings.TrimSpace(id), func(r rune) bool {
+		return r == '-' || r == '_'
+	})
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 func readSurfaceManifestFixture(t *testing.T, path string) string {

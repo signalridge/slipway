@@ -447,6 +447,11 @@ func CommandDescription(id string) string {
 	return ""
 }
 
+// CommandDefinitions returns a copy of the public command metadata registry.
+func CommandDefinitions() []CommandDef {
+	return slices.Clone(commandRegistry)
+}
+
 // promptSurfaceIDs returns IDs of commands that have generated prompt surfaces.
 // It is derived from commandRegistry to keep the generated surfaces in sync.
 var promptSurfaceIDs = func() []string {

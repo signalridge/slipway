@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/toolgen"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,12 +45,47 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 func TestRootHelpGroupsUseRegistryDescriptions(t *testing.T) {
 	t.Parallel()
 
+	groupTiers := map[string]string{
+		"Core lifecycle": "core",
+		"Discovery":      "discovery",
+		"Situational":    "situational",
+		"Helpers":        "helpers",
+		"Diagnostics":    "diagnostics",
+		"Setup":          "setup",
+	}
+	seen := map[string]string{}
 	for _, group := range helpGroups {
+		wantTier, ok := groupTiers[group.Title]
+		require.Truef(t, ok, "root help group %q must declare its registry tier", group.Title)
 		for _, entry := range group.Commands {
+			if previousGroup, exists := seen[entry.Name]; exists {
+				t.Fatalf("root help entry %q appears in both %q and %q", entry.Name, previousGroup, group.Title)
+			}
+			seen[entry.Name] = group.Title
+
 			description := desc(entry.Name)
 			require.NotEmptyf(t, description, "root help entry %q must be registered in toolgen commandRegistry", entry.Name)
 			assert.Equal(t, description, entry.Description, "root help entry %q must use the registry description", entry.Name)
+
+			var registryDef *toolgen.CommandDef
+			for _, def := range toolgen.CommandDefinitions() {
+				if def.ID == entry.Name {
+					def := def
+					registryDef = &def
+					break
+				}
+			}
+			require.NotNilf(t, registryDef, "root help entry %q must be registered in toolgen commandRegistry", entry.Name)
+			assert.Equalf(t, wantTier, registryDef.Tier,
+				"root help entry %q is grouped under %q but commandRegistry assigns tier %q",
+				entry.Name, group.Title, registryDef.Tier)
 		}
+	}
+
+	for _, def := range toolgen.CommandDefinitions() {
+		assert.Containsf(t, seen, def.ID,
+			"commandRegistry entry %q with tier %q must appear in root helpGroups",
+			def.ID, def.Tier)
 	}
 }
 
