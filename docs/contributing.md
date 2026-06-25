@@ -12,7 +12,8 @@ Slipway is a Go CLI with generated AI-tool surfaces and governed artifact workfl
 | `internal/engine/` | Progression, gates, governance, artifact, context, and wave logic. |
 | `internal/toolgen/` | AI-tool adapter generation and frozen surface contracts. |
 | `internal/tmpl/templates/` | Embedded command, skill, hook, and artifact templates. |
-| `docs/` | MkDocs source pages. |
+| `docs/` | Documentation source pages (the source of truth). |
+| `website/` | Astro Starlight site that renders `docs/` for GitHub Pages. |
 | `artifacts/changes/` | Governed change bundles created by Slipway. |
 
 ## Development Commands
@@ -69,15 +70,22 @@ go run ./internal/testlint/cmd/testlint ./...
 
 ## Documentation
 
-Update `docs/` and `mkdocs.yml` together. Every nav target must exist in the current checkout.
+Documentation lives in `docs/` (the source of truth) and is rendered by the
+Astro Starlight site in `website/`. `website/scripts/sync-docs.mjs` transforms
+`docs/**` into the Starlight content collection at build time, so never edit
+`website/src/content/docs/` by hand. Update the sidebar in
+`website/astro.config.mjs` when you add or move a page.
 
-Build locally when MkDocs is installed:
+Build or preview locally:
 
 ```bash
-mkdocs build --strict
+cd website
+npm install
+npm run build   # runs sync-docs, then `astro build`
+npm run dev     # local preview with content synced from docs/
 ```
 
-The docs workflow installs MkDocs Material and runs the same strict build.
+The docs workflow runs the same `npm run build` and deploys to GitHub Pages.
 
 ## Adapter Contracts
 

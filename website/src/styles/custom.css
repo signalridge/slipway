@@ -1,0 +1,79 @@
+/* Slipway brand theming for Starlight.
+   Violet (#6366F1) face + coral (#FF7A59) accent, matching the wordmark. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+	--slip-violet: #6366f1;
+	--slip-violet-deep: #4f46e5;
+	--slip-coral: #ff7a59;
+	--slip-display: 'Space Grotesk', var(--sl-font, ui-sans-serif, system-ui, sans-serif);
+
+	/* Dark theme accent ramp (Starlight default theme is dark). */
+	--sl-color-accent-low: #1e1b4b;
+	--sl-color-accent: #6366f1;
+	--sl-color-accent-high: #c7d2fe;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #e0e7ff;
+	--sl-color-accent: #4f46e5;
+	--sl-color-accent-high: #312e81;
+}
+
+/* Display font for headings and the hero title. */
+h1,
+h2,
+h3,
+.hero h1,
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3 {
+	font-family: var(--slip-display);
+	letter-spacing: -0.012em;
+}
+
+/* Header wordmark sizing. */
+header.header .site-title img,
+a.site-title img {
+	height: 1.65rem;
+	width: auto;
+}
+
+/* Splash hero: brand glow + gradient primary CTA. */
+.hero {
+	position: relative;
+}
+.hero > img,
+.hero .hero-html {
+	filter: drop-shadow(0 12px 40px rgba(99, 102, 241, 0.28));
+}
+.hero .actions a.action.primary {
+	background: linear-gradient(135deg, var(--slip-violet) 0%, var(--slip-coral) 100%);
+	border: none;
+	color: #fff;
+	box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.7);
+	transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hero .actions a.action.primary:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 14px 30px -10px rgba(255, 122, 89, 0.65);
+}
+
+/* Tagline reads as supporting copy, not a second headline. */
+.hero .tagline {
+	max-width: 48ch;
+	color: var(--sl-color-gray-2);
+}
+
+/* Card grid accent on the landing page. */
+.card {
+	border-color: var(--sl-color-gray-5);
+	transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.card:hover {
+	border-color: var(--slip-violet);
+	transform: translateY(-2px);
+}
+.card .icon {
+	color: var(--slip-coral);
+}
