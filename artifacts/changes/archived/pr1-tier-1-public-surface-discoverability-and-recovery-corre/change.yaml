@@ -1,0 +1,46 @@
+version: 1
+slug: pr1-tier-1-public-surface-discoverability-and-recovery-corre
+description: 'PR1 / Tier 1 - public-surface discoverability and recovery correctness across two issues. #315: add a `slipway config` command that lists every .slipway.yaml key (name, type, default, allowed-values, scope) derived from the internal/model/config.go struct so the catalog cannot drift (mirror the --list-focuses pattern, contract-tested). Tier 1 config surface: `slipway config` / `config list [--json]`, `config get <key> [--json]`, and `config set <key> <value>` for validated persistence. Also surface the 3 behavior-affecting env vars (SLIPWAY_GITHUB_API_URL, SLIPWAY_CONTEXT_WINDOW_TOKENS, SLIPWAY_SESSION_OWNER) in the relevant --help, add a back-pointer from `run --help` to the config surface, and warn (not silently swallow) on unknown top-level config keys (sub-finding A). OUT OF SCOPE: the R1-R4 recovery-routing items listed inside #315 (their own issues). #324: fix S2_IMPLEMENT stale wave-orchestration evidence recovery - `slipway run` currently recommends `slipway fix`, but fix only runs in S3_REVIEW so it returns fix_state_invalid; the recovery for stale wave-orchestration evidence in S2 must point to a state-valid S2 command/remediation instead.'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-24T12:18:41.522985Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/pr1-tier-1-public-surface-discoverability-and-recovery-corre
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 458eb8342588cea42153c0976941b4603c3f6918f4e01123f5e20c372afef976
+        updated_at: 2026-06-24T17:50:07.113079197Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: a0f76dd4e888a989d7b1ec402695f9bf4c6a1987c61eb7f19f0a3bec90c7abb2
+        updated_at: 2026-06-24T12:38:08.168085129Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: d48fe749ad74a44a2c5b73ab2a5697fe91c129ef1a451cb79a314a5845e366b8
+        updated_at: 2026-06-24T12:41:00.658091935Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 7b475145b66203f753f4eee74f8841f0016a7ca6cc8f1f2d4809adf11d71312f
+        updated_at: 2026-06-24T17:11:40.652232714Z
+evidence_refs:
+    code-quality-review: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/code-quality-review.yaml
+    independent-review: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/independent-review.yaml
+    intake-clarification: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/intake-clarification.yaml
+    plan-audit: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/plan-audit.yaml
+    security-review: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/security-review.yaml
+    ship-verification: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/pr1-tier-1-public-surface-discoverability-and-recovery-corre/artifacts/changes/pr1-tier-1-public-surface-discoverability-and-recovery-corre/verification/wave-orchestration.yaml

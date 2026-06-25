@@ -35,6 +35,10 @@ func TestRootHelpUsesCurrentEntrySurfaceDescriptions(t *testing.T) {
 	assert.Contains(t, help, "Finalize a done-ready change and archive it")
 	assert.NotContains(t, help, "completed change")
 	assert.NotContains(t, help, "Auto-classify advisory versus governed work")
+	// The config public surface must be discoverable from the root help, not only
+	// `slipway help config`; this is the whole point of a discoverability change.
+	assert.Contains(t, help, "config")
+	assert.Contains(t, help, configShortDescription)
 }
 
 func TestProgressionCommandsDoNotExposeQuickBypass(t *testing.T) {

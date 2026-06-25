@@ -48,6 +48,16 @@ func (g ConfigGovernance) AutoProvisionWorktreeEnabled() bool {
 	return g.AutoProvisionWorktree == nil || *g.AutoProvisionWorktree
 }
 
+func (g ConfigGovernance) IsZero() bool {
+	return g.DefaultPreset == "" &&
+		g.MinPreset == "" &&
+		len(g.PolicyPacks) == 0 &&
+		len(g.Controls) == 0 &&
+		len(g.DisabledControls) == 0 &&
+		g.Thresholds.IsZero() &&
+		g.AutoProvisionWorktree == nil
+}
+
 // PolicyPack registers an external advisory governance pack. Policy packs are
 // intentionally read-only/advisory in this schema; built-in guardrail domains
 // remain the fail-closed enforcement surface.
@@ -69,6 +79,12 @@ type ConfigGovernanceThresholds struct {
 	// WorktreeBlastRadius is the minimum blast radius that triggers
 	// the worktree-isolation control. Default: high (10+ files).
 	WorktreeBlastRadius SignalLevel `yaml:"worktree_blast_radius,omitempty" json:"worktree_blast_radius,omitempty"`
+}
+
+func (t ConfigGovernanceThresholds) IsZero() bool {
+	return t.IndependentReviewBlastRadius == "" &&
+		t.SecurityReviewBlastRadius == "" &&
+		t.WorktreeBlastRadius == ""
 }
 
 // Validate checks that threshold signal levels are valid.
@@ -332,13 +348,10 @@ func (c Config) ToYAML() ([]byte, error) {
 	appendMappingEntry(root, "defaults", defaultsNode)
 	appendMappingEntry(root, "execution", executionNode)
 
-	hasGovernance := cfg.Governance.DefaultPreset != "" || cfg.Governance.MinPreset != "" ||
-		len(cfg.Governance.PolicyPacks) > 0 ||
-		len(cfg.Governance.Controls) > 0 || len(cfg.Governance.DisabledControls) > 0 ||
-		cfg.Governance.Thresholds.IndependentReviewBlastRadius != "" ||
-		cfg.Governance.Thresholds.SecurityReviewBlastRadius != "" ||
-		cfg.Governance.Thresholds.WorktreeBlastRadius != ""
-	if hasGovernance {
+	// Emit the governance section whenever any governance leaf is set. Reuse
+	// IsZero() as the single empty-section predicate so newly added fields do not
+	// need a second hand-maintained omission list.
+	if !cfg.Governance.IsZero() {
 		governanceNode, err := encodeYAMLNode(cfg.Governance)
 		if err != nil {
 			return nil, err
@@ -354,7 +367,10 @@ func (c Config) ToYAML() ([]byte, error) {
 		appendMappingEntry(root, "validation", validationNode)
 	}
 
-	if cfg.Context.TechStack != "" || cfg.Context.Conventions != "" || cfg.Context.TestCmd != "" || cfg.Context.BuildCmd != "" || len(cfg.Context.Languages) > 0 {
+	// Emit the context section whenever any context leaf is set. Reuse IsZero()
+	// (the single authority for "context is empty") instead of a hand-maintained
+	// field list, which previously omitted recent_work and dropped it on save.
+	if !cfg.Context.IsZero() {
 		contextNode, err := encodeYAMLNode(cfg.Context)
 		if err != nil {
 			return nil, err
