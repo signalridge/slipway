@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ErrUnknownConfigKey is the sentinel wrapped by every "unknown config key"
@@ -423,7 +425,7 @@ func cloneConfigForSet(cfg Config) Config {
 func assignScalar(leaf reflect.Value, key, value string) error {
 	switch leaf.Kind() {
 	case reflect.Bool:
-		b, err := strconv.ParseBool(strings.TrimSpace(value))
+		b, err := parseConfigBool(value)
 		if err != nil {
 			return fmt.Errorf("config key %q expects a boolean (true/false), got %q", key, value)
 		}
@@ -442,4 +444,18 @@ func assignScalar(leaf reflect.Value, key, value string) error {
 		return fmt.Errorf("config key %q is not settable via `set` (type %s)", key, leaf.Kind())
 	}
 	return nil
+}
+
+func parseConfigBool(value string) (bool, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false, fmt.Errorf("empty boolean")
+	}
+	var parsed bool
+	dec := yaml.NewDecoder(strings.NewReader(trimmed + "\n"))
+	dec.KnownFields(true)
+	if err := dec.Decode(&parsed); err != nil {
+		return false, err
+	}
+	return parsed, nil
 }

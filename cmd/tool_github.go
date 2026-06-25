@@ -19,6 +19,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const githubBackendEnvHelp = `Environment variables:
+  SLIPWAY_GITHUB_API_URL  Override the GitHub REST/GraphQL API base URL used by
+                          the --backend api / token-backed HTTP path (default
+                          https://api.github.com). Useful for GitHub Enterprise;
+                          a trailing slash is trimmed. The gh backend ignores it.`
+
 func makeFetchPRChecksCmd() *cobra.Command {
 	var backend string
 	var repo string
@@ -26,14 +32,8 @@ func makeFetchPRChecksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fetch-pr-checks",
 		Short: "Fetch GitHub PR check status using the selected GitHub backend",
-		Long: `Fetch GitHub PR check status using the selected GitHub backend.
-
-Environment variables:
-  SLIPWAY_GITHUB_API_URL  Override the GitHub REST/GraphQL API base URL used by
-                          the --backend api / token-backed HTTP path (default
-                          https://api.github.com). Useful for GitHub Enterprise;
-                          a trailing slash is trimmed. The gh backend ignores it.`,
-		Args: cobra.NoArgs,
+		Long:  withGitHubBackendHelp("Fetch GitHub PR check status using the selected GitHub backend."),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFetchPRChecks(cmd, repo, pr, backend)
 		},
@@ -51,6 +51,7 @@ func makeFetchPRFeedbackCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fetch-pr-feedback",
 		Short: "Fetch GitHub PR review feedback using the selected GitHub backend",
+		Long:  withGitHubBackendHelp("Fetch GitHub PR review feedback using the selected GitHub backend."),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFetchPRFeedback(cmd, repo, pr, backend)
@@ -69,6 +70,7 @@ func makeFetchReviewRequestsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fetch-review-requests --org ORG --teams TEAM1,TEAM2",
 		Short: "Fetch GitHub review-request notifications using the selected GitHub backend",
+		Long:  withGitHubBackendHelp("Fetch GitHub review-request notifications using the selected GitHub backend."),
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runFetchReviewRequests(cmd, org, teams, backend)
@@ -87,11 +89,11 @@ func makeReplyToThreadCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reply-to-thread [--confirm] THREAD_ID BODY [THREAD_ID BODY...]",
 		Short: "Reply to GitHub PR review threads; dry-run by default",
-		Long: `Reply to GitHub PR review threads.
+		Long: withGitHubBackendHelp(`Reply to GitHub PR review threads.
 
 Without --confirm, this command prints the intended GraphQL mutation and exits
 non-zero with reply_to_thread_dry_run so automation does not mistake a preview
-for a posted reply.`,
+for a posted reply.`),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 || len(args)%2 != 0 {
 				return newInvalidUsageError("reply_to_thread_usage", "Usage: slipway tool reply-to-thread [--confirm] THREAD_ID BODY [THREAD_ID BODY...]", "Pass one or more THREAD_ID BODY pairs.", nil)
@@ -106,6 +108,10 @@ for a posted reply.`,
 	cmd.Flags().BoolVar(&confirm, "confirm", false, "Post replies instead of printing a dry-run request")
 	cmd.Flags().StringVar(&signature, "signature", "Slipway", "Attribution label appended to reply bodies; pass an empty string to disable")
 	return cmd
+}
+
+func withGitHubBackendHelp(long string) string {
+	return strings.TrimRight(long, "\n") + "\n\n" + githubBackendEnvHelp
 }
 
 const (

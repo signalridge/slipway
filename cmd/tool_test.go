@@ -277,6 +277,25 @@ func TestToolFetchPRChecksRequiresExplicitRepo(t *testing.T) {
 	assert.Contains(t, stderr, "github_repo_required")
 }
 
+func TestToolGitHubBackendHelpDisclosesAPIURL(t *testing.T) {
+	tests := []string{
+		"fetch-pr-checks",
+		"fetch-pr-feedback",
+		"fetch-review-requests",
+		"reply-to-thread",
+	}
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			stdout, stderr, err := runRootCommandWithInput([]string{"tool", name, "--help"}, "")
+			require.NoError(t, err)
+			assert.Empty(t, stderr)
+			assert.Contains(t, stdout, "SLIPWAY_GITHUB_API_URL")
+			assert.Contains(t, stdout, "--backend api / token-backed HTTP path")
+			assert.Contains(t, stdout, "https://api.github.com")
+		})
+	}
+}
+
 func TestToolGitHubFlagOnlyHelpersRejectUnexpectedArgsBeforeToken(t *testing.T) {
 	t.Setenv("GH_TOKEN", "")
 	t.Setenv("GITHUB_TOKEN", "")

@@ -118,9 +118,6 @@ func loadConfigForCommand(cmd *cobra.Command) (string, model.Config, error) {
 }
 
 func runConfigList(cmd *cobra.Command, jsonFlag bool) error {
-	if _, _, err := loadConfigForCommand(cmd); err != nil {
-		return err
-	}
 	catalog := model.ConfigCatalog()
 	if jsonFlag {
 		return encodeJSONResponse(cmd, catalog)

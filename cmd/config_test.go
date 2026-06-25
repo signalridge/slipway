@@ -79,6 +79,24 @@ func TestConfigListJSONShape(t *testing.T) {
 	})
 }
 
+func TestConfigListJSONSurvivesBrokenConfig(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("defaults: [\n"), 0o644))
+
+		out, errOut, err := runConfigCmd(t, root, "list", "--json")
+		require.NoError(t, err, "list is a static catalog and must remain usable while .slipway.yaml is broken")
+		assert.Empty(t, errOut, "--json must not write to stderr")
+
+		var entries []model.ConfigCatalogEntry
+		require.NoError(t, json.Unmarshal([]byte(out), &entries), "list --json must emit valid JSON on stdout")
+		assert.NotEmpty(t, entries)
+		assertConfigCatalogContains(t, entries, "execution.auto")
+	})
+}
+
 func TestConfigHelpDisclosesSetRewrite(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -369,6 +387,34 @@ func TestConfigSetInvalidRejectsWithFileUnchanged(t *testing.T) {
 	})
 }
 
+func TestConfigSetRejectsLoaderInvalidBooleanLiteralsWithFileUnchanged(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		before, err := os.ReadFile(state.ConfigPath(root))
+		require.NoError(t, err)
+
+		for _, value := range []string{"1", "t"} {
+			t.Run(value, func(t *testing.T) {
+				out, _, err := runConfigCmd(t, root, "set", "execution.auto", value)
+				require.Error(t, err, "config set must reject bool tokens the strict config loader rejects")
+				assert.Empty(t, strings.TrimSpace(out), "invalid set must not print a success line")
+
+				cliErr := asCLIError(err)
+				require.NotNil(t, cliErr)
+				assert.Equal(t, "config_value_invalid", cliErr.ErrorCode)
+				assert.Equal(t, "execution.auto", cliErr.Details["key"])
+
+				after, err := os.ReadFile(state.ConfigPath(root))
+				require.NoError(t, err)
+				assert.Equal(t, string(before), string(after), "invalid boolean set must leave the config file unchanged")
+			})
+		}
+	})
+}
+
 func TestConfigSetRequiresKeyAndValue(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -475,4 +521,14 @@ func assertConfigListLineContains(t *testing.T, output, key, want string) {
 		}
 	}
 	t.Fatalf("config list output missing line for %s:\n%s", key, output)
+}
+
+func assertConfigCatalogContains(t *testing.T, entries []model.ConfigCatalogEntry, key string) {
+	t.Helper()
+	for _, entry := range entries {
+		if entry.Name == key {
+			return
+		}
+	}
+	t.Fatalf("config catalog missing key %s", key)
 }
