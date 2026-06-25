@@ -1,6 +1,6 @@
 <div align="center">
 
-<img alt="Slipway - Governance CLI for AI-assisted software delivery" src="docs/assets/brand/slipway-mark.svg" width="112">
+<img alt="Slipway - Governance CLI for AI-assisted software delivery" src="docs/assets/brand/slipway-wordmark.svg" width="360">
 
 <br/>
 <br/>
