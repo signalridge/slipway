@@ -1,39 +1,36 @@
 # Structure
 
-- Directory layout: `cmd/` owns CLI commands and hooks; `internal/tmpl/`
-  owns authored templates; `internal/toolgen/` emits adapter surfaces; governed
-  artifacts for this change live under `artifacts/changes/<slug>/`.
-  Evidence: `cmd/root.go:28-90`, `internal/tmpl/templates/skills/workflow/SKILL.md.tmpl:1-114`,
-  `internal/toolgen/toolgen_test.go:631-666`.
-- Entry points: `main.go` delegates process exit behavior to `cmd.Execute`;
-  root help groups include lifecycle, discovery, situational, helper,
-  diagnostics, and setup commands. Evidence: `main.go:10-17`,
-  `cmd/root.go:28-90`.
-- Generated versus handwritten boundaries: edit template sources under
-  `internal/tmpl/templates/...`, not generated `.codex/skills` or `.claude`
-  outputs. Generated-surface contracts are pinned by `internal/tmpl` and
-  `internal/toolgen` tests. Evidence: `internal/tmpl/templates_test.go:586-612`,
-  `internal/toolgen/toolgen_test.go:631-666`.
-- Ownership hints: workflow entry guidance belongs in
-  `internal/tmpl/templates/skills/workflow/SKILL.md.tmpl`; command-specific
-  guidance belongs in `_partials/command-*.tmpl`; shared review checklist
-  guidance belongs in `skills/_shared/references/checklist-quality.md`.
-  Evidence: `internal/tmpl/templates/skills/workflow/SKILL.md.tmpl:72-80`,
-  `internal/tmpl/templates/_partials/command-run-body.tmpl:42-48`,
-  `internal/tmpl/templates/skills/_shared/references/checklist-quality.md:1-6`.
-- Notes: codebase-map docs are advisory and should stay bounded to this
-  change's surfaces.
-- New state helper files for this change should live under `internal/state/`
-  beside other git-runtime path and state helpers. The plan's
-  `internal/state/handoff.go` and `internal/state/handoff_test.go` targets are
-  consistent with the existing `ChangeHandoffPath` runtime-path owner in
-  `internal/state/local_runtime_paths.go`.
-- `cmd/handoff.go` should own Cobra command wiring and presentation for
-  `slipway handoff write/show`; hook handlers should call the command or shared
-  command-owned logic rather than parsing handoff files directly.
-- Codex project hook generation is structurally a toolgen concern. Existing
-  tests currently assert that fresh Codex generation does not create
-  `.codex/config.toml`; this change must update those contracts deliberately
-  rather than leaving stale negative assertions in place. Evidence:
-  `cmd/init_test.go:73-75`, `internal/toolgen/toolgen_test.go:1589-1590`,
-  `internal/toolgen/toolgen_test.go:2018-2026`.
+- `.github/workflows/release.yaml`
+  - `validate-tag`: no-secret, read-only tag validation job.
+  - `test`: checks out `needs.validate-tag.outputs.tag_name` and runs release
+    metadata smoke before any release secret is available.
+  - `release`: protected by `release-publish`, owns write/package/attestation
+    permissions, optional publishing secrets, GoReleaser, and generated smoke
+    outputs.
+  - `verify-*`: post-release smoke jobs consume release job outputs and run
+    `slipway --version` plus `slipway --help`.
+- `.github/workflows/ci.yml`
+  - `Release Config` installs fixed GoReleaser, syft, and Docker Buildx before
+    `goreleaser check` and snapshot dry run.
+  - `Build` depends on `Release Config`, so release-config breakage blocks PR
+    success before merge.
+- `.github/workflows/security.yaml`
+  - `govulncheck` and `go-licenses` install pinned module versions.
+  - security upload actions are full SHA-pinned like other workflows.
+- `.github/workflows/nix.yaml` and
+  `.github/workflows/flake-lock-update.yaml`
+  - DeterminateSystems actions are pinned to full commit SHAs rather than
+    `@main`.
+- `cmd/tool_github.go`
+  - Constants define default public GitHub API URL, allowlist env, override
+    token env, and ambient token env names.
+  - `resolveGitHubAPIConfigFromEnv` normalizes/validates base URL and chooses
+    the correct token class.
+  - `githubHTTPClient` serves both REST and GraphQL helper paths.
+- `cmd/release_workflow_contract_test.go`
+  - Reads the workflow from repo root.
+  - Asserts validation-before-secret behavior and generated smoke outputs.
+- `internal/state/worktree.go`
+  - `validateWorktreeBaseRef` is local to the worktree provisioning boundary.
+  - The helper defaults empty refs to `HEAD`, rejects option-like or malformed
+    refs, and verifies commit-ish resolution through `git rev-parse`.
