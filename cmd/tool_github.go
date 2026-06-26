@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -22,8 +23,16 @@ import (
 const githubBackendEnvHelp = `Environment variables:
   SLIPWAY_GITHUB_API_URL  Override the GitHub REST/GraphQL API base URL used by
                           the --backend api / token-backed HTTP path (default
-                          https://api.github.com). Useful for GitHub Enterprise;
-                          a trailing slash is trimmed. The gh backend ignores it.`
+                          https://api.github.com). Overrides must be HTTPS and
+                          listed in SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS.
+  SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS
+                          Comma/space/semicolon separated HTTPS API base URLs
+                          allowed for SLIPWAY_GITHUB_API_URL.
+  SLIPWAY_GITHUB_API_TOKEN
+                          Token used only for an allowed override URL. Ambient
+                          GH_TOKEN/GITHUB_TOKEN are sent only to
+                          https://api.github.com. The gh backend ignores these
+                          HTTP-only settings.`
 
 func makeFetchPRChecksCmd() *cobra.Command {
 	var backend string
@@ -120,13 +129,21 @@ const (
 	githubBackendGH   = "gh"
 	githubBodyCap     = 16 << 20
 	githubStderrCap   = 64 << 10
+
+	githubDefaultAPIBaseURL        = "https://api.github.com"
+	githubAPIURLEnv                = "SLIPWAY_GITHUB_API_URL"
+	githubAPIAllowedBaseURLsEnv    = "SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS"
+	githubAPIOverrideTokenEnv      = "SLIPWAY_GITHUB_API_TOKEN" // #nosec G101 -- environment variable name, not a credential.
+	githubAmbientTokenPrimaryEnv   = "GH_TOKEN"                 // #nosec G101 -- environment variable name, not a credential.
+	githubAmbientTokenSecondaryEnv = "GITHUB_TOKEN"             // #nosec G101 -- environment variable name, not a credential.
 )
 
 var githubRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 
 var (
-	githubLookPath = exec.LookPath
-	githubRunCLI   = runGitHubCLICommand
+	githubLookPath      = exec.LookPath
+	githubRunCLI        = runGitHubCLICommand
+	githubHTTPTransport http.RoundTripper
 )
 
 type githubBackend interface {
@@ -184,8 +201,9 @@ func newGitHubBackend(ctx context.Context, mode string) (githubBackend, error) {
 }
 
 func githubTokenAvailable() bool {
-	return strings.TrimSpace(os.Getenv("GH_TOKEN")) != "" ||
-		strings.TrimSpace(os.Getenv("GITHUB_TOKEN")) != ""
+	return strings.TrimSpace(os.Getenv(githubAmbientTokenPrimaryEnv)) != "" ||
+		strings.TrimSpace(os.Getenv(githubAmbientTokenSecondaryEnv)) != "" ||
+		strings.TrimSpace(os.Getenv(githubAPIOverrideTokenEnv)) != ""
 }
 
 // autoGitHubBackend implements `--backend auto`. It prefers the gh CLI and
@@ -299,18 +317,158 @@ type githubHTTPClient struct {
 func (c githubHTTPClient) backendName() string { return githubBackendAPI }
 
 func newGitHubHTTPClient() (githubHTTPClient, error) {
-	token := strings.TrimSpace(os.Getenv("GH_TOKEN"))
+	cfg, err := resolveGitHubAPIConfigFromEnv()
+	if err != nil {
+		return githubHTTPClient{}, err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	if githubHTTPTransport != nil {
+		client.Transport = githubHTTPTransport
+	}
+	return githubHTTPClient{baseURL: cfg.baseURL, token: cfg.token, client: client}, nil
+}
+
+type githubAPIConfig struct {
+	baseURL  string
+	token    string
+	override bool
+}
+
+func resolveGitHubAPIConfigFromEnv() (githubAPIConfig, error) {
+	baseURL, err := normalizeGitHubAPIBaseURL(firstNonEmpty(os.Getenv(githubAPIURLEnv), githubDefaultAPIBaseURL))
+	if err != nil {
+		return githubAPIConfig{}, err
+	}
+	override := baseURL != githubDefaultAPIBaseURL
+	if override && !githubAPIBaseURLAllowed(baseURL) {
+		return githubAPIConfig{}, newPreconditionError(
+			"github_api_url_not_allowed",
+			fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL),
+			"Set SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS to the exact HTTPS API base URL before using SLIPWAY_GITHUB_API_URL.",
+			"",
+			map[string]any{"base_url": baseURL},
+		)
+	}
+	token := githubAPITokenForBaseURL(override)
 	if token == "" {
-		token = strings.TrimSpace(os.Getenv("GITHUB_TOKEN"))
+		if override {
+			return githubAPIConfig{}, newPreconditionError(
+				"github_api_override_token_missing",
+				"GitHub API override token missing; ambient GH_TOKEN/GITHUB_TOKEN are not sent to override hosts",
+				"Set SLIPWAY_GITHUB_API_TOKEN for the allowed override host, or remove SLIPWAY_GITHUB_API_URL to use https://api.github.com.",
+				"",
+				map[string]any{"base_url": baseURL},
+			)
+		}
+		return githubAPIConfig{}, newPreconditionError(
+			"github_token_missing",
+			"GitHub token missing; set GH_TOKEN or GITHUB_TOKEN",
+			"Set GH_TOKEN or GITHUB_TOKEN before invoking this helper.",
+			"",
+			nil,
+		)
 	}
+	return githubAPIConfig{baseURL: baseURL, token: token, override: override}, nil
+}
+
+func normalizeGitHubAPIBaseURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		value = githubDefaultAPIBaseURL
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return "", newInvalidGitHubAPIURLError(value, "parse URL")
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return "", newInvalidGitHubAPIURLError(value, "scheme must be https")
+	}
+	if parsed.User != nil || strings.TrimSpace(parsed.Host) == "" {
+		return "", newInvalidGitHubAPIURLError(value, "URL must not include userinfo and must include a host")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", newInvalidGitHubAPIURLError(value, "URL must not include query or fragment")
+	}
+	if parsed.RawPath != "" {
+		return "", newInvalidGitHubAPIURLError(value, "encoded path is not accepted")
+	}
+	cleanPath := path.Clean(parsed.Path)
+	switch cleanPath {
+	case ".", "/":
+		parsed.Path = ""
+	default:
+		if cleanPath != parsed.Path {
+			return "", newInvalidGitHubAPIURLError(value, "path must be canonical")
+		}
+		if strings.EqualFold(parsed.Hostname(), "api.github.com") {
+			return "", newInvalidGitHubAPIURLError(value, "public api.github.com override must not include a path")
+		}
+		parsed.Path = cleanPath
+	}
+	parsed.Scheme = "https"
+	parsed.Host = strings.ToLower(parsed.Host)
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func newInvalidGitHubAPIURLError(value, reason string) error {
+	return newInvalidUsageError(
+		"github_api_url_invalid",
+		fmt.Sprintf("invalid GitHub API base URL %q: %s", value, reason),
+		"Use https://api.github.com, or an exact HTTPS GitHub Enterprise API base URL allowlisted by SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS.",
+		nil,
+	)
+}
+
+func githubAPIBaseURLAllowed(baseURL string) bool {
+	entries, invalid := parseGitHubAPIAllowedBaseURLs(os.Getenv(githubAPIAllowedBaseURLsEnv))
+	if invalid != "" {
+		return false
+	}
+	for _, entry := range entries {
+		if entry == baseURL {
+			return true
+		}
+	}
+	return false
+}
+
+func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, string) {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\t' || r == ' '
+	})
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			continue
+		}
+		normalized, err := normalizeGitHubAPIBaseURL(value)
+		if err != nil {
+			return nil, value
+		}
+		out = append(out, normalized)
+	}
+	return out, ""
+}
+
+func githubAPITokenForBaseURL(override bool) string {
+	if override {
+		return strings.TrimSpace(os.Getenv(githubAPIOverrideTokenEnv))
+	}
+	token := strings.TrimSpace(os.Getenv(githubAmbientTokenPrimaryEnv))
 	if token == "" {
-		return githubHTTPClient{}, newPreconditionError("github_token_missing", "GitHub token missing; set GH_TOKEN or GITHUB_TOKEN", "Set GH_TOKEN or GITHUB_TOKEN before invoking this helper.", "", nil)
+		token = strings.TrimSpace(os.Getenv(githubAmbientTokenSecondaryEnv))
 	}
-	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("SLIPWAY_GITHUB_API_URL")), "/")
-	if baseURL == "" {
-		baseURL = "https://api.github.com"
+	return token
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
-	return githubHTTPClient{baseURL: baseURL, token: token, client: &http.Client{Timeout: 30 * time.Second}}, nil
+	return ""
 }
 
 func (c githubHTTPClient) getJSON(path string, out any) error {
@@ -403,7 +561,11 @@ func (c githubHTTPClient) walkPages(path string, handle func(raw []byte) (int, e
 			return err
 		}
 		if linkNext := parseLinkNext(linkHeader); linkNext != "" {
-			next = linkNext
+			authorizedNext, err := c.authorizePaginationURL(linkNext)
+			if err != nil {
+				return err
+			}
+			next = authorizedNext
 			usedLink = true
 			continue
 		}
@@ -426,6 +588,68 @@ func (c githubHTTPClient) firstPageURL(path string) string {
 func (c githubHTTPClient) nextPageURL(path string, page int) string {
 	withPer := addQueryParam(path, "per_page", "100")
 	return c.baseURL + addQueryParam(withPer, "page", fmt.Sprint(page))
+}
+
+func (c githubHTTPClient) authorizePaginationURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil || !parsed.IsAbs() {
+		return "", newUnsafeGitHubPaginationURLError(value, "URL must be absolute")
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil || base == nil {
+		return "", newUnsafeGitHubPaginationURLError(value, "configured API base URL is invalid")
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") || !strings.EqualFold(parsed.Scheme, base.Scheme) {
+		return "", newUnsafeGitHubPaginationURLError(value, "scheme must remain https")
+	}
+	if !strings.EqualFold(parsed.Host, base.Host) {
+		return "", newUnsafeGitHubPaginationURLError(value, "host must match the configured API base URL")
+	}
+	if parsed.User != nil {
+		return "", newUnsafeGitHubPaginationURLError(value, "URL must not include userinfo")
+	}
+	if parsed.Fragment != "" {
+		return "", newUnsafeGitHubPaginationURLError(value, "URL must not include a fragment")
+	}
+	if parsed.RawPath != "" {
+		return "", newUnsafeGitHubPaginationURLError(value, "encoded path is not accepted")
+	}
+	if !githubAPIPathWithinBase(parsed.Path, base.Path) {
+		return "", newUnsafeGitHubPaginationURLError(value, "path must stay under the configured API base URL")
+	}
+	parsed.Scheme = "https"
+	parsed.Host = strings.ToLower(parsed.Host)
+	return parsed.String(), nil
+}
+
+func githubAPIPathWithinBase(candidatePath, basePath string) bool {
+	candidate := cleanGitHubAPIPath(candidatePath)
+	base := cleanGitHubAPIPath(basePath)
+	if base == "/" {
+		return strings.HasPrefix(candidate, "/")
+	}
+	return candidate == base || strings.HasPrefix(candidate, base+"/")
+}
+
+func cleanGitHubAPIPath(value string) string {
+	if value == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	return path.Clean(value)
+}
+
+func newUnsafeGitHubPaginationURLError(value, reason string) error {
+	return newPreconditionError(
+		"github_api_pagination_url_not_allowed",
+		fmt.Sprintf("unsafe GitHub API pagination URL %q: %s", value, reason),
+		"Retry with a GitHub API endpoint that keeps pagination links on the configured HTTPS API base URL.",
+		"",
+		map[string]any{"url": value},
+	)
 }
 
 func addQueryParam(path, key, value string) string {

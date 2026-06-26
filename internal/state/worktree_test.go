@@ -291,6 +291,76 @@ func TestEnsureDefaultWorktreeForChange_ProvisionsNonDiscoveryByDefault(t *testi
 	assert.NotEmpty(t, change.WorktreePath, "binding metadata must be persisted on the change")
 }
 
+func TestEnsureDefaultWorktreeForChangeRejectsOptionLikeBaseRef(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+
+	change := model.NewChange("my-change")
+	change.BaseRef = "--upload-pack=ssh://evil.example/repo"
+
+	_, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid base_ref")
+	assert.Contains(t, err.Error(), "must not start with '-'")
+	assert.NotContains(t, err.Error(), "git worktree add failed")
+	assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+}
+
+func TestEnsureDefaultWorktreeForChangeRejectsInvalidBaseRefControlChars(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		baseRef string
+	}{
+		{name: "nul", baseRef: "main\x00refs/heads/main"},
+		{name: "carriage return", baseRef: "main\rrefs/heads/main"},
+		{name: "line feed", baseRef: "main\nrefs/heads/main"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			initGitRepoAt(t, root)
+
+			change := model.NewChange("my-change")
+			change.BaseRef = tt.baseRef
+
+			_, err := EnsureDefaultWorktreeForChange(root, &change)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid base_ref")
+			assert.Contains(t, err.Error(), "value must be a single git ref")
+			assert.NotContains(t, err.Error(), "git worktree add failed")
+			assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+		})
+	}
+}
+
+func TestEnsureDefaultWorktreeForChangeRejectsUnknownBaseRefBeforeWorktreeAdd(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+
+	change := model.NewChange("my-change")
+	change.BaseRef = "definitely-not-a-ref"
+
+	_, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid base_ref")
+	assert.Contains(t, err.Error(), "repair the change authority")
+	assert.NotContains(t, err.Error(), "git worktree add failed")
+	assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+}
+
+func TestEnsureDefaultWorktreeForChangeAcceptsTagBaseRef(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoAt(t, root)
+	runGit(t, root, "tag", "v0.1.0")
+
+	change := model.NewChange("my-change")
+	change.BaseRef = "v0.1.0"
+
+	binding, err := EnsureDefaultWorktreeForChange(root, &change)
+	require.NoError(t, err)
+	assert.True(t, binding.Created)
+	assert.Contains(t, filepath.ToSlash(binding.Path), ".worktrees/my-change")
+}
+
 func TestEnsureDefaultWorktreeForChange_DisabledByConfig(t *testing.T) {
 	root := t.TempDir()
 	initGitRepoAt(t, root)

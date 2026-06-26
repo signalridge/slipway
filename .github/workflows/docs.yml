@@ -38,7 +38,7 @@ jobs:
           REF_NAME: ${{ github.ref }}
         run: |
           if [ "$REF_NAME" != "refs/heads/main" ]; then
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            printf 'deploy=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -46,7 +46,7 @@ jobs:
             push|workflow_dispatch)
               ;;
             *)
-              echo "deploy=false" >> "$GITHUB_OUTPUT"
+              printf 'deploy=false\n' >> "$GITHUB_OUTPUT"
               exit 0
               ;;
           esac
@@ -58,13 +58,13 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pages")
 
           if [ "$status" = "200" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            printf 'deploy=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           if [ "$status" = "404" ]; then
             echo "::notice::GitHub Pages is not enabled; docs were built but deployment was skipped."
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            printf 'deploy=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -79,9 +79,9 @@ jobs:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "22"
           cache: npm
@@ -92,7 +92,7 @@ jobs:
         run: npm run build
       - name: Upload Pages artifact
         if: needs.pages-status.outputs.deploy == 'true'
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
           path: website/dist
   deploy:
@@ -109,4 +109,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

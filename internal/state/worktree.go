@@ -233,9 +233,9 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 	if gitBranchExists(repoRoot, branch) {
 		args = append(args, normalizedPath, branch)
 	} else {
-		baseRef := strings.TrimSpace(change.BaseRef)
-		if baseRef == "" {
-			baseRef = "HEAD"
+		baseRef, err := validateWorktreeBaseRef(repoRoot, change.BaseRef)
+		if err != nil {
+			return DefaultWorktreeBinding{}, err
 		}
 		args = append(args, "-b", branch, normalizedPath, baseRef)
 	}
@@ -254,6 +254,24 @@ func EnsureDefaultWorktreeForChange(root string, change *model.Change) (DefaultW
 		Branch:  branch,
 		Created: true,
 	}, nil
+}
+
+func validateWorktreeBaseRef(repoRoot, raw string) (string, error) {
+	baseRef := strings.TrimSpace(raw)
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+	if strings.HasPrefix(baseRef, "-") {
+		return "", fmt.Errorf("invalid base_ref %q: value must not start with '-' because it would be parsed as a git option; repair the change authority to use HEAD, a branch, a tag, or a commit SHA", baseRef)
+	}
+	if strings.ContainsAny(baseRef, "\x00\r\n") {
+		return "", fmt.Errorf("invalid base_ref %q: value must be a single git ref or commit-ish; repair the change authority to use HEAD, a branch, a tag, or a commit SHA", baseRef)
+	}
+	cmd := exec.Command("git", "-C", repoRoot, "rev-parse", "--verify", "--quiet", baseRef+"^{commit}") // #nosec G204 -- baseRef is validated as data and passed as one argv element without shell interpolation.
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("invalid base_ref %q: git cannot resolve it as a commit; repair the change authority to use HEAD, a branch, a tag, or a commit SHA", baseRef)
+	}
+	return baseRef, nil
 }
 
 func gitBranchExists(repoRoot, branch string) bool {
