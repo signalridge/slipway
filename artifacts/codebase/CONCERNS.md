@@ -1,34 +1,33 @@
 # Concerns
 
-- Route divergence risk: `status` currently succeeds from the root checkout for
-  a single active change bound elsewhere, while `next`, `validate`, `done`, and
-  `evidence` fail closed through `resolveActiveChangeRef`. A partial fix in one
-  command would preserve misleading agent guidance.
-- Local actionability risk: `next_ready_actions` currently describes lifecycle
-  actions by state only (`cmd/common.go:994-1018`). It can therefore advertise
-  `next`, `run`, or `done` in a workspace that cannot execute those actions
-  locally.
-- Archived-local regression risk: #283 behavior intentionally prefers an
-  archived change in the current archived worktree over an unrelated active
-  change elsewhere. A shared route abstraction must encode this as a first-class
-  route kind instead of treating it as an afterthought.
-- Error taxonomy drift risk: explicit missing slugs currently vary by command
-  (`status --change` returns `change_not_found`, `validate --change` falls back
-  to diagnostics, and `next --change` reports `no_active_change`). The shared
-  route must pin stable error codes and exit code 3.
-- Freshness overclaim risk: execution evidence freshness is not the same as
-  governance readiness. Existing tests intentionally allow `required_skill_missing`
-  while execution freshness remains `fresh`, so adding new readiness fields is
-  safer than changing the execution-freshness helper semantics.
-- Action-contract drift risk: `next` owns `confirmation_requirement` and action
-  kinds, while `status` and `validate` expose separate recovery/action fields.
-  `status`/`validate` must not let `recovery.primary_action` override or
-  contradict the current `next` action kind.
-- Capability dead-end risk: technique hints and generated skill prose can tell a
-  host to spawn or delegate, but the CLI does not currently report whether that
-  capability exists. Auto-mode must not report prior authorization sufficient
-  when the selected skill requires an unavailable host capability and no explicit
-  fallback is selected.
-- Compatibility risk: new JSON fields should be additive where possible, while
-  erroneous existing values that cause unsafe action claims should be corrected
-  even if tests need updates.
+- Live protection drift: GitHub rulesets and environments can change outside
+  git. This change records request bodies in verification artifacts and must
+  re-query live settings before final closeout.
+- Required check drift: branch rulesets use exact check context names. A future
+  workflow rename can block merges until ruleset `18174607` is updated.
+- Path-filtered check risk: ruleset required checks should avoid jobs that do
+  not always run. This change intentionally requires CI/security/title checks,
+  not docs or Nix path-filtered jobs.
+- Tag lockout risk: a tag ruleset with no bypass can prevent legitimate release
+  tags on a user-owned repo. Ruleset `18174614` keeps an explicit owner-user
+  bypass while restricting arbitrary `v*` tag mutation.
+- Secret exposure risk: release workflow inputs are untrusted. The only
+  acceptable flow is no-secret validation before any job can read `GH_PAT`,
+  `AUR_SSH_PRIVATE_KEY`, package/write/attestation permissions, or the
+  protected release environment.
+- Floating dependency risk: action tags and `@latest` tool installs are mutable
+  supply-chain inputs. Full SHA pins and fixed Go module versions are required
+  in workflows touched by this change.
+- Override token leakage risk: `SLIPWAY_GITHUB_API_URL` can point at a
+  non-public GitHub host. Ambient `GH_TOKEN` and `GITHUB_TOKEN` must not be sent
+  to override hosts; override hosts need exact allowlist plus
+  `SLIPWAY_GITHUB_API_TOKEN`.
+- Git ref confusion risk: `BaseRef` is not shell-interpolated, but option-like
+  values can still be parsed by Git as options. Validate before
+  `git worktree add`.
+- Release smoke drift: hard-coded artifact names rot as GoReleaser config
+  changes. Smoke jobs should consume asset names generated from actual `dist/`
+  outputs.
+- Local evidence gap: this workstation lacks a usable Docker daemon for full
+  container snapshot validation, and local syft runs through aqua. CI must cover
+  Docker/SBOM with explicit setup steps.

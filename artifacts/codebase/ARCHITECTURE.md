@@ -1,42 +1,32 @@
 # Architecture
 
-- Question: Which seams must change so every public lifecycle command reports
-  the same invocation route, actionability, freshness/readiness, and host
-  capability contract?
-- Active command resolution currently centers on `resolveActiveChangeRef` in
-  `cmd/common.go:339-390`. It resolves explicit `--change` first, then current
-  git worktree binding, then a global active fallback. Most lifecycle commands
-  (`next`, `run`, `done`, `evidence`) call this resolver before acting.
-- Explicit slug resolution is in `resolveExplicitChange` at
-  `cmd/common.go:405-483`. Missing active bundles currently become
-  `no_active_change`, archived slugs become `archived_change_not_validatable`,
-  and corrupted active bundles fail closed as `change_state_load_failed`.
-- Bound-elsewhere error construction is in `wrapResolutionError` at
-  `cmd/common.go:909-934`. It already carries `change_bound_to_other_worktree`,
-  bound slug/path details, and executable remediation.
-- `status` has a separate route path in `cmd/status.go:299-378`.
-  `resolveStatusRouteForRoot` only consults `resolveActiveChangeRef` for
-  multi-active cases, so a single active change bound to another worktree can be
-  rendered as a normal governed status view from the root checkout.
-- Archived-local precedence is explicitly protected by
-  `statusArchivedChangeForCurrentWorktree` in `cmd/status.go:400-416` and by
-  resolver archived fallback in `cmd/common.go:353-364` and `cmd/common.go:370-379`.
-  Any shared route must preserve this #283 invariant.
-- `statusView`, `validateView`, and `nextView` carry separate action/freshness
-  shapes: `statusView` exposes `next_ready_actions` and `evidence_freshness`
-  (`cmd/status.go:17-66`), `validateView` exposes `actionable_next_skill` and
-  `evidence_freshness` (`cmd/validate.go:17-52`), and `nextView` exposes
-  `confirmation_requirement` (`cmd/next.go:14-75`).
-- `status` currently derives ready actions through
-  `projectNextReadyActionsWithPrimary` (`cmd/common.go:994-1018`) and does not
-  know whether the invocation workspace is locally executable. This is the root
-  of the misleading root-status behavior.
-- Execution freshness is projected by `projectFreshnessForExecMode` at
-  `cmd/common.go:1020-1034`. The helper intentionally ignores non-freshness
-  blockers such as `required_skill_missing`, so a broader readiness freshness
-  field must be added instead of changing execution freshness semantics in place.
-- Host capability data is currently advisory. `appendCatalogHints` resolves
-  support hints from the capability registry (`cmd/next_skill_view.go:894-925`),
-  and the registry resolver produces supports/hydrate references
-  (`internal/engine/capability/resolver.go:48-70`). There is no CLI-visible
-  field for required host capabilities, availability, or fail-closed fallback.
+- Question: Which release and supply-chain seams must change so `opt.md`
+  section 2 is actually closed rather than documented?
+- GitHub repository protection is external state, but this change stores the
+  applied request bodies under
+  `artifacts/changes/harden-release-supply-chain/verification/`. The live
+  authority is GitHub API rulesets `18174607` for `main` and `18174614` for
+  `refs/tags/v*`, plus environment `release-publish`.
+- `.github/workflows/release.yaml` owns tag-release and manual-release control
+  flow. The hardened flow is `validate-tag` -> `test` -> `release` -> smoke
+  jobs. `validate-tag` is intentionally no-secret/read-only; `release` is the
+  only job that carries write/package/attestation permissions and publishing
+  secrets.
+- `.github/workflows/ci.yml` owns PR verification. The new `Release Config`
+  job validates the GoReleaser config and runs a snapshot dry run before the
+  normal build job can pass.
+- `.github/workflows/security.yaml`, `.github/workflows/nix.yaml`, and
+  `.github/workflows/flake-lock-update.yaml` are supply-chain entry points for
+  scanner/tool installs and Nix setup. Floating action refs and `go install
+  ...@latest` are not acceptable there.
+- `cmd/tool_github.go` owns token-backed REST/GraphQL helper construction for
+  GitHub tools. `newGitHubHTTPClient` is the shared choke point for
+  `SLIPWAY_GITHUB_API_URL`, token selection, and HTTP client setup.
+- `cmd/release_workflow_contract_test.go` is the static workflow policy test
+  for REQ-002 and REQ-006. It parses `.github/workflows/release.yaml` and
+  asserts the secret-exposure ordering and smoke-manifest wiring.
+- `cmd/tool_test.go` covers GitHub API override and token isolation behavior
+  through TLS test servers and an injected HTTP transport.
+- `internal/state/worktree.go` owns governed default worktree provisioning.
+  `EnsureDefaultWorktreeForChange` now validates `change.BaseRef` before the
+  value is passed to `git worktree add`.

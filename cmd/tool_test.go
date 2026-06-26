@@ -243,7 +243,7 @@ func TestToolReplyToThreadDryRunDoesNotRequireToken(t *testing.T) {
 
 func TestToolFetchPRChecksUsesTokenHTTP(t *testing.T) {
 	var seenAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenAuth = r.Header.Get("Authorization")
 		switch r.URL.Path {
 		case "/repos/owner/repo/pulls/7":
@@ -256,7 +256,6 @@ func TestToolFetchPRChecksUsesTokenHTTP(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -422,6 +421,192 @@ func TestGitHubBackendSelection(t *testing.T) {
 	}
 }
 
+func TestGitHubAPIOverrideRejectsUnsafeURLs(t *testing.T) {
+	t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "")
+	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+
+	tests := []struct {
+		name     string
+		baseURL  string
+		wantCode string
+	}{
+		{
+			name:     "http rejected",
+			baseURL:  "http://api.github.com",
+			wantCode: "github_api_url_invalid",
+		},
+		{
+			name:     "unknown https host rejected",
+			baseURL:  "https://api.github.invalid",
+			wantCode: "github_api_url_not_allowed",
+		},
+		{
+			name:     "path-confused public host rejected",
+			baseURL:  "https://api.github.com/evil",
+			wantCode: "github_api_url_invalid",
+		},
+		{
+			name:     "path-confused public host with default port rejected",
+			baseURL:  "https://api.github.com:443/evil",
+			wantCode: "github_api_url_invalid",
+		},
+		{
+			name:     "path-confused mixed-case public host with default port rejected",
+			baseURL:  "https://API.GITHUB.COM:443/evil",
+			wantCode: "github_api_url_invalid",
+		},
+		{
+			name:     "query rejected",
+			baseURL:  "https://api.github.com?x=1",
+			wantCode: "github_api_url_invalid",
+		},
+		{
+			name:     "userinfo rejected",
+			baseURL:  "https://token@api.github.com",
+			wantCode: "github_api_url_invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(githubAPIURLEnv, tt.baseURL)
+			_, err := newGitHubHTTPClient()
+			require.Error(t, err)
+			var cliErr *CLIError
+			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+			assert.Equal(t, tt.wantCode, cliErr.ErrorCode)
+		})
+	}
+}
+
+func TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseURL string
+	}{
+		{
+			name:    "path",
+			baseURL: "https://api.github.com/evil",
+		},
+		{
+			name:    "default port path",
+			baseURL: "https://api.github.com:443/evil",
+		},
+		{
+			name:    "mixed-case default port path",
+			baseURL: "https://API.GITHUB.COM:443/evil",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(githubAPIURLEnv, tt.baseURL)
+			t.Setenv(githubAPIAllowedBaseURLsEnv, tt.baseURL)
+			t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+			t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+			t.Setenv(githubAmbientTokenSecondaryEnv, "")
+
+			_, err := newGitHubHTTPClient()
+			require.Error(t, err)
+			var cliErr *CLIError
+			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+			assert.Equal(t, "github_api_url_invalid", cliErr.ErrorCode)
+		})
+	}
+}
+
+func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T) {
+	var hits int
+	var seenAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		seenAuth = r.Header.Get("Authorization")
+		_, _ = io.WriteString(w, `{"number":7}`)
+	}))
+	defer server.Close()
+	previousTransport := githubHTTPTransport
+	githubHTTPTransport = server.Client().Transport
+	t.Cleanup(func() { githubHTTPTransport = previousTransport })
+
+	t.Setenv(githubAPIURLEnv, server.URL)
+	t.Setenv(githubAPIAllowedBaseURLsEnv, server.URL)
+	t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "secondary-ambient-token")
+	t.Setenv(githubAPIOverrideTokenEnv, "")
+
+	_, err := newGitHubHTTPClient()
+	require.Error(t, err)
+	var cliErr *CLIError
+	require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+	assert.Equal(t, "github_api_override_token_missing", cliErr.ErrorCode)
+	assert.Equal(t, 0, hits, "ambient tokens must not be sent to override hosts")
+
+	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+	client, err := newGitHubHTTPClient()
+	require.NoError(t, err)
+	var out struct {
+		Number int `json:"number"`
+	}
+	require.NoError(t, client.getJSON("/repos/o/r/pulls/7", &out))
+	assert.Equal(t, 7, out.Number)
+	assert.Equal(t, "Bearer override-token", seenAuth)
+}
+
+func TestGitHubAPIOverrideRejectsUnsafePaginationLink(t *testing.T) {
+	tests := []struct {
+		name string
+		link string
+	}{
+		{
+			name: "cross host",
+			link: "https://attacker.example/repos/owner/repo/issues?per_page=100&page=2",
+		},
+		{
+			name: "base path escape",
+			link: "https://api.enterprise.example/api/repos/owner/repo/issues?per_page=100&page=2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requests []*http.Request
+			client := githubHTTPClient{
+				baseURL: "https://api.enterprise.example/api/v3",
+				token:   "override-token",
+				client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					requests = append(requests, req.Clone(req.Context()))
+					resp := &http.Response{
+						StatusCode: http.StatusOK,
+						Status:     "200 OK",
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(`[]`)),
+						Request:    req,
+					}
+					resp.Header.Set("Link", fmt.Sprintf("<%s>; rel=\"next\"", tt.link))
+					return resp, nil
+				})},
+			}
+
+			_, err := client.getPaginated("/repos/owner/repo/issues")
+			require.Error(t, err)
+			var cliErr *CLIError
+			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+			assert.Equal(t, "github_api_pagination_url_not_allowed", cliErr.ErrorCode)
+			require.Len(t, requests, 1, "unsafe Link target must be rejected before any token-bearing follow-up request")
+			assert.Equal(t, "api.enterprise.example", requests[0].URL.Host)
+			assert.Equal(t, "Bearer override-token", requests[0].Header.Get("Authorization"))
+		})
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestGitHubCLIBackendUsesGHAPIEndpointArgs(t *testing.T) {
 	originalRunCLI := githubRunCLI
 	t.Cleanup(func() { githubRunCLI = originalRunCLI })
@@ -481,16 +666,32 @@ func readBody(t *testing.T, r *http.Request) string {
 	return string(raw)
 }
 
+func newGitHubAPITestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	server := httptest.NewTLSServer(handler)
+	previousTransport := githubHTTPTransport
+	githubHTTPTransport = server.Client().Transport
+	t.Cleanup(func() {
+		githubHTTPTransport = previousTransport
+		server.Close()
+	})
+	t.Setenv(githubAPIURLEnv, server.URL)
+	t.Setenv(githubAPIAllowedBaseURLsEnv, server.URL)
+	t.Setenv(githubAPIOverrideTokenEnv, "test-token")
+	t.Setenv(githubAmbientTokenPrimaryEnv, "")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "")
+	return server
+}
+
 // --- reply-to-thread --confirm -------------------------------------------------
 
 func TestToolReplyToThreadConfirmSuccessReturnsCommentID(t *testing.T) {
 	var sawAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sawAuth = r.Header.Get("Authorization")
 		require.Equal(t, "/graphql", r.URL.Path)
 		_, _ = w.Write([]byte(`{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"IC_123","url":"https://github.com/o/r/pull/1#discussion_r1"}}}}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -505,12 +706,11 @@ func TestToolReplyToThreadConfirmSuccessReturnsCommentID(t *testing.T) {
 }
 
 func TestToolReplyToThreadConfirmGraphQLErrorsNotReportedPosted(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// HTTP 200 but GraphQL errors array is non-empty.
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"Could not resolve to a node with the global id of 'PRRT_bad'"}]}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -526,11 +726,10 @@ func TestToolReplyToThreadConfirmGraphQLErrorsNotReportedPosted(t *testing.T) {
 }
 
 func TestToolReplyToThreadConfirmNullPayloadFails(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// HTTP 200, no errors, but the mutation payload is null/missing.
 		_, _ = w.Write([]byte(`{"data":{"addPullRequestReviewThreadReply":null}}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -546,7 +745,7 @@ func TestToolReplyToThreadConfirmNullPayloadFails(t *testing.T) {
 
 func TestToolReplyToThreadConfirmPartialFailureReportsPostedReply(t *testing.T) {
 	var calls int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		if calls == 1 {
 			_, _ = w.Write([]byte(`{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"IC_1","url":"https://github.com/o/r/pull/1#discussion_r1"}}}}`))
@@ -555,7 +754,6 @@ func TestToolReplyToThreadConfirmPartialFailureReportsPostedReply(t *testing.T) 
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"data":null,"errors":[{"message":"Could not resolve to a node with the global id of 'PRRT_bad'"}]}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -593,7 +791,7 @@ func TestToolFetchPRFeedbackCategorizesAndCarriesThreadIDs(t *testing.T) {
       }}}}
     }`
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/graphql":
 			body := readBody(t, r)
@@ -624,7 +822,6 @@ func TestToolFetchPRFeedbackCategorizesAndCarriesThreadIDs(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -681,8 +878,7 @@ func TestToolFetchPRFeedbackCategorizesAndCarriesThreadIDs(t *testing.T) {
 
 func TestToolFetchReviewRequestsFiltersClosedAndBuildsReasons(t *testing.T) {
 	mux := http.NewServeMux()
-	server := httptest.NewServer(mux)
-	defer server.Close()
+	server := newGitHubAPITestServer(t, mux)
 	base := server.URL
 
 	mux.HandleFunc("/orgs/acme/teams/team-a/members", func(w http.ResponseWriter, r *http.Request) {
@@ -793,7 +989,7 @@ func isPageTwoOrLater(r *http.Request) bool {
 
 func TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates(t *testing.T) {
 	var checkRunPages int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/owner/repo/pulls/7":
 			_, _ = io.WriteString(w, `{"number":7,"html_url":"https://github.com/owner/repo/pull/7","head":{"sha":"abc123","ref":"feature"},"base":{"ref":"main"}}`)
@@ -820,7 +1016,6 @@ func TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -863,7 +1058,7 @@ func TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates(t *testing.T) {
 
 func TestToolFetchPRChecksSurfacesFailedCommitStatuses(t *testing.T) {
 	var requestedStatus bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/repos/owner/repo/pulls/7":
 			_, _ = io.WriteString(w, `{"number":7,"html_url":"https://github.com/owner/repo/pull/7","head":{"sha":"abc123","ref":"feature"},"base":{"ref":"main"}}`)
@@ -876,7 +1071,6 @@ func TestToolFetchPRChecksSurfacesFailedCommitStatuses(t *testing.T) {
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -1326,12 +1520,11 @@ func TestAutoGitHubBackendFallsBackToTokenOnGHAuthError(t *testing.T) {
 	}
 
 	var httpHits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpHits++
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		_, _ = w.Write([]byte(`{"number":7}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
@@ -1378,11 +1571,10 @@ func TestAutoGitHubBackendDoesNotFallBackOnNonAuthError(t *testing.T) {
 	}
 
 	var httpHits int
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := newGitHubAPITestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		httpHits++
 		_, _ = w.Write([]byte(`{"number":7}`))
 	}))
-	defer server.Close()
 
 	t.Setenv("SLIPWAY_GITHUB_API_URL", server.URL)
 	t.Setenv("GH_TOKEN", "test-token")
