@@ -1,38 +1,35 @@
 # Testing
 
-- Question: What tests prove the public lifecycle contract is consistent without
-  only testing private helper behavior?
-- Existing resolver tests in `cmd/active_change_resolution_test.go:17-95`
-  cover helper-level bound-elsewhere behavior for `resolveActiveChangeRef`,
-  `next --change`, and root `run`, but they do not cover root unscoped
-  `status`, root unscoped `validate`, `done`, or `evidence` as a shared
-  contract matrix.
-- Existing archived-local regression tests in
-  `cmd/active_change_resolution_test.go:98-175` and `cmd/status.go:400-416`
-  should be preserved and extended only as needed; this behavior must not be
-  rewritten away while introducing shared routing.
-- Existing validate zero-write tests in `cmd/validate_readonly_test.go:52-96`
-  cover no-active diagnostics and archived explicit slugs. They should be
-  extended so explicit missing slugs fail closed with `change_not_found` instead
-  of returning diagnostics.
-- Existing review-action consistency tests in
-  `cmd/progression_next_test.go:1065-1183` compare `next`, `validate`, and
-  `run` for S3 review-batch state. They do not assert `status` exposes the same
-  action kind, so this change should add a status-side action contract assertion.
-- Freshness tests in `cmd/common_test.go:496-580` prove
-  `projectFreshnessForExecMode` tracks execution evidence and deliberately
-  ignores non-freshness blockers. New tests should keep that behavior while
-  asserting new readiness/governance freshness fields become stale/blocked when
-  required skills or ship gates are missing.
-- Auto-mode tests in `cmd/auto_mode_test.go:173-205` and
-  `cmd/auto_mode_test.go:263-280` show current `prior_authorization_sufficient`
-  softening for review batches and non-sensitive skill handoffs, with security
-  review staying hard-stop. #339 tests should add capability-unavailable cases
-  so prior authorization alone is not reported sufficient when the required host
-  mechanism is absent.
-- Black-box command helpers exist through `runRootCommandIn` in
-  `cmd/error_contract_test.go:267-280`; command-level tests should use these or
-  `commandForRoot` instead of only calling private route helpers.
-- Minimum focused verification before implementation closeout: new route/action
-  matrix tests, freshness field tests, host-capability tests, `go test ./cmd
-  -count=1`, `go test ./... -count=1`, and `golangci-lint run ./...`.
+- Workflow syntax:
+  - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`
+  - `uvx yamllint -c .yamllint.yaml .github/workflows/release.yaml
+    .github/workflows/ci.yml .github/workflows/security.yaml
+    .github/workflows/nix.yaml .github/workflows/flake-lock-update.yaml
+    .github/workflows/docs.yml .github/workflows/pr-title.yaml
+    .github/workflows/release-please.yaml`
+- Release config:
+  - `go run github.com/goreleaser/goreleaser/v2@v2.16.0 check`
+  - Local bounded dry run:
+    `go run github.com/goreleaser/goreleaser/v2@v2.16.0 release --snapshot
+    --clean --skip=publish,sign,sbom,docker`
+  - CI dry run covers Docker/SBOM because it installs syft and sets up Docker
+    Buildx on a runner with Docker available.
+- Release workflow contract:
+  - `go test ./cmd -run TestReleaseWorkflow -count=1`
+  - The test proves `validate-tag` is no-secret/read-only, release/test jobs
+    consume `needs.validate-tag.outputs.tag_name`, only `release` references
+    `GH_PAT`/`AUR_SSH_PRIVATE_KEY`, and smoke inputs come from generated
+    release outputs.
+- GitHub API override:
+  - `go test ./cmd -run 'TestGitHub(APIOverride|BackendSelection|AutoGitHubBackend|ToolFetchPRChecksUsesTokenHTTP|ToolReplyToThreadConfirm|ToolFetchPRFeedback|ToolFetchReviewRequests)' -count=1`
+  - TLS test servers exercise the override path without allowing production
+    HTTP base URLs.
+- BaseRef validation:
+  - `go test ./internal/state -run 'TestEnsureDefaultWorktreeForChange(Rejects|Accepts|_Provisions)' -count=1`
+  - Tests cover option-like refs, unknown refs, valid tag refs, and default
+    provisioning.
+- Full implementation verification before S3:
+  - `go test ./cmd -count=1`
+  - `go test ./internal/state -count=1`
+  - `go test ./... -count=1`
+  - `golangci-lint run ./...`

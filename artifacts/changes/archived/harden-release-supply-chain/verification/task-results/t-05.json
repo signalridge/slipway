@@ -1,0 +1,12 @@
+{
+  "task_id": "t-05",
+  "verdict": "pass",
+  "evidence_ref": "artifacts/changes/harden-release-supply-chain/verification/task-results/t-05.json",
+  "changed_files": [
+    "internal/state/worktree.go",
+    "internal/state/worktree_test.go"
+  ],
+  "blockers": [],
+  "test_summary": "Source inspection and regression tests confirm empty BaseRef defaults to HEAD before git worktree add, option-like refs are rejected before git worktree add, NUL/CR/LF are rejected as invalid single-ref input, unknown refs fail closed via git rev-parse --verify --quiet <base>^{commit}, and valid tag/ref commit-ish values are accepted. Focused test command passed after adding direct control-character coverage: go test ./internal/state -run 'TestEnsureDefaultWorktreeForChange(Rejects|Accepts|_Provisions)' -count=1.",
+  "notes": "Codebase map relevance self-check: not relied on; the task is localized to internal/state/worktree.go and internal/state/worktree_test.go, and the required source/tests plus task acceptance fully determine the behavior. Control-character rejection is now covered by TestEnsureDefaultWorktreeForChangeRejectsInvalidBaseRefControlChars for NUL, carriage return, and line feed."
+}

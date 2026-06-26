@@ -1,0 +1,362 @@
+verdict: pass
+blockers: []
+timestamp: 2026-06-26T17:40:00.843226Z
+run_version: 3
+references:
+    - artifact:ship_verification_notes=artifacts/changes/harden-release-supply-chain/verification/ship-verification-notes.md
+    - closeout:assurance_complete=pass
+    - closeout:assurance_section:archive_decision=authored
+    - closeout:assurance_section:residual_risks=authored
+    - closeout:assurance_section:scope_summary=authored
+    - closeout:assurance_section:verification_index=authored
+    - closeout:assurance_section:verification_verdict=authored
+    - closeout:evidence_freshness=pass
+    - closeout:reviewer_independence=pass
+    - closeout:test_suite=pass:6/6
+    - context_origin:stage=review=codex-ship-verification-subagent-20260626T173357Z
+    - coverage:change_surface=pass
+    - fresh:command_ref=artifacts/changes/harden-release-supply-chain/verification/logs/ship-coverage.txt
+    - fresh:command_ref=artifacts/changes/harden-release-supply-chain/verification/logs/ship-static-checks.txt
+    - fresh:command_ref=artifacts/changes/harden-release-supply-chain/verification/logs/ship-stub-scan.txt
+    - fresh:command_ref=artifacts/changes/harden-release-supply-chain/verification/logs/ship-suite.txt
+    - scope_contract:pass
+notes: |-
+    # Ship Verification Evidence Notes
+
+    Verifier handle: `codex-ship-verification-subagent-20260626T173357Z`
+
+    Role: bulky evidence collection for `ship-verification` only. I did not edit
+    source code, lifecycle YAML, evidence YAML, or the git index. I did not run
+    `slipway evidence`, `slipway run`, `slipway done`, `git add`, or `git commit`.
+
+    Verdict for this evidence-gathering pass: `pass`.
+
+    Run summary version: `3`, from fresh
+    `SLIPWAY_HOST_CAPABILITIES=subagent go run . status --json` and
+    `artifacts/changes/harden-release-supply-chain/verification/execution-summary.yaml`.
+
+    ## Transcript Index
+
+    - `verification/logs/ship-suite.txt`
+      - `go test ./... -count=1`
+      - exit code: `0`
+      - summary: all packages passed; slowest packages were `cmd` at `167.650s`,
+        `internal/toolgen` at `179.487s`, and `internal/engine/progression` at
+        `50.387s`.
+    - `verification/logs/ship-static-checks.txt`
+      - `go version`: exit code `0`, `go version go1.26.4 darwin/arm64`.
+      - `golangci-lint run ./...`: exit code `0`, `0 issues.`
+      - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`: exit code
+        `0`.
+      - `go run github.com/goreleaser/goreleaser/v2@v2.16.0 check`: exit code
+        `0`, `1 configuration file(s) validated`.
+      - `git diff --check -- . ':!dist'`: exit code `0`.
+      - no-match scans for active non-SHA `uses:`, `@latest`, `@main`, `@master`,
+        `curl | sh`, `wget | sh`, `eval`, `docker.sock`, corrected
+        `--privileged`, and floating workflow container image defaults: exit code
+        `1` for no matches and recorded as pass evidence.
+      - malformed scan note: the first `--privileged` scan omitted `rg --` and
+        exited `2` because `rg` parsed `--privileged` as an option. It was rerun as
+        `rg -n -P -- --privileged ...`; the corrected scan exited `1` with no
+        matches. This is an operator command-form error, not a product blocker.
+      - live `gh api` checks for `main`, rulesets `18174607` and `18174614`,
+        required status-check contexts, and `release-publish`: all exit code `0`.
+    - `verification/logs/ship-stub-scan.txt`
+      - planned target files scanned: `16`.
+      - verdict: `pass`; no substantive stub, placeholder, unimplemented panic,
+        commented-out replacement code, or assertion-free changed test found.
+    - `verification/logs/ship-coverage.txt`
+      - `go version`: exit code `0`, `go version go1.26.4 darwin/arm64`.
+      - `go test ./cmd ./internal/state -coverprofile=.../ship-coverage.out -count=1`:
+        exit code `0`; `cmd` coverage `80.0%`, `internal/state` coverage `72.0%`.
+      - `go tool cover -func=.../ship-coverage.out`: exit code `0`; combined
+        statement total `77.7%`.
+      - derived statement totals from the same profile: relevant packages
+        `9873/12712` statements covered (`77.7%`); changed implementation files
+        `923/1271` statements covered (`72.6%`).
+
+    ## Acceptance Criteria
+
+    ### AC-1: Live GitHub Protections
+
+    Requirement: `main` and release tags are protected by active GitHub rules
+    matching actual project workflows.
+
+    - Exists: pass. Live `gh api repos/signalridge/slipway/branches/main --jq
+      .protected` returned `true`; rulesets `18174607` and `18174614` and
+      environment `release-publish` exist. Stored request artifacts exist at
+      `verification/main-branch-ruleset-request.json`,
+      `verification/release-tag-ruleset-request.json`, and
+      `verification/release-environment-request.json`.
+    - Substantive: pass. Live ruleset `18174607` is `active`, targets
+      `~DEFAULT_BRANCH`, and includes `deletion`, `non_fast_forward`,
+      `pull_request`, and `required_status_checks`. Its required contexts include
+      `Build`, all cross-compile jobs, `Go Vulnerability Check`, `Gosec SAST`,
+      `Kernel Coverage Gate`, `License Compliance`, `Lint Actions`, `Lint Go`,
+      `Lint Markdown`, `Lint YAML`, `Race Tests`, `Release Config`, three OS test
+      jobs, `Trivy Filesystem Scan`, and `Validate PR Title`. Live ruleset
+      `18174614` is `active`, targets `refs/tags/v*`, and includes `creation`,
+      `update`, `deletion`, and `non_fast_forward`.
+    - Wired: pass. `release-publish` exists with required reviewer `signalridge`;
+      `.github/workflows/release.yaml:81-91` puts the release job behind that
+      environment and write permissions. Transcript:
+      `verification/logs/ship-static-checks.txt`.
+
+    ### AC-2: Release Workflow Validation And Secret Confinement
+
+    Requirement: the release workflow validates manual release tag input before
+    release secrets are available, and downstream release refs use only the
+    validated tag output.
+
+    - Exists: pass. `.github/workflows/release.yaml:22-47` defines a read-only
+      `validate-tag` job; `cmd/release_workflow_contract_test.go:16-92` adds static
+      and executable workflow contract tests.
+    - Substantive: pass. `.github/workflows/release.yaml:37-47` rejects control
+      characters and non-semver-like tags before writing `tag_name` to
+      `GITHUB_OUTPUT`; `.github/workflows/release.yaml:49-80` and `:81-164` make
+      `test` and `release` depend on `validate-tag`, checkout
+      `needs.validate-tag.outputs.tag_name`, and confine `GH_PAT` /
+      `AUR_SSH_PRIVATE_KEY` to the protected release job.
+    - Wired: pass. Full suite passed, and the contract tests are in `./cmd`, covered
+      by `go test ./... -count=1`; `actionlint` also passed. Transcript:
+      `verification/logs/ship-suite.txt` and
+      `verification/logs/ship-static-checks.txt`.
+
+    ### AC-3: Pinned Workflow And Tool Dependencies
+
+    Requirement: workflow action and tool dependencies do not float.
+
+    - Exists: pass. The changed workflows are
+      `.github/workflows/ci.yml`, `docs.yml`, `flake-lock-update.yaml`, `nix.yaml`,
+      `pr-title.yaml`, `release-please.yaml`, `release.yaml`, and `security.yaml`.
+    - Substantive: pass. Active external `uses:` refs in changed workflows are full
+      40-character SHA refs. `.github/workflows/security.yaml:23-24` pins
+      `govulncheck@v1.5.0`; `.github/workflows/security.yaml:155-156` pins
+      `go-licenses@v1.6.0`. `.github/workflows/ci.yml:116-143` pins GoReleaser
+      `v2.16.0`, Docker Buildx action by SHA, syft action by SHA, and the
+      GoReleaser action by SHA.
+    - Wired: pass. `rg` scans for non-SHA active `uses:`, `@latest`, `@main`,
+      `@master`, unsafe shell install pipes, `eval`, `docker.sock`,
+      `--privileged`, and floating workflow container defaults all produced no
+      matches after the corrected scan. `actionlint` passed. Transcript:
+      `verification/logs/ship-static-checks.txt`.
+
+    ### AC-4: GitHub API Override Token Safety
+
+    Requirement: token-backed GitHub REST/GraphQL backend fails closed for unsafe
+    API base URL overrides, and allowed overrides require an override token without
+    sending ambient public GitHub tokens.
+
+    - Exists: pass. `cmd/tool_github.go:319-371` centralizes HTTP backend
+      construction, base URL normalization, allowlist enforcement, and token-class
+      selection; `cmd/tool_test.go:424-602` adds negative and token-isolation tests.
+    - Substantive: pass. `cmd/tool_github.go:374-410` rejects non-HTTPS,
+      userinfo, query/fragment, encoded-path, non-canonical path, and path-confused
+      public `api.github.com` overrides. `cmd/tool_github.go:422-462` enforces exact
+      allowlisted override bases and uses `SLIPWAY_GITHUB_API_TOKEN` for overrides.
+      `cmd/tool_github.go:563-624` re-authorizes pagination links before any
+      follow-up token-bearing request. `cmd/tool_github.go:687-711` routes GraphQL
+      through the same validated HTTP backend.
+    - Wired: pass. `cmd/tool_test.go:424-602` covers unsafe URLs, allowlisted public
+      path confusion, missing override token, override-token authorization, and
+      unsafe pagination links. Full suite and focused coverage passed. Transcript:
+      `verification/logs/ship-suite.txt` and
+      `verification/logs/ship-coverage.txt`.
+
+    ### AC-5: BaseRef Validation Before Worktree Creation
+
+    Requirement: governed `BaseRef` values are validated before reaching
+    `git worktree add`.
+
+    - Exists: pass. `internal/state/worktree.go:236-240` calls
+      `validateWorktreeBaseRef` before appending the base ref to `git worktree add`;
+      `internal/state/worktree.go:259-275` implements the validator.
+    - Substantive: pass. Empty refs default to `HEAD`; option-like refs and refs
+      containing NUL/CR/LF fail with product-owned remediation; remaining refs must
+      resolve via `git rev-parse --verify --quiet <ref>^{commit}` before worktree
+      creation. The ref is passed as a single argv element without shell
+      interpolation.
+    - Wired: pass. `internal/state/worktree_test.go:294-362` covers option-like
+      refs, control-character refs, unknown refs before worktree add, and valid tag
+      refs. Full suite and focused coverage passed. Transcript:
+      `verification/logs/ship-suite.txt` and
+      `verification/logs/ship-coverage.txt`.
+
+    ### AC-6: Release Config And Smoke Closure
+
+    Requirement: release configuration changes are validated on PR and release smoke
+    derives from actual generated assets.
+
+    - Exists: pass. `.github/workflows/ci.yml:116-143` defines the `Release Config`
+      job; `.github/workflows/release.yaml:183-221` emits smoke manifest outputs;
+      `.github/workflows/release.yaml:318-396` consumes package and binary outputs.
+    - Substantive: pass. The CI job runs GoReleaser `check`, sets up Docker Buildx,
+      installs syft, and runs a snapshot dry run. The release job fails closed if
+      generated archive/package assets are missing and exports `binary_matrix`,
+      `deb_asset`, `rpm_asset`, and `apk_asset` from `dist/`. Smoke jobs run
+      `slipway --version` and `slipway --help` against deb, rpm, apk, and selected
+      binary archive assets.
+    - Wired: pass. `cmd/release_workflow_contract_test.go:94-132` asserts smoke
+      inputs come from generated release outputs. `go run
+      github.com/goreleaser/goreleaser/v2@v2.16.0 check` passed, `actionlint`
+      passed, and full suite passed. Transcript:
+      `verification/logs/ship-suite.txt` and
+      `verification/logs/ship-static-checks.txt`.
+
+    ## Scope Contract
+
+    Verdict: pass.
+
+    Fresh `validate --json` reports `scope_contract.status=pass`, with planned and
+    changed files matching the eight workflows, three live GitHub request artifacts,
+    `cmd/release_workflow_contract_test.go`, `cmd/tool_github.go`,
+    `cmd/tool_test.go`, `internal/state/worktree.go`, and
+    `internal/state/worktree_test.go`.
+
+    ## Evidence Freshness Recheck
+
+    - Fresh `status --json` after command execution: `current_state=S3_REVIEW`,
+      `progress.run_summary_version=3`, `skills_ready` shows
+      `spec-compliance-review`, `code-quality-review`, `independent-review`, and
+      `security-review` all `pass`.
+    - Fresh `validate --json` after command execution: `evidence_freshness=fresh`,
+      `execution_evidence_freshness=fresh`, `scope_contract.status=pass`, and
+      selected review skills are the same four peers.
+    - Selected peer evidence:
+      - `spec-compliance-review.yaml`: verdict `pass`, run_version `3`, timestamp
+        `2026-06-26T17:21:16.550257Z`.
+      - `code-quality-review.yaml`: verdict `pass`, run_version `3`, timestamp
+        `2026-06-26T17:21:28.603029Z`.
+      - `independent-review.yaml`: verdict `pass`, run_version `3`, timestamp
+        `2026-06-26T17:21:38.8074Z`.
+      - `security-review.yaml`: verdict `pass`, run_version `3`, timestamp
+        `2026-06-26T17:21:46.3536Z`.
+    - Current `G_ship` blockers remain the expected terminal-record blockers:
+      `required_skill_missing`, `ship_verification_assurance_attestation_missing`,
+      `ship_verification_evidence_missing`, and
+      `ship_verification_reviewer_independence_missing`.
+    - No additional blocker was found by this evidence-gathering pass.
+
+    ## Assurance Semantic Section Check
+
+    `assurance.md` is authored and change-specific, not a template scaffold.
+
+    - `scope_summary`: authored. It names live GitHub protections, release workflow
+      validation, full-SHA pinning, API override handling, BaseRef validation, and
+      CI release config/smoke wiring.
+    - `verification_verdict`: authored. It distinguishes S2 implementation evidence
+      from remaining S3 peer and ship-verification gates.
+    - `verification_index`: authored. It enumerates live request artifacts, task
+      results `t-01` through `t-06`, wave evidence, and executed checks.
+    - `residual_risks`: authored. It names local Docker/syft limitations, live
+      GitHub external state, required `Release Config` check coupling, and ignored
+      `dist/` output.
+    - `archive_decision_rationale`: authored. It says not to archive until S3 peer
+      reviews, terminal ship-verification attestations, and active `validate --json`
+      proof are complete.
+
+    Required ship-verification attestation token for the host to record when
+    stamping evidence: `closeout:assurance_complete=pass`.
+
+    ## Reviewer Independence
+
+    Verifier handle for this evidence pass:
+    `codex-ship-verification-subagent-20260626T173357Z`.
+
+    Implementation/fix handles referenced by peer records:
+    `019f04cc-6fed-74f0-9042-f92e767e0291` and
+    `019f04e3-aa63-7ed2-a61f-467180f45be5`.
+
+    S3 peer review handles:
+    `codex-spec-compliance-review-20260627T021434JST`,
+    `codex-code-quality-review-20260626T171551Z`,
+    `codex-independent-review-20260627T0236JST`, and
+    `codex-security-review-r3-20260627`.
+
+    Verdict: pass. The verifier handle is distinct from the implementation/fix
+    handles and the S3 peer handles.
+
+    Required ship-verification attestation token for the host to record when
+    stamping evidence: `closeout:reviewer_independence=pass`.
+
+    ## Coverage Analysis
+
+    ```yaml
+    tool: "go version go1.26.4 darwin/arm64; go test coverage profile"
+    command: "go test ./cmd ./internal/state -coverprofile=artifacts/changes/harden-release-supply-chain/verification/logs/ship-coverage.out -count=1"
+    whole_codebase:
+      scope: "focused relevant packages ./cmd and ./internal/state, not whole repository"
+      statements: 12712
+      covered: 9873
+      pct: 77.7
+    change_surface:
+      scope: "changed implementation files cmd/tool_github.go and internal/state/worktree.go; workflow YAML and test files are covered by static/actionlint/Go tests, not Go statement coverage"
+      statements: 1271
+      covered: 923
+      pct: 72.6
+    uncovered:
+      - location: "internal/state/worktree.go:233-235"
+        disposition: justified-exclusion
+        reason: "existing branch-already-exists path through EnsureDefaultWorktreeForChange; not part of BaseRef hardening path"
+      - location: "internal/state/worktree.go:244-251"
+        disposition: justified-exclusion
+        reason: "git worktree add and metadata-persist failure returns; defensive I/O error paths, while invalid BaseRef pre-add paths are tested"
+      - location: "internal/state/worktree.go:261-263"
+        disposition: justified-exclusion
+        reason: "empty BaseRef default-to-HEAD branch is adjacent legacy/default behavior; current AC risk is option-like, control-character, unknown, and valid tag refs, all tested"
+      - location: "cmd/tool_github.go:376-378"
+        disposition: justified-exclusion
+        reason: "empty override value default path; default public API behavior covered through existing GitHub API tests and not the unsafe override negative path"
+      - location: "cmd/tool_github.go:380-382"
+        disposition: justified-exclusion
+        reason: "url.Parse nil/parse-failure defensive branch; unsafe URL classes with real parser outputs are tested"
+      - location: "cmd/tool_github.go:392-406"
+        disposition: justified-exclusion
+        reason: "encoded/canonical enterprise path normalization branches; public path-confusion, query, userinfo, HTTP, and unknown host failures are tested"
+      - location: "cmd/tool_github.go:424-448"
+        disposition: justified-exclusion
+        reason: "invalid allowlist entry handling; exact allowlist requirement and public path-confusion rejection are tested"
+      - location: "cmd/tool_github.go:471"
+        disposition: justified-exclusion
+        reason: "all-empty firstNonEmpty return; default value is passed by caller"
+      - location: "cmd/tool_github.go:596-624"
+        disposition: justified-exclusion
+        reason: "pagination malformed URL, scheme, userinfo, fragment, encoded-path, and parser-defensive branches; cross-host and base-path escape token-exfil paths are tested"
+      - location: "cmd/tool_github.go:690-702"
+        disposition: justified-exclusion
+        reason: "GraphQL marshal/request/network construction errors; REST/GraphQL shared backend wiring and token selection are covered by command tests"
+    delta_vs_baseline: "not measured in this subagent pass; no baseline profile was provided"
+    verdict: pass
+    ```
+
+    Gap report:
+
+    ```yaml
+    gaps: []
+    end_to_end_gaps:
+      - boundary: "GitHub Actions hosted release execution"
+        why_unit_only_is_insufficient: "Local verification uses static workflow tests, actionlint, GoReleaser check, and full Go tests. The actual tag-release path still depends on GitHub-hosted environment approvals, Docker Buildx, syft, package installers, and generated dist assets."
+        disposition: "residual risk documented in assurance.md; CI/release environment is the intended e2e executor"
+    delta_direction: "unknown"
+    ```
+
+    Coverage conclusion: pass for this ship-verification evidence pass. The changed
+    security-sensitive Go branches are covered by focused tests and the full suite;
+    workflow behavior is covered by static contract tests, actionlint, GoReleaser
+    check, and live GitHub reads rather than Go line coverage. No uncovered changed
+    line was classified as `add-test`.
+
+    ## Blockers
+
+    Evidence-gathering blockers found: none.
+
+    Lifecycle blockers still reported by `validate --json` before the host stamps
+    ship-verification evidence:
+
+    - `required_skill_missing`: `ship-verification`
+    - `ship_verification_assurance_attestation_missing`
+    - `ship_verification_evidence_missing`
+    - `ship_verification_reviewer_independence_missing`
+
+    These are expected because this subagent only collected notes/logs and did not
+    run `slipway evidence` or lifecycle advancement.

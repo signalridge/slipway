@@ -1,0 +1,85 @@
+
+## go version
+[command] go version
+go version go1.26.4 darwin/arm64
+[exit_code] 0
+
+## golangci-lint
+[command] golangci-lint run ./...
+0 issues.
+[exit_code] 0
+
+## actionlint
+[command] actionlint .github/workflows/ci.yml .github/workflows/docs.yml .github/workflows/flake-lock-update.yaml .github/workflows/nix.yaml .github/workflows/pr-title.yaml .github/workflows/release-please.yaml .github/workflows/release.yaml .github/workflows/security.yaml
+[exit_code] 0
+
+## goreleaser check
+[command] go run github.com/goreleaser/goreleaser/v2@v2.16.0 check
+  • checking                                  path=.goreleaser.yaml
+  • 1 configuration file(s) validated
+  • thanks for using GoReleaser!
+[exit_code] 0
+
+## git diff check
+[command] git diff --check -- . :!dist
+[exit_code] 0
+
+## workflow uses refs not full SHA
+[command] rg -n -P ^[[:space:]]*uses:[[:space:]]*[^#\n]+@(?![0-9a-f]{40}(\s|$|#)) .github/workflows
+[exit_code] 1
+
+## floating latest main master refs
+[command] rg -n -P @(latest|main|master)(\s|$|#) .github/workflows
+[exit_code] 1
+
+## curl or wget pipe shell
+[command] rg -n -P (curl|wget)\s+[^\n]*\|\s*(sh|bash) .github/workflows Dockerfile Dockerfile.goreleaser
+[exit_code] 1
+
+## eval usage
+[command] rg -n -P \beval\b .github/workflows Dockerfile Dockerfile.goreleaser
+[exit_code] 1
+
+## docker socket usage
+[command] rg -n -P docker\.sock|/var/run/docker\.sock .github/workflows Dockerfile Dockerfile.goreleaser
+[exit_code] 1
+
+## privileged containers
+[command] rg -n -P --privileged .github/workflows Dockerfile Dockerfile.goreleaser
+rg: unrecognized flag --privileged
+[exit_code] 2
+
+## floating workflow container image defaults
+[command] rg -n -P ^[[:space:]]*container:[[:space:]]*[^@\s]+:(latest|[0-9]+)(\s|$|#) .github/workflows
+[exit_code] 1
+
+[no-match policy] For the rg scans above, exit_code 1 means no matches and is pass evidence.
+
+## privileged containers corrected
+[command] rg -n -P -- --privileged .github/workflows Dockerfile Dockerfile.goreleaser
+[exit_code] 1
+
+## live main protected
+[command] gh api repos/signalridge/slipway/branches/main --jq .protected
+true
+[exit_code] 0
+
+## live main ruleset
+[command] gh api repos/signalridge/slipway/rulesets/18174607 --jq {id,name,target,enforcement,conditions,rules:[.rules[].type]}
+{"conditions":{"ref_name":{"exclude":[],"include":["~DEFAULT_BRANCH"]}},"enforcement":"active","id":18174607,"name":"protect main required checks","rules":["deletion","non_fast_forward","pull_request","required_status_checks"],"target":"branch"}
+[exit_code] 0
+
+## live release tag ruleset
+[command] gh api repos/signalridge/slipway/rulesets/18174614 --jq {id,name,target,enforcement,conditions,rules:[.rules[].type]}
+{"conditions":{"ref_name":{"exclude":[],"include":["refs/tags/v*"]}},"enforcement":"active","id":18174614,"name":"protect release tags","rules":["creation","update","deletion","non_fast_forward"],"target":"tag"}
+[exit_code] 0
+
+## live release environment
+[command] gh api repos/signalridge/slipway/environments/release-publish --jq {name,protection_rules}
+{"name":"release-publish","protection_rules":[{"id":58421579,"node_id":"GA_kwDORdQdQM4De3FL","prevent_self_review":false,"reviewers":[{"reviewer":{"avatar_url":"https://avatars.githubusercontent.com/u/52877870?v=4","events_url":"https://api.github.com/users/signalridge/events{/privacy}","followers_url":"https://api.github.com/users/signalridge/followers","following_url":"https://api.github.com/users/signalridge/following{/other_user}","gists_url":"https://api.github.com/users/signalridge/gists{/gist_id}","gravatar_id":"","html_url":"https://github.com/signalridge","id":52877870,"login":"signalridge","node_id":"MDQ6VXNlcjUyODc3ODcw","organizations_url":"https://api.github.com/users/signalridge/orgs","received_events_url":"https://api.github.com/users/signalridge/received_events","repos_url":"https://api.github.com/users/signalridge/repos","site_admin":false,"starred_url":"https://api.github.com/users/signalridge/starred{/owner}{/repo}","subscriptions_url":"https://api.github.com/users/signalridge/subscriptions","type":"User","url":"https://api.github.com/users/signalridge","user_view_type":"public"},"type":"User"}],"type":"required_reviewers"}]}
+[exit_code] 0
+
+## live main required status check contexts
+[command] gh api repos/signalridge/slipway/rulesets/18174607 --jq ...required_status_checks...
+[{"context":"Build"},{"context":"Cross Compile (darwin, amd64)"},{"context":"Cross Compile (darwin, arm64)"},{"context":"Cross Compile (linux, amd64)"},{"context":"Cross Compile (linux, arm64)"},{"context":"Cross Compile (windows, amd64)"},{"context":"Go Vulnerability Check"},{"context":"Gosec SAST"},{"context":"Kernel Coverage Gate"},{"context":"License Compliance"},{"context":"Lint Actions"},{"context":"Lint Go"},{"context":"Lint Markdown"},{"context":"Lint YAML"},{"context":"Race Tests"},{"context":"Release Config"},{"context":"Test (macos-latest)"},{"context":"Test (ubuntu-latest)"},{"context":"Test (windows-latest)"},{"context":"Trivy Filesystem Scan"},{"context":"Validate PR Title"}]
+[exit_code] 0

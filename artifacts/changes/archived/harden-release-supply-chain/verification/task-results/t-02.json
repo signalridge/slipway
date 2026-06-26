@@ -1,0 +1,13 @@
+{
+  "task_id": "t-02",
+  "verdict": "pass",
+  "evidence_ref": "artifacts/changes/harden-release-supply-chain/verification/task-results/t-02.json",
+  "changed_files": [
+    ".github/workflows/release.yaml",
+    ".github/workflows/ci.yml",
+    "cmd/release_workflow_contract_test.go"
+  ],
+  "blockers": [],
+  "test_summary": "Static and executable checks confirmed release tag validation runs in validate-tag before secret-bearing jobs, rejects control-character and multiline output-injection inputs before writing GITHUB_OUTPUT, validates the whole Bash scalar without line-oriented grep, keeps top-level permissions at contents: read, uses environment release-publish and validated tag outputs, confines GH_PAT/AUR_SSH_PRIVATE_KEY to the release job, keeps smoke inputs generated from dist/, and keeps CI Release Config in the build flow. Passed after S3 repair: go test ./cmd -run 'TestReleaseWorkflow|TestGitHubAPIOverride|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1; actionlint .github/workflows/release.yaml; go run github.com/goreleaser/goreleaser/v2@v2.16.0 check.",
+  "notes": "Codebase map relevance self-check: not relied on because tasks.md, requirements.md, release.yaml, ci.yml, and release_workflow_contract_test.go directly covered the verification criteria. S3 repair batch s3-review-repair:harden-release-supply-chain closed the release tag multiline/output-injection blocker by switching to control-character rejection plus Bash scalar regex validation before output writes."
+}

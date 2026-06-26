@@ -1,0 +1,68 @@
+version: 1
+generated_at: 2026-06-26T17:09:06.375985Z
+run_summary_version: 3
+tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+tasks_plan_structural_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+tasks_plan_scope_hash: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+tasks_plan_semantic_hash: 59ca9fd189c602b3a0cb56b0a1b81d1d3252b364b4a5cf3de8b7ed2f17fc0b30
+effective_structural_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+total_tasks: 6
+waves:
+    - wave_index: 1
+      parallel: true
+      tasks:
+        - task_id: t-01
+          objective: Apply and verify live GitHub repository protections.
+          target_files:
+            - artifacts/changes/harden-release-supply-chain/verification/main-branch-ruleset-request.json
+            - artifacts/changes/harden-release-supply-chain/verification/release-environment-request.json
+            - artifacts/changes/harden-release-supply-chain/verification/release-tag-ruleset-request.json
+          task_kind: code
+        - task_id: t-03
+          objective: Pin workflow actions and security tool versions.
+          target_files:
+            - .github/workflows/ci.yml
+            - .github/workflows/docs.yml
+            - .github/workflows/flake-lock-update.yaml
+            - .github/workflows/nix.yaml
+            - .github/workflows/pr-title.yaml
+            - .github/workflows/release-please.yaml
+            - .github/workflows/release.yaml
+            - .github/workflows/security.yaml
+          task_kind: code
+        - task_id: t-04
+          objective: Implement GitHub API override token safety.
+          target_files:
+            - cmd/tool_github.go
+            - cmd/tool_test.go
+          task_kind: code
+        - task_id: t-05
+          objective: Validate `BaseRef` before governed worktree creation.
+          target_files:
+            - internal/state/worktree.go
+            - internal/state/worktree_test.go
+          task_kind: code
+    - wave_index: 2
+      tasks:
+        - task_id: t-02
+          objective: Harden release workflow validation, permissions, and smoke.
+          depends_on:
+            - t-01
+          target_files:
+            - .github/workflows/ci.yml
+            - .github/workflows/release.yaml
+            - cmd/release_workflow_contract_test.go
+          task_kind: code
+    - wave_index: 3
+      tasks:
+        - task_id: t-06
+          objective: Add S2 release workflow contract verification.
+          depends_on:
+            - t-01
+            - t-02
+            - t-03
+            - t-04
+            - t-05
+          target_files:
+            - cmd/release_workflow_contract_test.go
+          task_kind: test

@@ -1,0 +1,622 @@
+# Planned target stub/placeholder scan
+Planned targets scanned: 16
+
+## stub markers
+[command] rg -n -P TODO|FIXME|HACK|XXX|PLACEHOLDER|NotImplemented|not implemented <planned-target-files>
+cmd/tool_test.go:137:	assert.Contains(t, stdout, "TODO(source)")
+cmd/tool_test.go:138:	assert.Contains(t, stdout, "TODO(sink)")
+cmd/tool_test.go:139:	assert.Contains(t, stdout, "TODO(sanitizer)")
+[exit_code] 0
+
+## unimplemented panics
+[command] rg -n -P panic\([^)]*(implement|todo|TODO|FIXME) <planned-target-files>
+[exit_code] 1
+
+## nil nil returns
+[command] rg -n -P return[[:space:]]+nil,[[:space:]]+nil <planned-target-files>
+internal/state/worktree.go:397:	return nil, nil
+cmd/tool_github.go:866:		return nil, nil, err
+cmd/tool_github.go:1188:		return nil, nil, err
+[exit_code] 0
+
+## zero-value-only returns
+[command] rg -n -P ^[[:space:]]*return[[:space:]]+(\"\"|0|false)[[:space:]]*$ <planned-target-files>
+internal/state/worktree_test.go:21:	return false
+internal/state/worktree_test.go:30:	return false
+internal/state/worktree.go:105:		return false
+internal/state/worktree.go:109:		return false
+internal/state/worktree.go:113:		return false
+internal/state/worktree.go:117:		return false
+internal/state/worktree.go:121:		return false
+internal/state/worktree.go:279:		return false
+internal/state/worktree.go:772:		return false
+cmd/release_workflow_contract_test.go:287:		return ""
+cmd/tool_github.go:308:	return false
+cmd/tool_github.go:425:		return false
+cmd/tool_github.go:432:	return false
+cmd/tool_github.go:471:	return ""
+cmd/tool_github.go:667:		return ""
+cmd/tool_github.go:684:	return ""
+cmd/tool_github.go:1014:	return false
+cmd/tool_github.go:1044:		return ""
+cmd/tool_github.go:1049:	return ""
+cmd/tool_github.go:1054:		return false
+cmd/tool_github.go:1059:	return false
+cmd/tool_github.go:1293:		return 0
+cmd/tool_github.go:1338:	return false
+cmd/tool_github.go:1359:	return ""
+cmd/tool_github.go:1813:			return 0
+cmd/tool_github.go:1969:		return false
+[exit_code] 0
+
+## empty braces same-line
+[command] rg -n -P \{[[:space:]]*\} <planned-target-files>
+internal/state/worktree_test.go:95:	require.NoError(t, os.WriteFile(filepath.Join(scopeRoot, ".slipway.yaml"), []byte("{}"), 0o644))
+internal/state/worktree.go:53:	entries: map[string]worktreeListCacheEntry{},
+internal/state/worktree.go:163:		return DefaultWorktreeBinding{}, fmt.Errorf("change is required")
+internal/state/worktree.go:178:			return DefaultWorktreeBinding{}, cfgErr
+internal/state/worktree.go:192:		return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:202:		return DefaultWorktreeBinding{}, fmt.Errorf("normalize default worktree path: %w", err)
+internal/state/worktree.go:207:		return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:211:			return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:215:			return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:218:			return DefaultWorktreeBinding{}, fmt.Errorf("default worktree validation failed: %s", strings.Join(model.ReasonSpecs(validation.Blockers), ", "))
+internal/state/worktree.go:224:		return DefaultWorktreeBinding{}, fmt.Errorf("default worktree path exists and is not empty: %s", normalizedPath)
+internal/state/worktree.go:226:		return DefaultWorktreeBinding{}, readErr
+internal/state/worktree.go:229:		return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:238:			return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:245:		return DefaultWorktreeBinding{}, fmt.Errorf("git worktree add failed: %w (%s)", err, strings.TrimSpace(string(out)))
+internal/state/worktree.go:250:		return DefaultWorktreeBinding{}, err
+internal/state/worktree.go:291:	result := model.WorktreeValidationResult{}
+internal/state/worktree.go:321:		return model.WorktreeValidationResult{}, err
+internal/state/worktree.go:328:	reasons := []string{}
+internal/state/worktree.go:495:func listGitWorktrees(repoRoot string) (map[string]struct{}, error) {
+internal/state/worktree.go:503:func worktreeRecordPathSet(records []gitWorktreeRecord) (map[string]struct{}, error) {
+internal/state/worktree.go:504:	set := make(map[string]struct{}, len(records))
+internal/state/worktree.go:510:		set[normalized] = struct{}{}
+internal/state/worktree.go:595:		return SlugWorktreeMatch{}, false, nil
+internal/state/worktree.go:600:			return SlugWorktreeMatch{}, false, nil
+internal/state/worktree.go:602:		return SlugWorktreeMatch{}, false, err
+internal/state/worktree.go:606:		return SlugWorktreeMatch{}, false, err
+internal/state/worktree.go:661:	return SlugWorktreeMatch{}, false, nil
+cmd/tool_test.go:952:	}{}
+cmd/tool_github.go:322:		return githubHTTPClient{}, err
+cmd/tool_github.go:340:		return githubAPIConfig{}, err
+cmd/tool_github.go:344:		return githubAPIConfig{}, newPreconditionError(
+cmd/tool_github.go:355:			return githubAPIConfig{}, newPreconditionError(
+cmd/tool_github.go:363:		return githubAPIConfig{}, newPreconditionError(
+cmd/tool_github.go:1492:		"high":     {},
+cmd/tool_github.go:1493:		"medium":   {},
+cmd/tool_github.go:1494:		"low":      {},
+cmd/tool_github.go:1495:		"bot":      {},
+cmd/tool_github.go:1496:		"resolved": {},
+cmd/tool_github.go:1659:			return pullReviewContext{}, err
+cmd/tool_github.go:1663:			return pullReviewContext{}, err
+cmd/release_workflow_contract_test.go:246:func workflowStringSet(raw any) map[string]struct{} {
+cmd/release_workflow_contract_test.go:247:	out := map[string]struct{}{}
+cmd/release_workflow_contract_test.go:250:		out[v] = struct{}{}
+cmd/release_workflow_contract_test.go:254:				out[s] = struct{}{}
+[exit_code] 0
+
+## commented-out code candidates
+[command] rg -n -P ^[[:space:]]*//[[:space:]]*(func|if|for|return|go |git |uses:|run:|[A-Za-z0-9_]+ :=) <planned-target-files>
+cmd/tool_github.go:240:// returns a concrete value (never a nil interface) even on error, so the
+[exit_code] 0
+
+## test bodies and assertions
+[command] rg -n -P func Test|t\.(Fatal|Fatalf|Error|Errorf|Fail|FailNow)|require\.|assert\.|cmp\.|reflect\.DeepEqual <planned-target-files>
+internal/state/worktree_test.go:33:func TestPersistScopeWorktreeMetadata(t *testing.T) {
+internal/state/worktree_test.go:36:	require.NoError(t, PersistScopeWorktreeMetadata(&change, "/tmp/repo", "main"))
+internal/state/worktree_test.go:38:	require.NoError(t, err)
+internal/state/worktree_test.go:39:	assert.Equal(t, normalizedPath, change.WorktreePath)
+internal/state/worktree_test.go:40:	assert.Equal(t, "main", change.WorktreeBranch)
+internal/state/worktree_test.go:43:func TestValidateWorktreeAuthenticity(t *testing.T) {
+internal/state/worktree_test.go:48:	require.NoError(t, err)
+internal/state/worktree_test.go:49:	assert.Empty(t, reasons)
+internal/state/worktree_test.go:52:func TestValidateWorktreeAuthenticityMissingPath(t *testing.T) {
+internal/state/worktree_test.go:57:	require.NoError(t, reasonErr)
+internal/state/worktree_test.go:58:	assert.Contains(t, reasons, WorktreeReasonPathInvalid)
+internal/state/worktree_test.go:61:func TestValidateWorktreeAuthenticityNonWorktreePath(t *testing.T) {
+internal/state/worktree_test.go:67:	require.NoError(t, err)
+internal/state/worktree_test.go:68:	assert.Contains(t, reasons, WorktreeReasonPathInvalid)
+internal/state/worktree_test.go:71:func TestValidateWorktreeAuthenticityBranchMismatch(t *testing.T) {
+internal/state/worktree_test.go:76:	require.NoError(t, reasonErr)
+internal/state/worktree_test.go:77:	assert.Contains(t, reasons, WorktreeReasonBranchMismatch)
+internal/state/worktree_test.go:80:func TestValidateWorktreeAuthenticityMetadataMissing(t *testing.T) {
+internal/state/worktree_test.go:85:	require.NoError(t, err)
+internal/state/worktree_test.go:86:	assert.Equal(t, []string{WorktreeReasonMetadataRequired}, reasons)
+internal/state/worktree_test.go:89:func TestValidateDedicatedWorktreeAuthenticityReasonsRejectsMainWorktreeForNestedScope(t *testing.T) {
+internal/state/worktree_test.go:94:	require.NoError(t, os.MkdirAll(scopeRoot, 0o755))
+internal/state/worktree_test.go:95:	require.NoError(t, os.WriteFile(filepath.Join(scopeRoot, ".slipway.yaml"), []byte("{}"), 0o644))
+internal/state/worktree_test.go:98:	require.NoError(t, err)
+internal/state/worktree_test.go:99:	assert.True(t, hasReasonCode(reasons, WorktreeReasonDedicatedRequired))
+internal/state/worktree_test.go:102:func TestListGitWorktreesCachedWithListerReusesCacheUntilProbeChanges(t *testing.T) {
+internal/state/worktree_test.go:118:	require.NoError(t, err)
+internal/state/worktree_test.go:119:	require.True(t, recordsContainPath(first, worktreeA))
+internal/state/worktree_test.go:122:	require.NoError(t, err)
+internal/state/worktree_test.go:123:	require.True(t, recordsContainPath(second, worktreeA))
+internal/state/worktree_test.go:124:	assert.Equal(t, 1, calls, "unchanged worktree probe should reuse cached listing")
+internal/state/worktree_test.go:128:	require.NoError(t, os.Chtimes(worktreesDir, later, later))
+internal/state/worktree_test.go:131:	require.NoError(t, err)
+internal/state/worktree_test.go:132:	require.True(t, recordsContainPath(third, worktreeB))
+internal/state/worktree_test.go:133:	assert.Equal(t, 2, calls, "worktree probe changes must invalidate the cache")
+internal/state/worktree_test.go:136:func TestListGitWorktreesCachedWithListerInvalidatesWhenEntryFingerprintChanges(t *testing.T) {
+internal/state/worktree_test.go:142:	require.NoError(t, os.MkdirAll(initialEntry, 0o755))
+internal/state/worktree_test.go:154:	require.NoError(t, os.Chtimes(worktreesDir, fixed, fixed))
+internal/state/worktree_test.go:157:	require.NoError(t, err)
+internal/state/worktree_test.go:158:	require.True(t, recordsContainPath(first, worktreeA))
+internal/state/worktree_test.go:159:	assert.Equal(t, 1, calls)
+internal/state/worktree_test.go:161:	require.NoError(t, os.RemoveAll(initialEntry))
+internal/state/worktree_test.go:162:	require.NoError(t, os.MkdirAll(filepath.Join(worktreesDir, "entry-b"), 0o755))
+internal/state/worktree_test.go:163:	require.NoError(t, os.Chtimes(worktreesDir, fixed, fixed))
+internal/state/worktree_test.go:168:	require.NoError(t, err)
+internal/state/worktree_test.go:169:	require.True(t, recordsContainPath(second, worktreeB))
+internal/state/worktree_test.go:170:	assert.False(t, recordsContainPath(second, worktreeA))
+internal/state/worktree_test.go:171:	assert.Equal(t, 2, calls, "entry-name changes must invalidate the cache even when directory modtime is restored")
+internal/state/worktree_test.go:174:func TestListGitWorktreesCachedWithListerDoesNotCacheStaleResultWhenProbeChangesDuringList(t *testing.T) {
+internal/state/worktree_test.go:180:	require.NoError(t, os.MkdirAll(initialEntry, 0o755))
+internal/state/worktree_test.go:188:			require.NoError(t, os.RemoveAll(initialEntry))
+internal/state/worktree_test.go:189:			require.NoError(t, os.MkdirAll(filepath.Join(worktreesDir, "entry-b"), 0o755))
+internal/state/worktree_test.go:196:	require.NoError(t, err)
+internal/state/worktree_test.go:197:	require.True(t, recordsContainPath(first, worktreeA))
+internal/state/worktree_test.go:200:	require.NoError(t, err)
+internal/state/worktree_test.go:201:	require.True(t, recordsContainPath(second, worktreeB))
+internal/state/worktree_test.go:202:	assert.False(t, recordsContainPath(second, worktreeA))
+internal/state/worktree_test.go:203:	assert.Equal(t, 2, calls, "probe changes during listing must prevent caching stale worktree sets")
+internal/state/worktree_test.go:206:func TestReconcileWorktreeBranchBindingRealignsBranchMismatch(t *testing.T) {
+internal/state/worktree_test.go:215:	require.NoError(t, err)
+internal/state/worktree_test.go:216:	assert.True(t, reconciled, "a pure branch mismatch on a dedicated worktree must reconcile")
+internal/state/worktree_test.go:217:	assert.Equal(t, "feature", change.WorktreeBranch, "recorded branch realigned to the worktree's actual branch")
+internal/state/worktree_test.go:221:	require.NoError(t, err)
+internal/state/worktree_test.go:222:	assert.False(t, reconciledAgain)
+internal/state/worktree_test.go:225:func TestReconcileWorktreeBranchBindingLeavesNonBranchMismatchAlone(t *testing.T) {
+internal/state/worktree_test.go:235:	require.NoError(t, err)
+internal/state/worktree_test.go:236:	assert.False(t, reconciled)
+internal/state/worktree_test.go:237:	assert.Equal(t, "feature", change.WorktreeBranch)
+internal/state/worktree_test.go:248:	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("hello"), 0o644))
+internal/state/worktree_test.go:249:	require.NoError(t, os.WriteFile(filepath.Join(repoRoot, ".slipway.yaml"), []byte("defaults:\n  artifact_schema: expanded\n"), 0o644))
+internal/state/worktree_test.go:263:	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
+internal/state/worktree_test.go:271:	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("hello"), 0o644))
+internal/state/worktree_test.go:276:func TestEnsureDefaultWorktreeForChange_ProvisionsNonDiscoveryByDefault(t *testing.T) {
+internal/state/worktree_test.go:286:	require.NoError(t, err)
+internal/state/worktree_test.go:287:	assert.True(t, binding.Created, "non-discovery change should provision a worktree by default")
+internal/state/worktree_test.go:288:	assert.Empty(t, binding.SkippedReason)
+internal/state/worktree_test.go:289:	assert.Equal(t, "feat/my-change", binding.Branch)
+internal/state/worktree_test.go:290:	assert.Contains(t, filepath.ToSlash(binding.Path), ".worktrees/my-change")
+internal/state/worktree_test.go:291:	assert.NotEmpty(t, change.WorktreePath, "binding metadata must be persisted on the change")
+internal/state/worktree_test.go:294:func TestEnsureDefaultWorktreeForChangeRejectsOptionLikeBaseRef(t *testing.T) {
+internal/state/worktree_test.go:302:	require.Error(t, err)
+internal/state/worktree_test.go:303:	assert.Contains(t, err.Error(), "invalid base_ref")
+internal/state/worktree_test.go:304:	assert.Contains(t, err.Error(), "must not start with '-'")
+internal/state/worktree_test.go:305:	assert.NotContains(t, err.Error(), "git worktree add failed")
+internal/state/worktree_test.go:306:	assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+internal/state/worktree_test.go:309:func TestEnsureDefaultWorktreeForChangeRejectsInvalidBaseRefControlChars(t *testing.T) {
+internal/state/worktree_test.go:326:			require.Error(t, err)
+internal/state/worktree_test.go:327:			assert.Contains(t, err.Error(), "invalid base_ref")
+internal/state/worktree_test.go:328:			assert.Contains(t, err.Error(), "value must be a single git ref")
+internal/state/worktree_test.go:329:			assert.NotContains(t, err.Error(), "git worktree add failed")
+internal/state/worktree_test.go:330:			assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+internal/state/worktree_test.go:335:func TestEnsureDefaultWorktreeForChangeRejectsUnknownBaseRefBeforeWorktreeAdd(t *testing.T) {
+internal/state/worktree_test.go:343:	require.Error(t, err)
+internal/state/worktree_test.go:344:	assert.Contains(t, err.Error(), "invalid base_ref")
+internal/state/worktree_test.go:345:	assert.Contains(t, err.Error(), "repair the change authority")
+internal/state/worktree_test.go:346:	assert.NotContains(t, err.Error(), "git worktree add failed")
+internal/state/worktree_test.go:347:	assert.NoDirExists(t, filepath.Join(root, ".worktrees", "my-change"))
+internal/state/worktree_test.go:350:func TestEnsureDefaultWorktreeForChangeAcceptsTagBaseRef(t *testing.T) {
+internal/state/worktree_test.go:359:	require.NoError(t, err)
+internal/state/worktree_test.go:360:	assert.True(t, binding.Created)
+internal/state/worktree_test.go:361:	assert.Contains(t, filepath.ToSlash(binding.Path), ".worktrees/my-change")
+internal/state/worktree_test.go:364:func TestEnsureDefaultWorktreeForChange_DisabledByConfig(t *testing.T) {
+internal/state/worktree_test.go:367:	require.NoError(t, os.WriteFile(filepath.Join(root, ".slipway.yaml"),
+internal/state/worktree_test.go:372:	require.NoError(t, err)
+internal/state/worktree_test.go:373:	assert.False(t, binding.Created)
+internal/state/worktree_test.go:374:	assert.Equal(t, "worktree_provisioning_disabled", binding.SkippedReason)
+internal/state/worktree_test.go:375:	assert.Empty(t, change.WorktreePath)
+internal/state/worktree_test.go:378:func TestEnsureDefaultWorktreeForChange_SkipsNonGitRepo(t *testing.T) {
+internal/state/worktree_test.go:383:	require.NoError(t, err)
+internal/state/worktree_test.go:384:	assert.Equal(t, "not_git_repository", binding.SkippedReason)
+internal/state/worktree_test.go:385:	assert.False(t, binding.Created)
+cmd/release_workflow_contract_test.go:16:func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
+cmd/release_workflow_contract_test.go:21:	assert.Equal(t, "ubuntu-latest", workflowString(t, validateJob, "runs-on"))
+cmd/release_workflow_contract_test.go:22:	assert.Equal(t, "read", workflowString(t, workflowMap(t, validateJob, "permissions"), "contents"))
+cmd/release_workflow_contract_test.go:26:	assert.Contains(t, validateRun, "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$")
+cmd/release_workflow_contract_test.go:27:	assert.Contains(t, validateRun, "[[:cntrl:]]")
+cmd/release_workflow_contract_test.go:28:	assert.NotContains(t, validateRun, "grep")
+cmd/release_workflow_contract_test.go:29:	assert.Contains(t, validateRun, "printf 'tag_name=%s\\n'")
+cmd/release_workflow_contract_test.go:30:	assert.Contains(t, validateRun, ">> \"$GITHUB_OUTPUT\"")
+cmd/release_workflow_contract_test.go:34:	assert.Equal(t, "read", workflowString(t, workflowMap(t, testJob, "permissions"), "contents"))
+cmd/release_workflow_contract_test.go:35:	assert.Equal(
+cmd/release_workflow_contract_test.go:45:	assert.Equal(t, "release-publish", workflowString(t, releaseJob, "environment"))
+cmd/release_workflow_contract_test.go:47:	assert.Equal(t, "write", workflowString(t, releasePerms, "contents"))
+cmd/release_workflow_contract_test.go:48:	assert.Equal(t, "write", workflowString(t, releasePerms, "packages"))
+cmd/release_workflow_contract_test.go:49:	assert.Equal(t, "write", workflowString(t, releasePerms, "id-token"))
+cmd/release_workflow_contract_test.go:50:	assert.Equal(t, "write", workflowString(t, releasePerms, "attestations"))
+cmd/release_workflow_contract_test.go:51:	assert.Equal(
+cmd/release_workflow_contract_test.go:56:	assert.Contains(t, workflowString(t, workflowMap(t, releaseJob, "outputs"), "tag_name"), "needs.validate-tag.outputs.tag_name")
+cmd/release_workflow_contract_test.go:68:func TestReleaseWorkflowRejectsOutputInjectionTags(t *testing.T) {
+cmd/release_workflow_contract_test.go:73:	require.NoError(t, err, stderr)
+cmd/release_workflow_contract_test.go:74:	assert.Equal(t, "tag_name=v1.2.3\n", output)
+cmd/release_workflow_contract_test.go:88:			require.Error(t, err, stderr)
+cmd/release_workflow_contract_test.go:89:			assert.Empty(t, output, "invalid tags must fail before writing GITHUB_OUTPUT")
+cmd/release_workflow_contract_test.go:94:func TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest(t *testing.T) {
+cmd/release_workflow_contract_test.go:101:		assert.Contains(t, workflowString(t, outputs, output), "steps.smoke.outputs."+output)
+cmd/release_workflow_contract_test.go:105:	assert.Contains(t, smokeRun, "cd dist")
+cmd/release_workflow_contract_test.go:106:	assert.Contains(t, smokeRun, "find . -maxdepth 1 -type f")
+cmd/release_workflow_contract_test.go:107:	assert.Contains(t, smokeRun, "binary_matrix=")
+cmd/release_workflow_contract_test.go:108:	assert.Contains(t, smokeRun, "deb_asset=")
+cmd/release_workflow_contract_test.go:109:	assert.Contains(t, smokeRun, "rpm_asset=")
+cmd/release_workflow_contract_test.go:110:	assert.Contains(t, smokeRun, "apk_asset=")
+cmd/release_workflow_contract_test.go:112:	assert.Equal(
+cmd/release_workflow_contract_test.go:117:	assert.Equal(
+cmd/release_workflow_contract_test.go:122:	assert.Equal(
+cmd/release_workflow_contract_test.go:131:	assert.Equal(t, "${{ fromJSON(needs.release.outputs.binary_matrix) }}", workflowString(t, matrix, "include"))
+cmd/release_workflow_contract_test.go:138:	require.NoError(t, err)
+cmd/release_workflow_contract_test.go:140:	require.NoError(t, yaml.Unmarshal(raw, &out))
+cmd/release_workflow_contract_test.go:147:	require.NoError(t, err)
+cmd/release_workflow_contract_test.go:153:		require.NotEqual(t, dir, parent, "could not find repo root from %s", dir)
+cmd/release_workflow_contract_test.go:161:	require.Truef(t, ok, "expected map for %q, got %T", key, raw)
+cmd/release_workflow_contract_test.go:163:	require.Truef(t, ok, "missing key %q", key)
+cmd/release_workflow_contract_test.go:165:	require.Truef(t, ok, "expected map at %q, got %T", key, value)
+cmd/release_workflow_contract_test.go:181:		require.NoError(t, readErr)
+cmd/release_workflow_contract_test.go:189:	require.Truef(t, ok, "expected map for %q, got %T", key, raw)
+cmd/release_workflow_contract_test.go:191:	require.Truef(t, ok, "missing key %q", key)
+cmd/release_workflow_contract_test.go:193:	require.Truef(t, ok, "expected string at %q, got %T", key, value)
+cmd/release_workflow_contract_test.go:201:	require.Truef(t, ok, "step %q has no run body", name)
+cmd/release_workflow_contract_test.go:208:	require.True(t, ok, "job has no steps")
+cmd/release_workflow_contract_test.go:211:		require.Truef(t, ok, "expected step map, got %T", rawStep)
+cmd/release_workflow_contract_test.go:217:	t.Fatalf("missing step with uses prefix %q", usesPrefix)
+cmd/release_workflow_contract_test.go:224:	require.True(t, ok, "job has no steps")
+cmd/release_workflow_contract_test.go:227:		require.Truef(t, ok, "expected step map, got %T", rawStep)
+cmd/release_workflow_contract_test.go:232:	t.Fatalf("missing step %q", name)
+cmd/release_workflow_contract_test.go:239:	require.True(t, ok, "job has no needs")
+cmd/release_workflow_contract_test.go:242:		assert.Contains(t, got, need)
+cmd/release_workflow_contract_test.go:263:	assert.NotContains(t, workflowScalarDump(raw), needle, msg)
+cmd/tool_test.go:20:func TestToolMergeSARIFDeterministicAndSeparatedByTool(t *testing.T) {
+cmd/tool_test.go:22:	require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{
+cmd/tool_test.go:26:	require.NoError(t, os.WriteFile(filepath.Join(raw, "b.sarif"), []byte(`{
+cmd/tool_test.go:33:	require.NoError(t, err, stderr)
+cmd/tool_test.go:34:	assert.Contains(t, stdout, "Merged 2 SARIF file(s)")
+cmd/tool_test.go:37:	require.NoError(t, err)
+cmd/tool_test.go:39:	require.NoError(t, err, stderr)
+cmd/tool_test.go:41:	require.NoError(t, err)
+cmd/tool_test.go:42:	assert.Equal(t, string(first), string(second))
+cmd/tool_test.go:53:	require.NoError(t, json.Unmarshal(first, &merged))
+cmd/tool_test.go:54:	require.Len(t, merged.Runs, 2)
+cmd/tool_test.go:55:	assert.Equal(t, "CodeQL", merged.Runs[0].Tool.Driver.Name)
+cmd/tool_test.go:56:	assert.Equal(t, "semgrep", merged.Runs[1].Tool.Driver.Name)
+cmd/tool_test.go:59:func TestToolMergeSARIFRejectsUnsupportedVersion(t *testing.T) {
+cmd/tool_test.go:61:	require.NoError(t, os.WriteFile(filepath.Join(raw, "old.sarif"), []byte(`{"version":"2.0.0","runs":[]}`), 0o644))
+cmd/tool_test.go:65:	require.Error(t, err)
+cmd/tool_test.go:66:	assert.Contains(t, stderr, "merge_sarif_version_unsupported")
+cmd/tool_test.go:69:func TestToolPinActionsNoPartialWriteOnUnresolved(t *testing.T) {
+cmd/tool_test.go:72:	require.NoError(t, os.WriteFile(mapping, []byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
+cmd/tool_test.go:76:	require.NoError(t, os.WriteFile(workflow, []byte(original), 0o644))
+cmd/tool_test.go:79:	require.Error(t, err)
+cmd/tool_test.go:80:	assert.Contains(t, stderr, "pin_actions_unresolved")
+cmd/tool_test.go:83:	require.NoError(t, readErr)
+cmd/tool_test.go:84:	assert.Equal(t, original, string(after))
+cmd/tool_test.go:87:func TestToolPinActionsBatchNoPartialWriteOnLaterUnresolved(t *testing.T) {
+cmd/tool_test.go:90:	require.NoError(t, os.WriteFile(mapping, []byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
+cmd/tool_test.go:94:	require.NoError(t, os.WriteFile(first, []byte(firstOriginal), 0o644))
+cmd/tool_test.go:97:	require.NoError(t, os.WriteFile(second, []byte(secondOriginal), 0o644))
+cmd/tool_test.go:100:	require.Error(t, err)
+cmd/tool_test.go:101:	assert.Contains(t, stderr, "pin_actions_unresolved")
+cmd/tool_test.go:104:	require.NoError(t, readErr)
+cmd/tool_test.go:105:	assert.Equal(t, firstOriginal, string(afterFirst))
+cmd/tool_test.go:107:	require.NoError(t, readErr)
+cmd/tool_test.go:108:	assert.Equal(t, secondOriginal, string(afterSecond))
+cmd/tool_test.go:111:func TestToolPinActionsUnreadableWorkflowFailsBeforeWrites(t *testing.T) {
+cmd/tool_test.go:114:	require.NoError(t, os.WriteFile(mapping, []byte("actions/checkout@v4\tb4ffde65f46336ab88eb53be808477a3936bae11\n"), 0o644))
+cmd/tool_test.go:118:	require.NoError(t, os.WriteFile(workflow, []byte(original), 0o644))
+cmd/tool_test.go:120:	require.NoError(t, os.Mkdir(notAFile, 0o755))
+cmd/tool_test.go:123:	require.Error(t, err)
+cmd/tool_test.go:124:	assert.Contains(t, stderr, "pin_actions_workflow_unreadable")
+cmd/tool_test.go:127:	require.NoError(t, readErr)
+cmd/tool_test.go:128:	assert.Equal(t, original, string(after))
+cmd/tool_test.go:131:func TestToolFindVariantScaffoldsSemgrepGo(t *testing.T) {
+cmd/tool_test.go:133:	require.NoError(t, err, stderr)
+cmd/tool_test.go:134:	assert.Contains(t, stdout, "id: variant-taint-go")
+cmd/tool_test.go:135:	assert.Contains(t, stdout, "mode: taint")
+cmd/tool_test.go:136:	assert.Contains(t, stdout, "languages: [go]")
+cmd/tool_test.go:137:	assert.Contains(t, stdout, "TODO(source)")
+cmd/tool_test.go:138:	assert.Contains(t, stdout, "TODO(sink)")
+cmd/tool_test.go:139:	assert.Contains(t, stdout, "TODO(sanitizer)")
+cmd/tool_test.go:142:func TestToolFindVariantValidatesInputsAndScaffoldsCodeQLPython(t *testing.T) {
+cmd/tool_test.go:173:				require.Error(t, err)
+cmd/tool_test.go:174:				assert.Contains(t, stderr, tt.wantErr)
+cmd/tool_test.go:177:			require.NoError(t, err, stderr)
+cmd/tool_test.go:179:				assert.Contains(t, stdout, want)
+cmd/tool_test.go:185:func TestToolFindPolluterGoMissingGo(t *testing.T) {
+cmd/tool_test.go:189:	require.Error(t, err)
+cmd/tool_test.go:190:	assert.Contains(t, stderr, "find_polluter_go_missing_go")
+cmd/tool_test.go:193:func TestToolFindPolluterGoRejectsExistingPollutionPath(t *testing.T) {
+cmd/tool_test.go:195:	require.NoError(t, os.WriteFile(pollutionPath, []byte("already here"), 0o644))
+cmd/tool_test.go:198:	require.Error(t, err)
+cmd/tool_test.go:201:	require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
+cmd/tool_test.go:202:	assert.Equal(t, "find_polluter_go_pollution_present", payload["error_code"])
+cmd/tool_test.go:203:	assert.Contains(t, fmt.Sprint(payload["message"]), pollutionPath)
+cmd/tool_test.go:205:	require.True(t, ok, "details must be present")
+cmd/tool_test.go:206:	assert.Equal(t, pollutionPath, details["path"])
+cmd/tool_test.go:209:func TestToolFindPolluterGoFailsWhenGoListFails(t *testing.T) {
+cmd/tool_test.go:211:	require.Error(t, err)
+cmd/tool_test.go:212:	assert.Contains(t, stderr, "find_polluter_go_list_failed")
+cmd/tool_test.go:215:func TestToolFindPolluterGoRejectsNoTestPackages(t *testing.T) {
+cmd/tool_test.go:217:	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/notests\n\ngo 1.21\n"), 0o644))
+cmd/tool_test.go:218:	require.NoError(t, os.MkdirAll(filepath.Join(dir, "pkg"), 0o755))
+cmd/tool_test.go:219:	require.NoError(t, os.WriteFile(filepath.Join(dir, "pkg", "pkg.go"), []byte("package pkg\n"), 0o644))
+cmd/tool_test.go:222:	require.NoError(t, err)
+cmd/tool_test.go:223:	require.NoError(t, os.Chdir(dir))
+cmd/tool_test.go:225:		require.NoError(t, os.Chdir(previousWD))
+cmd/tool_test.go:229:	require.Error(t, err)
+cmd/tool_test.go:230:	assert.Contains(t, stderr, "find_polluter_go_no_tests")
+cmd/tool_test.go:233:func TestToolReplyToThreadDryRunDoesNotRequireToken(t *testing.T) {
+cmd/tool_test.go:237:	require.Error(t, err)
+cmd/tool_test.go:238:	assert.Contains(t, stdout, "DRY-RUN")
+cmd/tool_test.go:239:	assert.Contains(t, stdout, "addPullRequestReviewThreadReply")
+cmd/tool_test.go:240:	assert.Contains(t, stdout, "PRRT_abc")
+cmd/tool_test.go:241:	assert.Contains(t, stderr, "reply_to_thread_dry_run")
+cmd/tool_test.go:244:func TestToolFetchPRChecksUsesTokenHTTP(t *testing.T) {
+cmd/tool_test.go:264:	require.NoError(t, err, stderr)
+cmd/tool_test.go:265:	assert.Equal(t, "Bearer test-token", seenAuth)
+cmd/tool_test.go:266:	assert.Contains(t, stdout, `"head_sha": "abc123"`)
+cmd/tool_test.go:267:	assert.True(t, strings.Contains(stdout, `"total_count": 0`), stdout)
+cmd/tool_test.go:270:func TestToolFetchPRChecksRequiresExplicitRepo(t *testing.T) {
+cmd/tool_test.go:275:	require.Error(t, err)
+cmd/tool_test.go:276:	assert.Contains(t, stderr, "github_repo_required")
+cmd/tool_test.go:279:func TestToolGitHubBackendHelpDisclosesAPIURL(t *testing.T) {
+cmd/tool_test.go:289:			require.NoError(t, err)
+cmd/tool_test.go:290:			assert.Empty(t, stderr)
+cmd/tool_test.go:291:			assert.Contains(t, stdout, "SLIPWAY_GITHUB_API_URL")
+cmd/tool_test.go:292:			assert.Contains(t, stdout, "--backend api / token-backed HTTP path")
+cmd/tool_test.go:293:			assert.Contains(t, stdout, "https://api.github.com")
+cmd/tool_test.go:298:func TestToolGitHubFlagOnlyHelpersRejectUnexpectedArgsBeforeToken(t *testing.T) {
+cmd/tool_test.go:322:			require.Error(t, err)
+cmd/tool_test.go:323:			assert.Contains(t, stderr, "invalid_usage")
+cmd/tool_test.go:324:			assert.NotContains(t, stderr, "github_token_missing")
+cmd/tool_test.go:329:func TestGitHubRepoValidationRejectsDotOnlySegments(t *testing.T) {
+cmd/tool_test.go:346:			assert.Equal(t, tt.want, validGitHubRepo(tt.repo))
+cmd/tool_test.go:351:func TestGitHubBackendSelection(t *testing.T) {
+cmd/tool_test.go:403:				require.Equal(t, "gh", name)
+cmd/tool_test.go:412:				require.Error(t, err)
+cmd/tool_test.go:414:				require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+cmd/tool_test.go:415:				assert.Equal(t, tt.wantErr, cliErr.ErrorCode)
+cmd/tool_test.go:418:			require.NoError(t, err)
+cmd/tool_test.go:419:			assert.Equal(t, tt.wantName, backend.backendName())
+cmd/tool_test.go:424:func TestGitHubAPIOverrideRejectsUnsafeURLs(t *testing.T) {
+cmd/tool_test.go:476:			require.Error(t, err)
+cmd/tool_test.go:478:			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+cmd/tool_test.go:479:			assert.Equal(t, tt.wantCode, cliErr.ErrorCode)
+cmd/tool_test.go:484:func TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion(t *testing.T) {
+cmd/tool_test.go:512:			require.Error(t, err)
+cmd/tool_test.go:514:			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+cmd/tool_test.go:515:			assert.Equal(t, "github_api_url_invalid", cliErr.ErrorCode)
+cmd/tool_test.go:520:func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T) {
+cmd/tool_test.go:540:	require.Error(t, err)
+cmd/tool_test.go:542:	require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+cmd/tool_test.go:543:	assert.Equal(t, "github_api_override_token_missing", cliErr.ErrorCode)
+cmd/tool_test.go:544:	assert.Equal(t, 0, hits, "ambient tokens must not be sent to override hosts")
+cmd/tool_test.go:548:	require.NoError(t, err)
+cmd/tool_test.go:552:	require.NoError(t, client.getJSON("/repos/o/r/pulls/7", &out))
+cmd/tool_test.go:553:	assert.Equal(t, 7, out.Number)
+cmd/tool_test.go:554:	assert.Equal(t, "Bearer override-token", seenAuth)
+cmd/tool_test.go:557:func TestGitHubAPIOverrideRejectsUnsafePaginationLink(t *testing.T) {
+cmd/tool_test.go:593:			require.Error(t, err)
+cmd/tool_test.go:595:			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+cmd/tool_test.go:596:			assert.Equal(t, "github_api_pagination_url_not_allowed", cliErr.ErrorCode)
+cmd/tool_test.go:597:			require.Len(t, requests, 1, "unsafe Link target must be rejected before any token-bearing follow-up request")
+cmd/tool_test.go:598:			assert.Equal(t, "api.enterprise.example", requests[0].URL.Host)
+cmd/tool_test.go:599:			assert.Equal(t, "Bearer override-token", requests[0].Header.Get("Authorization"))
+cmd/tool_test.go:610:func TestGitHubCLIBackendUsesGHAPIEndpointArgs(t *testing.T) {
+cmd/tool_test.go:626:	require.NoError(t, client.getJSON("/repos/owner/repo/pulls/7", &out))
+cmd/tool_test.go:628:	assert.Equal(t, "/opt/bin/gh", gotPath)
+cmd/tool_test.go:629:	assert.Equal(t, []string{"api", "repos/owner/repo/pulls/7"}, gotArgs)
+cmd/tool_test.go:630:	assert.Equal(t, 7, out.Number)
+cmd/tool_test.go:633:func TestGitHubCLIBackendGraphQLUsesFlagArgs(t *testing.T) {
+cmd/tool_test.go:650:	require.NoError(t, err)
+cmd/tool_test.go:651:	assert.JSONEq(t, `{"ok":true}`, string(data))
+cmd/tool_test.go:652:	assert.Equal(t, []string{
+cmd/tool_test.go:665:	require.NoError(t, err)
+cmd/tool_test.go:688:func TestToolReplyToThreadConfirmSuccessReturnsCommentID(t *testing.T) {
+cmd/tool_test.go:692:		require.Equal(t, "/graphql", r.URL.Path)
+cmd/tool_test.go:701:	require.NoError(t, err, stderr)
+cmd/tool_test.go:702:	assert.Equal(t, "Bearer test-token", sawAuth)
+cmd/tool_test.go:703:	assert.Contains(t, stdout, `"comment_id": "IC_123"`)
+cmd/tool_test.go:704:	assert.Contains(t, stdout, `"replied": 1`)
+cmd/tool_test.go:705:	assert.Contains(t, stdout, `"status": "ok"`)
+cmd/tool_test.go:708:func TestToolReplyToThreadConfirmGraphQLErrorsNotReportedPosted(t *testing.T) {
+cmd/tool_test.go:720:	require.Error(t, err)
+cmd/tool_test.go:721:	assert.Contains(t, stderr, "reply_to_thread_partial_failure")
+cmd/tool_test.go:722:	assert.Contains(t, stderr, "Could not resolve to a node")
+cmd/tool_test.go:723:	assert.Contains(t, stdout, `"replied": 0`)
+cmd/tool_test.go:724:	assert.Contains(t, stdout, `"failed": 1`)
+cmd/tool_test.go:725:	assert.Contains(t, stdout, `"status": "failed"`)
+cmd/tool_test.go:728:func TestToolReplyToThreadConfirmNullPayloadFails(t *testing.T) {
+cmd/tool_test.go:739:	require.Error(t, err)
+cmd/tool_test.go:740:	assert.Contains(t, stderr, "reply_to_thread_partial_failure")
+cmd/tool_test.go:741:	assert.Contains(t, stdout, `"failed": 1`)
+cmd/tool_test.go:742:	assert.Contains(t, stdout, `"mutation returned no comment id"`)
+cmd/tool_test.go:743:	assert.NotContains(t, stdout, `"replied": 1`)
+cmd/tool_test.go:746:func TestToolReplyToThreadConfirmPartialFailureReportsPostedReply(t *testing.T) {
+cmd/tool_test.go:763:	require.Error(t, err)
+cmd/tool_test.go:764:	assert.Equal(t, 2, calls)
+cmd/tool_test.go:765:	assert.Contains(t, stderr, "reply_to_thread_partial_failure")
+cmd/tool_test.go:766:	assert.Contains(t, stdout, `"replied": 1`)
+cmd/tool_test.go:767:	assert.Contains(t, stdout, `"failed": 1`)
+cmd/tool_test.go:768:	assert.Contains(t, stdout, `"comment_id": "IC_1"`)
+cmd/tool_test.go:769:	assert.Contains(t, stdout, `"thread_id": "PRRT_bad"`)
+cmd/tool_test.go:770:	assert.Contains(t, stdout, `"status": "failed"`)
+cmd/tool_test.go:775:func TestToolFetchPRFeedbackCategorizesAndCarriesThreadIDs(t *testing.T) {
+cmd/tool_test.go:798:			require.Contains(t, body, "reviewThreads")
+cmd/tool_test.go:799:			require.Contains(t, body, "reviewDecision")
+cmd/tool_test.go:831:	require.NoError(t, err, stderr)
+cmd/tool_test.go:846:	require.NoError(t, json.Unmarshal([]byte(stdout), &out), stdout)
+cmd/tool_test.go:847:	assert.Equal(t, "CHANGES_REQUESTED", out.PR.ReviewDecision)
+cmd/tool_test.go:852:	assert.GreaterOrEqual(t, out.Summary.High, 1, stdout)
+cmd/tool_test.go:853:	assert.GreaterOrEqual(t, out.Summary.Medium, 1, stdout)
+cmd/tool_test.go:854:	assert.GreaterOrEqual(t, out.Summary.Low, 1, stdout)
+cmd/tool_test.go:855:	assert.GreaterOrEqual(t, out.Summary.Bot, 1, stdout)
+cmd/tool_test.go:856:	assert.GreaterOrEqual(t, out.Summary.Resolved, 1, stdout)
+cmd/tool_test.go:859:	assert.Contains(t, stdout, `"thread_id": "PRRT_high"`)
+cmd/tool_test.go:860:	assert.Contains(t, stdout, `"thread_id": "PRRT_low"`)
+cmd/tool_test.go:861:	assert.Contains(t, stdout, `"thread_id": "PRRT_med"`)
+cmd/tool_test.go:864:	require.NotEmpty(t, out.Feedback["resolved"])
+cmd/tool_test.go:865:	assert.Equal(t, "PRRT_done", out.Feedback["resolved"][0]["thread_id"])
+cmd/tool_test.go:866:	assert.Equal(t, true, out.Feedback["resolved"][0]["resolved"])
+cmd/tool_test.go:874:	assert.True(t, sawChangesRequestedReview, stdout)
+cmd/tool_test.go:879:func TestToolFetchReviewRequestsFiltersClosedAndBuildsReasons(t *testing.T) {
+cmd/tool_test.go:932:	require.NoError(t, err, stderr)
+cmd/tool_test.go:945:	require.NoError(t, json.Unmarshal([]byte(stdout), &out), stdout)
+cmd/tool_test.go:948:	assert.Equal(t, 2, out.Total, stdout)
+cmd/tool_test.go:959:	require.Contains(t, byNumber, 100)
+cmd/tool_test.go:960:	require.Contains(t, byNumber, 200)
+cmd/tool_test.go:961:	assert.NotContains(t, byNumber, 300)
+cmd/tool_test.go:964:	assert.Equal(t, "author-open", byNumber[100].Author)
+cmd/tool_test.go:965:	assert.Contains(t, strings.Join(byNumber[100].Reasons, "|"), "opened by: author-open")
+cmd/tool_test.go:968:	assert.Contains(t, strings.Join(byNumber[200].Reasons, "|"), "review requested from: team-a")
+cmd/tool_test.go:971:func TestToolFetchReviewRequestsRequiresExplicitOrg(t *testing.T) {
+cmd/tool_test.go:976:	require.Error(t, err)
+cmd/tool_test.go:977:	assert.Contains(t, stderr, "fetch_review_requests_org_required")
+cmd/tool_test.go:978:	assert.NotContains(t, stderr, "github_token_missing")
+cmd/tool_test.go:990:func TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates(t *testing.T) {
+cmd/tool_test.go:1025:	require.NoError(t, err, stderr)
+cmd/tool_test.go:1028:	assert.GreaterOrEqual(t, checkRunPages, 2, "expected >=2 check-run pages, got %d", checkRunPages)
+cmd/tool_test.go:1045:	require.NoError(t, json.Unmarshal([]byte(stdout), &out), stdout)
+cmd/tool_test.go:1047:	assert.Equal(t, 2, out.Summary.Total, stdout)
+cmd/tool_test.go:1048:	assert.Equal(t, 1, out.Summary.Failed, stdout)
+cmd/tool_test.go:1049:	assert.Equal(t, 1, out.Summary.Passed, stdout)
+cmd/tool_test.go:1051:	require.Len(t, out.Failed, 1)
+cmd/tool_test.go:1052:	require.NotEmpty(t, out.Failed[0].Snippets)
+cmd/tool_test.go:1054:	assert.Equal(t, "pkg/foo.go:42", out.Failed[0].Snippets[0].Location)
+cmd/tool_test.go:1055:	assert.Contains(t, out.Failed[0].Snippets[0].Message, "undefined: Bar")
+cmd/tool_test.go:1056:	assert.Contains(t, stdout, "pkg/foo.go:42")
+cmd/tool_test.go:1059:func TestToolFetchPRChecksSurfacesFailedCommitStatuses(t *testing.T) {
+cmd/tool_test.go:1080:	require.NoError(t, err, stderr)
+cmd/tool_test.go:1081:	assert.True(t, requestedStatus, "expected combined commit status endpoint to be requested")
+cmd/tool_test.go:1094:	require.NoError(t, json.Unmarshal([]byte(stdout), &out), stdout)
+cmd/tool_test.go:1095:	assert.Equal(t, 1, out.Summary.Total, stdout)
+cmd/tool_test.go:1096:	assert.Equal(t, 1, out.Summary.Failed, stdout)
+cmd/tool_test.go:1097:	require.Len(t, out.Failed, 1)
+cmd/tool_test.go:1098:	assert.Equal(t, "commit_status", out.Failed[0].Type)
+cmd/tool_test.go:1099:	assert.Equal(t, "legacy-ci", out.Failed[0].Context)
+cmd/tool_test.go:1100:	assert.Equal(t, "failure", out.Failed[0].State)
+cmd/tool_test.go:1154:		require.NoError(t, os.WriteFile(filepath.Join(raw, name), []byte(body), 0o644))
+cmd/tool_test.go:1158:	require.NoError(t, err, stderr)
+cmd/tool_test.go:1160:	require.NoError(t, err)
+cmd/tool_test.go:1168:func TestToolMergeSARIFRemapsRuleIndexAcrossRuns(t *testing.T) {
+cmd/tool_test.go:1191:	require.NoError(t, json.Unmarshal(got, &doc))
+cmd/tool_test.go:1192:	require.Len(t, doc.Runs, 1, "same tool/profile must merge into one run")
+cmd/tool_test.go:1200:	assert.Equal(t, []string{"A1", "A2", "B1", "B2"}, gotRuleIDs)
+cmd/tool_test.go:1202:	require.Len(t, run.Results, 3)
+cmd/tool_test.go:1204:		require.NotEmpty(t, res.RuleID, "ruleId must be present/backfilled so consumers are not forced onto the index")
+cmd/tool_test.go:1205:		require.NotNil(t, res.RuleIndex, "ruleIndex retained when resolvable")
+cmd/tool_test.go:1207:		require.GreaterOrEqual(t, idx, 0)
+cmd/tool_test.go:1208:		require.Less(t, idx, len(run.Tool.Driver.Rules))
+cmd/tool_test.go:1209:		assert.Equal(t, res.RuleID, run.Tool.Driver.Rules[idx].ID,
+cmd/tool_test.go:1219:			require.NotNil(t, res.RuleIndex)
+cmd/tool_test.go:1220:			assert.Equal(t, "B2", run.Tool.Driver.Rules[*res.RuleIndex].ID)
+cmd/tool_test.go:1223:	assert.True(t, backfilled, "expected a result backfilled to B2")
+cmd/tool_test.go:1229:func TestToolMergeSARIFRemapsRuleObjectIndex(t *testing.T) {
+cmd/tool_test.go:1245:	require.NoError(t, json.Unmarshal(got, &doc))
+cmd/tool_test.go:1246:	require.Len(t, doc.Runs, 1)
+cmd/tool_test.go:1253:	assert.Equal(t, []string{"Q0", "Q1"}, gotRuleIDs)
+cmd/tool_test.go:1259:			require.NotNil(t, res.Rule)
+cmd/tool_test.go:1260:			require.NotNil(t, res.Rule.Index)
+cmd/tool_test.go:1261:			assert.Equal(t, "Q0", run.Tool.Driver.Rules[*res.Rule.Index].ID)
+cmd/tool_test.go:1264:	assert.True(t, checkedQ0, "expected the rule.index-backfilled Q0 result")
+cmd/tool_test.go:1270:func TestToolMergeSARIFDropsUnresolvableRuleIndex(t *testing.T) {
+cmd/tool_test.go:1282:	require.NoError(t, json.Unmarshal(got, &doc))
+cmd/tool_test.go:1283:	require.Len(t, doc.Runs, 1)
+cmd/tool_test.go:1284:	require.Len(t, doc.Runs[0].Results, 1)
+cmd/tool_test.go:1286:	assert.Equal(t, "GHOST", res.RuleID, "ruleId retained")
+cmd/tool_test.go:1287:	assert.Nil(t, res.RuleIndex, "stale ruleIndex must be removed, not left pointing at wrong rule")
+cmd/tool_test.go:1294:func TestToolMergeSARIFRemapsArtifactIndex(t *testing.T) {
+cmd/tool_test.go:1312:	require.NoError(t, json.Unmarshal(got, &doc))
+cmd/tool_test.go:1313:	require.Len(t, doc.Runs, 1, "same tool/profile merges into one run")
+cmd/tool_test.go:1322:	assert.Equal(t, []string{"a.go", "zero.go", "one.go", "two.go"}, gotURIs)
+cmd/tool_test.go:1328:		require.Len(t, res.Locations, 1)
+cmd/tool_test.go:1333:				require.GreaterOrEqual(t, *al.Index, 0)
+cmd/tool_test.go:1334:				require.Less(t, *al.Index, len(run.Artifacts))
+cmd/tool_test.go:1335:				assert.Equal(t, "two.go", run.Artifacts[*al.Index].Location.URI,
+cmd/tool_test.go:1337:				assert.Equal(t, "two.go", al.URI, "uri recovered from source artifacts table")
+cmd/tool_test.go:1340:				assert.Equal(t, "two.go", al.URI)
+cmd/tool_test.go:1344:	assert.True(t, checked, "expected to inspect the run-B result")
+cmd/tool_test.go:1347:func TestToolMergeSARIFEmitsMinimalArtifactsWhenSourceOmitsArtifacts(t *testing.T) {
+cmd/tool_test.go:1356:	require.NoError(t, json.Unmarshal(got, &doc))
+cmd/tool_test.go:1357:	require.Len(t, doc.Runs, 1)
+cmd/tool_test.go:1359:	require.Len(t, mergedRun.Artifacts, 1)
+cmd/tool_test.go:1360:	assert.Equal(t, "x.go", mergedRun.Artifacts[0].Location.URI)
+cmd/tool_test.go:1362:	require.Len(t, mergedRun.Results, 1)
+cmd/tool_test.go:1363:	require.Len(t, mergedRun.Results[0].Locations, 1)
+cmd/tool_test.go:1365:	require.NotNil(t, al.Index, "artifactLocation.index should point into the synthesized artifacts table")
+cmd/tool_test.go:1366:	assert.Equal(t, 0, *al.Index)
+cmd/tool_test.go:1367:	assert.Equal(t, "x.go", al.URI)
+cmd/tool_test.go:1372:func TestToolMergeSARIFRemapDeterministic(t *testing.T) {
+cmd/tool_test.go:1390:	assert.Equal(t, string(first), string(second), "merge output must be byte-stable across reruns")
+cmd/tool_test.go:1395:	require.NoError(t, json.Unmarshal(first, &doc))
+cmd/tool_test.go:1396:	require.Len(t, doc.Runs, 1)
+cmd/tool_test.go:1400:			require.Less(t, *res.RuleIndex, len(run.Tool.Driver.Rules))
+cmd/tool_test.go:1401:			assert.Equal(t, res.RuleID, run.Tool.Driver.Rules[*res.RuleIndex].ID)
+cmd/tool_test.go:1406:				require.Less(t, *al.Index, len(run.Artifacts))
+cmd/tool_test.go:1407:				assert.Equal(t, al.URI, run.Artifacts[*al.Index].Location.URI)
+cmd/tool_test.go:1413:func TestToolMergeSARIFFailsClosedWhenAllInputsUnparseable(t *testing.T) {
+cmd/tool_test.go:1415:	require.NoError(t, os.WriteFile(filepath.Join(raw, "broken.sarif"), []byte("{not valid json"), 0o644))
+cmd/tool_test.go:1419:	require.Error(t, err)
+cmd/tool_test.go:1420:	assert.Contains(t, stderr, "merge_sarif_parse_failed")
+cmd/tool_test.go:1425:	assert.True(t, os.IsNotExist(statErr), "expected no merged output to be written on fail-closed")
+cmd/tool_test.go:1428:func TestToolMergeSARIFFailsClosedWhenAnyInputUnparseable(t *testing.T) {
+cmd/tool_test.go:1430:	require.NoError(t, os.WriteFile(filepath.Join(raw, "valid.sarif"), []byte(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"semgrep"}},"results":[]}]}`), 0o644))
+cmd/tool_test.go:1431:	require.NoError(t, os.WriteFile(filepath.Join(raw, "broken.sarif"), []byte("{not valid json"), 0o644))
+cmd/tool_test.go:1435:	require.Error(t, err)
+cmd/tool_test.go:1436:	assert.Contains(t, stderr, "merge_sarif_parse_failed")
+cmd/tool_test.go:1437:	assert.Contains(t, stderr, "failed to parse")
+cmd/tool_test.go:1440:	assert.True(t, os.IsNotExist(statErr), "expected no merged output when any input is unparseable")
+cmd/tool_test.go:1443:func TestToolMergeSARIFZeroResultsStillSucceeds(t *testing.T) {
+cmd/tool_test.go:1445:	require.NoError(t, os.WriteFile(filepath.Join(raw, "clean.sarif"), []byte(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"semgrep"}},"results":[]}]}`), 0o644))
+cmd/tool_test.go:1449:	require.NoError(t, err, stderr)
+cmd/tool_test.go:1454:	require.NoError(t, statErr)
+cmd/tool_test.go:1457:func TestToolMergeSARIFSortsResultsByNumericStartLine(t *testing.T) {
+cmd/tool_test.go:1459:	require.NoError(t, os.WriteFile(filepath.Join(raw, "a.sarif"), []byte(`{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"semgrep","rules":[{"id":"R1"}]}},"results":[
+cmd/tool_test.go:1466:	require.NoError(t, err, stderr)
+cmd/tool_test.go:1469:	require.NoError(t, err)
+cmd/tool_test.go:1484:	require.NoError(t, json.Unmarshal(data, &merged))
+cmd/tool_test.go:1485:	require.Len(t, merged.Runs, 1)
+cmd/tool_test.go:1486:	require.Len(t, merged.Runs[0].Results, 2)
+cmd/tool_test.go:1488:	assert.Equal(t, 2, merged.Runs[0].Results[0].Locations[0].PhysicalLocation.Region.StartLine)
+cmd/tool_test.go:1489:	assert.Equal(t, 10, merged.Runs[0].Results[1].Locations[0].PhysicalLocation.Region.StartLine)
+cmd/tool_test.go:1492:func TestNormalizeReplyBody(t *testing.T) {
+cmd/tool_test.go:1494:		assert.Equal(t, "line1\nline2\n\n*- Slipway*", normalizeReplyBody(`line1\nline2`, "Slipway"))
+cmd/tool_test.go:1497:		assert.Equal(t, "body\n\n*- Codex*", normalizeReplyBody("body", "Codex"))
+cmd/tool_test.go:1500:		assert.Equal(t, "body", normalizeReplyBody("body", ""))
+cmd/tool_test.go:1504:		assert.Equal(t, body, normalizeReplyBody(body, "Slipway"))
+cmd/tool_test.go:1508:		assert.Equal(t, body, normalizeReplyBody(body, "Slipway"))
+cmd/tool_test.go:1512:func TestAutoGitHubBackendFallsBackToTokenOnGHAuthError(t *testing.T) {
+cmd/tool_test.go:1525:		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+cmd/tool_test.go:1537:	require.NoError(t, backend.getJSON("/repos/o/r/pulls/7", &out))
+cmd/tool_test.go:1538:	assert.Equal(t, 7, out.Number)
+cmd/tool_test.go:1539:	assert.Equal(t, 1, ghCalls, "gh should be attempted exactly once")
+cmd/tool_test.go:1540:	assert.Equal(t, 1, httpHits, "request should fall back to the token API")
+cmd/tool_test.go:1541:	assert.Equal(t, "api", backend.backendName(), "backendName should reflect the backend that served the request")
+cmd/tool_test.go:1544:func TestAutoGitHubBackendPropagatesGHAuthErrorWithoutToken(t *testing.T) {
+cmd/tool_test.go:1559:	require.Error(t, err)
+cmd/tool_test.go:1561:	require.True(t, errors.As(err, &cliErr))
+cmd/tool_test.go:1562:	assert.Equal(t, "github_gh_auth_required", cliErr.ErrorCode)
+cmd/tool_test.go:1563:	assert.Equal(t, "gh", backend.backendName())
+cmd/tool_test.go:1566:func TestAutoGitHubBackendDoesNotFallBackOnNonAuthError(t *testing.T) {
+cmd/tool_test.go:1588:	require.Error(t, err)
+cmd/tool_test.go:1590:	require.True(t, errors.As(err, &cliErr))
+cmd/tool_test.go:1591:	assert.Equal(t, "github_gh_api_failed", cliErr.ErrorCode)
+cmd/tool_test.go:1592:	assert.Equal(t, 0, httpHits, "non-auth gh failures must not silently fall back and mask the error")
+[exit_code] 0
+
+[triage]
+exit_code 1 from rg means no matches. Stub marker, unimplemented panic, nil-nil return, zero-value-only return, empty-brace, and commented-out-code scans require manual review of any matches above.
+
+[manual_triage]
+stub marker matches: pass - cmd/tool_test.go:137-139 asserts expected Semgrep scaffold strings TODO(source/sink/sanitizer) from the find-variant helper; not production placeholder code.
+unimplemented panics: pass - no matches.
+return nil, nil matches: pass - internal/state/worktree.go:397 is the no-reasons/no-error success return from dedicated-worktree validation; cmd/tool_github.go:866 and 1188 are error returns with a non-nil err in three-value status helpers.
+zero-value-only returns: pass - matched boolean/string helper predicates and error paths; no changed production path returns only a zero value as placeholder behavior.
+empty braces same-line: pass - matched composite literals, empty maps/sets, and zero-value struct returns with errors; no empty function body.
+commented-out code candidates: pass - cmd/tool_github.go:240 is explanatory prose in a real comment, not disabled implementation.
+assertion-free tests: pass - changed tests include require/assert assertions and negative-path oracles for release workflow, GitHub API override, and BaseRef validation.
+verdict: pass - no substantive stubs, placeholders, commented-out replacement code, or assertion-free changed tests found in planned target files.

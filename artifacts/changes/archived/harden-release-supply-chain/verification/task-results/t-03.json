@@ -1,0 +1,18 @@
+{
+  "task_id": "t-03",
+  "verdict": "pass",
+  "evidence_ref": "artifacts/changes/harden-release-supply-chain/verification/task-results/t-03.json",
+  "changed_files": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/flake-lock-update.yaml",
+    ".github/workflows/nix.yaml",
+    ".github/workflows/pr-title.yaml",
+    ".github/workflows/release-please.yaml",
+    ".github/workflows/release.yaml",
+    ".github/workflows/security.yaml"
+  ],
+  "blockers": [],
+  "test_summary": "Read tasks.md and all eight assigned workflow files. Verified every workflow uses: ref is pinned to a 40-character SHA; focused rg checks found no active non-SHA action refs and no @main, @master, @latest, DeterminateSystems/*@main, govulncheck@latest, or go-licenses@latest refs. Confirmed security tool installs are pinned: govulncheck@v1.5.0, gosec@v2.27.1, go-licenses@v1.6.0, and Trivy/Syft actions by commit SHA. Ran actionlint on the eight assigned workflow files; it passed.",
+  "notes": "Codebase map relevance self-check: not read because t-03 is limited to static workflow/action pinning and security tool version verification, and tasks.md plus the assigned workflow files were sufficient. Warning: DeterminateSystems original @main refs are intentionally preserved only in comments beside commit SHA pins. No repository-wide Go tests were run."
+}

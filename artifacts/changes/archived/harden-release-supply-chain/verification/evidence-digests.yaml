@@ -1,0 +1,167 @@
+version: 1
+skills:
+    code-quality-review:
+        verdict_timestamp: 2026-06-26T17:21:28.603029Z
+        inputs:
+            .github/workflows/ci.yml: 704356d73e3ea723589086de4b937cf40955906f19a12928ef92ee61e0bae9c9
+            .github/workflows/docs.yml: da885a2fe259aa343a48d62cf74192e111490b744c15a39c2fe2db62537e8dcc
+            .github/workflows/flake-lock-update.yaml: a09a8aeee3b25e1f6700dbef714cac759ca7f9fc8b760b4405dbf8265513dc10
+            .github/workflows/nix.yaml: 4a69e6201f8294a8ec24da58567337582a593ed09dcbc15a567458eca1d52e66
+            .github/workflows/pr-title.yaml: a1b0b2a69db7e8c9f3e9e3e087c48b7bb278fccde5f58d790d6f2f27ffceb22d
+            .github/workflows/release-please.yaml: 25900f6452af8c4a59e74139aa1663820bde0bc99a0dc545c9fa4f946495176e
+            .github/workflows/release.yaml: 27474b3c02bdee7ecd676e29f25b9724c0d94f74fd931a3d867f1126426b668e
+            .github/workflows/security.yaml: 09620955a2720da30114b9c41e1824e090345010640aae8f03b8f4f948940bf2
+            artifacts/codebase/ARCHITECTURE.md: 2db9f0fe195f416fb06efc94e88389506652c455f17d4b87bd2692efe909185a
+            artifacts/codebase/CONCERNS.md: 86ac2e349dd54fe10145b4475d03931aa7ee9d5427fc64e52110e1da3631ed06
+            artifacts/codebase/STRUCTURE.md: aceba7a29e910b6815df19d865dd0ab300a01f5321e9e6c32fab04f4b5ef92e4
+            artifacts/codebase/TESTING.md: 25e1731c3b1ea424b8f5d10841494b4c43c95d5ca930a72fab3fe62f8337236a
+            cmd/release_workflow_contract_test.go: 66ddae619fde836e28b1c4fd12d6c5b28cfbc0fe998d610b27b64149d252e57d
+            cmd/tool_github.go: a7afe6d066c6ccbc1d8d63406906e781d2a10b551141e53b4fc2f6d722966cfe
+            cmd/tool_test.go: 85ec0d6f4aef1b9712b128d3627db89a470fec3e79c1ba9885fc207ad3be71ad
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            execution-summary.yaml: e1b96925efd46b8300fc096f546fbeeadbd97ab16c09e65b18492339274eccb1
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            internal/state/worktree.go: 202473304527d4b3698dd6b02e458bb4a6273c57c0058a216cd000f3032e180e
+            internal/state/worktree_test.go: f58326f752f1009abe4560af8fffa35c70849271ece9050f48aab12e7b4be930
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            run_summary_version: 07d5b7dfdd58986e7e14e9122f3148055b149ee20fdb2f9cce5512f3ccd67165
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+            tasks.md:scope: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+            tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    independent-review:
+        verdict_timestamp: 2026-06-26T17:21:38.8074Z
+        inputs:
+            .github/workflows/ci.yml: 704356d73e3ea723589086de4b937cf40955906f19a12928ef92ee61e0bae9c9
+            .github/workflows/docs.yml: da885a2fe259aa343a48d62cf74192e111490b744c15a39c2fe2db62537e8dcc
+            .github/workflows/flake-lock-update.yaml: a09a8aeee3b25e1f6700dbef714cac759ca7f9fc8b760b4405dbf8265513dc10
+            .github/workflows/nix.yaml: 4a69e6201f8294a8ec24da58567337582a593ed09dcbc15a567458eca1d52e66
+            .github/workflows/pr-title.yaml: a1b0b2a69db7e8c9f3e9e3e087c48b7bb278fccde5f58d790d6f2f27ffceb22d
+            .github/workflows/release-please.yaml: 25900f6452af8c4a59e74139aa1663820bde0bc99a0dc545c9fa4f946495176e
+            .github/workflows/release.yaml: 27474b3c02bdee7ecd676e29f25b9724c0d94f74fd931a3d867f1126426b668e
+            .github/workflows/security.yaml: 09620955a2720da30114b9c41e1824e090345010640aae8f03b8f4f948940bf2
+            artifacts/codebase/ARCHITECTURE.md: 2db9f0fe195f416fb06efc94e88389506652c455f17d4b87bd2692efe909185a
+            artifacts/codebase/CONCERNS.md: 86ac2e349dd54fe10145b4475d03931aa7ee9d5427fc64e52110e1da3631ed06
+            artifacts/codebase/STRUCTURE.md: aceba7a29e910b6815df19d865dd0ab300a01f5321e9e6c32fab04f4b5ef92e4
+            artifacts/codebase/TESTING.md: 25e1731c3b1ea424b8f5d10841494b4c43c95d5ca930a72fab3fe62f8337236a
+            cmd/release_workflow_contract_test.go: 66ddae619fde836e28b1c4fd12d6c5b28cfbc0fe998d610b27b64149d252e57d
+            cmd/tool_github.go: a7afe6d066c6ccbc1d8d63406906e781d2a10b551141e53b4fc2f6d722966cfe
+            cmd/tool_test.go: 85ec0d6f4aef1b9712b128d3627db89a470fec3e79c1ba9885fc207ad3be71ad
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            execution-summary.yaml: e1b96925efd46b8300fc096f546fbeeadbd97ab16c09e65b18492339274eccb1
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            internal/state/worktree.go: 202473304527d4b3698dd6b02e458bb4a6273c57c0058a216cd000f3032e180e
+            internal/state/worktree_test.go: f58326f752f1009abe4560af8fffa35c70849271ece9050f48aab12e7b4be930
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            run_summary_version: 07d5b7dfdd58986e7e14e9122f3148055b149ee20fdb2f9cce5512f3ccd67165
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+            tasks.md:scope: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+            tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    intake-clarification:
+        verdict_timestamp: 2026-06-26T14:15:53.675832Z
+        inputs:
+            intent.md: d5ad617aa06589c44eb487698210c0b0fda6778c7722b3b96edd11ce29b75006
+    plan-audit:
+        verdict_timestamp: 2026-06-26T15:05:26.200285Z
+        inputs:
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    research-orchestration:
+        verdict_timestamp: 2026-06-26T14:56:50.889768Z
+        inputs:
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+    security-review:
+        verdict_timestamp: 2026-06-26T17:21:46.3536Z
+        inputs:
+            .github/workflows/ci.yml: 704356d73e3ea723589086de4b937cf40955906f19a12928ef92ee61e0bae9c9
+            .github/workflows/docs.yml: da885a2fe259aa343a48d62cf74192e111490b744c15a39c2fe2db62537e8dcc
+            .github/workflows/flake-lock-update.yaml: a09a8aeee3b25e1f6700dbef714cac759ca7f9fc8b760b4405dbf8265513dc10
+            .github/workflows/nix.yaml: 4a69e6201f8294a8ec24da58567337582a593ed09dcbc15a567458eca1d52e66
+            .github/workflows/pr-title.yaml: a1b0b2a69db7e8c9f3e9e3e087c48b7bb278fccde5f58d790d6f2f27ffceb22d
+            .github/workflows/release-please.yaml: 25900f6452af8c4a59e74139aa1663820bde0bc99a0dc545c9fa4f946495176e
+            .github/workflows/release.yaml: 27474b3c02bdee7ecd676e29f25b9724c0d94f74fd931a3d867f1126426b668e
+            .github/workflows/security.yaml: 09620955a2720da30114b9c41e1824e090345010640aae8f03b8f4f948940bf2
+            artifacts/codebase/ARCHITECTURE.md: 2db9f0fe195f416fb06efc94e88389506652c455f17d4b87bd2692efe909185a
+            artifacts/codebase/CONCERNS.md: 86ac2e349dd54fe10145b4475d03931aa7ee9d5427fc64e52110e1da3631ed06
+            artifacts/codebase/STRUCTURE.md: aceba7a29e910b6815df19d865dd0ab300a01f5321e9e6c32fab04f4b5ef92e4
+            artifacts/codebase/TESTING.md: 25e1731c3b1ea424b8f5d10841494b4c43c95d5ca930a72fab3fe62f8337236a
+            cmd/release_workflow_contract_test.go: 66ddae619fde836e28b1c4fd12d6c5b28cfbc0fe998d610b27b64149d252e57d
+            cmd/tool_github.go: a7afe6d066c6ccbc1d8d63406906e781d2a10b551141e53b4fc2f6d722966cfe
+            cmd/tool_test.go: 85ec0d6f4aef1b9712b128d3627db89a470fec3e79c1ba9885fc207ad3be71ad
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            execution-summary.yaml: e1b96925efd46b8300fc096f546fbeeadbd97ab16c09e65b18492339274eccb1
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            internal/state/worktree.go: 202473304527d4b3698dd6b02e458bb4a6273c57c0058a216cd000f3032e180e
+            internal/state/worktree_test.go: f58326f752f1009abe4560af8fffa35c70849271ece9050f48aab12e7b4be930
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            run_summary_version: 07d5b7dfdd58986e7e14e9122f3148055b149ee20fdb2f9cce5512f3ccd67165
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+            tasks.md:scope: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+            tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    ship-verification:
+        verdict_timestamp: 2026-06-26T17:40:00.843226Z
+        inputs:
+            .github/workflows/ci.yml: 704356d73e3ea723589086de4b937cf40955906f19a12928ef92ee61e0bae9c9
+            .github/workflows/docs.yml: da885a2fe259aa343a48d62cf74192e111490b744c15a39c2fe2db62537e8dcc
+            .github/workflows/flake-lock-update.yaml: a09a8aeee3b25e1f6700dbef714cac759ca7f9fc8b760b4405dbf8265513dc10
+            .github/workflows/nix.yaml: 4a69e6201f8294a8ec24da58567337582a593ed09dcbc15a567458eca1d52e66
+            .github/workflows/pr-title.yaml: a1b0b2a69db7e8c9f3e9e3e087c48b7bb278fccde5f58d790d6f2f27ffceb22d
+            .github/workflows/release-please.yaml: 25900f6452af8c4a59e74139aa1663820bde0bc99a0dc545c9fa4f946495176e
+            .github/workflows/release.yaml: 27474b3c02bdee7ecd676e29f25b9724c0d94f74fd931a3d867f1126426b668e
+            .github/workflows/security.yaml: 09620955a2720da30114b9c41e1824e090345010640aae8f03b8f4f948940bf2
+            assurance.md: 07647a2b44f1006d8eeee30f5dfbcddc4210ce3be099d28890def423915c2c67
+            changed_target_files: 6de0b677f124fa8c72c72652035329aa87e695823d463e4914208539b66d381c
+            cmd/release_workflow_contract_test.go: 66ddae619fde836e28b1c4fd12d6c5b28cfbc0fe998d610b27b64149d252e57d
+            cmd/tool_github.go: a7afe6d066c6ccbc1d8d63406906e781d2a10b551141e53b4fc2f6d722966cfe
+            cmd/tool_test.go: 85ec0d6f4aef1b9712b128d3627db89a470fec3e79c1ba9885fc207ad3be71ad
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            execution-summary.yaml: e1b96925efd46b8300fc096f546fbeeadbd97ab16c09e65b18492339274eccb1
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            internal/state/worktree.go: 202473304527d4b3698dd6b02e458bb4a6273c57c0058a216cd000f3032e180e
+            internal/state/worktree_test.go: f58326f752f1009abe4560af8fffa35c70849271ece9050f48aab12e7b4be930
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            run_summary_version: 07d5b7dfdd58986e7e14e9122f3148055b149ee20fdb2f9cce5512f3ccd67165
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+            tasks.md:scope: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+            tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    spec-compliance-review:
+        verdict_timestamp: 2026-06-26T17:21:16.550257Z
+        inputs:
+            .github/workflows/ci.yml: 704356d73e3ea723589086de4b937cf40955906f19a12928ef92ee61e0bae9c9
+            .github/workflows/docs.yml: da885a2fe259aa343a48d62cf74192e111490b744c15a39c2fe2db62537e8dcc
+            .github/workflows/flake-lock-update.yaml: a09a8aeee3b25e1f6700dbef714cac759ca7f9fc8b760b4405dbf8265513dc10
+            .github/workflows/nix.yaml: 4a69e6201f8294a8ec24da58567337582a593ed09dcbc15a567458eca1d52e66
+            .github/workflows/pr-title.yaml: a1b0b2a69db7e8c9f3e9e3e087c48b7bb278fccde5f58d790d6f2f27ffceb22d
+            .github/workflows/release-please.yaml: 25900f6452af8c4a59e74139aa1663820bde0bc99a0dc545c9fa4f946495176e
+            .github/workflows/release.yaml: 27474b3c02bdee7ecd676e29f25b9724c0d94f74fd931a3d867f1126426b668e
+            .github/workflows/security.yaml: 09620955a2720da30114b9c41e1824e090345010640aae8f03b8f4f948940bf2
+            artifacts/codebase/ARCHITECTURE.md: 2db9f0fe195f416fb06efc94e88389506652c455f17d4b87bd2692efe909185a
+            artifacts/codebase/CONCERNS.md: 86ac2e349dd54fe10145b4475d03931aa7ee9d5427fc64e52110e1da3631ed06
+            artifacts/codebase/STRUCTURE.md: aceba7a29e910b6815df19d865dd0ab300a01f5321e9e6c32fab04f4b5ef92e4
+            artifacts/codebase/TESTING.md: 25e1731c3b1ea424b8f5d10841494b4c43c95d5ca930a72fab3fe62f8337236a
+            cmd/release_workflow_contract_test.go: 66ddae619fde836e28b1c4fd12d6c5b28cfbc0fe998d610b27b64149d252e57d
+            cmd/tool_github.go: a7afe6d066c6ccbc1d8d63406906e781d2a10b551141e53b4fc2f6d722966cfe
+            cmd/tool_test.go: 85ec0d6f4aef1b9712b128d3627db89a470fec3e79c1ba9885fc207ad3be71ad
+            decision.md: a513ca6cc073ea300f236569d38da7b5fcb332d4b2627437bc874a7f6e26c236
+            execution-summary.yaml: e1b96925efd46b8300fc096f546fbeeadbd97ab16c09e65b18492339274eccb1
+            intent.md: 99d3a5b27f825cfcbd210cbd5ead0e1f3b529925ccff74e52d031532d9f73d6e
+            internal/state/worktree.go: 202473304527d4b3698dd6b02e458bb4a6273c57c0058a216cd000f3032e180e
+            internal/state/worktree_test.go: f58326f752f1009abe4560af8fffa35c70849271ece9050f48aab12e7b4be930
+            requirements.md: 4a5c3c23c6bff90bd7cb89aa0b529160b93823b53d4e07e16423e7fdbb25c117
+            research.md: 81e2f3372934664b447d74a9b732677870f1d497823635a86c3b643b9134a389
+            run_summary_version: 07d5b7dfdd58986e7e14e9122f3148055b149ee20fdb2f9cce5512f3ccd67165
+            tasks.md: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+            tasks.md:scope: 48efbd87562d2f1d4901b9a8764f1379c3edbd2ba6b57def65619d4684799f5c
+            tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+    wave-orchestration:
+        verdict_timestamp: 2026-06-26T17:08:46.708123Z
+        inputs:
+            runtime_task_evidence: 2201d0296f52bc5a2bc9279615cdd9678e6b63d07171da67d1ee153e2219e37a
+            wave-plan.yaml: 1f517611beef51913afc2e4e557d132f33a5d60b4cab0e0b563d9ae63dd699ca

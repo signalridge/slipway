@@ -1,0 +1,123 @@
+version: 1
+run_summary_version: 3
+captured_at: 2026-06-26T17:08:46.708123Z
+overall_verdict: pass
+tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+completed_tasks:
+    - t-01
+    - t-02
+    - t-03
+    - t-04
+    - t-05
+    - t-06
+tasks:
+    - task_id: t-01
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - artifacts/changes/harden-release-supply-chain/verification/main-branch-ruleset-request.json
+        - artifacts/changes/harden-release-supply-chain/verification/release-environment-request.json
+        - artifacts/changes/harden-release-supply-chain/verification/release-tag-ruleset-request.json
+      target_files:
+        - artifacts/changes/harden-release-supply-chain/verification/main-branch-ruleset-request.json
+        - artifacts/changes/harden-release-supply-chain/verification/release-environment-request.json
+        - artifacts/changes/harden-release-supply-chain/verification/release-tag-ruleset-request.json
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-01.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-01
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z
+    - task_id: t-02
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/ci.yml
+        - .github/workflows/release.yaml
+        - cmd/release_workflow_contract_test.go
+      target_files:
+        - .github/workflows/ci.yml
+        - .github/workflows/release.yaml
+        - cmd/release_workflow_contract_test.go
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-02.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-02
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z
+    - task_id: t-03
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - .github/workflows/ci.yml
+        - .github/workflows/docs.yml
+        - .github/workflows/flake-lock-update.yaml
+        - .github/workflows/nix.yaml
+        - .github/workflows/pr-title.yaml
+        - .github/workflows/release-please.yaml
+        - .github/workflows/release.yaml
+        - .github/workflows/security.yaml
+      target_files:
+        - .github/workflows/ci.yml
+        - .github/workflows/docs.yml
+        - .github/workflows/flake-lock-update.yaml
+        - .github/workflows/nix.yaml
+        - .github/workflows/pr-title.yaml
+        - .github/workflows/release-please.yaml
+        - .github/workflows/release.yaml
+        - .github/workflows/security.yaml
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-03.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-03
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z
+    - task_id: t-04
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - cmd/tool_github.go
+        - cmd/tool_test.go
+      target_files:
+        - cmd/tool_github.go
+        - cmd/tool_test.go
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-04.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-04
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z
+    - task_id: t-05
+      verdict: pass
+      task_kind: code
+      changed_files:
+        - internal/state/worktree.go
+        - internal/state/worktree_test.go
+      target_files:
+        - internal/state/worktree.go
+        - internal/state/worktree_test.go
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-05.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-05
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z
+    - task_id: t-06
+      verdict: pass
+      task_kind: test
+      changed_files:
+        - cmd/release_workflow_contract_test.go
+      target_files:
+        - cmd/release_workflow_contract_test.go
+      evidence_ref: artifacts/changes/archived/harden-release-supply-chain/verification/task-results/t-06.json
+      freshness_inputs:
+        change_id: harden-release-supply-chain
+        run_summary_version: 3
+        task_id: t-06
+        tasks_plan_hash: 2e0d8a59d00ba0089dc47fa85dd715aefc7da72cd2bdda688f2ef84e2a9664d8
+      captured_at: 2026-06-26T17:08:03.996953Z

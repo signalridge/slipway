@@ -1,0 +1,11 @@
+{
+  "task_id": "t-06",
+  "verdict": "pass",
+  "evidence_ref": "artifacts/changes/harden-release-supply-chain/verification/task-results/t-06.json",
+  "changed_files": [
+    "cmd/release_workflow_contract_test.go"
+  ],
+  "blockers": [],
+  "test_summary": "Static and executable inspection confirmed cmd/release_workflow_contract_test.go parses .github/workflows/release.yaml and asserts no-secret tag validation before release/test jobs, control-character and multiline output-injection rejection before GITHUB_OUTPUT writes, release job environment release-publish with write/package/id-token/attestation permissions, GH_PAT/AUR_SSH_PRIVATE_KEY confinement to the release job, validated tag output consumption, and smoke inputs generated from dist/ outputs. Passed after S3 repair: go test ./cmd -run 'TestReleaseWorkflow|TestGitHubAPIOverride|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1.",
+  "notes": "Codebase map relevance self-check: ARCHITECTURE.md, STRUCTURE.md, TESTING.md, and CONCERNS.md were relevant for scope confirmation and matched the task contract, but final verification relied on tasks.md, requirements.md, release.yaml, ci.yml, release_workflow_contract_test.go, and executed commands. S3 repair batch s3-review-repair:harden-release-supply-chain added direct release-tag output-injection regression coverage. The earlier bounded GoReleaser dry run passed and generated only ignored dist/ output."
+}

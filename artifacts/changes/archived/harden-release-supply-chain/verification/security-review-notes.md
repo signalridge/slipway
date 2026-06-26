@@ -1,0 +1,314 @@
+# Security Review Notes
+
+verdict: pass
+context_origin:stage=review=codex-security-review-r3-20260627
+reviewer_handle: codex-security-review-r3-20260627
+review_role: security-review
+change: harden-release-supply-chain
+run_summary_version: 3
+
+## Bottom Line
+
+Security review passes for run summary version 3. I found no remaining blocker
+across the changed release workflow, GitHub API override backend, REST
+pagination handling, BaseRef worktree validation, live-protection artifacts,
+workflow pinning, or container/supply-chain surfaces.
+
+## Findings
+
+No blocker, major, minor, or nit findings.
+
+## Prior Blocker Closure
+
+### Prior blocker: release tag GITHUB_OUTPUT injection
+
+Verdict: closed.
+
+Evidence:
+
+- `.github/workflows/release.yaml:37-47` derives the tag from the workflow
+  input or pushed ref, rejects `[[:cntrl:]]`, validates the whole scalar with a
+  Bash regex, and writes `tag_name` to `GITHUB_OUTPUT` only after validation.
+- `.github/workflows/release.yaml:52-58` and `.github/workflows/release.yaml:84-106`
+  make `test` and `release` depend on `validate-tag` and consume
+  `needs.validate-tag.outputs.tag_name`, not raw `inputs.tag`.
+- `cmd/release_workflow_contract_test.go:68-91` executes the validation script
+  and asserts LF, CR, and tab inputs fail before `GITHUB_OUTPUT` is written.
+
+Command evidence:
+
+```text
+go test ./cmd -run 'TestReleaseWorkflowRejectsOutputInjectionTags|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1 -v
+
+=== RUN   TestReleaseWorkflowRejectsOutputInjectionTags
+--- PASS: TestReleaseWorkflowRejectsOutputInjectionTags (0.07s)
+PASS
+ok   github.com/signalridge/slipway/cmd   0.433s
+```
+
+Additional focused contract evidence:
+
+```text
+go test ./cmd -run 'TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient|TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates|TestReleaseWorkflowValidatesTagBeforeSecretExposure|TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest' -count=1 -v
+
+=== RUN   TestReleaseWorkflowValidatesTagBeforeSecretExposure
+--- PASS: TestReleaseWorkflowValidatesTagBeforeSecretExposure (0.00s)
+=== RUN   TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest
+--- PASS: TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest (0.00s)
+PASS
+ok   github.com/signalridge/slipway/cmd   0.661s
+```
+
+### Prior blocker: REST pagination Link token exfiltration
+
+Verdict: closed.
+
+Evidence:
+
+- `cmd/tool_github.go:563-568` calls `authorizePaginationURL` before using any
+  server-provided `Link` rel=next URL.
+- `cmd/tool_github.go:593-624` requires pagination URLs to be absolute HTTPS,
+  on the configured API base host, without userinfo, without fragments, without
+  encoded paths, and within the configured API base path.
+- `cmd/tool_test.go:557-597` covers both cross-host and base-path escape Link
+  targets and asserts the unsafe target is rejected before any token-bearing
+  follow-up request.
+
+Command evidence:
+
+```text
+go test ./cmd -run 'TestReleaseWorkflowRejectsOutputInjectionTags|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1 -v
+
+=== RUN   TestGitHubAPIOverrideRejectsUnsafePaginationLink
+=== RUN   TestGitHubAPIOverrideRejectsUnsafePaginationLink/cross_host
+=== RUN   TestGitHubAPIOverrideRejectsUnsafePaginationLink/base_path_escape
+--- PASS: TestGitHubAPIOverrideRejectsUnsafePaginationLink (0.00s)
+PASS
+ok   github.com/signalridge/slipway/cmd   0.433s
+```
+
+### Prior blocker: public api.github.com path confusion
+
+Verdict: closed.
+
+Evidence:
+
+- `cmd/tool_github.go:374-410` normalizes API base URLs through `net/url`,
+  rejects non-HTTPS, userinfo, query, fragment, encoded path, non-canonical
+  path, and any non-root public `api.github.com` path. The public-host check
+  uses `parsed.Hostname()`, so explicit default-port input is classified as the
+  public host.
+- `cmd/tool_test.go:424-518` covers unsafe URLs and allowlisted public
+  path-confusion spellings.
+
+Command evidence:
+
+```text
+go test ./cmd -run 'TestReleaseWorkflowRejectsOutputInjectionTags|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1 -v
+
+=== RUN   TestGitHubAPIOverrideRejectsUnsafeURLs
+=== RUN   TestGitHubAPIOverrideRejectsUnsafeURLs/path-confused_public_host_rejected
+=== RUN   TestGitHubAPIOverrideRejectsUnsafeURLs/path-confused_public_host_with_default_port_rejected
+=== RUN   TestGitHubAPIOverrideRejectsUnsafeURLs/path-confused_mixed-case_public_host_with_default_port_rejected
+--- PASS: TestGitHubAPIOverrideRejectsUnsafeURLs (0.00s)
+=== RUN   TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion
+=== RUN   TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion/path
+=== RUN   TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion/default_port_path
+=== RUN   TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion/mixed-case_default_port_path
+--- PASS: TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion (0.00s)
+PASS
+ok   github.com/signalridge/slipway/cmd   0.433s
+```
+
+Direct repro evidence:
+
+```text
+SLIPWAY_GITHUB_API_URL=https://api.github.com:443/evil go run . tool fetch-pr-checks --backend api --repo signalridge/slipway --pr 1
+```
+
+Observed result:
+
+```json
+{
+  "error_code": "github_api_url_invalid",
+  "category": "invalid_usage",
+  "message": "invalid GitHub API base URL \"https://api.github.com:443/evil\": public api.github.com override must not include a path",
+  "remediation": "Use https://api.github.com, or an exact HTTPS GitHub Enterprise API base URL allowlisted by SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS.",
+  "exit_code": 2
+}
+exit status 2
+```
+
+This fails before request construction with `github_api_url_invalid`, matching
+the secure-default expectation.
+
+### Prior blocker: explicit-default-port public path confusion
+
+Verdict: closed.
+
+Evidence:
+
+- `cmd/tool_github.go:403-405` compares `parsed.Hostname()` to
+  `api.github.com`, so `https://api.github.com:443/evil` and
+  `https://API.GITHUB.COM:443/evil` are rejected as public GitHub path
+  overrides before allowlist or token selection.
+- `cmd/tool_test.go:451-458` and `cmd/tool_test.go:493-500` add regression
+  coverage for explicit default-port and mixed-case public host spellings.
+- The direct repro above returns `github_api_url_invalid`, not
+  `github_api_failed`.
+
+## Secure Default Checklist
+
+- Input: pass. Release tag input is scalar-validated before output emission;
+  `BaseRef` is trimmed, defaulted to `HEAD` only when empty, rejects option-like
+  and control-character values, and resolves to a commit before worktree add.
+- Authentication: pass. No password, session, MFA, or hand-rolled credential
+  primitive changed. GitHub API authentication now uses ambient tokens only for
+  the default public API and requires `SLIPWAY_GITHUB_API_TOKEN` for exact
+  allowlisted overrides.
+- Authorization: pass. Release publishing is gated behind `validate-tag`,
+  `test`, and the protected `release-publish` environment. The live protection
+  artifacts record active main/tag rulesets and required environment reviewer
+  configuration.
+- Output encoding and injection: pass. `GITHUB_OUTPUT` writes for release tag,
+  optional-secret booleans, hashes, and smoke manifest outputs are emitted from
+  validated scalar or generated values. No shell string interpolation issue
+  remains in the reviewed release tag boundary.
+- SSRF and server-side requests: pass. API override base URLs are HTTPS-only,
+  exact-allowlisted for non-default hosts, reject public GitHub path confusion,
+  reject query/fragment/userinfo/encoded paths, and re-authorize pagination
+  Link URLs before follow-up requests.
+- Secrets: pass. `GH_PAT` and `AUR_SSH_PRIVATE_KEY` are confined to the
+  protected release job. Ambient `GH_TOKEN` / `GITHUB_TOKEN` are not sent to
+  override hosts; allowlisted override hosts require `SLIPWAY_GITHUB_API_TOKEN`.
+- Error paths: pass. Unsafe API overrides fail closed with
+  `github_api_url_invalid`, `github_api_url_not_allowed`, or
+  `github_api_override_token_missing` before network use. Invalid BaseRef values
+  return product-owned remediation before `git worktree add`.
+- Dependency boundary: pass. Changed workflow action refs are full commit SHAs;
+  `govulncheck`, `gosec`, `go-licenses`, GoReleaser, syft, Trivy, and Buildx
+  usage are pinned by fixed module/action version or commit SHA as applicable.
+- Insecure defaults: pass. No active `@latest`, active `@main`, `curl | sh`,
+  `wget | sh`, `eval`, Docker socket mount, `--privileged`, or floating changed
+  workflow container image was found.
+- Docker/container supply chain: pass for changed scope. Release verification
+  containers are digest-pinned; Dockerfiles were not changed and use digest
+  pinned bases plus `USER nonroot:nonroot`.
+- XSS: not applicable to changed surfaces; no browser rendering or HTML sink
+  changed.
+
+## Live Protection Artifact Review
+
+- `main-branch-ruleset-request.json` records active branch enforcement for
+  `~DEFAULT_BRANCH`, deletion and non-fast-forward protection, required thread
+  resolution, squash-only merges, strict required status checks, and exact
+  always-running contexts including `Release Config`.
+- `release-tag-ruleset-request.json` records active `refs/tags/v*` tag
+  enforcement for creation, update, deletion, and non-fast-forward changes, with
+  the documented owner-user bypass.
+- `release-environment-request.json` records the `release-publish` required
+  reviewer configuration for User `52877870`.
+- `task-results/t-01.json` records read-only GitHub API verification: main is
+  protected, rulesets `18174607` and `18174614` are active, and
+  `release-publish` has required reviewers.
+
+## Commands Run
+
+Required governed state:
+
+```text
+SLIPWAY_HOST_CAPABILITIES=subagent go run . next --json --diagnostics
+```
+
+Result summary: active `harden-release-supply-chain`, bound workspace
+`.worktrees/harden-release-supply-chain`, state `S3_REVIEW`, selected review
+skills include `security-review`, and run-summary-bound review constraints are
+present.
+
+```text
+SLIPWAY_HOST_CAPABILITIES=subagent go run . validate --json
+```
+
+Result summary: requirements, tasks, decision, and scope contracts are valid;
+execution evidence is fresh; G_ship is blocked by expected missing/stale S3
+review and ship-verification evidence before this review is recorded.
+
+Security tests and repros:
+
+```text
+go test ./cmd -run 'TestReleaseWorkflowRejectsOutputInjectionTags|TestGitHubAPIOverrideRejectsUnsafeURLs|TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion|TestGitHubAPIOverrideRejectsUnsafePaginationLink' -count=1 -v
+```
+
+Result: pass.
+
+```text
+SLIPWAY_GITHUB_API_URL=https://api.github.com:443/evil go run . tool fetch-pr-checks --backend api --repo signalridge/slipway --pr 1
+```
+
+Result: expected exit status 2 with `github_api_url_invalid`.
+
+```text
+go test ./cmd -run 'TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient|TestToolFetchPRChecksSurfacesFailureSnippetAndPaginates|TestReleaseWorkflowValidatesTagBeforeSecretExposure|TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest' -count=1 -v
+```
+
+Result: pass.
+
+```text
+go test ./internal/state -run 'TestEnsureDefaultWorktreeForChange(Rejects|Accepts)' -count=1 -v
+```
+
+Result: pass.
+
+Diff and supply-chain scans:
+
+```text
+git diff -- . ':!dist'
+git diff --check -- . ':!dist'
+```
+
+Result: diff inspected; whitespace check passed with no diagnostics.
+
+```text
+awk '/^[[:space:]]*-?[[:space:]]*uses:/ { n=split($0,a,"@"); ref=a[n]; sub(/ .*/,"",ref); if (ref !~ /^[0-9a-f]{40}$/) print FILENAME ":" FNR ":" $0 }' .github/workflows/*.yml .github/workflows/*.yaml
+```
+
+Result: no output after tightening the scan to actual `uses:` keys.
+
+```text
+rg -n "@latest|@(main|master)(\\s|$)|DeterminateSystems/[^@]+@main|go install .*@(latest|main|master)(\\s|$)|curl\\s+.*\\|\\s*(sh|bash)|wget\\s+.*\\|\\s*(sh|bash)|\\beval\\b|docker\\.sock|/var/run/docker\\.sock|--privileged|container:\\s*[^@\\s]+:(latest|[0-9]+)$" .github/workflows Dockerfile Dockerfile.goreleaser
+```
+
+Result: no matches.
+
+Additional broad test attempt:
+
+```text
+go test ./cmd ./internal/state -count=1
+```
+
+Result: interrupted after 176.527s due long-running/noisy `cmd` suite output;
+`internal/state` had already passed in that run. I did not use this interrupted
+command as pass evidence; the focused security tests above provide the pass
+evidence for the reviewed surfaces.
+
+## Required Reading Completed
+
+- `.codex/skills/slipway-security-review/SKILL.md`
+- `.codex/skills/slipway-security-review/references/authentication.md`
+- `.codex/skills/slipway-security-review/references/authorization.md`
+- `.codex/skills/slipway-security-review/references/injection.md`
+- `.codex/skills/slipway-security-review/references/xss.md`
+- `.codex/skills/slipway-security-review/references/ssrf.md`
+- `.codex/skills/slipway-security-review/references/infrastructure-docker.md`
+- `artifacts/changes/harden-release-supply-chain/requirements.md`
+- `artifacts/changes/harden-release-supply-chain/decision.md`
+- `artifacts/changes/harden-release-supply-chain/tasks.md`
+- `artifacts/changes/harden-release-supply-chain/assurance.md`
+- `artifacts/changes/harden-release-supply-chain/verification/execution-summary.yaml`
+- live-protection request/evidence JSON under
+  `artifacts/changes/harden-release-supply-chain/verification/`
+- current diff excluding `dist`
+- changed security-sensitive workflows, Go files, tests, and Dockerfiles
+
+Per operator instruction, I did not run `slipway evidence`, `slipway run`,
+`slipway done`, `git add`, `git commit`, or modify lifecycle YAML.

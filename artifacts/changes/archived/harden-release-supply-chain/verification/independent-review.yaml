@@ -1,0 +1,187 @@
+verdict: pass
+blockers: []
+timestamp: 2026-06-26T17:21:38.8074Z
+run_version: 3
+references:
+    - context_origin:stage=fix=019f04cc-6fed-74f0-9042-f92e767e0291
+    - context_origin:stage=fix=019f04e3-aa63-7ed2-a61f-467180f45be5
+    - context_origin:stage=review=codex-independent-review-20260627T0236JST
+notes: |-
+    verdict: pass
+    context_origin: context_origin:stage=review=codex-independent-review-20260627T0236JST
+    bottom_line: "The run-version 3 diff satisfies the release supply-chain hardening acceptance signals, and I found no new or worsened blocker."
+    findings: []
+    questions: []
+
+    # Independent Review Notes
+
+    Review handle: `codex-independent-review-20260627T0236JST`
+
+    Scope: governed Slipway change `harden-release-supply-chain` in
+    `/Users/yixianlu/ghq/github.com/signalridge/slipway/.worktrees/harden-release-supply-chain`.
+
+    Role: independent S3 review only. I did not edit source, lifecycle YAML, or
+    evidence stamps. The only write from this review is this notes file.
+
+    ## Required Reading
+
+    - Read `.codex/skills/slipway-independent-review/SKILL.md`.
+    - Ran `SLIPWAY_HOST_CAPABILITIES=subagent go run . next --json --diagnostics`.
+      It reported the bound workspace as `.worktrees/harden-release-supply-chain`,
+      current state `S3_REVIEW`, expected run summary version 3, selected S3 review
+      skills, and missing/stale independent-review evidence for this run.
+    - Read `intent.md`, `requirements.md`, `decision.md`, `tasks.md`,
+      `assurance.md`, and `verification/execution-summary.yaml`.
+    - Read current diff before author-review notes with `git diff -- . ':!dist'`.
+      The terminal truncated the all-file patch, so I completed review with
+      file-by-file numbered reads and targeted diffs.
+
+    ## Acceptance Map
+
+    - REQ-001 Live Repository Protection:
+      `artifacts/changes/harden-release-supply-chain/verification/*ruleset*`,
+      live GitHub rulesets, and the protected environment.
+    - REQ-002 Release Workflow Fails Closed Before Secret Exposure:
+      `.github/workflows/release.yaml` lines 22-48, 49-85, 107-164, and
+      `cmd/release_workflow_contract_test.go` lines 16-92.
+    - REQ-003 Pinned Workflow and Tool Dependencies:
+      `.github/workflows/ci.yml`, `docs.yml`, `flake-lock-update.yaml`,
+      `nix.yaml`, `pr-title.yaml`, `release-please.yaml`, `release.yaml`, and
+      `security.yaml`.
+    - REQ-004 GitHub API Override Token Safety:
+      `cmd/tool_github.go` lines 337-463, 563-624, 687-711, and
+      `cmd/tool_test.go` lines 424-602 and 669-683.
+    - REQ-005 BaseRef Validation Before Worktree Creation:
+      `internal/state/worktree.go` lines 236-240 and 259-274, plus
+      `internal/state/worktree_test.go` lines 294-362.
+    - REQ-006 Release Config and Smoke Closure:
+      `.github/workflows/ci.yml` lines 116-147,
+      `.github/workflows/release.yaml` lines 183-221 and 318-396, and
+      `cmd/release_workflow_contract_test.go` lines 94-132.
+    - Codebase map updates:
+      `artifacts/codebase/{ARCHITECTURE,CONCERNS,STRUCTURE,TESTING}.md` now describe
+      this change's actual release/API/worktree review surface and test strategy.
+
+    ## Review Findings
+
+    No blocker, major, minor, or nit findings.
+
+    Diff-scoped classification:
+
+    - New or worsened blockers: none.
+    - Pre-existing blockers in reviewed changed lines: none identified.
+
+    ## Line-Level Review Notes
+
+    Release workflow:
+
+    - `.github/workflows/release.yaml:22-48` adds `validate-tag` as the first
+      no-secret, read-only job. It rejects control characters and non-semver-like
+      tags before writing the validated `tag_name` output.
+    - `.github/workflows/release.yaml:49-80` makes the test job depend on
+      `validate-tag`, checks out `needs.validate-tag.outputs.tag_name`, and avoids
+      release secrets and write permissions.
+    - `.github/workflows/release.yaml:81-164` scopes release write/package/
+      attestation permissions and publishing secrets to the protected
+      `release-publish` environment after validation and tests.
+    - `.github/workflows/release.yaml:183-221` derives smoke asset outputs from
+      actual `dist/` files and fails closed when the archive, deb, rpm, or apk
+      assets are absent.
+    - `.github/workflows/release.yaml:318-396` consumes release job smoke outputs
+      for deb/rpm/apk/binary verification and runs both `slipway --version` and
+      `slipway --help`.
+
+    CI and workflow pinning:
+
+    - `.github/workflows/ci.yml:116-143` adds an always-running `Release Config`
+      job with fixed GoReleaser `v2.16.0`, syft setup, Docker Buildx setup, config
+      check, and snapshot dry run.
+    - `.github/workflows/ci.yml:144-147` makes `Build` depend on `release-config`,
+      so release-config failures block normal PR success.
+    - `.github/workflows/security.yaml:23-26` pins `govulncheck` to `v1.5.0`;
+      `.github/workflows/security.yaml:155-157` pins `go-licenses` to `v1.6.0`.
+    - Static search found no remaining `uses:` ref outside a full 40-character SHA
+      and no `@latest`, `@main`, or `@master` tool install in `.github/workflows`.
+
+    GitHub API override safety:
+
+    - `cmd/tool_github.go:337-371` centralizes GitHub API URL/token resolution.
+      Override URLs must be allowlisted and require `SLIPWAY_GITHUB_API_TOKEN`.
+      Ambient `GH_TOKEN` and `GITHUB_TOKEN` stay limited to the default public
+      GitHub API path.
+    - `cmd/tool_github.go:374-410` rejects HTTP, userinfo, query/fragment,
+      encoded-path, non-canonical-path, and path-confused public `api.github.com`
+      overrides, including default-port path confusion.
+    - `cmd/tool_github.go:563-624` validates pagination `Link` targets before
+      following them with an Authorization header, preventing cross-host or base-path
+      escape follow-up requests.
+    - `cmd/tool_github.go:687-711` routes GraphQL through the same validated HTTP
+      backend and token selection.
+    - `cmd/tool_test.go:424-602` covers unsafe override URLs, allowlisted public
+      path confusion, missing override token, override-token authorization, and
+      unsafe pagination links. `cmd/tool_test.go:669-683` keeps API tests on TLS
+      test servers with injected transport and override-token env setup.
+
+    BaseRef validation:
+
+    - `internal/state/worktree.go:236-240` validates `change.BaseRef` before it is
+      appended to `git worktree add`.
+    - `internal/state/worktree.go:259-274` defaults empty refs to `HEAD`, rejects
+      option-like and control-character refs, and verifies commit-ish resolution via
+      `git rev-parse --verify --quiet`.
+    - `internal/state/worktree_test.go:294-362` covers option-like refs, control
+      characters, unknown refs, and valid tag refs, including assertions that
+      invalid refs fail before a worktree directory is created.
+
+    ## Commands Run
+
+    - `sed -n '1,240p' /Users/yixianlu/ghq/github.com/signalridge/slipway/.codex/skills/slipway-independent-review/SKILL.md`
+    - `SLIPWAY_HOST_CAPABILITIES=subagent go run . next --json --diagnostics`
+    - `sed -n '1,260p' artifacts/changes/harden-release-supply-chain/intent.md`
+    - `sed -n '1,320p' artifacts/changes/harden-release-supply-chain/requirements.md`
+    - `sed -n '1,320p' artifacts/changes/harden-release-supply-chain/decision.md`
+    - `sed -n '1,360p' artifacts/changes/harden-release-supply-chain/tasks.md`
+    - `sed -n '1,360p' artifacts/changes/harden-release-supply-chain/assurance.md`
+    - `sed -n '1,260p' artifacts/changes/harden-release-supply-chain/verification/execution-summary.yaml`
+    - `git diff --stat -- . ':!dist'`
+    - `git diff -- . ':!dist'`
+    - Numbered file reads and targeted diffs for changed workflow, Go, test, and
+      codebase-map files.
+    - `go test ./cmd ./internal/state -count=1`
+      - `ok github.com/signalridge/slipway/cmd 187.936s`
+      - `ok github.com/signalridge/slipway/internal/state 36.579s`
+    - `go test ./cmd -run 'TestReleaseWorkflow|TestGitHubAPI' -count=1`
+      - `ok github.com/signalridge/slipway/cmd 1.116s`
+    - `go test ./internal/state -run 'TestEnsureDefaultWorktreeForChange(Rejects|Accepts|_Provisions)' -count=1`
+      - `ok github.com/signalridge/slipway/internal/state 7.129s`
+    - `git diff --check -- . ':!dist'`
+      - passed with no output.
+    - `actionlint .github/workflows/*.yml .github/workflows/*.yaml`
+      - passed with no output.
+    - `rg -n "uses:\\s*[^#\\n]+@(?![0-9a-f]{40})([A-Za-z0-9._/-]+)" .github/workflows -P`
+      - no matches.
+    - `rg -n "go install .*@(latest|main|master)|go run .*@(latest|main|master)|DeterminateSystems/.+@main|@latest" .github/workflows`
+      - no matches.
+    - `gh api repos/signalridge/slipway/branches/main --jq .protected`
+      - `true`
+    - `gh api repos/signalridge/slipway/rulesets/18174607 --jq '{id,name,target,enforcement,conditions,rules:[.rules[].type]}'`
+      - active branch ruleset for `~DEFAULT_BRANCH` with deletion,
+        non-fast-forward, pull request, and required status checks rules.
+    - `gh api repos/signalridge/slipway/rulesets/18174614 --jq '{id,name,target,enforcement,conditions,rules:[.rules[].type]}'`
+      - active tag ruleset for `refs/tags/v*` with creation, update, deletion, and
+        non-fast-forward rules.
+    - `gh api repos/signalridge/slipway/environments/release-publish --jq '{name,protection_rules}'`
+      - environment exists with required reviewer `signalridge`.
+
+    ## Residual Risk
+
+    - I did not run `go test ./...`, `goreleaser check`, the snapshot release dry
+      run, `yamllint`, or live PR CI in this review pass. The S2 assurance and task
+      evidence claim those were run before S3, and this independent pass reran the
+      focused command/API/worktree tests plus actionlint and live read-only GitHub
+      protection checks.
+
+    ## Verdict
+
+    Pass. The reviewed diff aligns with the approved run-version 3 requirements and
+    I found no new or worsened correctness, quality, safety, or test blocker.

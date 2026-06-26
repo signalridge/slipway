@@ -1,0 +1,61 @@
+version: 1
+slug: harden-release-supply-chain
+description: harden release supply chain
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-26T14:12:24.940263Z
+quality_mode: full
+workflow_profile: code
+workflow_preset: strict
+worktree_branch: feat/harden-release-supply-chain
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 5c3a0fca04c31af3cee1f015d7d09cc7b2e84cbd46d8b8cb24e0b30d03ac084c
+        updated_at: 2026-06-26T17:39:11.23331934Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 7083669353e3f2aeb8df186b1c2edc087a8ec41f2c5cd07d32204476c83d92f4
+        updated_at: 2026-06-26T14:46:23.982945236Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 6d345908e5c86bd94b72e07f6daf7cd64105357fc1d488f86017ade3e4018e29
+        updated_at: 2026-06-26T14:43:23.237266629Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 4f915e52785a1ff57b9f7d239e4c8444b7879c099fcf1199dc68be75076669f4
+        updated_at: 2026-06-26T14:53:34.013414197Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: d0e8dc5a6b5567c065b05c18deca82950df55c6626ed8935e89a0b745b7027c0
+        updated_at: 2026-06-26T14:53:55.750350129Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 0df1192e434e946da9fb1623a6d9cad3a8d634ed17e4eb48ed522bbb74c7f72d
+        updated_at: 2026-06-26T14:53:34.012907795Z
+evidence_refs:
+    code-quality-review: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/code-quality-review.yaml
+    independent-review: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/independent-review.yaml
+    intake-clarification: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/intake-clarification.yaml
+    plan-audit: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/plan-audit.yaml
+    research-orchestration: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/research-orchestration.yaml
+    security-review: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/security-review.yaml
+    ship-verification: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/harden-release-supply-chain/artifacts/changes/harden-release-supply-chain/verification/wave-orchestration.yaml

@@ -1,0 +1,13 @@
+{
+  "task_id": "t-01",
+  "verdict": "pass",
+  "evidence_ref": "artifacts/changes/harden-release-supply-chain/verification/task-results/t-01.json",
+  "changed_files": [
+    "artifacts/changes/harden-release-supply-chain/verification/main-branch-ruleset-request.json",
+    "artifacts/changes/harden-release-supply-chain/verification/release-tag-ruleset-request.json",
+    "artifacts/changes/harden-release-supply-chain/verification/release-environment-request.json"
+  ],
+  "blockers": [],
+  "test_summary": "Read-only GitHub API verification passed: main reports protected=true; rulesets 18174607 and 18174614 are active for the default branch and refs/tags/v* respectively; the main ruleset carries the expected required status check contexts and strict policy; release-publish has a required_reviewers protection rule for User 52877870.",
+  "notes": "Codebase map relevance self-check: not read or relied on because this task verifies live GitHub repository settings against request JSON payloads, not code architecture or test topology. Warning: the ruleset list endpoint omitted detailed rules and the environment endpoint exposes required reviewers under protection_rules, so verification used ruleset detail endpoints and full environment output. No repository-wide tests were run."
+}

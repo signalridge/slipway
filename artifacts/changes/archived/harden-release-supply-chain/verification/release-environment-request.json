@@ -1,0 +1,10 @@
+{
+  "wait_timer": 0,
+  "reviewers": [
+    {
+      "type": "User",
+      "id": 52877870
+    }
+  ],
+  "deployment_branch_policy": null
+}
