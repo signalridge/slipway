@@ -5,7 +5,8 @@
 
 大多数路由命令在需要结构化输出时都支持 `--json`。
 `slipway validate` 的主报告以 JSON 形式输出，`slipway init` 仅用于初始化配置，
-`slipway config` 是公开的纯 CLI 初始化/配置面。
+而 `slipway config`、`slipway tool` 和 `slipway hook` 是公开的纯 CLI 命令面，
+不生成适配器 prompt 包装。
 
 ## 命令索引
 
@@ -13,7 +14,7 @@
 | --- | --- | --- |
 | `slipway new` | mutation | 创建一个受治理的变更。 |
 | `slipway intake` | mutation | 执行意图澄清与授权。 |
-| `slipway plan` | mutation | 编写或修订规划制品。 |
+| `slipway plan` | mutation | 编写或修订规划产物。 |
 | `slipway implement` | mutation | 执行 S2 阶段的实现波次编排。 |
 | `slipway review` | mutation | 执行 S3 阶段的评审收敛。 |
 | `slipway fix` | mutation | 针对 S3 评审发现派发修复。 |
@@ -31,8 +32,9 @@
 | `slipway repair` | mutation | 执行有界范围的本地完整性修复。 |
 | `slipway evidence` | mutation | 记录受支持的任务或技能证据。 |
 | `slipway tool` | mutation | 运行生成技能所使用的纯 CLI 辅助工具。 |
+| `slipway hook` | mutation | 运行生成的适配器配置所使用的纯 CLI 宿主 hook 辅助命令。 |
 | `slipway health` | query | 显示仓库本地的完整性检查结果。 |
-| `slipway instructions` | query | 显示制品或 codebase-map 的编写约定。 |
+| `slipway instructions` | query | 显示产物或 codebase-map 的编写约定。 |
 | `slipway init` | mutation | 初始化运行时布局与可选适配器。 |
 | `slipway config` | mutation | 查看并设置仓库级配置键。 |
 
@@ -63,10 +65,10 @@ slipway evidence task --result-file task-result.json [--result-file next-task-re
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json
-slipway config --json
+slipway config list --json
 ```
 
-当你需要查看阻塞项细节、制品就绪度细节、状态转换轨迹或上下文预算诊断时，
+当你需要查看阻塞项细节、产物就绪度细节、状态转换轨迹或上下文预算诊断时，
 请在 `next` 或 `run` 上加 `--diagnostics`。
 
 ## 子命令与模式要点
@@ -77,7 +79,9 @@ slipway config --json
 - `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。
 - `slipway status --stats --json` 报告工作区诊断，不重新引入已退休的顶层 `stats` 命令。
 - `slipway health --doctor --json` 在 health 报告中加入面向修复的诊断。
-- `slipway config`、`slipway config list --json`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看或更新 `.slipway.yaml`；`config` 刻意保持 CLI-only，不生成适配器 prompt surface。
+- `slipway tool <helper>` 由生成的 skill 直接调用，不生成适配器提示词接入面。
+- `slipway hook session-start` 和 `slipway hook context-pressure` 由生成的宿主 hook 配置直接调用；hook 辅助命令会静默失败，避免自动 hook 阻塞用户。
+- `slipway config`、`slipway config list --json`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看或更新 `.slipway.yaml`；`config` 刻意保持 CLI-only，不生成适配器提示词接入面。
 
 ## 只读类命令
 
@@ -105,7 +109,7 @@ slipway done --json
 slipway run --json --diagnostics
 ```
 
-如果某个变更命令以 fail-closed 方式失败，请重新运行当前的只读检查，
+如果某个变更命令失败即停，请重新运行当前的只读检查，
 并按提示给出的恢复命令操作。
 
 配置项 `execution.auto` 作用于 `intake`、`plan` 和 `implement`。

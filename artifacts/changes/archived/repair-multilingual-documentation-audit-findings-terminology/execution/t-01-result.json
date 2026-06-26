@@ -1,0 +1,20 @@
+{
+  "task_id": "t-01",
+  "verdict": "pass",
+  "evidence_ref": "executor:019f018d-25c7-7d62-a562-1170205e934f; go run ./internal/toolgen/cmd/gen-surface-manifest --write; go test ./internal/toolgen/...; go run ./internal/toolgen/cmd/gen-surface-manifest --check",
+  "changed_files": [
+    "cmd/root.go",
+    "internal/toolgen/toolgen.go",
+    "internal/toolgen/toolgen_test.go",
+    "internal/toolgen/surface_manifest.go",
+    "docs/SURFACE-MANIFEST.json",
+    "docs/commands.md",
+    "docs/reference/commands.md",
+    "docs/zh/commands.md",
+    "docs/zh/reference/commands.md",
+    "docs/ja/commands.md",
+    "docs/ja/reference/commands.md"
+  ],
+  "blockers": [],
+  "session_id": "019f018d-25c7-7d62-a562-1170205e934f"
+}

@@ -7,8 +7,9 @@
 
 ルーティングされるコマンドのほとんどは、構造化された出力が必要なときに `--json` を
 サポートします。`slipway validate` はメインのレポートを JSON で出力し、
-`slipway init` はセットアップ専用、`slipway config` は公開 CLI 専用の
-セットアップ／設定サーフェスです。
+`slipway init` はセットアップ専用です。`slipway config`、`slipway tool`、
+`slipway hook` は公開 CLI 専用サーフェスであり、アダプターのプロンプト
+ラッパーは生成されません。
 
 ## コマンド一覧
 
@@ -34,6 +35,7 @@
 | `slipway repair` | mutation | 範囲を限定したローカルの整合性修復を実行する。 |
 | `slipway evidence` | mutation | サポートされているタスクまたはスキルのエビデンスを記録する。 |
 | `slipway tool` | mutation | 生成されたスキルが使う CLI 専用のヘルパーツールを実行する。 |
+| `slipway hook` | mutation | 生成されたアダプター設定が使う CLI 専用のホストフックヘルパーを実行する。 |
 | `slipway health` | query | リポジトリローカルの整合性の指摘を表示する。 |
 | `slipway instructions` | query | アーティファクトまたは codebase-map のオーサリング契約を表示する。 |
 | `slipway init` | mutation | ランタイムレイアウトとオプションのアダプターを初期化する。 |
@@ -67,7 +69,7 @@ slipway evidence task --result-file task-result.json [--result-file next-task-re
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json
-slipway config --json
+slipway config list --json
 ```
 
 ブロッカーの詳細、アーティファクトのレディネスの詳細、トランジショントレース、
@@ -82,11 +84,13 @@ slipway config --json
 - `slipway evidence skill --skill <name> --verdict pass --json` は、そのスキルを所有するステージで統制スキルのエビデンスを記録します。
 - `slipway status --stats --json` は、廃止されたトップレベルの `stats` コマンドを戻さずにワークスペース診断を報告します。
 - `slipway health --doctor --json` は、ヘルスレポートに修復向けの診断を追加します。
+- `slipway tool <helper>` は生成されたスキルから直接呼び出され、生成されたアダプターのプロンプトサーフェスはありません。
+- `slipway hook session-start` と `slipway hook context-pressure` は生成されたホストフック設定から直接呼び出されます。フックヘルパーは、ホストの自動フックがユーザーをブロックしないよう静かに失敗します。
 - `slipway config`、`slipway config list --json`、`slipway config get <key> --json`、`slipway config set <key> <value>` は `.slipway.yaml` を確認・更新します。`config` は意図的に CLI 専用であり、生成されたアダプターのプロンプトサーフェスはありません。
 
-## 読み取り専用の権限
+## 読み取り専用サーフェス
 
-以下のコマンドは、ライフサイクルの権限を変更せずに状態を確認します。
+以下のコマンドは、ライフサイクル状態を変更せずに状態を確認します。
 
 ```bash
 slipway status --json
@@ -110,7 +114,7 @@ slipway done --json
 slipway run --json --diagnostics
 ```
 
-mutation が fail-closed になった場合は、現在の読み取り専用チェックを再実行し、
+mutation がフェイルクローズドになった場合は、現在の読み取り専用チェックを再実行し、
 指定された復旧コマンドに従ってください。
 
 設定レベルの `execution.auto` は `intake`、`plan`、`implement` に適用されます。

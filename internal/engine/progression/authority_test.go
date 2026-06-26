@@ -635,6 +635,82 @@ func TestReviewAuthorityDocsProfileIgnoresUnselectedCodeQualityEvidenceOnDisk(t 
 	assert.NotContains(t, strings.Join(model.ReasonSpecs(authority.Blockers), "\n"), SkillCodeQualityReview)
 }
 
+func TestReviewAuthorityAbsorbsS3TaskPlanDriftOnly(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n"), 0o644))
+
+	change := model.NewChange("review-authority-s3-task-plan-drift")
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+	writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+	summary.OverallVerdict = model.ExecutionVerdictFail
+	summary.OpenBlockers = []model.ReasonCode{
+		model.NewReasonCode("tasks_plan_changed_since_task_evidence", "t-01"),
+	}
+	summary.SyncDerivedFields()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	selectedRecords := reviewSkillContextRecords(map[string]string{
+		SkillSpecComplianceReview: "ctx-spec-reviewer",
+		SkillCodeQualityReview:    "ctx-code-reviewer",
+		SkillIndependentReview:    "ctx-independent-reviewer",
+	})
+	now := time.Date(2026, 6, 26, 4, 0, 0, 0, time.UTC)
+	for skillName, record := range selectedRecords {
+		record.RunVersion = 1
+		record.Timestamp = now
+		switch skillName {
+		case SkillSpecComplianceReview:
+			record.References = append(record.References, "layer:R0=pass")
+		case SkillCodeQualityReview:
+			record.References = append(record.References, "layer:IR1=pass")
+		}
+		writeVerificationForTest(t, root, change.Slug, skillName, record)
+	}
+	shipRecord := passingShipVerificationRecord(now.Add(time.Minute))
+	shipRecord.RunVersion = 1
+	writeVerificationForTest(t, root, change.Slug, SkillShipVerification, shipRecord)
+
+	authority, err := EvaluateReviewAuthority(root, change)
+	require.NoError(t, err)
+	assert.NotContains(t, model.ReasonSpecs(authority.Blockers), "tasks_plan_changed_since_task_evidence:t-01",
+		"S3 review authority should treat task-plan drift as reviewer recertification input")
+
+	ship, err := buildShipAuthorityFromReadiness(root, change, GovernanceReadiness{
+		ExecutionSummary:     summary,
+		ArtifactReadiness:    ArtifactReadiness{Ready: true},
+		PassingSkills:        authority.PassingSkills,
+		ReviewSurface:        &authority,
+		reviewAuthority:      &authority,
+		SkillBlockers:        []model.ReasonCode{},
+		Blockers:             []model.ReasonCode{},
+		RequiredActions:      []governance.RequiredAction{},
+		ArtifactProjection:   &ArtifactProjection{},
+		FreshnessDiagnostics: state.ExecutionFreshnessDiagnostics{},
+	})
+	require.NoError(t, err)
+	assert.NotContains(t, model.ReasonSpecs(ship.Result.ReasonCodes), "ship_verification_evidence_missing",
+		"ship gate must not stay generically blocked by S3 review-absorbed task-plan drift")
+
+	summary.OpenBlockers = []model.ReasonCode{
+		model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""),
+	}
+	summary.SyncDerivedFields()
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+	staleAuthority, err := EvaluateReviewAuthority(root, change)
+	require.NoError(t, err)
+	assert.Contains(t, model.ReasonSpecs(staleAuthority.Blockers), state.StaleExecutionEvidenceBlockerToken,
+		"stale execution evidence must remain a review-authority blocker")
+}
+
 // TestCrossStageContextDistinctBlockers covers the generalized P2 distinct-context
 // lattice (REQ-002) at the review seam: pass-with-distinct, a colliding pair named
 // in earlier|later detail, a single-stage handle equal to a member of the executor

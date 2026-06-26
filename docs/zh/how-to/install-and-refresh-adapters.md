@@ -43,9 +43,9 @@ slipway init --tools all
 slipway init --tools none
 ```
 
-`--tools none` 只初始化运行时布局和 `.slipway.yaml`，不写入任何 host 适配器文件。
+`--tools none` 只初始化运行时布局和 `.slipway.yaml`，不写入任何 AI 工具适配器文件。
 
-提交生成的文件前，先检查 diff：
+提交生成的文件前，先检查差异：
 
 ```bash
 git status --short
@@ -78,13 +78,13 @@ slipway init --tools all --refresh
 
 ## 保留用户自有文件
 
-接受刷新 diff 之前，先检查相邻的 host 配置：
+接受刷新差异之前，先检查相邻的工具配置：
 
 ```bash
 git status --short .claude .codex .cursor .opencode
 ```
 
-生成的文件由 CLI 负责。用户自有的 host 设置、本地 prompt、手写命令以及非 Slipway 的 hook 都应保持原样。
+生成的文件由 CLI 负责。用户自有的工具设置、本地 prompt、手写命令以及非 Slipway 的 hook 都应保持原样。
 
 如果刷新结果删除了某个旧的、由 Slipway 拥有的启动器或 prompt，提交前请确认新生成的接口已经存在。Codex 命令接口现在位于：
 

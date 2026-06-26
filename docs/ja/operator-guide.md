@@ -11,8 +11,8 @@
 | `artifacts/changes/<slug>/*.md` | 意図、調査、要件、決定、タスク、保証。 | 追跡対象のプロジェクト記録。 |
 | `artifacts/changes/<slug>/events/lifecycle.jsonl` | ライフサイクルを変化させるイベントの追記専用トレース。 | 既定ではローカル限定の生証跡。 |
 | `artifacts/changes/<slug>/verification/*.yaml` | スキルおよび検証の証跡。 | 既定ではローカル限定の生証跡。 |
-| `.git/slipway/runtime/changes/<slug>/evidence/**` | ウェーブ実行と鮮度診断が消費するランタイムタスク証跡。 | Git 内部のローカルランタイム状態。 |
-| `.git/slipway/runtime/changes/<slug>/handoff.md` | アクティブな変更について、新しい AI セッション向けの任意の補足的な継続メモ。ライフサイクルの権威でも、ガバナンス証跡でも、鮮度入力でも、ゲートでもない。 | Git 内部のローカルランタイム状態。 |
+| `.git/slipway/runtime/changes/<slug>/evidence/**` | ウェーブ実行と現在性診断が消費するランタイムタスク証跡。 | Git 内部のローカルランタイム状態。 |
+| `.git/slipway/runtime/changes/<slug>/handoff.md` | アクティブな変更について、新しい AI セッション向けの任意の補足的な継続メモ。ライフサイクルの権威でも、ガバナンス証跡でも、現在性判定の入力でも、ゲートでもない。 | Git 内部のローカルランタイム状態。 |
 | `.git/slipway/locks/change-create.lock`、`.git/slipway/locks/repair.lock` | 変更作成と修復のための、ワークスペース/スコープレベルの調整ロック。対応するクリティカルセクションは安定した変更単位ロックの前または外側で始まるため、これらはグローバルなまま残る。 | Git 内部のローカルランタイム状態。 |
 | `artifacts/codebase/**` | `slipway codebase-map` が生成する補足的なコードベースマップ。 | 追跡対象のプロジェクト記録。既定で git 追跡される（既存リポジトリは次回の管理ブロック再書き込み時に自動移行する）。 |
 | `.worktrees/<slug>` | 専用のガバナンス対象ワークトリーチェックアウト。 | 既定ではローカル限定。 |
@@ -22,7 +22,7 @@
 task` がそれを `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 配下に記録します。
 継続メモが役立つ場合は、新しい `status` または `next` の出力から `<slug>` を解決したうえで
 `.git/slipway/runtime/changes/<slug>/handoff.md` に書き込んでください。ライフサイクル状態、スキルの選択、
-鮮度を handoff のテキストから導き出さないこと。
+現在性の判定を handoff のテキストから導き出さないこと。
 `slipway init`、`slipway new`、`slipway codebase-map` は、Slipway のローカル状態用 `.gitignore` ブロックを冪等に保守します。
 
 ## ワークトリー
@@ -75,7 +75,7 @@ slipway repair --json
 オペレーターは削除する前に有用なコンテキストを現在の変更単位 handoff パスへ移行できます。
 JSON 出力では、`applied_repairs` が実施された修正を列挙し、`unrepaired_drift` が
 オペレーターの対応をまだ必要とするドリフトを、対象、理由、次のアクションとともに列挙します。
-鮮度フィールドやタイムスタンプを手で編集しないこと。代わりに、名前の付いた証跡を再生成するか、
+現在性を示すフィールドやタイムスタンプを手で編集しないこと。代わりに、名前の付いた証跡を再生成するか、
 ソースアーティファクトに同一意図の修正（amendment）を加えてください。
 ランタイムタスク証跡の方が新しいという理由だけで stale になっている ready な実行サマリについては、
 修復が現在のウェーブ裏付けのタスク証跡からサマリを再構築できます。
@@ -88,14 +88,14 @@ JSON 出力では、`applied_repairs` が実施された修正を列挙し、`un
 
 ## 診断 JSON
 
-実行鮮度の診断は、ハッシュベースではなく構造ベースです。現在の
+実行証跡の現在性診断は、ハッシュベースではなく構造ベースです。現在の
 実行サマリは、`change_id`、`run_summary_version`、`task_id`、`guardrail_domain` といった
-タスク鮮度入力を記録します。古いハッシュのみのサマリは stale として扱われ、再生成が必要です。
+タスクの現在性判定に使う入力を記録します。古いハッシュのみのサマリは stale として扱われ、再生成が必要です。
 
 `next --json --diagnostics`、`run --json --diagnostics`、`validate --json`、
 `status --json` は、stale なソース/証跡のペア、最初の stale 原因、下流の証跡チェーン、
 期待値/現在値のタスク入力値、権威あるバンドルおよびランタイムのパス、安全な次のアクションとともに
-鮮度の失敗を公開します。
+現在性チェックの失敗を公開します。
 タスク証跡欠落のブロッカーには、ランタイムタスク証跡ディレクトリ、
 `record_command=slipway evidence task --result-file <path> --json`、そしてコンパクトな
 エグゼキューター結果スキーマが含まれます。
@@ -172,9 +172,9 @@ slipway init --tools all --refresh
 `done` の前に行うこと。
 
 1. `go run . validate --json` が、対象となるアクティブな変更のゲートを承認済みと
-   報告することを確認する。これはアーカイブ前の鮮度/準備状態ゲートであり、
+   報告することを確認する。これはアーカイブ前の現在性と準備状態のゲートであり、
    `done` の後に同じアーカイブ済みバンドルを再検証できるという約束ではない。
-2. 現在のラン version に対してタスク証跡が fresh であることを確認する。
+2. タスク証跡が現在のラン version と一致していることを確認する。
 3. `git diff --check` を確認する。
 4. 意図したファイルのみをステージする。
 5. `git diff --cached --check` を確認する。

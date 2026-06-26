@@ -37,7 +37,7 @@ slipway repair --json
 
 ## 任务证据缺失或过期
 
-症状通常出现在 `validate --json` 或 `next --json --diagnostics` 中，表现为运行时任务证据缺失、执行摘要过期，或新鲜度输入不匹配。
+症状通常出现在 `validate --json` 或 `next --json --diagnostics` 中，表现为运行时任务证据缺失、执行摘要过期，或时效性输入不匹配。
 
 安全的恢复方式：
 
@@ -77,7 +77,7 @@ slipway review --json
 slipway validate --json
 ```
 
-选定评审者的证据必须对当前 diff、规划产物和执行摘要输入都是新鲜的。唯一权威的完整测试套件由终态 `ship-verification` gate 在各评审者收敛之后运行，而不是来自某个评审者共享的关键凭证。
+选定评审者的证据必须对当前差异、规划产物和执行摘要输入都当前有效。唯一权威的完整测试套件由终态 `ship-verification` gate 在各评审者收敛之后运行，而不是来自某个评审者共享的关键凭证。
 
 ## 范围漂移
 
@@ -100,7 +100,7 @@ git status --short
 git diff --check
 ```
 
-把预期的实现 diff 和已归档的 Slipway 记录一起提交。活跃 bundle 会被重写到 `artifacts/changes/archived/<slug>/`。
+把预期的实现差异和已归档的 Slipway 记录一起提交。活跃 bundle 会被重写到 `artifacts/changes/archived/<slug>/`。
 
 ## 适配器漂移
 
@@ -110,7 +110,7 @@ git diff --check
 slipway init --refresh
 ```
 
-然后检查 diff：
+然后检查差异：
 
 ```bash
 git status --short .claude .codex .cursor .opencode
@@ -127,7 +127,7 @@ git status --short .claude .codex .cursor .opencode
 | 本地状态看起来损坏 | `slipway health --doctor --json` | 仅针对具名的有限修复运行 `slipway repair --json`。 |
 | 产物只有占位内容 | `slipway instructions <artifact> --json` | 撰写真实内容并重新运行校验。 |
 | 评审发现问题 | `slipway fix --json` | 在全新上下文中修复，重新运行受影响的评审者。 |
-| 适配器文件已过期 | `slipway init --refresh` | 检查生成的 diff，保留用户自有的文件。 |
+| 适配器文件已过期 | `slipway init --refresh` | 检查生成的差异，保留用户自有的文件。 |
 
 ## 相关内容
 

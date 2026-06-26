@@ -1,0 +1,12 @@
+{
+  "task_id": "t-02",
+  "verdict": "pass",
+  "evidence_ref": "executor:019f018d-51e1-77c1-b97f-326ad1c7fa47; stale MkDocs search clean; locale README language switchers single; handoff examples present",
+  "changed_files": [
+    "README.zh.md",
+    "README.ja.md",
+    "docs/installation.md"
+  ],
+  "blockers": [],
+  "session_id": "019f018d-51e1-77c1-b97f-326ad1c7fa47"
+}

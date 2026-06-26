@@ -1,0 +1,16 @@
+{
+  "task_id": "t-04",
+  "verdict": "pass",
+  "evidence_ref": "executor:019f019f-1c57-7d30-9ee4-6df7a92f2193; ja scoped terminology scan clean; ja image-link scan; git diff --check",
+  "changed_files": [
+    "README.ja.md",
+    "docs/ja/ai-tools.md",
+    "docs/ja/commands.md",
+    "docs/ja/design.md",
+    "docs/ja/installation.md",
+    "docs/ja/reference/commands.md",
+    "docs/ja/workflow.md"
+  ],
+  "blockers": [],
+  "session_id": "019f019f-1c57-7d30-9ee4-6df7a92f2193"
+}

@@ -4,9 +4,10 @@
 只用于初始化（`--tools`/`--refresh`，没有 `--json`），而 `slipway validate`
 只输出 JSON（它的 `--format` 标志只决定 `--list-focuses` 的输出格式，不影响主报告）。
 
-生成的 host 命令面向那些选择启用 host 提示词的已注册命令。仅供 CLI 使用的辅助命名空间
-（例如 `slipway tool`）会在这里和面向清单（surface manifest）中注册，但不会生成
-`$slipway-tool` 或 host 提示词包装；生成的 skill 直接调用它们的辅助子命令。
+生成的宿主命令面向那些选择启用宿主提示词的已注册命令。仅供 CLI 使用的辅助命名空间
+（例如 `slipway tool` 和 `slipway hook`）会在这里和命令面清单中注册，但不会生成
+`$slipway-tool`、`$slipway-hook` 或宿主提示词包装；生成的 skill 和宿主 hook 配置会直接
+调用它们的辅助子命令。
 
 ## 核心生命周期
 
@@ -14,7 +15,7 @@
 | --- | --- | --- |
 | `slipway new [description]` | mutation | 创建一个从 intake 开始的受治理变更。 |
 | `slipway intake` | mutation | 执行 S0 阶段的 intake 澄清与授权。 |
-| `slipway plan` | mutation | 执行 S1 阶段的计划工件编写，或对同一意图的变更进行修订。 |
+| `slipway plan` | mutation | 执行 S1 阶段的计划产物编写，或对同一意图的变更进行修订。 |
 | `slipway implement` | mutation | 执行 S2 阶段的实现 wave 编排。 |
 | `slipway review` | mutation | 执行 S3 阶段的评审收敛与评审反馈修复。 |
 | `slipway fix` | mutation | 为 S3 评审发现派发全新上下文的修复任务。 |
@@ -26,10 +27,10 @@
 当一个受治理变更的证据已经过期时，`slipway next` 保持只读，并报告恢复指引。在已知状态的
 情况下，优先使用明确的当前阶段命令：`intake`、`plan`、`implement`、`review` 或 `done`。
 `run` 是一个自动驱动快捷方式，它会委派给当前阶段，并在 JSON 中报告 `delegated_to`。同一意图
-范围内的改动属于当前变更内部的变更修订；意图冲突则会开启一个新的受治理变更。计划新鲜度以结构化的
+范围内的改动属于当前变更内部的变更修订；意图冲突则会开启一个新的受治理变更。计划时效性以结构化的
 任务计划哈希为准。Plan-audit 在 S2 开始前评审计划包；它不会把 `wave-plan.yaml` 认定为计划权威。
-`wave-plan.yaml` 是从当前 `tasks.md` 物化出来的 S2 执行投影/缓存，它的 `generated_at`
-是物化时间，用于展示/审计，而非新鲜度权威。`slipway next --json` 上的
+`wave-plan.yaml` 是从当前 `tasks.md` 生成的 S2 执行投影/缓存，它的 `generated_at`
+是生成时间，用于展示/审计，而非时效性权威。`slipway next --json` 上的
 `input_context.wave_plan` 字段是另一个仅用于诊断的投影：它携带的只读字段（`wave_count`、
 `advisories`）并不是持久化的 `wave-plan.yaml` 缓存所定义的，因此绝不能复制进缓存。
 `wave-plan.yaml` 是由引擎拥有、由工具（`slipway repair`）重新生成的缓存，绝不手工编辑；如果它
@@ -37,9 +38,9 @@
 
 `slipway fix` 是 S3 评审发现的修复面。它会发现评审反馈和对齐阻塞项，然后返回一个
 `repair_batch_id` 以及一份供全新上下文修复子代理使用的契约。普通的发现过程不会推进生命周期状态；
-`slipway fix --start-reexecution` 才是显式的、由评审驱动的模式，它会重新打开 S2 并为实现修复物化
-出一个全新的执行运行边界。host 会先收集所选评审批次的发现，按根因将它们合并成一份修复简报，并且
-在其他所选评审仍在报告期间，绝不能内联或逐条修复发现。等子代理改完代码、工件、测试或同意图范围
+`slipway fix --start-reexecution` 才是显式的、由评审驱动的模式，它会重新打开 S2，并为实现修复生成
+一个全新的执行运行边界。宿主会先收集所选评审批次的发现，按根因将它们合并成一份修复简报，并且
+在其他所选评审仍在报告期间，绝不能内联或逐条修复发现。等子代理改完代码、产物、测试或同一意图范围
 证据之后，重新运行受影响的所选评审，并在 `slipway review` 关闭该批次之前同时记录
 `context_origin:stage=review=<handle>` 和 `context_origin:stage=fix=<handle>`。
 `slipway repair` 仍然只负责本地完整性。
@@ -95,7 +96,7 @@ baseline 文档是有用的起步上下文，但不是经过编写的存量（br
 `delete` 则是为一个被放弃、误建或部分删除的变更**丢弃本地受治理状态**——它的包、它的运行时绑定，
 以及（加上 `--worktree` 时）绑定的 git worktree——而加上 `--archived` 还能清除一条已归档记录。
 `delete` 默认是 dry-run：单纯的 `slipway delete --change <slug>` 只打印删除计划而不删除任何东西；
-加上 `--yes` 才会执行。它 fail closed——除非加 `--force`，否则它拒绝删除一个含有未提交跟踪改动、
+加上 `--yes` 才会执行。它失败即停：除非加 `--force`，否则它拒绝删除一个含有未提交跟踪改动、
 或在生成的 Slipway 路径之外含有未跟踪文件的 worktree，并且永远不删除实现分支或已推送的 PR 分支。
 当一个变更被放弃、损坏或绑定到了另一个 worktree 时，`slipway status`/`slipway next` 和恢复输出会
 路由到那条确切的 `slipway delete --change <slug>` 命令。
@@ -104,22 +105,24 @@ baseline 文档是有用的起步上下文，但不是经过编写的存量（br
 
 | 命令 | 类别 | 用途 |
 | --- | --- | --- |
-| `slipway tool <helper>` | mutation | 运行生成的 skill 所使用的辅助工具；缺少显式后端或领域工具时，辅助工具 fail closed。 |
+| `slipway tool <helper>` | mutation | 运行生成的 skill 所使用的辅助工具；缺少显式后端或领域工具时，辅助工具失败即停。 |
+| `slipway hook <event>` | mutation | 运行生成的宿主 hook 辅助命令，例如 `session-start` 和 `context-pressure`；hook 会静默失败，避免阻塞宿主自动化。 |
 
-`slipway tool` 有意只供 CLI 使用。它没有 `$slipway-tool`，也没有生成的 host 提示词包装；生成的
-skill 直接调用具体的辅助子命令。
+`slipway tool` 和 `slipway hook` 有意只供 CLI 使用。它们没有 `$slipway-tool`、
+`$slipway-hook`，也没有生成的宿主提示词包装；生成的 skill 和宿主配置会直接调用具体的
+辅助子命令。
 
 ## 诊断
 
 | 命令 | 类别 | 用途 |
 | --- | --- | --- |
 | `slipway health` | query | 显示仓库本地的完整性和可修复性发现。 |
-| `slipway instructions <artifact>` | query | 显示模板、质量标准，以及（在某个变更内部时）某个受治理工件或 codebase-map 文档解析后的输出路径 + 依赖图。 |
+| `slipway instructions <artifact>` | query | 显示模板、质量标准，以及（在某个变更内部时）某个受治理产物或 codebase-map 文档解析后的输出路径 + 依赖图。 |
 
-`slipway instructions <artifact>` 提供工件模板及其质量标准，让编写 skill 直接写出真正的文件——
+`slipway instructions <artifact>` 提供产物模板及其质量标准，让编写 skill 直接写出真正的文件——
 引擎拥有结构，skill 拥有内容，没有需要替换的预置正文。在受治理变更内部，它还会返回解析后的输出
-路径、依赖/解锁图，以及带标签的背景信息（`context`/`rules`），skill 必须遵守但绝不能把它们抄进工件。
-它覆盖六个受治理包工件（`intent`、`requirements`、`decision`、`research`、`tasks`、`assurance`）
+路径、依赖/解锁图，以及带标签的背景信息（`context`/`rules`），skill 必须遵守但绝不能把它们抄进产物。
+它覆盖六个受治理包产物（`intent`、`requirements`、`decision`、`research`、`tasks`、`assurance`）
 以及仓库范围的 codebase-map 文档（`stack`、`architecture`、`structure`、`conventions`、
 `integrations`、`testing`、`concerns`）。
 在 `--json` 中，`context_is_baseline: true` 标记应被保留并扩展进所编写文档的 codebase-map
@@ -129,7 +132,7 @@ baseline 上下文；当该字段缺失或为 false 时，`context` 是要遵守
 `input_context.codebase_map_status`（以及逐文档的 `input_context.codebase_map_doc_states`），
 让调用方能判断引用的 map 是否持久。其取值与 `slipway codebase-map` 的评估一致（`missing`、
 `scaffold_only`、`baseline`、`partial`、`populated`）；缺失的 map 会报告 `"missing"` 且每个文档
-为 `missing`，而不是省略该字段。当一个消费 map 的计划 skill（research-orchestration 或
+为 `missing`，而不是省略该字段。当一个使用 map 的计划 skill（research-orchestration 或
 plan-audit）即将执行而状态为 `scaffold_only` 或 `baseline` 时，`warnings` 会带上一条非阻塞的
 codebase-map 提示。
 
@@ -169,7 +172,7 @@ go run ./internal/toolgen/cmd/gen-surface-manifest --write
 - `next --no-auto-pass` 报告 skill 的可执行性，而不是自动放行；`next --context-guard` 以 hook 格式
   输出上下文预算守护消息。
 - `done --all-ready` 归档当前所有处于 done-ready 的活动变更。
-- 同一意图范围内的改动由当前阶段命令作为变更修订处理：更新所属工件和证据，然后继续向前推进。执行代理
+- 同一意图范围内的改动由当前阶段命令作为变更修订处理：更新所属产物和证据，然后继续向前推进。执行代理
   绝不能悄悄写到已声明的任务范围之外；它们要么提出修订，要么返回一个阻塞项。如果目标变了，就开启一个
   新的受治理变更。
 
@@ -186,7 +189,7 @@ slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
 slipway handoff show --json
-slipway config --json
+slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -198,7 +201,7 @@ slipway health --doctor --json
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
-| config JSON | `slipway config --json` |
+| config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
@@ -219,7 +222,7 @@ slipway health --doctor --json
 | status JSON | `slipway status --json` |
 | validate JSON | `slipway validate --json` |
 
-`next --json` 会包含 `next_skill.name`，用于 AI 工具交接。host 工具会按自己的适配器约定推导出本地
+`next --json` 会包含 `next_skill.name`，用于 AI 工具交接。宿主工具会按自己的适配器约定推导出本地
 `SKILL.md` 路径。
 
 启用诊断时，评审状态交接 JSON 还可以包含：
@@ -245,11 +248,11 @@ slipway health --doctor --json
 `actionable_next_skill` 映射可执行的评审交接，其中包括可执行 skill 必须提供的确切层引用
 `required_tokens`。`run --json` 是发生变更的转换面：`advanced` 报告本次调用改了什么，而 `blockers`
 报告任何转换之后的当前停止条件。因此一次成功的推进之后，可能紧跟着针对下一个必需 skill 的
-error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；用它来检查控制项和可追溯性细节，
+error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；用它来检查控制项和可追踪性细节，
 而不是把它当作判断 `run` 是否刚刚推进的生命周期权威。
 
 `status --json` 在已知执行证据过期时会包含 `freshness_diagnostics`，并给每个 `artifact_dag` 节点
-标上 `blocking` 加 `blocking_reason`，这样草稿计划工件就不会被误认作当前的评审阻塞项。
+标上 `blocking` 加 `blocking_reason`，这样草稿计划产物就不会被误认作当前的评审阻塞项。
 
 `validate --change <slug>` 选择一个明确的活动变更。如果该 slug 指向一个已归档的终态变更，命令会以
 `archived_change_not_validatable` 失败，并返回终态状态以及已归档的 `change.yaml` 路径，而不是返回
@@ -259,7 +262,7 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `artifacts/codebase/**` 下的持久 codebase map 不计入 scope-contract 的改动文件核算。当只有这些
 上下文文件是脏的时候，它们不会进入 `scope_contract.changed_files` 和
 `scope_contract.out_of_scope_files`，而 `scope_contract.status` 保持 `pass`——单单刷新一次
-codebase map 不会触发 scope-contract 漂移。为了让这种过滤是可见的、而不是从 `git diff` 的不一致
+codebase map 不会触发 scope-contract 漂移。为了让这种过滤是可见的、而不是从 Git 差异输出的不一致
 里去推断，被豁免的文件会在 `scope_contract.exempt_context_files` 字段里显式披露，由
 `slipway validate --json`、`slipway status --json` 和 `slipway review --json` 呈现。
 
@@ -270,7 +273,7 @@ JSON 包含 `task_id`、`verdict`、`evidence_ref`、`changed_files`、`blockers
 `session_id`。一个批次会预检每个文件、拒绝重复的 `task_id` 条目，并且只要有任何成员无效就不写入任何
 任务证据。执行器结果文件不得包含由 ledger 拥有的字段（`run_summary_version`、`task_kind`、
 `target_files`、`captured_at`、`freshness_inputs` 或 `input_hash`）；Slipway 会从当前活动 wave
-计划和当前任务证据运行里推导它们。手动标志模式仍可用于 host 内部或恢复回退场景；当前标志契约请用
+计划和当前任务证据运行里推导它们。手动标志模式仍可用于宿主内部或恢复回退场景；当前标志契约请用
 `slipway evidence task --help` 查看。该命令会计算 `freshness_inputs`、校验任务种类/裁决/阻塞项，
 并拒绝未知或路径不安全的任务 ID，而不是依赖手写的 JSON。
 `freshness_inputs` 包含当前由任务派生的 `tasks_plan_hash`，这样在 `tasks.md` 发生语义变化之后，
@@ -281,25 +284,25 @@ JSON 包含 `task_id`、`verdict`、`evidence_ref`、`changed_files`、`blockers
 使用单一且有效的 `run_summary_version`，并据此 ledger 给 wave-orchestration 摘要盖戳。之后那些绑定
 运行摘要的 skill，例如 `spec-compliance-review`、`code-quality-review` 和终态的
 `ship-verification` 门禁，仍然要求执行摘要已存在，缺失时会以
-`evidence_skill_run_summary_missing` fail closed。
+`evidence_skill_run_summary_missing` 失败即停。
 
 被接受的治理 skill 证据还额外受 `verification/evidence-digests.yaml` 约束，这是一个引擎拥有的本地
 文件，记录每个通过的 skill 所认证输入的内容摘要。该条目还存储被接受的验证裁决时间戳，使得较新的
-host 重跑裁决能在发生变更的推进过程中替换过期的摘要。只读命令只是比较已存摘要与当前输入；发生变更的
-推进路径会在接受通过证据时给文件盖戳。Diff 类评审摘要认证的是当前工作 diff（`git diff HEAD` 加上
-未被忽略的、可评审的未跟踪文件，排除 `artifacts/changes/**` 下的 Slipway 受治理/运行时工件），所以
-在评审和收尾之间的一次 commit 会让只读投影报告评审过期，直到所属评审阶段针对新的 diff 边界通过
+宿主重跑裁决能在发生变更的推进过程中替换过期的摘要。只读命令只是比较已存摘要与当前输入；发生变更的
+推进路径会在接受通过证据时给文件盖戳。差异类评审摘要认证的是当前工作差异（`git diff HEAD` 加上
+未被忽略的、可评审的未跟踪文件，排除 `artifacts/changes/**` 下的 Slipway 受治理/运行时产物），所以
+在评审和收尾之间的一次 commit 会让只读投影报告评审过期，直到所属评审阶段针对新的差异边界通过
 `slipway run` 重新运行。如果必需的摘要证据缺失或过期，所属治理 skill 会被报告为过期，必须重新运行。
 
 所选的 S3 评审同伴（spec-compliance-review、independent-review、在工作流配置要求时的
-code-quality-review，以及按策略选中时的 security-review）针对当前 diff、计划工件和运行摘要版本断言
-各自的裁决；它们不消费某个共享的 suite-result 基石。唯一一次权威的全套运行——加上任何 guardrail SAST
+code-quality-review，以及按策略选中时的 security-review）针对当前差异、计划产物和运行摘要版本断言
+各自的裁决；它们不使用某个共享的 suite-result 基石。唯一一次权威的全套运行——加上任何 guardrail SAST
 基线——由终态的 `ship-verification` 门禁拥有，它在评审同伴收敛之后运行一次，绝不依赖某条同伴共享的
 记录。没有 `slipway evidence suite-result` 子命令：ship-verification 会作为它单次终态证据过程的一
 部分，自己运行并记录整套测试。
 
 `repair --json` 把 `applied_repairs` 和 `unrepaired_drift` 分开。已应用的修复是真正执行过的有界
-本地修复；未修复的漂移则包含一个目标、一个原因，以及针对 Slipway 没有自动改动的证据或工件工作的
+本地修复；未修复的漂移则包含一个目标、一个原因，以及针对 Slipway 没有自动改动的证据或产物工作的
 `next_action`。那些仅仅因为运行时任务证据更新而过期的就绪执行摘要，可以从当前有 wave 支撑的任务证据
 重建；过期的计划源漂移则保持未修复。归档清理后留下的空孤立活动包目录会作为 `empty_orphan_bundle`
 已应用修复被移除；非空的孤立包仍是需要操作员审阅的完整性发现。诸如
@@ -312,7 +315,7 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 批量导入。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 
-`done --json` 会归档 done-ready 且绑定 worktree 的变更，即使源文件或非活动治理工件仍未提交，并返回
+`done --json` 会归档 done-ready 且绑定 worktree 的变更，即使源文件或非活动治理产物仍未提交，并返回
 一个非阻塞的 `worktree_dirty_warning`，带上 `worktree_dirty_files`，让操作员把这些文件和已归档的
 包一起提交。`done` 永远不会移除 worktree，而 `git worktree remove` 本来就会拒绝删除一个脏 worktree，
 所以这条提示取代了硬阻塞。当前的 `artifacts/changes/<slug>/` 包不在提示范围内，因为 `done` 会把它

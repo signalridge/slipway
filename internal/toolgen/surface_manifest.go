@@ -42,6 +42,13 @@ func BuildSurfaceManifest() SurfaceManifest {
 			Token:  "slipway " + def.ID,
 		})
 	}
+	rows = append(rows, SurfaceManifestRow{
+		Kind:   "implementation",
+		Name:   "hook",
+		Source: commandSourcePath("hook"),
+		Docs:   "docs/reference/commands.md",
+		Token:  "slipway hook",
+	})
 
 	for _, cfg := range Registry() {
 		rows = append(rows, SurfaceManifestRow{
@@ -207,6 +214,12 @@ func commandSkillRows() []SurfaceManifestRow {
 }
 
 func commandSourcePath(commandID string) string {
+	switch commandID {
+	case "implement", "intake", "plan":
+		return "cmd/stage.go"
+	case "hook":
+		return "cmd/context_pressure_hook.go"
+	}
 	return "cmd/" + strings.ReplaceAll(commandID, "-", "_") + ".go"
 }
 
@@ -218,6 +231,8 @@ func jsonContractDocsToken(commandID string) string {
 	switch commandID {
 	case "delete":
 		return "slipway delete --change <slug> --json"
+	case "config":
+		return "slipway config list --json"
 	case "handoff":
 		return "slipway handoff show --json"
 	case "instructions":

@@ -1,0 +1,14 @@
+{
+  "task_id": "t-06",
+  "verdict": "pass",
+  "evidence_ref": "executor:019f01b1-1e2d-73b0-9c10-e94f7fda29c2; ja remaining docs terminology scan clean; git diff --check",
+  "changed_files": [
+    "docs/ja/start-here.md",
+    "docs/ja/explanation/design.md",
+    "docs/ja/real-world-scenarios.md",
+    "docs/ja/how-to/recover-and-troubleshoot.md",
+    "docs/ja/operator-guide.md"
+  ],
+  "blockers": [],
+  "session_id": "019f01b1-1e2d-73b0-9c10-e94f7fda29c2"
+}

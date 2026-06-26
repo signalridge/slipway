@@ -1,0 +1,11 @@
+{
+  "task_id": "t-10",
+  "verdict": "pass",
+  "evidence_ref": "coordinator:s3-review-authority-task-plan-drift-ship-gate-fix; go test ./internal/engine/progression -run 'TestReviewAuthorityAbsorbsS3TaskPlanDriftOnly|TestReviewAuthorityDocsProfileIgnoresUnselectedCodeQualityEvidenceOnDisk|TestBuildShipAuthorityAttestationPresetGating' -count=1",
+  "changed_files": [
+    "internal/engine/progression/authority.go",
+    "internal/engine/progression/authority_test.go"
+  ],
+  "blockers": [],
+  "session_id": "codex-gpt5-main-t10"
+}

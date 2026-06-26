@@ -1,0 +1,11 @@
+{
+  "task_id": "t-07",
+  "verdict": "pass",
+  "evidence_ref": "executor:019f01b1-2464-7c83-8cae-96c8818f0227; English awkward-phrase scan clean; git diff --check",
+  "changed_files": [
+    "docs/design.md",
+    "docs/workflow.md"
+  ],
+  "blockers": [],
+  "session_id": "019f01b1-2464-7c83-8cae-96c8818f0227"
+}

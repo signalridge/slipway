@@ -143,6 +143,13 @@
     },
     {
       "kind": "command",
+      "name": "hook",
+      "source": "internal/toolgen/toolgen.go:commandRegistry",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway hook"
+    },
+    {
+      "kind": "command",
       "name": "implement",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
@@ -268,6 +275,13 @@
       "token": "Command Reference"
     },
     {
+      "kind": "implementation",
+      "name": "hook",
+      "source": "cmd/context_pressure_hook.go",
+      "docs": "docs/reference/commands.md",
+      "token": "slipway hook"
+    },
+    {
       "kind": "json-contract",
       "name": "abort-json",
       "source": "cmd/abort.go",
@@ -293,7 +307,7 @@
       "name": "config-json",
       "source": "cmd/config.go",
       "docs": "docs/reference/commands.md",
-      "token": "slipway config --json"
+      "token": "slipway config list --json"
     },
     {
       "kind": "json-contract",
@@ -347,7 +361,7 @@
     {
       "kind": "json-contract",
       "name": "implement-json",
-      "source": "cmd/implement.go",
+      "source": "cmd/stage.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway implement --json"
     },
@@ -361,7 +375,7 @@
     {
       "kind": "json-contract",
       "name": "intake-json",
-      "source": "cmd/intake.go",
+      "source": "cmd/stage.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway intake --json"
     },
@@ -382,7 +396,7 @@
     {
       "kind": "json-contract",
       "name": "plan-json",
-      "source": "cmd/plan.go",
+      "source": "cmd/stage.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway plan --json"
     },
