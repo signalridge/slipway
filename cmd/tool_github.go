@@ -133,9 +133,9 @@ const (
 	githubDefaultAPIBaseURL        = "https://api.github.com"
 	githubAPIURLEnv                = "SLIPWAY_GITHUB_API_URL"
 	githubAPIAllowedBaseURLsEnv    = "SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS"
-	githubAPIOverrideTokenEnv      = "SLIPWAY_GITHUB_API_TOKEN"
-	githubAmbientTokenPrimaryEnv   = "GH_TOKEN"
-	githubAmbientTokenSecondaryEnv = "GITHUB_TOKEN"
+	githubAPIOverrideTokenEnv      = "SLIPWAY_GITHUB_API_TOKEN" // #nosec G101 -- environment variable name, not a credential.
+	githubAmbientTokenPrimaryEnv   = "GH_TOKEN"                 // #nosec G101 -- environment variable name, not a credential.
+	githubAmbientTokenSecondaryEnv = "GITHUB_TOKEN"             // #nosec G101 -- environment variable name, not a credential.
 )
 
 var githubRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
