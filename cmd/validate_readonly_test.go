@@ -68,6 +68,31 @@ func TestValidateNoActiveDiagnosticIsZeroWrite(t *testing.T) {
 	assert.Contains(t, out.String(), "no active change or ambiguous")
 }
 
+func TestValidateMissingExplicitSlugFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	before := snapshotNonGitTree(t, root)
+
+	cmd := commandForRoot(t, root, makeValidateCmd())
+	cmd.SetArgs([]string{"--json", "--change", "definitely-not-a-change"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	err := cmd.Execute()
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "change_not_found", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, "definitely-not-a-change", cliErr.Slug)
+	assert.Contains(t, cliErr.Remediation, "slipway status")
+	assert.Equal(t, before, snapshotNonGitTree(t, root))
+}
+
 func TestValidateArchivedExplicitSlugIsZeroWrite(t *testing.T) {
 	t.Parallel()
 
@@ -92,6 +117,9 @@ func TestValidateArchivedExplicitSlugIsZeroWrite(t *testing.T) {
 	cliErr := asCLIError(err)
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, slug, cliErr.Slug)
 	assert.Equal(t, before, snapshotNonGitTree(t, root))
 }
 

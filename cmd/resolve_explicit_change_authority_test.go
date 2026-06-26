@@ -58,6 +58,22 @@ func TestResolveExplicitChangeFallsBackToArchivedWhenActiveBundleAuthorityMissin
 	assert.NotEqual(t, "change_state_load_failed", cliErr.ErrorCode)
 }
 
+func TestResolveExplicitChangeMissingSlugFailsClosed(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	_, resolveErr := resolveExplicitChange(root, "definitely-not-a-change")
+	cliErr := asCLIError(resolveErr)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "change_not_found", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
+	assert.Equal(t, "definitely-not-a-change", cliErr.Slug)
+	assert.Contains(t, cliErr.Remediation, "slipway status")
+}
+
 // TestResolveExplicitChangeMissingAuthorityWithoutArchiveFailsClosed pins the
 // fail-closed nuance: broadening the archived-fallback trigger must NOT soften a
 // genuine missing-authority error into no_active_change when there is no archived

@@ -439,15 +439,15 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 				)
 			}
 			// No archived record was found. Only os.ErrNotExist (no bundle at all)
-			// softens to no_active_change. A missing-authority error without an
-			// archive is genuine active-bundle corruption and must fall through to
-			// fail closed on change_state_load_failed.
+			// is a true missing explicit slug. A missing-authority error without
+			// an archive is genuine active-bundle corruption and must fall through
+			// to fail closed on change_state_load_failed.
 			if errors.Is(err, os.ErrNotExist) {
 				if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
 					return changeRef{}, recoveryErr
 				}
 				return changeRef{}, newPreconditionError(
-					"no_active_change",
+					"change_not_found",
 					fmt.Sprintf("no change found for slug %q", slug),
 					"Check the slug with `slipway status`.",
 					slug,
