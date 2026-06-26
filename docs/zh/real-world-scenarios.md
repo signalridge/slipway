@@ -10,7 +10,7 @@
 | 2. 接管一个已有项目 | 仓库已经有约定和风险区域。 | 在规划之前把真实的代码库上下文沉淀下来。 |
 | 3. 交付一个产品功能 | 工作涉及代码、测试、文档和评审。 | 让范围、任务、证据和评审保持一致。 |
 | 4. 修复评审发现的问题 | S3 评审发现了需要处理的问题。 | 通过全新上下文的修复把问题集中解决。 |
-| 5. 恢复陈旧或卡住的改动 | 证据、任务或工件出现了漂移。 | 失败即关闭，并给出具名的恢复命令。 |
+| 5. 恢复陈旧或卡住的改动 | 证据、任务或产物出现了漂移。 | 失败即停，并给出具名的恢复命令。 |
 | 6. 向团队推广 adapter | 多个 AI 工具需要同一套 Slipway 界面。 | 由单一 CLI 权威生成宿主文件。 |
 
 ## 1. 第一个受治理的改动
@@ -30,14 +30,14 @@ reports stale evidence or out-of-scope files.
 1. 用 `slipway init --tools <tool-id>` 初始化 adapter。
 2. 用 `slipway new "add a short README usage note" --profile docs` 创建改动。
 3. 用 `slipway next --json --diagnostics` 查看当前的 handoff。
-4. 让返回的 skill 来撰写所需的工件或完成实现步骤。
+4. 让返回的 skill 来撰写所需的产物或完成实现步骤。
 5. 实现完成后运行 `slipway validate --json`。
 6. 仅在状态已经 done-ready 后才运行 `slipway done --json`。
 
 完成的标志：
 
 - 目标文件确实改了。
-- 工件 bundle 说明了改动的原因。
+- 产物包说明了改动的原因。
 - 当前的校验认可这些证据。
 - `done` 之后存在归档记录。
 
@@ -94,12 +94,12 @@ review findings as a separate S3 repair batch.
 3. 确认每个任务都有具体的 `target_files`。
 4. 通过 `slipway implement --json` 或 `slipway run --json` 执行。
 5. 沿生成的 wave 执行路径记录任务证据。
-6. 运行 S3 评审，仅在选定评审者的证据新鲜时才收尾。
+6. 运行 S3 评审，仅在选定评审者的证据当前有效时才收尾。
 
 完成的标志：
 
 - 需求能对应到实现和测试。
-- 任务证据与当前的 run version 一致。
+- 任务证据与当前运行版本一致。
 - 选定的评审和收尾证据都通过。
 - `done` 在不掩盖脏改动的前提下归档了改动。
 
@@ -121,7 +121,7 @@ do not repair findings inline while review is still reporting.
 2. 运行 `slipway fix --json`。
 3. 把返回的修复契约交给一个全新上下文的修复 agent。
 4. 重跑受影响的选定评审者。
-5. 仅在修复和评审的 context-origin 证据都新鲜后才继续评审。
+5. 仅在修复和评审的 context-origin 证据都当前有效后才继续评审。
 
 完成的标志：
 
@@ -156,12 +156,12 @@ slipway health --doctor --json
 slipway repair --json
 ```
 
-如果某个阶段或评审者陈旧了，重跑它所属的阶段或评审者。如果某个工件缺少实质内容，运行 `slipway instructions <artifact>` 并撰写真实的工件。
+如果某个阶段或评审者陈旧了，重跑它所属的阶段或评审者。如果某个产物缺少实质内容，运行 `slipway instructions <artifact>` 并撰写真实的产物。
 
 完成的标志：
 
 - 当前 worktree 的原始 blocker 已经消失。
-- 新鲜度由所属命令或 skill 重新生成。
+- 时效性由所属命令或 skill 重新生成。
 - 恢复过程没有伪造时间戳、判定结果或生命周期状态。
 
 ## 6. 向团队推广 adapter
@@ -171,9 +171,8 @@ slipway repair --json
 起始提示词：
 
 ```text
-Refresh Slipway adapters for the tools this repo actually uses. Preserve
-user-owned files near the generated directories, inspect the diff, and do not
-make generated host files authoritative over the CLI.
+为该仓库实际使用的工具刷新 Slipway 适配器。保留生成目录附近的用户自有文件，
+检查差异，不要让生成的工具文件凌驾于 CLI 权威之上。
 ```
 
 工作流程：

@@ -24,6 +24,7 @@ const (
 var localStateGitIgnorePatterns = []string{
 	"/artifacts/changes/**/evidence/",
 	"/artifacts/changes/**/events/",
+	"/artifacts/changes/**/execution/",
 	"/artifacts/changes/**/verification/",
 	"/.worktrees/",
 }

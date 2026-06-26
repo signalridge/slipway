@@ -2,7 +2,7 @@
 
 ルーティングされるほとんどのコマンドは、構造化された出力が役立つ場面で `--json` をサポートします。例外が 2 つあります。`slipway init` はセットアップ専用（`--tools`/`--refresh`、`--json` なし）で、`slipway validate` は JSON のみを出力します（その `--format` フラグはメインレポートではなく `--list-focuses` の出力を整形します）。
 
-生成されるホストコマンドサーフェスは、ホストプロンプトを利用するよう登録されたコマンドを対象とします。`slipway tool` のような CLI 専用のヘルパー名前空間は、ここおよびサーフェスマニフェストに登録されますが、`$slipway-tool` やホストプロンプトのラッパーは生成しません。生成されたスキルはヘルパーサブコマンドを直接呼び出します。
+生成されるホストコマンドサーフェスは、ホストプロンプトを利用するよう登録されたコマンドを対象とします。`slipway tool` や `slipway hook` のような CLI 専用のヘルパー名前空間は、ここおよびサーフェスマニフェストに登録されますが、`$slipway-tool`、`$slipway-hook`、ホストプロンプトのラッパーは生成しません。生成されたスキルとホストフック設定は、ヘルパーサブコマンドを直接呼び出します。
 
 ## コアライフサイクル
 
@@ -19,9 +19,11 @@
 | `slipway run` | mutation | スキル、ブロッカー、または done-ready の結果が現れるまで、現在のライフサイクルステージをショートカット駆動する。 |
 | `slipway status` | query | ライフサイクルの状態、ブロッカー、進捗、次のアクションを表示する。 |
 
-統制された変更にエビデンスの陳腐化があると、`slipway next` は読み取り専用のまま復旧ガイダンスを報告します。状態が分かっている場合は、明示的な現在ステージのコマンド（`intake`、`plan`、`implement`、`review`、`done`）を優先してください。`run` は現在のステージに委譲する自動駆動のショートカットで、JSON では `delegated_to` を報告します。同一インテントのスコープ変更は現在の変更内での修正であり、インテントの衝突は新しい統制された変更を開始します。計画のフレッシュネスは構造的なタスク計画ハッシュをキーとします。プラン監査は S2 が開始できる前に計画バンドルをレビューしますが、`wave-plan.yaml` を計画の権威として認証するものではありません。`wave-plan.yaml` は現在の `tasks.md` から具現化された S2 実行用の投影／キャッシュであり、その `generated_at` はフレッシュネスの権威ではなく、表示・監査用の具現化時刻です。`slipway next --json` の `input_context.wave_plan` フィールドは別個の診断専用の投影で、永続化された `wave-plan.yaml` キャッシュが定義しない表示専用フィールド（`wave_count`、`advisories`）を含むため、決してキャッシュにコピーしてはなりません。`wave-plan.yaml` はツール（`slipway repair`）が再生成するエンジン所有のキャッシュで、手編集はしません。読み取れない場合は、`tasks.md` を編集するのではなく `slipway repair` で再生成してください。
+統制された変更にエビデンスの陳腐化があると、`slipway next` は読み取り専用のまま復旧ガイダンスを報告します。状態が分かっている場合は、明示的な現在ステージのコマンド（`intake`、`plan`、`implement`、`review`、`done`）を優先してください。`run` は現在のステージに委譲する自動駆動のショートカットで、JSON では `delegated_to` を報告します。同一インテントのスコープ変更は現在の変更内での修正であり、インテントの衝突は新しい統制された変更を開始します。
 
-`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` とフレッシュコンテキスト修復サブエージェント向けのコントラクトを返します。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
+計画の現在性は構造的なタスク計画ハッシュをキーとします。プラン監査は S2 が開始できる前に計画バンドルをレビューしますが、`wave-plan.yaml` を計画の権威として認証するものではありません。`wave-plan.yaml` は現在の `tasks.md` から具現化された S2 実行用の投影／キャッシュであり、その `generated_at` は現在性を判断する根拠ではなく、表示・監査用の具現化時刻です。`slipway next --json` の `input_context.wave_plan` フィールドは別個の診断専用の投影で、永続化された `wave-plan.yaml` キャッシュが定義しない表示専用フィールド（`wave_count`、`advisories`）を含むため、決してキャッシュにコピーしてはなりません。`wave-plan.yaml` はツール（`slipway repair`）が再生成するエンジン所有のキャッシュで、手編集はしません。読み取れない場合は、`tasks.md` を編集するのではなく `slipway repair` で再生成してください。
+
+`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` と現在の入力に基づく修復サブエージェント向けのコントラクトを返します。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
 
 ## 作成オプション
 
@@ -62,15 +64,18 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 | `slipway repair` | mutation | 範囲を限定したローカルの整合性修復を実行する。 |
 | `slipway evidence task` | mutation | ウェーブ実行向けに、サポートされるランタイムタスクエビデンスを記録する。 |
 
-`slipway cancel` と `slipway delete` は同じ操作ではありません。`cancel` は**アクティブな**変更を終端状態 `cancelled` へ移し、決定が監査証跡に残るよう `artifacts/changes/archived/<slug>` 配下に**アーカイブ**します。`delete` は代わりに、放棄された・誤って作られた・一部削除された変更について、そのバンドル、ランタイムバインディング、そして（`--worktree` 付きで）バインドされた git ワークトリーといった**ローカルの統制状態を破棄**し、`--archived` 付きでは既にアーカイブ済みのレコードをパージできます。`delete` は既定でドライランです。素の `slipway delete --change <slug>` は削除計画を表示するだけで何も削除しません。実行するには `--yes` を渡します。`delete` はフェイルクローズで動作します。追跡対象の未コミット変更や、生成された Slipway パス外の未追跡ファイルを含むワークトリーは `--force` がない限り削除を拒否し、実装ブランチやプッシュ済みの PR ブランチは決して削除しません。変更が放棄された・壊れた・別のワークトリーにバインドされている場合、`slipway status`/`slipway next` と復旧出力は、正確な `slipway delete --change <slug>` コマンドへ案内します。
+`slipway cancel` と `slipway delete` は同じ操作ではありません。`cancel` は**アクティブな**変更を終端状態 `cancelled` へ移し、決定が監査証跡に残るよう `artifacts/changes/archived/<slug>` 配下に**アーカイブ**します。`delete` は代わりに、放棄された・誤って作られた・一部削除された変更について、そのバンドル、ランタイムバインディング、そして（`--worktree` 付きで）バインドされた git ワークトリーといった**ローカルの統制状態を破棄**し、`--archived` 付きでは既にアーカイブ済みのレコードをパージできます。`delete` は既定でドライランです。素の `slipway delete --change <slug>` は削除計画を表示するだけで何も削除しません。実行するには `--yes` を渡します。`delete` はフェイルクローズドで動作します。追跡対象の未コミット変更や、生成された Slipway パス外の未追跡ファイルを含むワークトリーは `--force` がない限り削除を拒否し、実装ブランチやプッシュ済みの PR ブランチは決して削除しません。変更が放棄された・壊れた・別のワークトリーにバインドされている場合、`slipway status`/`slipway next` と復旧出力は、正確な `slipway delete --change <slug>` コマンドへ案内します。
 
 ## ヘルパー
 
 | コマンド | クラス | 目的 |
 | --- | --- | --- |
-| `slipway tool <helper>` | mutation | 生成されたスキルが使用するヘルパーツールを実行する。明示的なバックエンドやドメインツールが欠けている場合、ヘルパーはフェイルクローズする。 |
+| `slipway tool <helper>` | mutation | 生成されたスキルが使用するヘルパーツールを実行する。明示的なバックエンドやドメインツールが欠けている場合、ヘルパーはフェイルクローズドになる。 |
+| `slipway hook <event>` | mutation | `session-start` や `context-pressure` など、生成されたホストフックヘルパーを実行する。フックは静かに失敗し、ホスト自動化をブロックしない。 |
 
-`slipway tool` は意図的に CLI 専用です。`$slipway-tool` も生成されたホストプロンプトのラッパーもありません。生成されたスキルは特定のヘルパーサブコマンドを直接呼び出します。
+`slipway tool` と `slipway hook` は意図的に CLI 専用です。`$slipway-tool`、
+`$slipway-hook`、生成されたホストプロンプトのラッパーはありません。生成されたスキルと
+ホスト設定は、特定のヘルパーサブコマンドを直接呼び出します。
 
 ## 診断
 
@@ -90,7 +95,7 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 | `slipway init` | mutation | `.slipway.yaml`、リポジトリローカルのランタイムレイアウト、および任意の AI ツールアダプターを初期化する。 |
 | `slipway config [list\|get\|set]` | mutation | リポジトリレベルの `.slipway.yaml` 設定キーを確認・更新する。CLI 専用で、生成されたアダプターのプロンプトサーフェスはありません。 |
 
-`docs/SURFACE-MANIFEST.json` は、アダプター、コマンド、スキル、JSON、ドキュメントの各行についてコミットされた生成サーフェスのインベントリです。マニフェストは Slipway 所有の Go 権威から再構築され、CI 向けの Go テストでチェックされます。
+`docs/SURFACE-MANIFEST.json` は、アダプター、コマンド、スキル、JSON、ドキュメントの各行についてコミットされた生成サーフェスのインベントリです。マニフェストは Slipway 所有の Go の権威ソースから再構築され、CI 向けの Go テストでチェックされます。
 
 ```bash
 go run ./internal/toolgen/cmd/gen-surface-manifest --check
@@ -124,7 +129,7 @@ slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
 slipway handoff show --json
-slipway config --json
+slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -136,7 +141,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
-| config JSON | `slipway config --json` |
+| config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
@@ -178,7 +183,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 
 `slipway evidence task` は、wave-orchestration の同期のために、フラットなランタイムタスク JSON を `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 配下に書き込みます。既定の S2 コーディネーターパスは `--result-file <path>` で、コーディネーターが 1 つのアトミックなバッチインポートを行いたいときは繰り返します。各エグゼキューターの結果 JSON には `task_id`、`verdict`、`evidence_ref`、`changed_files`、`blockers`、および任意の `session_id` が含まれます。バッチはすべてのファイルをプリフライトし、重複する `task_id` エントリを拒否し、いずれかのメンバーが無効ならタスクエビデンスを一切書き込みません。エグゼキューターの結果ファイルには、ledger 所有のフィールド（`run_summary_version`、`task_kind`、`target_files`、`captured_at`、`freshness_inputs`、`input_hash`）を含めてはなりません。Slipway はそれらをアクティブなウェーブ計画と現在のタスクエビデンスランから導出します。手動フラグモードはホスト内部または復旧フォールバック用に引き続き利用可能です。現在のフラグコントラクトは `slipway evidence task --help` を参照してください。コマンドは `freshness_inputs` を計算し、タスク種別／verdict／ブロッカーを検証し、手書き JSON に頼る代わりに未知またはパス安全でないタスク ID を拒否します。`freshness_inputs` には現在のタスク由来の `tasks_plan_hash` が含まれるため、`tasks.md` が意味的に変わった後にタスクエビデンスを再利用できません。
 
-`slipway evidence skill --skill wave-orchestration` は execution-summary エビデンスのための S2 ブートストラップです。`execution-summary.yaml` が存在する前に、現在のフラットなタスクエビデンス ledger からウェーブのランバージョンを導出し、すべてのタスクエビデンスが単一の有効な `run_summary_version` を使うことを要求し、その ledger から wave-orchestration のダイジェストをスタンプします。`spec-compliance-review`、`code-quality-review`、終端の `ship-verification` ゲートといった後続のラン-サマリー連動スキルは、既存の execution summary を引き続き要求し、それが無い場合は `evidence_skill_run_summary_missing` でフェイルクローズします。
+`slipway evidence skill --skill wave-orchestration` は execution-summary エビデンスのための S2 ブートストラップです。`execution-summary.yaml` が存在する前に、現在のフラットなタスクエビデンス ledger からウェーブのランバージョンを導出し、すべてのタスクエビデンスが単一の有効な `run_summary_version` を使うことを要求し、その ledger から wave-orchestration のダイジェストをスタンプします。`spec-compliance-review`、`code-quality-review`、終端の `ship-verification` ゲートといった後続のラン-サマリー連動スキルは、既存の execution summary を引き続き要求し、それが無い場合は `evidence_skill_run_summary_missing` でフェイルクローズドになります。
 
 受理された統制スキルのエビデンスは、さらに `verification/evidence-digests.yaml` によってバインドされます。これはエンジン所有のローカルファイルで、各パスしたスキルが認証した入力のコンテンツダイジェストを記録します。エントリには受理された検証 verdict のタイムスタンプも保存されるため、より新しいホストの再実行 verdict が、変更を伴う前進中に陳腐化したダイジェストを置き換えられます。読み取り専用コマンドは保存されたダイジェストと現在の入力を比較するだけです。変更を伴う前進パスは、パスしたエビデンスが受理されたときにファイルをスタンプします。diff クラスのレビューダイジェストは現在の作業 diff（`git diff HEAD` に加え、`artifacts/changes/**` 配下の Slipway 統制／ランタイムアーティファクトを除く、無視されないレビュー可能な未追跡ファイル）を認証します。そのため、レビューとファイナライズの間のコミットによって、所有するレビューステージが新しい diff 境界に対して `slipway run` で再実行されるまで、読み取り専用の投影がレビューを陳腐化と報告することがあります。必要なダイジェストエビデンスが欠落または陳腐化している場合、所有する統制スキルは陳腐化と報告され、再実行が必要です。
 

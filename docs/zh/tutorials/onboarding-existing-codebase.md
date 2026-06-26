@@ -4,7 +4,7 @@
 
 ## 你将构建什么
 
-你会在 `artifacts/codebase/` 下创建或刷新代码库地图，然后基于这份地图跑一个小规模的试点受管变更。
+你会在 `artifacts/codebase/` 下创建或刷新代码库地图，然后基于这份地图跑一个小规模的试点受治理变更。
 
 ## 前置条件
 
@@ -85,7 +85,7 @@ Start with:
 - 修一个有明确复现步骤的小 bug。
 - 仅当仓库的路由和测试模式已经清晰时，再考虑新增一个健康检查端点。
 
-创建受管变更：
+创建受治理变更：
 
 ```bash
 slipway new "pilot change using the codebase map" --preset standard
@@ -165,7 +165,7 @@ slipway validate --json
 slipway done --json
 ```
 
-把试点的 diff 和归档的受管记录一起提交。
+把试点差异和归档的受治理记录一起提交。
 
 ## 你学到了什么
 

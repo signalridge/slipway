@@ -120,8 +120,8 @@ func TestResolveTools(t *testing.T) {
 
 func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	t.Parallel()
-	// Verify registry has 24 commands across the same public groups as root help.
-	assert.Len(t, commandRegistry, 24)
+	// Verify registry has 25 commands across the same public groups as root help.
+	assert.Len(t, commandRegistry, 25)
 
 	// Verify all registry entries have the required fields.
 	validTiers := []string{"core", "discovery", "situational", "helpers", "diagnostics", "setup"}
@@ -162,11 +162,11 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	assert.Equal(t, 10, core, "expected 10 core commands")
 	assert.Equal(t, 1, discovery, "expected 1 discovery command")
 	assert.Equal(t, 8, sit, "expected 8 situational commands")
-	assert.Equal(t, 1, helpers, "expected 1 helper command")
+	assert.Equal(t, 2, helpers, "expected 2 helper commands")
 	assert.Equal(t, 2, diag, "expected 2 diagnostics commands")
 	assert.Equal(t, 2, setup, "expected 2 setup commands")
 	assert.Equal(t, 5, query, "expected 5 query commands")
-	assert.Equal(t, 19, mutation, "expected 19 mutation commands")
+	assert.Equal(t, 20, mutation, "expected 20 mutation commands")
 
 	var fixDef CommandDef
 	var foundFix bool
@@ -194,6 +194,38 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	}
 	assert.NotContains(t, ids, "tool")
 	assert.NotContains(t, ids, "config")
+	assert.NotContains(t, ids, "hook")
+}
+
+func TestSurfaceManifestRegistersHookAsCLIOnlyImplementationSurface(t *testing.T) {
+	t.Parallel()
+
+	manifest := BuildSurfaceManifest()
+	var hookRow *SurfaceManifestRow
+	var hookImplementationRow *SurfaceManifestRow
+	for i := range manifest.Rows {
+		row := manifest.Rows[i]
+		if row.Kind == "command" && row.Name == "hook" {
+			hookRow = &row
+		}
+		if row.Kind == "implementation" && row.Name == "hook" {
+			hookImplementationRow = &row
+		}
+		assert.False(t, row.Kind == "skill" && row.Name == "slipway-hook",
+			"hook must not export a generated host prompt surface")
+		assert.NotEqual(t, "$slipway-hook", row.Token,
+			"hook must not export a generated host prompt token")
+	}
+
+	require.NotNil(t, hookRow, "surface manifest must include the public hook command")
+	assert.Equal(t, "internal/toolgen/toolgen.go:commandRegistry", hookRow.Source)
+	assert.Equal(t, "docs/reference/commands.md", hookRow.Docs)
+	assert.Equal(t, "slipway hook", hookRow.Token)
+
+	require.NotNil(t, hookImplementationRow, "surface manifest must include the hook implementation source")
+	assert.Equal(t, "cmd/context_pressure_hook.go", hookImplementationRow.Source)
+	assert.Equal(t, "docs/reference/commands.md", hookImplementationRow.Docs)
+	assert.Equal(t, "slipway hook", hookImplementationRow.Token)
 }
 
 func TestEvidenceCommandArgumentsUseResultFileOnlyTaskSurface(t *testing.T) {

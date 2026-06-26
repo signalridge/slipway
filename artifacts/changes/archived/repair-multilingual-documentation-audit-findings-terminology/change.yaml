@@ -1,0 +1,46 @@
+version: 1
+slug: repair-multilingual-documentation-audit-findings-terminology
+description: Repair multilingual documentation audit findings, terminology consistency, command references, image links, and surface manifest drift.
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-26T01:19:22.213735Z
+quality_mode: standard
+workflow_profile: docs
+workflow_preset: standard
+worktree_branch: feat/repair-multilingual-documentation-audit-findings-terminology
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 3b4872e1e613ee29e8b3d1499a63874e710a0c7ff6f77b74b0e2c16e583ca295
+        updated_at: 2026-06-26T04:19:05.374408714Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 39e29addc91b86ab49359bc201a8a0d33c8712583c14b7715923418d17d59a75
+        updated_at: 2026-06-26T01:21:09.470273292Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: f144a8bc1469470e871c842a366a1cd3cb4b6d3f2e7c0792d6f57e1961aff97f
+        updated_at: 2026-06-26T01:22:35.398043035Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 7429d19bb7ebac7c523548e2ee3addeb099772a0a1ea1e234a30c7b1be0564ba
+        updated_at: 2026-06-26T04:19:05.373457011Z
+evidence_refs:
+    independent-review: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/independent-review.yaml
+    intake-clarification: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/intake-clarification.yaml
+    plan-audit: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/plan-audit.yaml
+    security-review: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/security-review.yaml
+    ship-verification: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/repair-multilingual-documentation-audit-findings-terminology/artifacts/changes/repair-multilingual-documentation-audit-findings-terminology/verification/wave-orchestration.yaml

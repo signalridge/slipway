@@ -1,6 +1,6 @@
 # 参与贡献
 
-Slipway 是一个 Go CLI，配套生成 AI 工具接入面（AI-tool surfaces）和受治理的工件工作流。请把改动限定在你实际修改的模块或契约范围内。
+Slipway 是一个 Go CLI，配套生成 AI 工具接入面（AI-tool surfaces）和受治理的产物工作流。请把改动限定在你实际修改的模块或契约范围内。
 
 ## 仓库结构
 
@@ -9,12 +9,12 @@ Slipway 是一个 Go CLI，配套生成 AI 工具接入面（AI-tool surfaces）
 | `cmd/` | Cobra 命令接入面，以及 CLI 的 JSON/文本视图。 |
 | `internal/model/` | 持久化的领域类型、工作流状态和配置 schema。 |
 | `internal/state/` | 文件系统布局、工作区配置、change 持久化以及归档辅助逻辑。 |
-| `internal/engine/` | 推进（progression）、gate、治理、工件、上下文和 wave 逻辑。 |
+| `internal/engine/` | 推进（progression）、gate、治理、产物、上下文和 wave 逻辑。 |
 | `internal/toolgen/` | AI 工具适配器生成，以及冻结的接入面契约。 |
-| `internal/tmpl/templates/` | 内嵌的命令、skill、hook 和工件模板。 |
+| `internal/tmpl/templates/` | 内嵌的命令、skill、hook 和产物模板。 |
 | `docs/` | 文档源页面（唯一可信源）。 |
 | `website/` | Astro Starlight 站点，把 `docs/` 渲染并发布到 GitHub Pages。 |
-| `artifacts/changes/` | Slipway 创建的受治理 change 工件包。 |
+| `artifacts/changes/` | Slipway 创建的受治理 change 产物包。 |
 
 ## 开发命令
 
@@ -76,11 +76,11 @@ go test ./internal/toolgen -count=1
 
 ## 治理契约
 
-当生命周期、工件或 gate 语义发生变化时：
+当生命周期、产物或 gate 语义发生变化时：
 
 - 在所属的包里加一个聚焦的回归测试。
 - 把共享语义收敛到一个 helper 里，不要重复 Markdown 或状态解析逻辑。
-- host 契约变化时，更新生成的 skill 或文档。
+- 工具契约变化时，更新生成的 skill 或文档。
 - 在当前受治理的 worktree 内用 `go run . validate --json` 验证。
 
 ## 治理内核覆盖率门禁
@@ -98,13 +98,13 @@ go test ./internal/toolgen -count=1
 just coverage-gate
 ```
 
-当 CI 报告覆盖率回退时，常规修法是补测试把覆盖率补回来。如果这次下降是有意为之且经过评审（比如删掉了死代码），就上调（ratchet）基线并提交这段 diff，让改动在评审中可见：
+当 CI 报告覆盖率回退时，常规修法是补测试把覆盖率补回来。如果这次下降是有意为之且经过评审（比如删掉了死代码），就上调（ratchet）基线并提交这段差异，让改动在评审中可见：
 
 ```bash
 just coverage-baseline   # regenerates coverage-baseline.json from current coverage
 ```
 
-向下调整基线永远不是自动的——它会出现在 PR diff 里，必须经过评审。提升覆盖率之后，用同一条命令把下限抬高。
+向下调整基线永远不是自动的——它会出现在 PR 差异里，必须经过评审。提升覆盖率之后，用同一条命令把下限抬高。
 
 **排除列表**：只在 `-write` 时（即确定受门禁约束的集合时）给 `covergate` 传 `-exclude <prefix[,prefix...]>`。它保留给非内核、生成的或仅测试用的前缀，仅在 include 集合扩大时使用；它无法移除任何必须纳入的治理内核包下限。请把受门禁约束的集合限定在治理内核范围内。
 

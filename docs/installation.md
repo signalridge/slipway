@@ -14,7 +14,7 @@ Use documented release sources owned by the Slipway project: GitHub Releases und
 - Go matching `go.mod` when building from source or using `go install`.
 - Optional: Nix when using the flake package.
 - Optional: Docker or another OCI runtime when using the container image.
-- Optional: MkDocs Material for local docs builds.
+- Optional: Astro Starlight for local docs builds.
 - Optional: one or more AI coding tools supported by `slipway init --tools`.
 
 ## Install Order
