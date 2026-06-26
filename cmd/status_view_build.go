@@ -130,6 +130,8 @@ func buildGovernedStatusView(root string, change model.Change) (statusView, erro
 	view.Blockers = model.NormalizeReasonCodes(append(view.Blockers, waveBlockers...))
 	applyDoneReadyProjection(change, readiness.GateEvaluations, &view)
 	view.Recovery = model.BuildRecovery(view.Blockers)
+	applyReadinessFreshnessToStatus(&view, readiness)
+	view.CurrentActionKind, view.CurrentActionCommand = projectCurrentActionContract(change, readiness)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
@@ -178,6 +180,82 @@ func buildStatusViewBase(
 	}
 	view.Narrative = buildStatusNarrative(view)
 	return view
+}
+
+func applyReadinessFreshnessToStatus(view *statusView, readiness progression.GovernanceReadiness) {
+	if view == nil {
+		return
+	}
+	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
+	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
+	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
+		view.ExecutionEvidenceFreshness,
+		view.GovernanceEvidenceFreshness,
+		view.Blockers,
+	)
+}
+
+func applyReadinessFreshnessToValidate(view *validateView, readiness progression.GovernanceReadiness) {
+	if view == nil {
+		return
+	}
+	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
+	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
+	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
+		view.ExecutionEvidenceFreshness,
+		view.GovernanceEvidenceFreshness,
+		view.Blockers,
+	)
+}
+
+func projectGovernanceEvidenceFreshness(readiness progression.GovernanceReadiness) string {
+	if len(readiness.SkillBlockers) > 0 {
+		return "stale"
+	}
+	return "fresh"
+}
+
+func projectOverallReadinessFreshness(executionFreshness, governanceFreshness string, blockers []model.ReasonCode) string {
+	if len(model.NormalizeReasonCodes(blockers)) > 0 {
+		return "blocked"
+	}
+	if executionFreshness == "stale" || governanceFreshness == "stale" {
+		return "stale"
+	}
+	if executionFreshness == "" || executionFreshness == "unknown" || governanceFreshness == "" || governanceFreshness == "unknown" {
+		return "unknown"
+	}
+	return "fresh"
+}
+
+func projectCurrentActionContract(change model.Change, readiness progression.GovernanceReadiness) (string, string) {
+	if change.CurrentState == model.StateS3Review {
+		pending := pendingSelectedReviewSkills(change, readiness)
+		if len(pending) > 1 {
+			return "review_batch", "slipway run"
+		}
+		if len(pending) == 1 {
+			return "skill_handoff", "slipway run"
+		}
+	}
+	if skill := buildActionableNextSkillView(change, readiness); skill != nil {
+		return "skill_handoff", "slipway run"
+	}
+	if change.CurrentState == model.StateDone {
+		return "", ""
+	}
+	return "command_required", "slipway " + invocationRouteAction(change.CurrentState)
+}
+
+func pendingSelectedReviewSkills(change model.Change, readiness progression.GovernanceReadiness) []string {
+	selected := selectedReviewSkillsFromReadiness(readiness, change.EffectiveWorkflowProfile())
+	pending := make([]string, 0, len(selected))
+	for _, name := range selected {
+		if !skillHasPassingEvidence(readiness.PassingSkills, name) {
+			pending = append(pending, name)
+		}
+	}
+	return pending
 }
 
 func statusPrimaryAction(root string, change model.Change, execCtx executionContext) (string, []model.ReasonCode, []string) {

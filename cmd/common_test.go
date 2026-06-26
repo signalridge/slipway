@@ -130,7 +130,7 @@ func TestResolveExplicitChangeRejectsUnknownSlug(t *testing.T) {
 	_, err := resolveExplicitChange(root, "slug-missing")
 	cliErr := asCLIError(err)
 	require.NotNil(t, cliErr)
-	assert.Equal(t, "no_active_change", cliErr.ErrorCode)
+	assert.Equal(t, "change_not_found", cliErr.ErrorCode)
 	assert.Equal(t, categoryPrecondition, cliErr.Category)
 	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
 	assert.Equal(t, "slug-missing", cliErr.Slug)

@@ -33,6 +33,19 @@ type Resolution struct {
 	HydrateReferences []string
 }
 
+// HostCapabilityRequirement describes a host/runtime capability a selected
+// skill needs outside the Slipway kernel itself.
+type HostCapabilityRequirement struct {
+	SkillID             string
+	Capability          string
+	Required            bool
+	Availability        string
+	FallbackSelected    bool
+	FallbackMode        string
+	EvidenceRequirement string
+	Remediation         string
+}
+
 // Signals carries the context inputs for capability resolution.
 type Signals struct {
 	Command      string
@@ -40,6 +53,12 @@ type Signals struct {
 	Blockers     []string
 	ChangedFiles []string
 	Paths        []string
+	// HostCapabilities names capabilities the current host explicitly reports,
+	// e.g. "subagent". The token "none" means the host explicitly reports no
+	// delegated-execution capability. Empty means unknown, not unavailable.
+	HostCapabilities []string
+	// Fallbacks names explicit host/operator-selected fallback modes.
+	Fallbacks []string
 	// Focus names an explicit `--focus <alias>` selection resolved through
 	// surface policy. Empty means no explicit focus was requested.
 	Focus string
@@ -68,6 +87,65 @@ func Resolve(reg *Registry, sig Signals) Resolution {
 	resolution.HydrateReferences = collectHydrateReferences(reg, sig, resolution)
 
 	return resolution
+}
+
+func ResolveHostCapabilityRequirement(skillID string, sig Signals) *HostCapabilityRequirement {
+	skillID = strings.TrimSpace(skillID)
+	if skillID != "independent-review" {
+		return nil
+	}
+	req := &HostCapabilityRequirement{
+		SkillID:             skillID,
+		Capability:          "subagent",
+		Required:            true,
+		Availability:        hostCapabilityAvailability(sig.HostCapabilities, "subagent"),
+		EvidenceRequirement: "record independent-review evidence from a fresh independent reviewer context",
+		Remediation:         "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review fallback and record fresh independent reviewer evidence.",
+	}
+	if fallbackSelected(sig.Fallbacks, "manual_independent_review") {
+		req.FallbackSelected = true
+		req.FallbackMode = "manual_independent_review"
+	}
+	return req
+}
+
+func hostCapabilityAvailability(tokens []string, capabilityName string) string {
+	capabilityName = strings.TrimSpace(capabilityName)
+	if capabilityName == "" {
+		return "unknown"
+	}
+	declared := false
+	for _, token := range tokens {
+		token = strings.TrimSpace(strings.ToLower(token))
+		switch token {
+		case "":
+			continue
+		case "none", "unavailable":
+			declared = true
+		default:
+			declared = true
+			if token == capabilityName || token == "delegation" {
+				return "available"
+			}
+		}
+	}
+	if declared {
+		return "unavailable"
+	}
+	return "unknown"
+}
+
+func fallbackSelected(tokens []string, fallbackName string) bool {
+	fallbackName = strings.TrimSpace(fallbackName)
+	if fallbackName == "" {
+		return false
+	}
+	for _, token := range tokens {
+		if strings.TrimSpace(token) == fallbackName {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveRoute applies the surface-policy-based route contract. It returns

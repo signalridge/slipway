@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -25,6 +26,14 @@ func applyNextInvocationWorkspacePath(cmd *cobra.Command, root string, view *nex
 	applyCommandInvocationWorkspacePath(cmd, root, view.FreshnessDiagnostics)
 }
 
+func applyNextInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool, view *nextView) {
+	if view == nil {
+		return
+	}
+	workspace := invocationWorkspaceRootFromCommand(cmd, root)
+	view.InvocationRoute = buildInvocationRouteView(root, change, workspace, explicitChange)
+}
+
 func applyValidateInvocationWorkspacePath(cmd *cobra.Command, root string, view *validateView) {
 	if view == nil {
 		return
@@ -32,11 +41,27 @@ func applyValidateInvocationWorkspacePath(cmd *cobra.Command, root string, view 
 	applyCommandInvocationWorkspacePath(cmd, root, view.FreshnessDiagnostics)
 }
 
+func applyValidateInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool, view *validateView) {
+	if view == nil {
+		return
+	}
+	workspace := invocationWorkspaceRootFromCommand(cmd, root)
+	view.InvocationRoute = buildInvocationRouteView(root, change, workspace, explicitChange)
+}
+
 func applyStatusInvocationWorkspacePath(cmd *cobra.Command, root string, view *statusView) {
 	if view == nil {
 		return
 	}
 	applyCommandInvocationWorkspacePath(cmd, root, view.FreshnessDiagnostics)
+}
+
+func applyStatusInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool, view *statusView) {
+	if view == nil {
+		return
+	}
+	workspace := invocationWorkspaceRootFromCommand(cmd, root)
+	view.InvocationRoute = buildInvocationRouteView(root, change, workspace, explicitChange)
 }
 
 func attachFreshnessDiagnostics(diagnostics state.ExecutionFreshnessDiagnostics) *state.ExecutionFreshnessDiagnostics {

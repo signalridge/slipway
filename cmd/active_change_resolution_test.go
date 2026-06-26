@@ -40,6 +40,35 @@ func TestResolveActiveChangeRefReportsBoundElsewhereFromRoot(t *testing.T) {
 	})
 }
 
+func TestStatusFromRootReportsBoundElsewhere(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		worktreePath := filepath.Join(t.TempDir(), "status-bound-worktree")
+		runGit(t, root, "worktree", "add", worktreePath, "-b", "status-bound-worktree")
+		change := model.NewChange("status-bound-change")
+		change.WorktreePath = worktreePath
+		require.NoError(t, state.SaveChange(root, change))
+
+		var out bytes.Buffer
+		cmd := commandForRoot(t, root, makeStatusCmd())
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+		err := cmd.Execute()
+
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		normalizedWorktreePath, normalizeErr := state.NormalizePath(worktreePath)
+		require.NoError(t, normalizeErr)
+		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "--change status-bound-change")
+		assert.Contains(t, cliErr.Remediation, normalizedWorktreePath)
+		assert.NotContains(t, out.String(), `"slug"`, "unscoped root status must not render a stale action view for a bound worktree")
+	})
+}
+
 func TestNextChangeFlagFromRootTargetsBoundWorktree(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -66,7 +95,132 @@ func TestNextChangeFlagFromRootTargetsBoundWorktree(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, normalizedWorktreePath, view.InputContext.WorkspaceRoot)
 		assert.Equal(t, "next-bound-change", view.Slug)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "explicit_bound_change", view.InvocationRoute.Kind)
+		assert.Equal(t, "next-bound-change", view.InvocationRoute.ChangeSlug)
+		assert.False(t, view.InvocationRoute.LocalLifecycleExecutionAllowed)
+		assert.True(t, view.InvocationRoute.EffectiveLifecycleExecutionAllowed)
+		assert.Equal(t, "slipway next --change next-bound-change", view.InvocationRoute.NextCommand)
 	})
+}
+
+func TestBoundWorktreeCommandsExposeConsistentLocalInvocationRoute(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		initGitRepoForWorktreeTests(t, root)
+
+		slug := "local-bound-route"
+		branch := state.DefaultWorktreeBranch(slug)
+		worktreePath := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreePath, "-b", branch)
+
+		change := model.NewChange(slug)
+		change.Description = "exercise local bound invocation route"
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.QualityMode = model.QualityModeStandard
+		change.ComplexityLevel = "simple"
+		change.CurrentState = model.StateS1Plan
+		change.PlanSubStep = model.PlanSubStepBundle
+		change.WorktreePath = worktreePath
+		change.WorktreeBranch = branch
+		require.NoError(t, state.SaveChange(root, change))
+		writeMinimalGovernedBundle(t, worktreePath, change)
+
+		withNestedWorkingDirectory(t, worktreePath, func() {
+			var statusOut bytes.Buffer
+			statusCmd := makeStatusCmd()
+			statusCmd.SetArgs([]string{"--json"})
+			statusCmd.SetOut(&statusOut)
+			require.NoError(t, statusCmd.Execute())
+			var status statusView
+			require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+
+			var nextOut bytes.Buffer
+			nextCmd := makeNextCmd()
+			nextCmd.SetArgs([]string{"--json"})
+			nextCmd.SetOut(&nextOut)
+			require.NoError(t, nextCmd.Execute())
+			var next nextHandoffView
+			require.NoError(t, json.Unmarshal(nextOut.Bytes(), &next))
+
+			var validateOut bytes.Buffer
+			validateCmd := makeValidateCmd()
+			validateCmd.SetArgs([]string{"--json"})
+			validateCmd.SetOut(&validateOut)
+			require.NoError(t, validateCmd.Execute())
+			var validate validateView
+			require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+
+			routes := map[string]*invocationRouteView{
+				"status":   status.InvocationRoute,
+				"next":     next.InvocationRoute,
+				"validate": validate.InvocationRoute,
+			}
+			for surface, route := range routes {
+				assertLocalInvocationRoute(t, surface, route, slug)
+			}
+			assert.Equal(t, status.InvocationRoute, next.InvocationRoute)
+			assert.Equal(t, status.InvocationRoute, validate.InvocationRoute)
+		})
+	})
+}
+
+func TestInvocationRouteWithoutNextCommandUsesInspectOnlyRemediation(t *testing.T) {
+	root := t.TempDir()
+	worktreePath := filepath.Join(root, ".worktrees", "archived-local-route")
+	change := model.NewChange("archived-local-route")
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	change.WorktreePath = worktreePath
+
+	route := buildInvocationRouteView(root, change, root, false)
+	require.NotNil(t, route)
+	assert.Equal(t, "archived", route.Kind)
+	assert.False(t, route.LocalLifecycleExecutionAllowed)
+	assert.False(t, route.EffectiveLifecycleExecutionAllowed)
+	assert.Empty(t, route.NextCommand)
+	assert.NotEmpty(t, route.Remediation)
+	assert.Contains(t, route.Remediation, "to inspect the change")
+	assert.NotContains(t, route.Remediation, "or run")
+	assert.NotContains(t, route.Remediation, "``")
+}
+
+func assertLocalInvocationRoute(t *testing.T, surface string, route *invocationRouteView, slug string) {
+	t.Helper()
+
+	require.NotNil(t, route, "%s invocation_route", surface)
+	assert.Equal(t, "local_active", route.Kind, surface)
+	assert.Equal(t, slug, route.ChangeSlug, surface)
+	assert.True(t, route.LocalLifecycleExecutionAllowed, surface)
+	assert.True(t, route.EffectiveLifecycleExecutionAllowed, surface)
+	assert.NotEmpty(t, route.InvocationWorkspacePath, surface)
+	assert.NotEmpty(t, route.BoundWorkspacePath, surface)
+	assert.NotEmpty(t, route.ChangeAuthorityPath, surface)
+	assert.Equal(t, "slipway next", route.NextCommand, surface)
+	assert.Empty(t, route.Remediation, surface)
+}
+
+func TestValidateChangeFlagRejectsMissingSlugWithoutWritingState(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	cmd := commandForRoot(t, root, makeValidateCmd())
+	cmd.SetArgs([]string{"--json", "--change", "missing-explicit-change"})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	err := cmd.Execute()
+
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "change_not_found", cliErr.ErrorCode)
+	assert.Equal(t, "missing-explicit-change", cliErr.Slug)
+	assert.NotContains(t, out.String(), "no active change or ambiguous")
+	_, statErr := os.Stat(state.BundleChangeFilePath(root, "missing-explicit-change"))
+	assert.True(t, os.IsNotExist(statErr), "validate must not create state for a missing explicit change")
 }
 
 func TestRunFromRootReportsBoundElsewhere(t *testing.T) {

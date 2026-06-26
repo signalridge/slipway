@@ -1,27 +1,34 @@
 # Concerns
 
-- Second-authority risk: handoff content must never become lifecycle authority.
-  Machine header and `show --brief` output must omit lifecycle state/substep and
-  next_skill/next_command, and must point resumers to `slipway status` and
-  `slipway next` instead.
-- Context pollution risk: SessionStart can fire from the repo root or when
-  multiple changes exist. The hook must emit bounded slugs/paths or a count in
-  ambiguous contexts and never inject full handoff bodies or focus prose.
-- Hook portability risk: Claude and Codex payloads differ. Shared hook handlers
-  must fail silent, preserve existing Claude behavior, accept Codex SessionStart
-  and UserPromptSubmit payloads, and use Codex-compatible output only where
-  Codex expects it.
-- Trust risk: generating `.codex/config.toml` is not the same as enabling hooks.
-  The README and setup output must state that repo trust and hook trust are
-  user-granted and that Slipway never edits global Codex trust config.
-- Worktree placement risk: Slipway-provisioned worktrees may not be where Codex
-  reads project hooks. Toolgen must write Codex hook config where Codex actually
-  reads it for the root checkout while keeping governed code edits in the bound
-  worktree.
-- Generated-surface drift risk: adding a command must keep command registry,
-  command skills, surface manifest expectations, README command contracts, and
-  generated workflow guidance aligned. Stale negative tests that currently assert
-  no `.codex/config.toml` must be updated intentionally.
-- Advisory invariant risk: a stale, missing, or hand-edited handoff must not
-  affect lifecycle gates, evidence freshness, readiness, or bypass/force-close
-  paths. A dedicated invariant test should guard this.
+- Route divergence risk: `status` currently succeeds from the root checkout for
+  a single active change bound elsewhere, while `next`, `validate`, `done`, and
+  `evidence` fail closed through `resolveActiveChangeRef`. A partial fix in one
+  command would preserve misleading agent guidance.
+- Local actionability risk: `next_ready_actions` currently describes lifecycle
+  actions by state only (`cmd/common.go:994-1018`). It can therefore advertise
+  `next`, `run`, or `done` in a workspace that cannot execute those actions
+  locally.
+- Archived-local regression risk: #283 behavior intentionally prefers an
+  archived change in the current archived worktree over an unrelated active
+  change elsewhere. A shared route abstraction must encode this as a first-class
+  route kind instead of treating it as an afterthought.
+- Error taxonomy drift risk: explicit missing slugs currently vary by command
+  (`status --change` returns `change_not_found`, `validate --change` falls back
+  to diagnostics, and `next --change` reports `no_active_change`). The shared
+  route must pin stable error codes and exit code 3.
+- Freshness overclaim risk: execution evidence freshness is not the same as
+  governance readiness. Existing tests intentionally allow `required_skill_missing`
+  while execution freshness remains `fresh`, so adding new readiness fields is
+  safer than changing the execution-freshness helper semantics.
+- Action-contract drift risk: `next` owns `confirmation_requirement` and action
+  kinds, while `status` and `validate` expose separate recovery/action fields.
+  `status`/`validate` must not let `recovery.primary_action` override or
+  contradict the current `next` action kind.
+- Capability dead-end risk: technique hints and generated skill prose can tell a
+  host to spawn or delegate, but the CLI does not currently report whether that
+  capability exists. Auto-mode must not report prior authorization sufficient
+  when the selected skill requires an unavailable host capability and no explicit
+  fallback is selected.
+- Compatibility risk: new JSON fields should be additive where possible, while
+  erroneous existing values that cause unsafe action claims should be corrected
+  even if tests need updates.

@@ -82,6 +82,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"governed_bundle_path_invalid",
 		"high_risk_check_failed",
 		"high_risk_check_missing",
+		"host_capability_unavailable",
 		"incomplete_execution_task",
 		"intake_clarification_incomplete",
 		"intake_confirmation_incomplete",
