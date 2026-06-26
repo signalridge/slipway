@@ -30,9 +30,9 @@ slipway next --json --diagnostics
 
 然后再运行对应阶段的命令，或者完成被点出的技能。这样 agent 就不会凭旧上下文乱猜。
 
-## 失败即关闭的恢复
+## 失败即停的恢复
 
-失败即关闭的阻塞，意味着当前 worktree 中某项证明缺失、过期、损坏，或超出范围。
+失败即停的阻塞，意味着当前 worktree 中某项证明缺失、过期、损坏，或超出范围。
 好的恢复做法是下列之一：
 
 - 按 `slipway instructions <artifact>` 撰写缺失的产物。
@@ -47,7 +47,7 @@ slipway next --json --diagnostics
 ## done-ready 不等于 done
 
 done-ready 表示各项门禁已通过、变更可以定稿。`slipway done --json` 会归档终态。
-如果 `done` 报出 worktree 有未提交改动的警告，请把预期的实现 diff 连同归档的
+如果 `done` 报出 worktree 有未提交改动的警告，请把预期的实现差异连同归档的
 Slipway 记录一起提交，之后再移除 worktree。
 
 ## 相关阅读

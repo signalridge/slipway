@@ -9,10 +9,10 @@ Slipway 围绕几类长期存在的项目记录构建：
 | 受治理变更 | 位于 `artifacts/changes/<slug>/` 下的一个有边界的工作单元。 |
 | 代码库地图 | 位于 `artifacts/codebase/` 下的共享仓库上下文，用于既有项目（brownfield）的工作。 |
 | 任务证据 | 位于 `.git/slipway/runtime/changes/<slug>/evidence/` 下的运行时凭证。 |
-| 评审证据 | 必须与当前 worktree 匹配的新鲜验证记录。 |
+| 评审证据 | 必须与当前 worktree 匹配、当前有效的验证记录。 |
 | AI 适配器 | 生成的宿主文件，把 agent 重新引导回 Slipway CLI。 |
 
-CLI 是权威来源。AI 工具可以协助撰写工件、运行各个阶段，但不应臆造生命周期状态，也不应手工编辑证据。
+CLI 是权威来源。AI 工具可以协助撰写产物、运行各个阶段，但不应臆造生命周期状态，也不应手工编辑证据。
 
 ## 选择你的路径
 
@@ -87,7 +87,7 @@ slipway run --json --diagnostics
 
 `slipway run` 只在 Slipway 拥有的阶段之间推进，并在每个面向操作者的边界处停下。如果它返回了一个 skill 交接，请在你的 AI 工具里完成这次交接，然后重新运行只读命令再继续。
 
-## 如果它失败即停（fail closed）
+## 如果它失败即停（fail-closed）
 
 失败即停的输出是一项特性。它意味着 Slipway 发现证据缺失或过期，并指明了下一步安全动作。
 
@@ -100,7 +100,7 @@ slipway next --json --diagnostics
 slipway health --doctor --json
 ```
 
-然后按它指明的恢复命令执行。不要手工编辑 `change.yaml`、验证 YAML、任务证据或生命周期时间戳。如果证据过期了，重新运行其所属的阶段、评审者或任务证据路径，让 Slipway 能够从当前 worktree 重新推导出新鲜度。
+然后按它指明的恢复命令执行。不要手工编辑 `change.yaml`、验证 YAML、任务证据或生命周期时间戳。如果证据过期了，重新运行其所属的阶段、评审者或任务证据路径，让 Slipway 能够从当前 worktree 重新推导出时效性。
 
 ## 继续前进
 

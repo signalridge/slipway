@@ -6,7 +6,8 @@ keeps the generated surface manifest anchored under `docs/reference/`.
 
 Most routed commands support `--json` when structured output is useful.
 `slipway validate` emits JSON for its main report, `slipway init` is
-setup-only, and `slipway config` is a public CLI-only setup/config surface.
+setup-only, while `slipway config`, `slipway tool`, and `slipway hook` are
+public CLI-only surfaces without generated adapter prompt wrappers.
 
 ## Command Index
 
@@ -32,6 +33,7 @@ setup-only, and `slipway config` is a public CLI-only setup/config surface.
 | `slipway repair` | mutation | Run bounded local integrity repairs. |
 | `slipway evidence` | mutation | Record supported task or skill evidence. |
 | `slipway tool` | mutation | Run CLI-only helper tools used by generated skills. |
+| `slipway hook` | mutation | Run CLI-only host hook helpers used by generated adapter configuration. |
 | `slipway health` | query | Show repo-local integrity findings. |
 | `slipway instructions` | query | Show artifact or codebase-map authoring contracts. |
 | `slipway init` | mutation | Initialize runtime layout and optional adapters. |
@@ -65,7 +67,7 @@ slipway evidence task --result-file task-result.json [--result-file next-task-re
 slipway evidence skill --skill <name> --verdict pass --json
 slipway health --json
 slipway instructions <artifact> --json
-slipway config --json
+slipway config list --json
 ```
 
 Use `--diagnostics` with `next` or `run` when you need blocker detail,
@@ -79,6 +81,8 @@ artifact-readiness detail, transition traces, or context-budget diagnostics.
 - `slipway evidence skill --skill <name> --verdict pass --json` records governed skill evidence at the stage that owns that skill.
 - `slipway status --stats --json` reports workspace diagnostics without reviving the retired top-level `stats` command.
 - `slipway health --doctor --json` adds repair-oriented diagnostics to the health report.
+- `slipway tool <helper>` is invoked directly by generated skills and has no generated adapter prompt surface.
+- `slipway hook session-start` and `slipway hook context-pressure` are invoked directly by generated host hook configuration; hook helpers fail silent so automatic hooks cannot block the user.
 - `slipway config`, `slipway config list --json`, `slipway config get <key> --json`, and `slipway config set <key> <value>` inspect or update `.slipway.yaml`; `config` is intentionally CLI-only and has no generated adapter prompt surface.
 
 ## Read-Only Authority

@@ -63,15 +63,18 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		"security-review provides the selected security review evidence for security-review",
 	)
 	if len(executionSummaryCtx.Issues) > 0 {
-		domainReviewDone = false
-		domainSatisfiedBy = nil
-		domainIssues = stringutil.UniqueSorted(append(domainIssues, executionSummaryCtx.Issues...))
-		independentReviewDone = false
-		independentSatisfiedBy = nil
-		independentIssues = stringutil.UniqueSorted(append(independentIssues, executionSummaryCtx.Issues...))
-		securityReviewDone = false
-		securitySatisfiedBy = nil
-		securityIssues = stringutil.UniqueSorted(append(securityIssues, executionSummaryCtx.Issues...))
+		blockingExecutionIssues := runtimeBlockingExecutionSummaryIssues(change, executionSummaryCtx.Issues)
+		if len(blockingExecutionIssues) > 0 {
+			domainReviewDone = false
+			domainSatisfiedBy = nil
+			domainIssues = stringutil.UniqueSorted(append(domainIssues, blockingExecutionIssues...))
+			independentReviewDone = false
+			independentSatisfiedBy = nil
+			independentIssues = stringutil.UniqueSorted(append(independentIssues, blockingExecutionIssues...))
+			securityReviewDone = false
+			securitySatisfiedBy = nil
+			securityIssues = stringutil.UniqueSorted(append(securityIssues, blockingExecutionIssues...))
+		}
 	}
 
 	worktreeValidation, err := state.ValidateChangeWorktree(root, change)
@@ -121,6 +124,37 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		actions[idx].Description = fmt.Sprintf("%s [diagnostics: %s]", actions[idx].Description, strings.Join(issues, ", "))
 	}
 	return actions
+}
+
+func runtimeBlockingExecutionSummaryIssues(change model.Change, issues []string) []string {
+	if len(issues) == 0 {
+		return nil
+	}
+	filtered := make([]string, 0, len(issues))
+	for _, issue := range issues {
+		reasons := model.ReasonCodesFromSpecs([]string{issue})
+		if len(reasons) == 0 {
+			filtered = append(filtered, issue)
+			continue
+		}
+		if runtimeIssueAbsorbedByReview(change, reasons[0].Code) {
+			continue
+		}
+		filtered = append(filtered, issue)
+	}
+	return stringutil.UniqueSorted(filtered)
+}
+
+func runtimeIssueAbsorbedByReview(change model.Change, code string) bool {
+	if change.CurrentState != model.StateS3Review {
+		return false
+	}
+	switch strings.TrimSpace(code) {
+	case "tasks_plan_changed_since_task_evidence":
+		return true
+	default:
+		return false
+	}
 }
 
 func RequiredActionBlockers(change model.Change, actions []RequiredAction) []string {

@@ -65,8 +65,9 @@ engine-consumed tokens on the verification record's `references` (via
 `slipway evidence skill --reference ...`). Each is an error-severity blocker on
 `standard`/`strict` and advisory-only on `light` (realized as Pattern-A omission —
 the gate simply returns no blocker on `light`, there is no separate advisory
-channel in this seam). None of them is a self-stamp of a freshness or final
-verdict; the engine remains the sole timestamp and run-version stamper.
+channel in this seam). No token lets a stage self-certify freshness or a final
+verdict; the engine remains the sole timestamp and run-version
+stamper.
 
 | Token | Attests | Enforced | Recovery when the gate fails closed |
 | --- | --- | --- | --- |
@@ -109,7 +110,7 @@ handles — so it raises the cost and auditability of collapsing chain stages in
 one authoring context but is never cryptographic proof of independence. Genuine
 non-forgeable distinct-context discrimination (an engine-issued per-stage nonce or
 lifecycle-event boundary, "Option B") is infeasible within this change's
-constraints, so no gate here is oversold as cryptographic distinct-context proof.
+constraints, so no gate here is overstated as cryptographic distinct-context proof.
 
 ## S3 Review Dispatch
 

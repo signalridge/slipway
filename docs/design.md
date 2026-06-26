@@ -15,7 +15,7 @@ Slipway is a small governance control plane for local AI-assisted development. I
 
 ## Advantage Axes
 
-Slipway's value is not one gate; it is that every governed stage owns evidence the engine **re-derives instead of trusting**, across several independent axes. Each axis is stated at its honest enforcement tier — structural where it is structural, genuinely enforced where it is — and never oversold. Adjacent spec, workflow, and skill toolkits structure work well; the divide is that they enforce process by *asking* the model to comply, while these axes are checked in compiled code the model runs but cannot rewrite.
+Slipway's value is not one gate; it is that every governed stage owns evidence the engine **re-derives instead of trusting**, across several independent axes. Each axis is stated at its actual enforcement level — structural where it is structural, genuinely enforced where it is — and never overstated. Adjacent spec, workflow, and skill toolkits structure work well; the divide is that they enforce process by *asking* the model to comply, while these axes are checked in compiled code the model runs but cannot rewrite.
 
 | Axis | Enforcement tier | In one line |
 | --- | --- | --- |
@@ -25,9 +25,9 @@ Slipway's value is not one gate; it is that every governed stage owns evidence t
 | 4. Scope containment | Genuinely enforced | `target_files` is a contract checked with the planner's own `TargetCoversPath` predicate |
 | 5. Drift-aware forward recovery | Genuinely enforced | Forward-only reopen; `next` projects the repair as a named command |
 | 6. Local-first, git-native audit | Genuinely enforced | `change.yaml` authority plus an append-only, readback-verified `lifecycle.jsonl` |
-| 7. Risk-tiered guardrails | Genuinely enforced (fail-closed) | Sensitive domains require high-risk checks and get no bypass, force-close, or self-attest path |
+| 7. Risk-tiered guardrails | Genuinely enforced (fail-closed) | Sensitive domains require high-risk checks and get no bypass, force-close, or self-attestation path |
 
-The honest tier matters: axes 3–7 are mechanisms the engine genuinely enforces, axis 2 mixes an input-digest check (S3 review certificates) with structural freshness (execution summaries), and axis 1 is deliberately the *audit/structural* tier — it raises the cost of faking independence without claiming cryptographic proof. The sections below give each axis its mechanism and competitive boundary.
+The actual enforcement level matters: axes 3–7 are mechanisms the engine genuinely enforces, axis 2 mixes an input-digest check (S3 review certificates) with structural freshness (execution summaries), and axis 1 is deliberately the *audit/structural* tier — it raises the cost of faking independence without claiming cryptographic proof. The sections below give each axis its mechanism and competitive boundary.
 
 ### 1. Attested fresh context
 
@@ -35,7 +35,7 @@ Every stage records the distinct context handle it ran under (`context_origin:st
 
 ### 2. Tamper-evident evidence
 
-Freshness is computed from authoritative inputs, not from the verification record's own claims. Selected S3 review certificates are keyed to an engine-owned input digest (code diff, planning artifacts, task-scope hash, and run-summary version); the one authoritative full suite is owned by the terminal `ship-verification` gate rather than a shared keystone the peers consume. Execution-summary task freshness is **structural** (`change_id`, `run_summary_version`, `task_id`, `guardrail_domain`), and old hash-only summaries are treated as stale and regenerated. Either way, a hand-edited verdict or a drifted input is detected and named (`required_skill_stale:<skill>:<input>`) rather than trusted. The engine remains the sole verdict and run-version stamper; no gate adds a self-stamp, restamp, or force-close path. Adjacent tools store state as Markdown/YAML the model maintains and could edit freely.
+Freshness is computed from authoritative inputs, not from the verification record's own claims. Selected S3 review certificates are keyed to an engine-owned input digest (code diff, planning artifacts, task-scope hash, and run-summary version); the one authoritative full suite is owned by the terminal `ship-verification` gate rather than a shared keystone the peers consume. Execution-summary task freshness is **structural** (`change_id`, `run_summary_version`, `task_id`, `guardrail_domain`), and old hash-only summaries are treated as stale and regenerated. Either way, a hand-edited verdict or a drifted input is detected and named (`required_skill_stale:<skill>:<input>`) rather than trusted. The engine remains the sole verdict and run-version stamper; no gate can self-certify freshness, restamp a verdict, or force-close the record. Adjacent tools store state as Markdown/YAML the model maintains and could edit freely.
 
 ### 3. Two-sided parallel safety
 
@@ -97,7 +97,7 @@ boundary honestly rather than overselling it.
 Each gate fails closed at error severity on `standard`/`strict` and is advisory on
 `light` — advisory is realized as Pattern-A omission (the gate returns no blocker
 on `light`), not a separate advisory channel. No gate adds a bypass, force-close,
-or self-stamp path; the engine stays the sole verdict stamper.
+or self-attestation path; the engine stays the sole verdict stamper.
 
 ### Cross-stage context-origin lattice
 
@@ -130,7 +130,7 @@ converge, recorded on its own evidence rather than a peer-shared record.
 
 When a seam fails closed, recovery is to re-run the owning stage or selected
 reviewer in a fresh native subagent so it re-emits a distinct `context_origin`
-handle; the engine never self-stamps, restamps, force-closes, or treats
+handle; the engine never accepts self-issued claims, restamps, force-closes, or treats
 unselected security evidence as a hidden lattice participant.
 
 **Honest residual.** The `context_origin` lattice cannot prove that the chain's

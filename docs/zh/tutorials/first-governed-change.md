@@ -1,6 +1,6 @@
 # 第一个受治理的变更
 
-本教程会带你用 Slipway 跑通一个仅涉及文档的小改动。重点不在于这次 README 编辑本身，而是借此看清 Slipway 如何呈现生命周期状态、skill 交接、证据、评审，以及失败即关闭（fail-closed）的恢复机制。
+本教程会带你用 Slipway 跑通一个仅涉及文档的小改动。重点不在于这次 README 编辑本身，而是借此看清 Slipway 如何呈现生命周期状态、skill 交接、证据、评审，以及失败即停（fail-closed）的恢复机制。
 
 ## 你将构建什么
 
@@ -117,7 +117,7 @@ slipway validate --json
 slipway next --json --diagnostics
 ```
 
-只有在 plan-audit 各道 gate 通过之后，规划才算可以进入实现阶段。如果 Slipway 失败即关闭，就按它指明的 artifact 或评审恢复路径来处理。不要跳过规划这道 gate。
+只有在 plan-audit 各道 gate 通过之后，规划才算可以进入实现阶段。如果 Slipway 失败即停，就按它指明的产物或评审恢复路径来处理。不要跳过规划这道 gate。
 
 ## 第 6 步：实现 README 改动
 
@@ -143,7 +143,7 @@ slipway status --json
 ```
 ````
 
-AI 完成后，检查 diff：
+AI 完成后，检查差异：
 
 ```bash
 git diff -- README.md

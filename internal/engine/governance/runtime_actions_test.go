@@ -608,6 +608,155 @@ func TestResolveRuntimeRequiredActionsRejectsExecutionSummaryLevelBlockers(t *te
 	assert.Contains(t, byID[model.ControlIndependentReview].Description, blocker)
 }
 
+func TestResolveRuntimeRequiredActionsAbsorbsS3TaskPlanDriftAfterReviewEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("runtime-actions-s3-plan-drift")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 7,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		OpenBlockers: []model.ReasonCode{
+			model.NewReasonCode("tasks_plan_changed_since_task_evidence", "t-01"),
+			model.NewReasonCode("tasks_plan_changed_since_task_evidence", "t-02"),
+		},
+		CompletedTasks: []string{"t-01", "t-02", "t-03"},
+		Tasks: []model.ExecutionTaskSummary{
+			{TaskID: "t-01", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindDoc},
+			{TaskID: "t-02", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindDoc},
+			{TaskID: "t-03", Verdict: model.TaskVerdictPass, TaskKind: model.TaskKindDoc},
+		},
+	}))
+
+	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 7,
+	})
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 7,
+	})
+	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 7,
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlDomainReview, model.ControlModeBlocking, model.ControlScopeReview),
+			makeControl(model.ControlIndependentReview, model.ControlModeAdvisory, model.ControlScopeReview),
+			makeControl(model.ControlSecurityReview, model.ControlModeBlocking, model.ControlScopeReview),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	byID := map[model.ControlID]RequiredAction{}
+	for _, action := range actions {
+		byID[action.ControlID] = action
+	}
+
+	require.Contains(t, byID, model.ControlDomainReview)
+	require.Contains(t, byID, model.ControlIndependentReview)
+	require.Contains(t, byID, model.ControlSecurityReview)
+	assert.True(t, byID[model.ControlDomainReview].Satisfied)
+	assert.True(t, byID[model.ControlIndependentReview].Satisfied)
+	assert.True(t, byID[model.ControlSecurityReview].Satisfied)
+	assert.NotContains(t, byID[model.ControlSecurityReview].Description, "tasks_plan_changed_since_task_evidence")
+}
+
+func TestResolveRuntimeRequiredActionsDoesNotAbsorbStaleExecutionEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("runtime-actions-stale-execution")
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 8,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictFail,
+		OpenBlockers: []model.ReasonCode{
+			model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""),
+		},
+	}))
+
+	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 8,
+	})
+	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 8,
+	})
+	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 8,
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlDomainReview, model.ControlModeBlocking, model.ControlScopeReview),
+			makeControl(model.ControlIndependentReview, model.ControlModeAdvisory, model.ControlScopeReview),
+			makeControl(model.ControlSecurityReview, model.ControlModeBlocking, model.ControlScopeReview),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	byID := map[model.ControlID]RequiredAction{}
+	for _, action := range actions {
+		byID[action.ControlID] = action
+	}
+
+	require.Contains(t, byID, model.ControlDomainReview)
+	require.Contains(t, byID, model.ControlIndependentReview)
+	require.Contains(t, byID, model.ControlSecurityReview)
+	assert.False(t, byID[model.ControlDomainReview].Satisfied)
+	assert.False(t, byID[model.ControlIndependentReview].Satisfied)
+	assert.False(t, byID[model.ControlSecurityReview].Satisfied)
+	assert.Contains(t, byID[model.ControlSecurityReview].Description, state.StaleExecutionEvidenceBlockerToken)
+}
+
+func TestRuntimeBlockingExecutionSummaryIssuesDropsEmptyIssues(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("runtime-actions-empty-issues")
+	change.CurrentState = model.StateS3Review
+
+	assert.Nil(t, runtimeBlockingExecutionSummaryIssues(change, nil))
+	assert.Nil(t, runtimeBlockingExecutionSummaryIssues(change, []string{"", " \t "}))
+}
+
 func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHiddenSiblingWorktree(t *testing.T) {
 	t.Parallel()
 
@@ -892,6 +1041,35 @@ func TestExecutionScopeBlocksAtS2Implement(t *testing.T) {
 
 	blockers := RequiredActionBlockers(change, actions)
 	assert.Len(t, blockers, 1, "execution-scope control should block at S3 regardless of discovery flag")
+}
+
+func TestRequiredActionBlockersHandlesReleaseAndUnknownScopes(t *testing.T) {
+	t.Parallel()
+
+	change := model.Change{
+		CurrentState: model.StateS3Review,
+	}
+
+	actions := []RequiredAction{
+		{
+			ControlID:   model.ControlRollbackRequired,
+			Mode:        model.ControlModeBlocking,
+			Scope:       model.ControlScopeRelease,
+			Satisfied:   false,
+			Description: "rollback readiness required",
+		},
+		{
+			ControlID:   model.ControlResearch,
+			Mode:        model.ControlModeBlocking,
+			Satisfied:   false,
+			Description: "unknown scope should not block",
+		},
+	}
+
+	blockers := RequiredActionBlockers(change, actions)
+	require.Len(t, blockers, 1)
+	assert.Contains(t, blockers[0], "governance_action_required:rollback-required")
+	assert.NotContains(t, blockers[0], "unknown scope should not block")
 }
 
 func writeGovernanceVerification(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {

@@ -341,12 +341,19 @@ var commandRegistry = []CommandDef{
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "task --result-file <path> [--result-file <path> ...] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
-	// Helpers (1)
+	// Helpers (2)
 	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "helpers", HasPromptSurface: false,
 		Arguments:     "<helper> [helper flags]",
 		Prerequisites: []string{"None — public CLI-only helper namespace used by generated skills. Individual helpers may require GitHub tokens, local files, or explicit confirmation."},
 		Notes: []string{
 			"`tool` is intentionally CLI-only: generated skills call `slipway tool ...` directly, but Slipway does not export `$slipway-tool` or host command prompt wrappers.",
+		}},
+	{ID: "hook", Class: CommandClassMutation, Description: "Run internal host hook helpers", Tier: "helpers", HasPromptSurface: false,
+		Arguments:     "[session-start|context-pressure] [--tool <id>]",
+		Prerequisites: []string{"None — public CLI-only helper namespace used by generated host hook configuration."},
+		Notes: []string{
+			"`hook` is intentionally CLI-only: generated host configuration invokes `slipway hook ...` directly, but Slipway does not export `$slipway-hook` or host command prompt wrappers.",
+			"Hook helpers fail silent by design so automatic host hooks cannot block the user under version skew or malformed hook payloads.",
 		}},
 	// Diagnostics (2)
 	{ID: "health", Class: CommandClassQuery, Description: "Show repo-local integrity and repairability findings", Tier: "diagnostics", HasPromptSurface: true,

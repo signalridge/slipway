@@ -124,6 +124,9 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		crossStageContextOwnedReviewStagesForSelectedSkills(selectedReviewSkills),
 		policy.EffectivePreset != model.WorkflowPresetLight,
 	)...)
+	if change.CurrentState == model.StateS3Review {
+		blockers = filterReviewAuthorityS3TaskPlanDriftBlockers(blockers)
+	}
 	blockers = model.NormalizeReasonCodes(blockers)
 
 	return ReviewAuthority{
@@ -133,6 +136,20 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		SkillBlockers:        model.ReasonCodesFromSpecs(skillBlockers),
 		Blockers:             blockers,
 	}, nil
+}
+
+func filterReviewAuthorityS3TaskPlanDriftBlockers(blockers []model.ReasonCode) []model.ReasonCode {
+	if len(blockers) == 0 {
+		return nil
+	}
+	out := make([]model.ReasonCode, 0, len(blockers))
+	for _, blocker := range blockers {
+		if strings.TrimSpace(blocker.Code) == "tasks_plan_changed_since_task_evidence" {
+			continue
+		}
+		out = append(out, blocker)
+	}
+	return out
 }
 
 func reviewSkillSelectionForAuthority(root string, change model.Change) (engineskill.ReviewSkillSelection, error) {

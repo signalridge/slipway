@@ -4,7 +4,7 @@
 
 <div align="center" markdown>
 
-![Slipway ツールアダプター: slipway init --tools は Claude、Codex、Copilot、Cursor、Kilo、Kiro、OpenCode、Pi、Qwen、Windsurf 向けにツールごとのアダプターバンドルと .slipway.yaml ランタイム設定を生成し、各アダプターが生成するスキルとコマンドがガバナンス対象のアクションを slipway CLI へルーティングする](assets/diagrams/tool-adapters.svg)
+![Slipway ツールアダプター: slipway init --tools は Claude、Codex、Copilot、Cursor、Kilo、Kiro、OpenCode、Pi、Qwen、Windsurf 向けにツールごとのアダプターバンドルと .slipway.yaml ランタイム設定を生成し、各アダプターが生成するスキルとコマンドがガバナンス対象のアクションを slipway CLI へルーティングする](../assets/diagrams/tool-adapters.svg)
 
 </div>
 
@@ -57,7 +57,7 @@ Slipway はアダプターを、生成したセンチネルによって検出し
 
 `slipway tool` のような CLI 専用のヘルパー名前空間は、Slipway バイナリ内では公開されたままですが、ホストコマンドのラッパーは生成しません。生成されたスキルが `slipway tool ...` サブコマンドを直接呼び出します。
 
-生成されるフックは `slipway` バイナリ以外に依存しません。手動のヘルパーコマンドは、明示的に認証済みのバックエンドやドメインツールを利用できます。GitHub ヘルパーは `gh` を優先し、`gh` が利用できない場合や認証エラーを報告した場合はトークン API にフォールバックし、どちらのバックエンドも存在しない場合はフェイルクローズドします。
+生成されるフックは `slipway` バイナリ以外に依存しません。手動のヘルパーコマンドは、明示的に認証済みのバックエンドやドメインツールを利用できます。GitHub ヘルパーは `gh` を優先し、`gh` が利用できない場合や認証エラーを報告した場合はトークン API にフォールバックし、どちらのバックエンドも存在しない場合はフェイルクローズドになります。
 
 コアのライフサイクルコマンド:
 
@@ -103,7 +103,7 @@ Slipway はアダプターを、生成したセンチネルによって検出し
 
 ## サーフェスマニフェスト
 
-`docs/SURFACE-MANIFEST.json` は、生成されるアダプター、コマンド、スキル、JSON、ドキュメントの各サーフェスについてコミットされたインベントリです。手動で編集するものではなく、Slipway 所有の Go オーソリティから再生成されます。
+`docs/SURFACE-MANIFEST.json` は、生成されるアダプター、コマンド、スキル、JSON、ドキュメントの各サーフェスについてコミットされたインベントリです。手動で編集するものではなく、Slipway 所有の Go の権威ソースから再生成されます。
 
 ```bash
 go run ./internal/toolgen/cmd/gen-surface-manifest --write

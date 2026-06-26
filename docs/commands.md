@@ -6,10 +6,11 @@ exceptions: `slipway init` is setup-only (`--tools`/`--refresh`, no `--json`), a
 output, not the main report).
 
 Generated host command surfaces cover registered commands that opt into host
-prompts. Public CLI-only helper namespaces, such as `slipway tool`, are
+prompts. Public CLI-only helper namespaces, such as `slipway tool` and
+`slipway hook`, are
 registered here and in the surface manifest, but they do not generate
-`$slipway-tool` or host prompt wrappers; generated skills invoke their helper
-subcommands directly.
+`$slipway-tool`, `$slipway-hook`, or host prompt wrappers; generated skills and
+host hook configuration invoke their helper subcommands directly.
 
 ## Core Lifecycle
 
@@ -128,10 +129,11 @@ a change is abandoned, broken, or bound to another worktree, `slipway status`/
 | Command | Class | Purpose |
 | --- | --- | --- |
 | `slipway tool <helper>` | mutation | Run helper tools used by generated skills; helpers fail closed on missing explicit backends or domain tools. |
+| `slipway hook <event>` | mutation | Run generated host hook helpers such as `session-start` and `context-pressure`; hooks fail silent so they cannot block host automation. |
 
-`slipway tool` is intentionally CLI-only. It has no `$slipway-tool` or generated
-host prompt wrapper; generated skills call the specific helper subcommands
-directly.
+`slipway tool` and `slipway hook` are intentionally CLI-only. They have no
+`$slipway-tool`, `$slipway-hook`, or generated host prompt wrappers; generated
+skills and host configuration call the specific helper subcommands directly.
 
 ## Diagnostics
 
@@ -224,7 +226,7 @@ slipway run --json --diagnostics
 slipway status --json
 slipway validate --json
 slipway handoff show --json
-slipway config --json
+slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway health --doctor --json
 ```
@@ -236,7 +238,7 @@ Stable manifest tokens for JSON contract coverage:
 | abort JSON | `slipway abort --json` |
 | cancel JSON | `slipway cancel --json` |
 | codebase-map JSON | `slipway codebase-map --json` |
-| config JSON | `slipway config --json` |
+| config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done --json` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |

@@ -68,6 +68,7 @@ var helpGroups = []commandGroup{
 		Description: "Helper tools used by generated skills; explicit backends and domain tools fail closed when unavailable.",
 		Commands: []groupedCommand{
 			{Name: "tool", Description: desc("tool")},
+			{Name: "hook", Description: desc("hook")},
 		},
 	},
 	{
