@@ -81,9 +81,11 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	ignored := []string{
 		"artifacts/changes/demo/evidence/governance/review.yaml",
 		"artifacts/changes/demo/events/lifecycle.jsonl",
+		"artifacts/changes/demo/execution/t-01-result.json",
 		"artifacts/changes/demo/verification/ship-verification.yaml",
 		"artifacts/changes/archived/demo/evidence/tasks/t-01.json",
 		"artifacts/changes/archived/demo/events/lifecycle.jsonl",
+		"artifacts/changes/archived/demo/execution/t-01-result.json",
 		"artifacts/changes/archived/demo/verification/ship-verification.yaml",
 		".worktrees/demo/change.yaml",
 	}
@@ -131,6 +133,7 @@ func TestEnsureLocalStateGitIgnoreMigratesCodebaseMapsToTracked(t *testing.T) {
 	assert.NotContains(t, got, "/artifacts/codebase/", "codebase maps must no longer be git-ignored after migration")
 	assert.Contains(t, got, "/artifacts/changes/**/evidence/")
 	assert.Contains(t, got, "/artifacts/changes/**/events/")
+	assert.Contains(t, got, "/artifacts/changes/**/execution/")
 	assert.Contains(t, got, "/artifacts/changes/**/verification/")
 	assert.Contains(t, got, "/.worktrees/")
 	assert.Contains(t, got, "node_modules/")
