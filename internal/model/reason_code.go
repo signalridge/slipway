@@ -198,6 +198,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A required high-risk safety check is missing",
 	},
+	"host_capability_unavailable": {
+		Severity: ReasonSeverityError,
+		Message:  "A selected governance skill requires a host capability that is unavailable",
+	},
 	"incomplete_execution_task": {
 		Severity: ReasonSeverityError,
 		Message:  "A planned execution task has no recorded passing evidence",

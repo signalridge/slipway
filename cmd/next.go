@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"io"
+	"os"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -33,6 +35,10 @@ type nextView struct {
 	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
 	PlanningNote              string                               `json:"planning_note,omitempty"`
 	LifecycleStatus           string                               `json:"lifecycle_status"`
+	InvocationRoute           *invocationRouteView                 `json:"invocation_route,omitempty"`
+	CurrentActionKind         string                               `json:"current_action_kind,omitempty"`
+	CurrentActionCommand      string                               `json:"current_action_command,omitempty"`
+	HostCapabilities          []hostCapabilityView                 `json:"host_capabilities,omitempty"`
 	Advanced                  *progression.AdvanceSummary          `json:"advanced,omitempty"`
 	AutoTransitions           []progression.AdvanceSummary         `json:"auto_transitions,omitempty"`
 	NextSkill                 *nextSkillView                       `json:"next_skill"`
@@ -72,6 +78,17 @@ type confirmationRequirement struct {
 	NextAction                   string `json:"next_action,omitempty"`
 	NextActionKind               string `json:"next_action_kind,omitempty"`
 	NextCommand                  string `json:"next_command,omitempty"`
+}
+
+type hostCapabilityView struct {
+	SkillName           string `json:"skill_name"`
+	Capability          string `json:"capability"`
+	Required            bool   `json:"required"`
+	Availability        string `json:"availability"`
+	FallbackSelected    bool   `json:"fallback_selected,omitempty"`
+	FallbackMode        string `json:"fallback_mode,omitempty"`
+	EvidenceRequirement string `json:"evidence_requirement,omitempty"`
+	Remediation         string `json:"remediation,omitempty"`
 }
 
 type skillEvidenceEntry struct {
@@ -341,6 +358,9 @@ Environment variables:
 						return err
 					}
 					applyNextInvocationWorkspacePath(cmd, root, &view)
+					if change, loadErr := state.LoadChange(root, ref.Slug); loadErr == nil {
+						applyNextInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
+					}
 					return encodeJSONResponse(cmd, buildNextHandoffView(view))
 				}
 
@@ -356,6 +376,9 @@ Environment variables:
 					return err
 				}
 				applyNextInvocationWorkspacePath(cmd, root, &view)
+				if change, loadErr := state.LoadChange(root, ref.Slug); loadErr == nil {
+					applyNextInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
+				}
 
 				if contextGuard {
 					return writeContextGuardHookMessages(cmd.OutOrStdout(), view)
@@ -452,7 +475,10 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 	}
 	finalize := func() (nextView, error) {
 		applyReadyAdvanceDiagnostics(root, governedChange, &view)
+		applyHostCapabilityContractToNext(&view)
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
+		view.CurrentActionKind = view.ConfirmationRequirement.NextActionKind
+		view.CurrentActionCommand = view.ConfirmationRequirement.NextCommand
 		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
 	}
@@ -820,6 +846,131 @@ func nextSkillHandoffName(skill *nextSkillView) string {
 		return name
 	}
 	return strings.TrimSpace(skill.Name)
+}
+
+func applyHostCapabilityContractToNext(view *nextView) {
+	if view == nil {
+		return
+	}
+	view.HostCapabilities = hostCapabilityViewsForSkills(selectedHostCapabilitySkillNamesForNext(*view))
+	for _, req := range view.HostCapabilities {
+		if hostCapabilityBlocks(req) {
+			view.Blockers = appendReasonCodes(
+				view.Blockers,
+				[]model.ReasonCode{model.NewReasonCode("host_capability_unavailable", req.SkillName+":"+req.Capability)},
+			)
+		}
+	}
+}
+
+func applyHostCapabilityContractToValidate(view *validateView, skills []string) {
+	if view == nil {
+		return
+	}
+	view.HostCapabilities = hostCapabilityViewsForSkills(skills)
+	for _, req := range view.HostCapabilities {
+		if hostCapabilityBlocks(req) {
+			view.Blockers = model.NormalizeReasonCodes(append(
+				view.Blockers,
+				model.NewReasonCode("host_capability_unavailable", req.SkillName+":"+req.Capability),
+			))
+		}
+	}
+	view.CanAdvance = len(view.Blockers) == 0
+}
+
+func hostCapabilityBlocks(req hostCapabilityView) bool {
+	return req.Required && req.Availability != "available" && !req.FallbackSelected
+}
+
+func selectedHostCapabilitySkillNamesForNext(view nextView) []string {
+	var names []string
+	if view.ReviewBatch != nil {
+		for _, skill := range view.ReviewBatch.Skills {
+			names = append(names, skill.Name)
+		}
+	}
+	if view.NextSkill != nil {
+		names = append(names, nextSkillHandoffName(view.NextSkill))
+	}
+	return names
+}
+
+func selectedHostCapabilitySkillNamesForValidate(
+	change model.Change,
+	readiness progression.GovernanceReadiness,
+	actionable *actionableNextSkillView,
+) []string {
+	if change.CurrentState == model.StateS3Review {
+		if pending := pendingSelectedReviewSkills(change, readiness); len(pending) > 0 {
+			return pending
+		}
+	}
+	if actionable == nil {
+		return nil
+	}
+	if name := strings.TrimSpace(actionable.BlockingName); name != "" {
+		return []string{name}
+	}
+	return []string{strings.TrimSpace(actionable.Name)}
+}
+
+func hostCapabilityViewsForSkills(skillNames []string) []hostCapabilityView {
+	if len(skillNames) == 0 {
+		return nil
+	}
+	hostCapabilities := splitCapabilityEnv(os.Getenv("SLIPWAY_HOST_CAPABILITIES"))
+	fallbacks := splitCapabilityEnv(os.Getenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS"))
+	seen := map[string]bool{}
+	var views []hostCapabilityView
+	for _, skillName := range skillNames {
+		skillName = strings.TrimSpace(skillName)
+		if skillName == "" || seen[skillName] {
+			continue
+		}
+		seen[skillName] = true
+		req := capability.ResolveHostCapabilityRequirement(skillName, capability.Signals{
+			HostCapabilities: hostCapabilities,
+			Fallbacks:        fallbacks,
+		})
+		if req == nil {
+			continue
+		}
+		views = append(views, hostCapabilityView{
+			SkillName:           req.SkillID,
+			Capability:          req.Capability,
+			Required:            req.Required,
+			Availability:        req.Availability,
+			FallbackSelected:    req.FallbackSelected,
+			FallbackMode:        req.FallbackMode,
+			EvidenceRequirement: req.EvidenceRequirement,
+			Remediation:         req.Remediation,
+		})
+	}
+	return views
+}
+
+func splitCapabilityEnv(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ',', ';', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func confirmationHardStop(reason string) confirmationRequirement {

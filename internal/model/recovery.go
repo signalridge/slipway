@@ -253,6 +253,12 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate --focus sast",
 		Class:           RecoveryClassSatisfyControl,
 	},
+	"host_capability_unavailable": {
+		Remediation:     "Run the selected governance skill in a host that provides {detail}, or explicitly select the documented fallback for {subject} and record fresh evidence.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassSatisfyControl,
+		SplitDetail:     true,
+	},
 	"incomplete_execution_task": {
 		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or update tasks.md if the task no longer belongs, then continue wave-orchestration.",
 		CommandTemplate: "slipway run",
