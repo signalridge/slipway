@@ -29,6 +29,18 @@ type changeRef struct {
 
 const governedExecutionMode = string(ctxpack.ExecutionModeGoverned)
 
+type invocationRouteView struct {
+	Kind                               string `json:"kind"`
+	ChangeSlug                         string `json:"change_slug,omitempty"`
+	InvocationWorkspacePath            string `json:"invocation_workspace_path,omitempty"`
+	BoundWorkspacePath                 string `json:"bound_workspace_path,omitempty"`
+	ChangeAuthorityPath                string `json:"change_authority_path,omitempty"`
+	LocalLifecycleExecutionAllowed     bool   `json:"local_lifecycle_execution_allowed"`
+	EffectiveLifecycleExecutionAllowed bool   `json:"effective_lifecycle_execution_allowed"`
+	Remediation                        string `json:"remediation,omitempty"`
+	NextCommand                        string `json:"next_command,omitempty"`
+}
+
 type projectRootContextKey struct{}
 
 func projectRootFromCommand(cmd *cobra.Command) (string, error) {
@@ -447,7 +459,7 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 					return changeRef{}, recoveryErr
 				}
 				return changeRef{}, newPreconditionError(
-					"no_active_change",
+					"change_not_found",
 					fmt.Sprintf("no change found for slug %q", slug),
 					"Check the slug with `slipway status`.",
 					slug,
@@ -1015,6 +1027,85 @@ func projectNextReadyActionsWithPrimary(currentState model.WorkflowState, primar
 	}
 	actions = append(actions, "cancel")
 	return actions
+}
+
+func buildInvocationRouteView(
+	root string,
+	change model.Change,
+	invocationWorkspace string,
+	explicitChange bool,
+) *invocationRouteView {
+	slug := strings.TrimSpace(change.Slug)
+	if slug == "" {
+		return nil
+	}
+	route := &invocationRouteView{
+		ChangeSlug: slug,
+	}
+	if strings.TrimSpace(invocationWorkspace) != "" {
+		route.InvocationWorkspacePath = state.DisplayPath(root, invocationWorkspace)
+	}
+	if paths, err := state.ResolveChangePaths(root, change); err == nil {
+		route.BoundWorkspacePath = state.DisplayPath(root, paths.WorkspaceRoot)
+		route.ChangeAuthorityPath = state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
+	}
+
+	localAllowed := invocationWorkspaceMatchesChange(root, change, invocationWorkspace)
+	route.LocalLifecycleExecutionAllowed = localAllowed
+	route.EffectiveLifecycleExecutionAllowed = localAllowed || explicitChange
+	switch {
+	case change.Status != model.ChangeStatusActive:
+		route.Kind = "archived"
+		route.EffectiveLifecycleExecutionAllowed = false
+	case strings.TrimSpace(change.WorktreePath) == "":
+		route.Kind = "unbound_active"
+		route.LocalLifecycleExecutionAllowed = true
+		route.EffectiveLifecycleExecutionAllowed = true
+	case localAllowed:
+		route.Kind = "local_active"
+	case explicitChange:
+		route.Kind = "explicit_bound_change"
+	default:
+		route.Kind = "bound_elsewhere"
+	}
+
+	action := invocationRouteAction(change.CurrentState)
+	if action != "" {
+		route.NextCommand = "slipway " + action
+		if explicitChange || !route.LocalLifecycleExecutionAllowed {
+			route.NextCommand += " --change " + slug
+		}
+	}
+	if !route.LocalLifecycleExecutionAllowed && strings.TrimSpace(route.BoundWorkspacePath) != "" {
+		if strings.TrimSpace(route.NextCommand) != "" {
+			route.Remediation = fmt.Sprintf("cd %s or run `%s` from this workspace.", route.BoundWorkspacePath, route.NextCommand)
+		} else {
+			route.Remediation = fmt.Sprintf("cd %s to inspect the change.", route.BoundWorkspacePath)
+		}
+	}
+	return route
+}
+
+func invocationWorkspaceMatchesChange(root string, change model.Change, invocationWorkspace string) bool {
+	if strings.TrimSpace(change.WorktreePath) == "" {
+		normalizedRoot, rootErr := state.NormalizePath(root)
+		normalizedInvocation, invocationErr := state.NormalizePath(invocationWorkspace)
+		return rootErr == nil && invocationErr == nil && normalizedRoot == normalizedInvocation
+	}
+	normalizedBound, boundErr := state.NormalizePath(change.WorktreePath)
+	normalizedInvocation, invocationErr := state.NormalizePath(invocationWorkspace)
+	return boundErr == nil && invocationErr == nil && normalizedBound == normalizedInvocation
+}
+
+func invocationRouteAction(currentState model.WorkflowState) string {
+	switch currentState {
+	case model.StateDone:
+		return ""
+	case model.StateS2Implement:
+		return "run"
+	default:
+		return "next"
+	}
 }
 
 func projectFreshnessForExecMode(

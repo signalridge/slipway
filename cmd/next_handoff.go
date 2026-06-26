@@ -18,6 +18,8 @@ type nextHandoffView struct {
 	ExecutionMode    string                  `json:"execution_mode,omitempty"`
 	CurrentState     model.WorkflowState     `json:"current_state"`
 	LifecycleStatus  string                  `json:"lifecycle_status,omitempty"`
+	InvocationRoute  *invocationRouteView    `json:"invocation_route,omitempty"`
+	HostCapabilities []hostCapabilityView    `json:"host_capabilities,omitempty"`
 	NextSkill        *nextSkillHandoff       `json:"next_skill"`
 	ReviewBatch      *reviewBatchView        `json:"review_batch,omitempty"`
 	ContextBudget    *contextBudgetHandoff   `json:"context_budget,omitempty"`
@@ -97,6 +99,7 @@ func buildNextHandoffSourceView(root string, ref changeRef, preview bool, autoSk
 		view.GuardrailDomain = strings.TrimSpace(governedChange.GuardrailDomain)
 	}
 	finalize := func() (nextView, error) {
+		applyHostCapabilityContractToNext(&view)
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
 		return view, nil
 	}
@@ -236,9 +239,14 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		ExecutionMode:   view.ExecutionMode,
 		CurrentState:    view.CurrentState,
 		LifecycleStatus: view.LifecycleStatus,
-		NextSkill:       nextSkill,
-		ReviewBatch:     cloneReviewBatch(view.ReviewBatch),
-		ContextBudget:   budget,
+		InvocationRoute: view.InvocationRoute,
+		HostCapabilities: append(
+			[]hostCapabilityView(nil),
+			view.HostCapabilities...,
+		),
+		NextSkill:     nextSkill,
+		ReviewBatch:   cloneReviewBatch(view.ReviewBatch),
+		ContextBudget: budget,
 		InputContext: nextHandoffContext{
 			WorkspaceRoot:        view.InputContext.WorkspaceRoot,
 			ArtifactBundle:       view.InputContext.ArtifactBundle,

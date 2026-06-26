@@ -1142,6 +1142,7 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(nextDiag.ReviewBatch))
 		assert.Equal(t, "review_batch", nextDiag.ConfirmationRequirement.Reason)
+		assert.Equal(t, "review_batch", nextDiag.CurrentActionKind)
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
 		validateCmd.SetArgs([]string{"--json", "--change", slug})
@@ -1159,6 +1160,24 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Contains(t, validate.ActionableNextSkill.RequiredTokens, "layer:IR3=pass")
 		assert.NotContains(t, validate.ActionableNextSkill.RequiredTokens, "layer:R0=pass")
 		assert.NotContains(t, validate.ActionableNextSkill.RequiredTokens, "layer:R3=pass")
+		assert.Equal(t, "review_batch", validate.CurrentActionKind)
+		assert.Equal(t, "slipway run", validate.CurrentActionCommand)
+		assert.Equal(t, "fresh", validate.ExecutionEvidenceFreshness)
+		assert.Equal(t, "stale", validate.GovernanceEvidenceFreshness)
+		assert.Equal(t, "blocked", validate.OverallReadinessFreshness)
+
+		statusCmd := commandForRoot(t, root, makeStatusCmd())
+		statusCmd.SetArgs([]string{"--json", "--change", slug})
+		var statusOut bytes.Buffer
+		statusCmd.SetOut(&statusOut)
+		require.NoError(t, statusCmd.Execute())
+		var status statusView
+		require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+		assert.Equal(t, "review_batch", status.CurrentActionKind)
+		assert.Equal(t, "slipway run", status.CurrentActionCommand)
+		assert.Equal(t, "fresh", status.ExecutionEvidenceFreshness)
+		assert.Equal(t, "stale", status.GovernanceEvidenceFreshness)
+		assert.Equal(t, "blocked", status.OverallReadinessFreshness)
 
 		runCmd := commandForRoot(t, root, makeRunCmd())
 		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -1180,7 +1199,163 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 			progression.SkillSecurityReview,
 		}, reviewBatchSkillNames(runView.ReviewBatch))
 		assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
+		assert.Equal(t, "review_batch", runView.CurrentActionKind)
 	})
+}
+
+func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+
+	originalCapabilities, hadCapabilities := os.LookupEnv("SLIPWAY_HOST_CAPABILITIES")
+	originalFallbacks, hadFallbacks := os.LookupEnv("SLIPWAY_HOST_CAPABILITY_FALLBACKS")
+	t.Cleanup(func() {
+		if hadCapabilities {
+			require.NoError(t, os.Setenv("SLIPWAY_HOST_CAPABILITIES", originalCapabilities))
+		} else {
+			require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITIES"))
+		}
+		if hadFallbacks {
+			require.NoError(t, os.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", originalFallbacks))
+		} else {
+			require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS"))
+		}
+	})
+
+	require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITIES"))
+	require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS"))
+
+	unsetCmd := commandForRoot(t, root, makeNextCmd())
+	unsetCmd.SetArgs([]string{"--json", "--change", slug})
+	var unsetOut bytes.Buffer
+	unsetCmd.SetOut(&unsetOut)
+	require.NoError(t, unsetCmd.Execute())
+	var unsetHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(unsetOut.Bytes(), &unsetHandoff))
+	unsetCapability := requireIndependentReviewHostCapability(t, unsetHandoff.HostCapabilities)
+	assert.Equal(t, "unknown", unsetCapability.Availability)
+	assert.False(t, unsetCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(unsetHandoff.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "blocked_by_governance", unsetHandoff.Confirmation.Reason)
+
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+	var handoff nextHandoffView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
+	nextCapability := requireIndependentReviewHostCapability(t, handoff.HostCapabilities)
+	assert.Equal(t, "unknown", nextCapability.Availability)
+	assert.False(t, nextCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "blocked_by_governance", handoff.Confirmation.Reason)
+	assert.Equal(t, "blocker_resolution", handoff.Confirmation.NextActionKind)
+
+	validateCmd := commandForRoot(t, root, makeValidateCmd())
+	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	var validateOut bytes.Buffer
+	validateCmd.SetOut(&validateOut)
+	require.NoError(t, validateCmd.Execute())
+	var validate validateView
+	require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+	validateCapability := requireIndependentReviewHostCapability(t, validate.HostCapabilities)
+	assert.Equal(t, "unknown", validateCapability.Availability)
+	assert.False(t, validateCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(validate.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.False(t, validate.CanAdvance)
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var runOut bytes.Buffer
+	runCmd.SetOut(&runOut)
+	require.NoError(t, runCmd.Execute())
+	var runView nextView
+	require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
+	runCapability := requireIndependentReviewHostCapability(t, runView.HostCapabilities)
+	assert.Equal(t, "unknown", runCapability.Availability)
+	assert.False(t, runCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(runView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "blocked_by_governance", runView.ConfirmationRequirement.Reason)
+
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
+
+	unavailableCmd := commandForRoot(t, root, makeNextCmd())
+	unavailableCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var unavailableOut bytes.Buffer
+	unavailableCmd.SetOut(&unavailableOut)
+	require.NoError(t, unavailableCmd.Execute())
+	var unavailableView nextView
+	require.NoError(t, json.Unmarshal(unavailableOut.Bytes(), &unavailableView))
+	unavailableCapability := requireIndependentReviewHostCapability(t, unavailableView.HostCapabilities)
+	assert.Equal(t, "unavailable", unavailableCapability.Availability)
+	assert.False(t, unavailableCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(unavailableView.Blockers), "host_capability_unavailable:independent-review:subagent")
+
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "manual_independent_review")
+
+	fallbackCmd := commandForRoot(t, root, makeNextCmd())
+	fallbackCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var fallbackOut bytes.Buffer
+	fallbackCmd.SetOut(&fallbackOut)
+	require.NoError(t, fallbackCmd.Execute())
+	var fallbackView nextView
+	require.NoError(t, json.Unmarshal(fallbackOut.Bytes(), &fallbackView))
+	fallbackCapability := requireIndependentReviewHostCapability(t, fallbackView.HostCapabilities)
+	assert.Equal(t, "unavailable", fallbackCapability.Availability)
+	assert.True(t, fallbackCapability.FallbackSelected)
+	assert.Equal(t, "manual_independent_review", fallbackCapability.FallbackMode)
+	assert.NotContains(t, model.ReasonSpecs(fallbackView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "review_batch", fallbackView.ConfirmationRequirement.Reason)
+}
+
+func prepareReviewBatchHostCapabilityFixture(t *testing.T) (string, string) {
+	t.Helper()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "review host capability contract")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	change.GuardrailDomain = "external_api_contracts"
+	require.NoError(t, state.SaveChange(root, change))
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writeSkillVerification(t, root, slug, progression.SkillSpecComplianceReview, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 1,
+		References: []string{
+			"layer:R0=pass",
+			"layer:R3=pass",
+			"layer:IR1=pass",
+			"layer:IR3=pass",
+		},
+	})
+	return root, slug
+}
+
+func requireIndependentReviewHostCapability(t *testing.T, capabilities []hostCapabilityView) hostCapabilityView {
+	t.Helper()
+
+	for _, capabilityView := range capabilities {
+		if capabilityView.SkillName == progression.SkillIndependentReview {
+			assert.Equal(t, "subagent", capabilityView.Capability)
+			assert.True(t, capabilityView.Required)
+			assert.NotEmpty(t, capabilityView.EvidenceRequirement)
+			assert.NotEmpty(t, capabilityView.Remediation)
+			return capabilityView
+		}
+	}
+	require.Fail(t, "missing independent-review host capability", "capabilities: %#v", capabilities)
+	return hostCapabilityView{}
 }
 
 func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.T) {

@@ -89,6 +89,79 @@ func TestResolveNoMatchReturnsEmpty(t *testing.T) {
 	assert.Empty(t, res.Supports)
 }
 
+func TestResolveHostCapabilityRequirement(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown skill has no host capability contract", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Nil(t, ResolveHostCapabilityRequirement("code-quality-review", Signals{}))
+	})
+
+	tests := []struct {
+		name             string
+		signals          Signals
+		wantAvailability string
+		wantFallback     bool
+		wantFallbackMode string
+	}{
+		{
+			name:             "undeclared host capability remains unknown",
+			signals:          Signals{},
+			wantAvailability: "unknown",
+		},
+		{
+			name: "explicit subagent capability is available",
+			signals: Signals{
+				HostCapabilities: []string{"subagent"},
+			},
+			wantAvailability: "available",
+		},
+		{
+			name: "delegation alias satisfies subagent",
+			signals: Signals{
+				HostCapabilities: []string{"delegation"},
+			},
+			wantAvailability: "available",
+		},
+		{
+			name: "explicit none is unavailable",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+			},
+			wantAvailability: "unavailable",
+		},
+		{
+			name: "manual independent review fallback is explicit",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"manual_independent_review"},
+			},
+			wantAvailability: "unavailable",
+			wantFallback:     true,
+			wantFallbackMode: "manual_independent_review",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := ResolveHostCapabilityRequirement("independent-review", tt.signals)
+			require.NotNil(t, req)
+			assert.Equal(t, "independent-review", req.SkillID)
+			assert.Equal(t, "subagent", req.Capability)
+			assert.True(t, req.Required)
+			assert.Equal(t, tt.wantAvailability, req.Availability)
+			assert.Equal(t, tt.wantFallback, req.FallbackSelected)
+			assert.Equal(t, tt.wantFallbackMode, req.FallbackMode)
+			assert.NotEmpty(t, req.EvidenceRequirement)
+			assert.NotEmpty(t, req.Remediation)
+		})
+	}
+}
+
 func TestResolveReviewHostDoesNotAttachPromotedReviewHosts(t *testing.T) {
 	t.Parallel()
 	reg := DefaultRegistry()
