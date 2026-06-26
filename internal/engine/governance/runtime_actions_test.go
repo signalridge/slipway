@@ -747,6 +747,16 @@ func TestResolveRuntimeRequiredActionsDoesNotAbsorbStaleExecutionEvidence(t *tes
 	assert.Contains(t, byID[model.ControlSecurityReview].Description, state.StaleExecutionEvidenceBlockerToken)
 }
 
+func TestRuntimeBlockingExecutionSummaryIssuesDropsEmptyIssues(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("runtime-actions-empty-issues")
+	change.CurrentState = model.StateS3Review
+
+	assert.Nil(t, runtimeBlockingExecutionSummaryIssues(change, nil))
+	assert.Nil(t, runtimeBlockingExecutionSummaryIssues(change, []string{"", " \t "}))
+}
+
 func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHiddenSiblingWorktree(t *testing.T) {
 	t.Parallel()
 
@@ -1031,6 +1041,35 @@ func TestExecutionScopeBlocksAtS2Implement(t *testing.T) {
 
 	blockers := RequiredActionBlockers(change, actions)
 	assert.Len(t, blockers, 1, "execution-scope control should block at S3 regardless of discovery flag")
+}
+
+func TestRequiredActionBlockersHandlesReleaseAndUnknownScopes(t *testing.T) {
+	t.Parallel()
+
+	change := model.Change{
+		CurrentState: model.StateS3Review,
+	}
+
+	actions := []RequiredAction{
+		{
+			ControlID:   model.ControlRollbackRequired,
+			Mode:        model.ControlModeBlocking,
+			Scope:       model.ControlScopeRelease,
+			Satisfied:   false,
+			Description: "rollback readiness required",
+		},
+		{
+			ControlID:   model.ControlResearch,
+			Mode:        model.ControlModeBlocking,
+			Satisfied:   false,
+			Description: "unknown scope should not block",
+		},
+	}
+
+	blockers := RequiredActionBlockers(change, actions)
+	require.Len(t, blockers, 1)
+	assert.Contains(t, blockers[0], "governance_action_required:rollback-required")
+	assert.NotContains(t, blockers[0], "unknown scope should not block")
 }
 
 func writeGovernanceVerification(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {
