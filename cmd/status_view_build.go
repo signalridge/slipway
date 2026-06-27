@@ -15,10 +15,16 @@ import (
 )
 
 func buildStatusViewFromChange(root string, change model.Change) (statusView, error) {
-	return buildGovernedStatusView(root, change)
+	return buildStatusViewFromChangeWithReadContext(newStateReadContext(root), change)
 }
 
-func buildGovernedStatusView(root string, change model.Change) (statusView, error) {
+func buildStatusViewFromChangeWithReadContext(readCtx *stateReadContext, change model.Change) (statusView, error) {
+	readCtx.rememberChange(change)
+	return buildGovernedStatusViewWithReadContext(readCtx, change)
+}
+
+func buildGovernedStatusViewWithReadContext(readCtx *stateReadContext, change model.Change) (statusView, error) {
+	root := readCtx.root
 	var blockers []model.ReasonCode
 	presetFields, err := buildWorkflowPresetView(root, change)
 	if err != nil {
@@ -58,9 +64,17 @@ func buildGovernedStatusView(root string, change model.Change) (statusView, erro
 		return view, nil
 	}
 
-	execCtx, err := loadExecutionContext(root, change)
+	execCtx, err := readCtx.loadExecution(change)
 	if err != nil {
 		return statusView{}, err
+	}
+	paths, err := readCtx.resolvedPaths(change)
+	if err != nil {
+		return statusView{}, err
+	}
+	verificationRecords, err := readCtx.verificationRecords(change)
+	if err != nil {
+		return statusView{}, wrapGovernanceReadinessError("build status view", change.Slug, err)
 	}
 	readiness, err := progression.EvaluateGovernanceReadiness(
 		root,
@@ -70,6 +84,7 @@ func buildGovernedStatusView(root string, change model.Change) (statusView, erro
 			// Status renders artifact-centric context, so it opts into the
 			// in-memory projection on top of shared blockers.
 			IncludeArtifactProjection: true,
+			VerificationRecords:       verificationRecords,
 		},
 	)
 	if err != nil {
@@ -97,7 +112,8 @@ func buildGovernedStatusView(root string, change model.Change) (statusView, erro
 		execCtx.Summary,
 		projection,
 		blockers,
-		governedSourceStateFile(root, change),
+		state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml")),
+		collectSkillVerificationPointersFromRecords(root, paths, verificationRecords),
 	)
 	profile := buildChangeProfileView(change)
 	view.QualityMode = profile.QualityMode
@@ -135,7 +151,7 @@ func buildGovernedStatusView(root string, change model.Change) (statusView, erro
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
-	timeline, timelineErr := buildStatusTimeline(root, change, 20)
+	timeline, timelineErr := buildStatusTimelineWithReadContext(readCtx, change, 20)
 	if timelineErr != nil {
 		view.Diagnostics = append(view.Diagnostics, "lifecycle_event_log_unreadable: "+timelineErr.Error())
 	} else {
@@ -153,6 +169,7 @@ func buildStatusViewBase(
 	projection enginestatus.Projection,
 	blockers []model.ReasonCode,
 	sourceStateFile string,
+	skillVerificationPointers map[string]string,
 ) statusView {
 	view := statusView{
 		ExecutionMode:    execMode,
@@ -174,7 +191,7 @@ func buildStatusViewBase(
 			blockers,
 		),
 		SourceStateFile:  sourceStateFile,
-		EvidencePointers: buildEvidencePointers(projection.EvidenceInventory, collectSkillVerificationPointers(root, change.Slug)),
+		EvidencePointers: buildEvidencePointers(projection.EvidenceInventory, skillVerificationPointers),
 		GateStatus:       projection.GateStatus,
 		ArtifactDAG:      mapArtifactDAGNodesForGateStatus(projection.ArtifactDAG, projection.GateStatus),
 	}
@@ -332,17 +349,12 @@ func statusReasonFromCLIError(cliErr *CLIError) model.ReasonCode {
 	return model.NewReasonCode("wave_execution_unavailable", detail)
 }
 
-// governedSourceStateFile returns the display path for the authoritative
-// change.yaml, resolving worktree-bound bundles when necessary.
-func governedSourceStateFile(root string, change model.Change) string {
-	if paths, err := state.ResolveChangePaths(root, change); err == nil {
-		return state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
+func buildStatusTimelineWithReadContext(readCtx *stateReadContext, change model.Change, limit int) ([]statusTimelineEvent, error) {
+	readLimit := limit
+	if limit > 0 {
+		readLimit = limit * 4
 	}
-	return filepath.Join("artifacts", "changes", change.Slug, "change.yaml")
-}
-
-func buildStatusTimeline(root string, change model.Change, limit int) ([]statusTimelineEvent, error) {
-	events, err := state.ReadLifecycleEvents(root, change)
+	events, err := readCtx.lifecycleEventTailWithPredecessorTransition(change, readLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -576,11 +588,7 @@ func defaultSurfaceShowsShipGate(state model.WorkflowState) bool {
 	}
 }
 
-func collectSkillVerificationPointers(root, slug string) map[string]string {
-	records, err := state.ListVerifications(root, slug)
-	if err != nil {
-		return nil
-	}
+func collectSkillVerificationPointersFromRecords(root string, paths state.ResolvedChangePaths, records map[string]model.VerificationRecord) map[string]string {
 	keys := make([]string, 0, len(records))
 	for skillName := range records {
 		keys = append(keys, skillName)
@@ -592,7 +600,7 @@ func collectSkillVerificationPointers(root, slug string) map[string]string {
 	out := make(map[string]string, len(keys))
 	for _, skillName := range keys {
 		key := "skill." + skillName
-		out[key] = state.DisplayPath(root, state.VerificationFilePath(root, slug, skillName))
+		out[key] = state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "verification", skillName+".yaml"))
 	}
 	return out
 }

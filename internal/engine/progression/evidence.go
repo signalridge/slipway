@@ -41,6 +41,28 @@ func EvaluateRequiredSkillsForChangeWithReviewSelection(
 	reviewSelection skill.ReviewSkillSelection,
 	planSubSteps ...model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
+	return evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
+		root,
+		change,
+		workflowState,
+		latestRunSummaryVersion,
+		closeoutRequired,
+		reviewSelection,
+		nil,
+		planSubSteps...,
+	)
+}
+
+func evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
+	root string,
+	change model.Change,
+	workflowState model.WorkflowState,
+	latestRunSummaryVersion int,
+	closeoutRequired bool,
+	reviewSelection skill.ReviewSkillSelection,
+	verificationRecords map[string]model.VerificationRecord,
+	planSubSteps ...model.PlanSubStep,
+) (map[string]model.VerificationRecord, []string, error) {
 	return evaluateRequiredSkills(
 		root,
 		change,
@@ -50,11 +72,24 @@ func EvaluateRequiredSkillsForChangeWithReviewSelection(
 		latestRunSummaryVersion,
 		closeoutRequired,
 		reviewSelection,
-		func() (map[string]model.VerificationRecord, error) {
-			return state.ListVerificationsForChange(root, change)
-		},
+		verificationRecordsLoader(root, change, verificationRecords),
 		planSubSteps...,
 	)
+}
+
+func verificationRecordsLoader(
+	root string,
+	change model.Change,
+	verificationRecords map[string]model.VerificationRecord,
+) func() (map[string]model.VerificationRecord, error) {
+	if verificationRecords != nil {
+		return func() (map[string]model.VerificationRecord, error) {
+			return cloneVerificationRecords(verificationRecords), nil
+		}
+	}
+	return func() (map[string]model.VerificationRecord, error) {
+		return state.ListVerificationsForChange(root, change)
+	}
 }
 
 func activePlanningSubStepsForState(change model.Change, workflowState model.WorkflowState) []model.PlanSubStep {

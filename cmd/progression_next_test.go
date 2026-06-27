@@ -2307,7 +2307,7 @@ func TestNextJSONDefaultOmitsFreshnessDiagnosticsWhenDiagnosticsViewHasThem(t *t
 	})
 }
 
-func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
+func TestNextJSONHandoffDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -2321,32 +2321,46 @@ func TestNextHandoffSourceViewDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		change.PlanSubStep = model.PlanSubStepNone
 		require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildNextHandoffSourceView(root, changeRef{Slug: slug}, true, false, false, false)
-		require.NoError(t, err)
+		cmd := commandForRoot(t, root, makeNextCmd())
+		cmd.SetArgs([]string{"--json"})
+		var buf bytes.Buffer
+		cmd.SetOut(&buf)
+		require.NoError(t, cmd.Execute())
 
-		require.NotNil(t, view.NextSkill)
-		assert.Equal(t, progression.SkillSpecComplianceReview, view.NextSkill.Name)
-		assert.NotNil(t, view.NextSkill.SkillConstraints)
-		assert.NotEmpty(t, view.NextSkill.TechniqueHints)
-		require.NotNil(t, view.NextSkill.ReviewContext)
-		assert.Contains(t, view.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
-		assert.Empty(t, view.NextSkill.ReviewContext.RequiredImplementationLayers)
-		require.NotNil(t, view.ContextBudget)
-		assert.Equal(t, "ok", view.ContextBudget.GuardAction)
-		assert.Nil(t, view.Constraints)
-		assert.Nil(t, view.GovernanceSignals)
-		assert.Empty(t, view.ActiveControls)
-		assert.Empty(t, view.RequiredActions)
-		assert.Empty(t, view.SkillEvidence)
-		assert.Empty(t, view.ArtifactAmendments)
-		assert.Nil(t, view.FreshnessDiagnostics)
-		require.NotNil(t, view.InputContext.HandoffContext)
-		assert.NotEmpty(t, view.InputContext.HandoffContext.ChangeAuthority)
-		assert.Empty(t, view.InputContext.HandoffContext.PolicyPacks)
-		assert.Empty(t, view.InputContext.HandoffContext.ReadRefs)
-		assert.Nil(t, view.InputContext.GateStatus)
-		assert.Nil(t, view.InputContext.ArtifactStatus)
-		assert.Nil(t, view.InputContext.WavePlan)
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &raw))
+		assert.NotContains(t, raw, "freshness_diagnostics")
+		assert.NotContains(t, raw, "constraints")
+		assert.NotContains(t, raw, "governance_signals")
+		assert.NotContains(t, raw, "active_controls")
+		assert.NotContains(t, raw, "required_actions")
+		assert.NotContains(t, raw, "skill_evidence")
+		assert.NotContains(t, raw, "artifact_amendments")
+		inputRaw, ok := raw["input_context"].(map[string]any)
+		require.True(t, ok)
+		assert.NotContains(t, inputRaw, "handoff_context")
+		assert.NotContains(t, inputRaw, "gate_status")
+		assert.NotContains(t, inputRaw, "artifact_status")
+		assert.NotContains(t, inputRaw, "policy_packs")
+		assert.NotContains(t, inputRaw, "read_refs")
+
+		var handoff nextHandoffView
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &handoff))
+		assert.Equal(t, "next", handoff.Command)
+		assert.Equal(t, slug, handoff.Slug)
+		assert.Equal(t, model.StateS3Review, handoff.CurrentState)
+		assert.Equal(t, governedExecutionMode, handoff.ExecutionMode)
+		assert.Nil(t, handoff.ContextBudget)
+		require.NotNil(t, handoff.NextSkill)
+		assert.Equal(t, progression.SkillSpecComplianceReview, handoff.NextSkill.Name)
+		assert.NotNil(t, handoff.NextSkill.SkillConstraints)
+		assert.NotEmpty(t, handoff.NextSkill.TechniqueHints)
+		require.NotNil(t, handoff.NextSkill.ReviewContext)
+		assert.Contains(t, handoff.NextSkill.ReviewContext.RequiredArtifactLayers, "R0")
+		assert.Empty(t, handoff.NextSkill.ReviewContext.RequiredImplementationLayers)
+		assert.NotEmpty(t, handoff.InputContext.WorkspaceRoot)
+		assert.NotEmpty(t, handoff.InputContext.ArtifactBundle)
+		assert.Nil(t, handoff.InputContext.WavePlan)
 	})
 }
 

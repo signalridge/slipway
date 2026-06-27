@@ -337,8 +337,9 @@ Environment variables:
 			if err != nil {
 				return err
 			}
+			readCtx := newStateReadContext(root)
 
-			ref, err := resolveActiveChangeRef(root, changeSlug)
+			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
 				return err
 			}
@@ -352,20 +353,29 @@ Environment variables:
 			}
 
 			return withChangeStateLock(root, ref.Slug, "next", func() error {
+				lockedChange, err := readCtx.reloadChange(ref.Slug)
+				if err != nil {
+					return err
+				}
+				ref := changeRef{Slug: lockedChange.Slug}
 				if jsonOutput && !diagnostics && !contextGuard {
-					view, err := buildNextHandoffSourceView(root, ref, true, false, noAutoPass, auto)
+					view, err := buildNextViewForCommandWithReadContext(readCtx, ref, nextViewOptions{
+						Preview:          true,
+						AutoSkipEvidence: false,
+						SkipAutoPass:     noAutoPass,
+						Command:          "next",
+						Auto:             auto,
+					})
 					if err != nil {
 						return err
 					}
 					applyNextInvocationWorkspacePath(cmd, root, &view)
-					if change, loadErr := state.LoadChange(root, ref.Slug); loadErr == nil {
-						applyNextInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
-					}
+					applyNextInvocationRoute(cmd, root, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
 					return encodeJSONResponse(cmd, buildNextHandoffView(view))
 				}
 
 				// next is always query-only; state advancement is owned by `run`.
-				view, err := buildNextViewForCommand(root, ref, nextViewOptions{
+				view, err := buildNextViewForCommandWithReadContext(readCtx, ref, nextViewOptions{
 					Preview:          true,
 					AutoSkipEvidence: !jsonOutput,
 					SkipAutoPass:     noAutoPass,
@@ -376,9 +386,7 @@ Environment variables:
 					return err
 				}
 				applyNextInvocationWorkspacePath(cmd, root, &view)
-				if change, loadErr := state.LoadChange(root, ref.Slug); loadErr == nil {
-					applyNextInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
-				}
+				applyNextInvocationRoute(cmd, root, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
 
 				if contextGuard {
 					return writeContextGuardHookMessages(cmd.OutOrStdout(), view)
@@ -423,6 +431,11 @@ type nextViewOptions struct {
 }
 
 func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (nextView, error) {
+	return buildNextViewForCommandWithReadContext(newStateReadContext(root), ref, opts)
+}
+
+func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref changeRef, opts nextViewOptions) (nextView, error) {
+	root := readCtx.root
 	preview := opts.Preview
 	autoSkipEvidence := opts.AutoSkipEvidence
 	skipAutoPass := opts.SkipAutoPass
@@ -456,14 +469,14 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 	// Preset confirmation gate: check BEFORE buildNextContextByMode to prevent
 	// artifact reconciliation side effects (ReconcileFromFilesystem, SaveChange)
 	// and artifact_status leakage when the preset is still pending.
-	if pending, err := checkPresetPendingEarlyReturn(root, ref, &view); err != nil {
+	if pending, err := checkPresetPendingEarlyReturnWithReadContext(readCtx, ref, &view); err != nil {
 		return nextView{}, err
 	} else if pending {
 		view.Recovery = model.BuildRecovery(view.Blockers)
 		return view, nil
 	}
 
-	governedChange, execCtx, err := buildNextContextByMode(root, &view, ref)
+	governedChange, execCtx, err := buildNextContextByModeWithReadContext(readCtx, &view, ref)
 	if err != nil {
 		return nextView{}, err
 	}
@@ -561,15 +574,8 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 	return finalize()
 }
 
-// advanceIfReady attempts state advancement unless in preview mode.
-// When skipAutoPass is true, advancement proceeds but auto-pass is
-// suppressed so the caller can decide whether to accept auto-pass.
-func advanceIfReady(root string, ref changeRef, preview bool, skipAutoPass bool, command string) (progression.AdvanceSummary, error) {
-	return advanceIfReadyAuto(root, ref, preview, skipAutoPass, command, false)
-}
-
-// advanceIfReadyAuto is advanceIfReady with an explicit auto override. When auto
-// is true, the engine auto-confirms a pending preset upgrade-only; every
+// advanceIfReadyAuto attempts state advancement unless in preview mode. When
+// auto is true, the engine auto-confirms a pending preset upgrade-only; every
 // evidence gate and guardrail control still blocks as in the non-auto path.
 // Callers force auto false in preview so a query never mutates state.
 func advanceIfReadyAuto(root string, ref changeRef, preview bool, skipAutoPass bool, command string, auto bool) (progression.AdvanceSummary, error) {
@@ -682,12 +688,13 @@ func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model
 	}, nil
 }
 
-// checkPresetPendingEarlyReturn loads the change minimally and, if preset
-// confirmation is pending, populates the view with identity and preset fields
-// only — no artifact reconciliation, no SaveChange, no artifact_status.
-// Returns (true, nil) when the early return was taken.
-func checkPresetPendingEarlyReturn(root string, ref changeRef, view *nextView) (bool, error) {
-	change, err := state.LoadChange(root, ref.Slug)
+// checkPresetPendingEarlyReturnWithReadContext loads the change minimally and,
+// if preset confirmation is pending, populates the view with identity and
+// preset fields only — no artifact reconciliation, no SaveChange, no
+// artifact_status. Returns (true, nil) when the early return was taken.
+func checkPresetPendingEarlyReturnWithReadContext(readCtx *stateReadContext, ref changeRef, view *nextView) (bool, error) {
+	root := readCtx.root
+	change, err := readCtx.loadChange(ref.Slug)
 	if err != nil {
 		return false, err
 	}

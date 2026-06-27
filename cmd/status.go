@@ -216,6 +216,8 @@ func makeStatusCmd() *cobra.Command {
 			if _, err := loadConfigAtRoot(root); err != nil {
 				return err
 			}
+			readCtx := newStateReadContext(root)
+			changeSlug = strings.TrimSpace(changeSlug)
 
 			// Resolve output format.
 			outputFormat, err := resolveStatusFormat(format, jsonFlag)
@@ -225,6 +227,9 @@ func makeStatusCmd() *cobra.Command {
 
 			// When --change is provided, show detail view for that specific change.
 			if changeSlug != "" {
+				if err := state.ValidateChangeSlug(changeSlug); err != nil {
+					return invalidChangeSlugUsageError(changeSlug, err)
+				}
 				effectiveView := resolveEffectiveFocus("status", explicitFocus)
 				hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 				if hydrate {
@@ -236,7 +241,7 @@ func makeStatusCmd() *cobra.Command {
 				if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
 					return printStatusView(cmd, root, *diag, outputFormat, hydrate)
 				}
-				change, archived, err := loadStatusChangeBySlug(root, changeSlug)
+				change, archived, err := loadStatusChangeBySlugWithReadContext(readCtx, changeSlug)
 				if err != nil {
 					if diag := deleteRecoveryStatusViewForSlug(root, changeSlug); diag != nil {
 						return printStatusView(cmd, root, *diag, outputFormat, hydrate)
@@ -246,12 +251,13 @@ func makeStatusCmd() *cobra.Command {
 				if archived {
 					return showArchivedStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 				}
-				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate, true)
+				return showStatusForChangeWithReadContext(cmd, readCtx, change, outputFormat, effectiveView, hydrateKeys, hydrate, true)
 			}
 
 			if change, ok, err := statusChangeFromCurrentWorktreeBinding(root); err != nil {
 				return err
 			} else if ok {
+				readCtx.rememberChange(change)
 				effectiveView := resolveEffectiveFocus("status", explicitFocus)
 				hydrateKeys := normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 				if hydrate {
@@ -260,7 +266,7 @@ func makeStatusCmd() *cobra.Command {
 						return err
 					}
 				}
-				return showStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate, false)
+				return showStatusForChangeWithReadContext(cmd, readCtx, change, outputFormat, effectiveView, hydrateKeys, hydrate, false)
 			}
 
 			// When the invocation worktree hosts a local archived change, prefer it
@@ -302,7 +308,7 @@ func makeStatusCmd() *cobra.Command {
 			if diag := deleteRecoveryStatusView(root); diag != nil {
 				return printStatusView(cmd, root, *diag, outputFormat, hydrate)
 			}
-			route, err := resolveStatusRouteForRoot(root, active)
+			route, err := resolveStatusRouteForRootWithReadContext(readCtx, active)
 			if err != nil {
 				return err
 			}
@@ -333,7 +339,7 @@ func makeStatusCmd() *cobra.Command {
 					return err
 				}
 			}
-			return showStatusForChange(cmd, root, *route.change, outputFormat, effectiveView, hydrateKeys, hydrate, false)
+			return showStatusForChangeWithReadContext(cmd, readCtx, *route.change, outputFormat, effectiveView, hydrateKeys, hydrate, false)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output (shorthand for --format json)")
@@ -362,17 +368,18 @@ func resolveStatusRoute(active []model.Change) statusRoute {
 	}
 }
 
-func resolveStatusRouteForRoot(root string, active []model.Change) (statusRoute, error) {
+func resolveStatusRouteForRootWithReadContext(readCtx *stateReadContext, active []model.Change) (statusRoute, error) {
 	route := resolveStatusRoute(active)
 	if route.change != nil {
-		ref, err := resolveActiveChangeRef(root, "")
+		readCtx.rememberChange(*route.change)
+		ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
 		if err != nil {
 			return statusRoute{}, err
 		}
 		if ref.Slug == route.change.Slug {
 			return route, nil
 		}
-		change, err := loadChangeBySlug(root, ref.Slug)
+		change, err := loadChangeBySlugWithReadContext(readCtx, ref.Slug)
 		if err != nil {
 			return statusRoute{}, err
 		}
@@ -382,7 +389,7 @@ func resolveStatusRouteForRoot(root string, active []model.Change) (statusRoute,
 		return route, nil
 	}
 
-	ref, err := resolveActiveChangeRef(root, "")
+	ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
 	if err != nil {
 		if shouldFallbackStatusMultiSummary(err) {
 			return route, nil
@@ -390,7 +397,7 @@ func resolveStatusRouteForRoot(root string, active []model.Change) (statusRoute,
 		return statusRoute{}, err
 	}
 
-	change, err := loadChangeBySlug(root, ref.Slug)
+	change, err := loadChangeBySlugWithReadContext(readCtx, ref.Slug)
 	if err != nil {
 		return statusRoute{}, err
 	}
@@ -511,18 +518,20 @@ func deleteRecoveryStatusViewForSlug(root, slug string) *statusView {
 	return view
 }
 
-func showStatusForChange(cmd *cobra.Command, root string, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool, explicitChange bool) error {
+func showStatusForChangeWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, change model.Change, outputFormat string, requestedView string, hydrateKeys []string, hydrate bool, explicitChange bool) error {
+	root := readCtx.root
+	readCtx.rememberChange(change)
 	return withChangeStateLock(root, change.Slug, "status", func() error {
-		latest, err := state.LoadChange(root, change.Slug)
+		lockedChange, err := readCtx.reloadChange(change.Slug)
 		if err != nil {
 			return err
 		}
-		view, err := buildStatusViewFromChange(root, latest)
+		view, err := buildStatusViewFromChangeWithReadContext(readCtx, lockedChange)
 		if err != nil {
 			return err
 		}
 		applyStatusInvocationWorkspacePath(cmd, root, &view)
-		applyStatusInvocationRoute(cmd, root, latest, explicitChange, &view)
+		applyStatusInvocationRoute(cmd, root, lockedChange, explicitChange, &view)
 		view.Mode = requestedView
 		view.HydrateReferences = hydrateKeys
 		return printStatusView(cmd, root, view, outputFormat, hydrate)
@@ -558,7 +567,16 @@ func buildArchivedStatusView(root string, change model.Change) statusView {
 }
 
 func loadStatusChangeBySlug(root, slug string) (model.Change, bool, error) {
-	change, err := state.LoadChange(root, slug)
+	return loadStatusChangeBySlugWithReadContext(newStateReadContext(root), slug)
+}
+
+func loadStatusChangeBySlugWithReadContext(readCtx *stateReadContext, slug string) (model.Change, bool, error) {
+	root := readCtx.root
+	slug = strings.TrimSpace(slug)
+	if err := state.ValidateChangeSlug(slug); err != nil {
+		return model.Change{}, false, invalidChangeSlugUsageError(slug, err)
+	}
+	change, err := readCtx.loadChange(slug)
 	if err == nil {
 		return change, false, nil
 	}

@@ -1,6 +1,8 @@
 package state
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -62,4 +64,162 @@ func TestReadLifecycleEventsMissingLogIsEmpty(t *testing.T) {
 	events, err := ReadLifecycleEvents(root, change)
 	require.NoError(t, err)
 	assert.Empty(t, events)
+}
+
+func TestReadLifecycleEventTailIgnoresMalformedOlderLines(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	payload := "{not-json}\n" +
+		lifecycleEventLine(t, "tail-event-1", change.Slug) +
+		lifecycleEventLine(t, "tail-event-2", change.Slug) +
+		lifecycleEventLine(t, "tail-event-3", change.Slug)
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	tail, err := ReadLifecycleEventTail(root, change, 2)
+	require.NoError(t, err)
+	require.Len(t, tail, 2)
+	assert.Equal(t, "tail-event-2", tail[0].EventID)
+	assert.Equal(t, "tail-event-3", tail[1].EventID)
+
+	_, err = ReadLifecycleEvents(root, change)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line 1")
+}
+
+func TestReadLifecycleEventTailFailsOnMalformedRetainedLine(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log-malformed")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	payload := lifecycleEventLine(t, "tail-good-1", change.Slug) +
+		lifecycleEventLine(t, "tail-good-2", change.Slug) +
+		"{not-json}\n"
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	_, err = ReadLifecycleEventTail(root, change, 2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "decode lifecycle event log tail line")
+}
+
+func TestReadLifecycleEventTailWithPredecessorTransitionIncludesContext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log-context")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	payload := lifecycleEventLineWithType(t, "transition-context", change.Slug, "state.transitioned") +
+		lifecycleEventLineWithType(t, "older-non-transition", change.Slug, "skill.evidence_recorded") +
+		lifecycleEventLineWithType(t, "tail-non-transition", change.Slug, "state.blocked") +
+		lifecycleEventLineWithType(t, "tail-transition", change.Slug, "state.transitioned")
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	events, err := ReadLifecycleEventTailWithPredecessorTransitionFromPath(path, 2)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, "transition-context", events[0].EventID)
+	assert.Equal(t, "tail-non-transition", events[1].EventID)
+	assert.Equal(t, "tail-transition", events[2].EventID)
+}
+
+func TestReadLifecycleEventTailWithPredecessorTransitionIncludesBoundaryContext(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log-context-boundary")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	const limit = 2
+	payload := lifecycleEventLineWithType(t, "transition-context-boundary", change.Slug, "state.transitioned")
+	for i := 1; i < lifecyclePredecessorContextLimit(limit); i++ {
+		payload += lifecycleEventLineWithType(t, "context-non-transition-"+string(rune('a'+i)), change.Slug, "skill.evidence_recorded")
+	}
+	payload += lifecycleEventLineWithType(t, "tail-non-transition", change.Slug, "state.blocked") +
+		lifecycleEventLineWithType(t, "tail-transition", change.Slug, "state.transitioned")
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	events, err := ReadLifecycleEventTailWithPredecessorTransitionFromPath(path, limit)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	assert.Equal(t, "transition-context-boundary", events[0].EventID)
+	assert.Equal(t, "tail-non-transition", events[1].EventID)
+	assert.Equal(t, "tail-transition", events[2].EventID)
+}
+
+func TestReadLifecycleEventTailWithPredecessorTransitionIgnoresContextOutsideBudget(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log-context-budget")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	const limit = 2
+	payload := "{not-json}\n" +
+		lifecycleEventLineWithType(t, "transition-context-too-old", change.Slug, "state.transitioned")
+	for i := 0; i < lifecyclePredecessorContextLimit(limit)+1; i++ {
+		payload += lifecycleEventLineWithType(t, "context-non-transition-"+string(rune('a'+i)), change.Slug, "skill.evidence_recorded")
+	}
+	payload += lifecycleEventLineWithType(t, "tail-non-transition", change.Slug, "state.blocked") +
+		lifecycleEventLineWithType(t, "tail-transition", change.Slug, "state.transitioned")
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	events, err := ReadLifecycleEventTailWithPredecessorTransitionFromPath(path, limit)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "tail-non-transition", events[0].EventID)
+	assert.Equal(t, "tail-transition", events[1].EventID)
+}
+
+func TestReadLifecycleEventTailWithPredecessorTransitionFailsOnMalformedContextLine(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	change := model.NewChange("tail-event-log-context-malformed")
+	require.NoError(t, SaveChange(root, change))
+
+	path, err := LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	payload := lifecycleEventLineWithType(t, "transition-context", change.Slug, "state.transitioned") +
+		"{not-json}\n" +
+		lifecycleEventLineWithType(t, "tail-non-transition", change.Slug, "state.blocked") +
+		lifecycleEventLineWithType(t, "tail-transition", change.Slug, "state.transitioned")
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	_, err = ReadLifecycleEventTailWithPredecessorTransitionFromPath(path, 2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "decode lifecycle event log context line")
+}
+
+func lifecycleEventLine(t *testing.T, eventID string, slug string) string {
+	t.Helper()
+	return lifecycleEventLineWithType(t, eventID, slug, "state.transitioned")
+}
+
+func lifecycleEventLineWithType(t *testing.T, eventID string, slug string, eventType string) string {
+	t.Helper()
+	raw, err := json.Marshal(LifecycleEvent{
+		Version:    1,
+		EventID:    eventID,
+		ChangeSlug: slug,
+		OccurredAt: time.Date(2026, 6, 1, 1, 2, 3, 0, time.UTC),
+		EventType:  eventType,
+	})
+	require.NoError(t, err)
+	return string(raw) + "\n"
 }
