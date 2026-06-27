@@ -24,29 +24,32 @@ type evidenceTaskView struct {
 	Slug              string                             `json:"slug"`
 	TaskID            string                             `json:"task_id"`
 	RunSummaryVersion int                                `json:"run_summary_version"`
+	InvocationRoute   *invocationRouteView               `json:"invocation_route,omitempty"`
 	Path              string                             `json:"path"`
 	Recorded          bool                               `json:"recorded"`
 	FreshnessInputs   model.ExecutionTaskFreshnessInputs `json:"freshness_inputs"`
 }
 
 type evidenceTaskBatchView struct {
-	Slug              string             `json:"slug"`
-	RunSummaryVersion int                `json:"run_summary_version"`
-	Recorded          bool               `json:"recorded"`
-	RecordedCount     int                `json:"recorded_count"`
-	Tasks             []evidenceTaskView `json:"tasks"`
+	Slug              string               `json:"slug"`
+	RunSummaryVersion int                  `json:"run_summary_version"`
+	InvocationRoute   *invocationRouteView `json:"invocation_route,omitempty"`
+	Recorded          bool                 `json:"recorded"`
+	RecordedCount     int                  `json:"recorded_count"`
+	Tasks             []evidenceTaskView   `json:"tasks"`
 }
 
 type evidenceSkillView struct {
-	Slug       string   `json:"slug"`
-	Skill      string   `json:"skill"`
-	SkillName  string   `json:"skill_name"`
-	Verdict    string   `json:"verdict"`
-	RunVersion int      `json:"run_version"`
-	Path       string   `json:"path"`
-	Recorded   bool     `json:"recorded"`
-	Stamped    bool     `json:"stamped"`
-	References []string `json:"references,omitempty"`
+	Slug            string               `json:"slug"`
+	Skill           string               `json:"skill"`
+	SkillName       string               `json:"skill_name"`
+	Verdict         string               `json:"verdict"`
+	RunVersion      int                  `json:"run_version"`
+	InvocationRoute *invocationRouteView `json:"invocation_route,omitempty"`
+	Path            string               `json:"path"`
+	Recorded        bool                 `json:"recorded"`
+	Stamped         bool                 `json:"stamped"`
+	References      []string             `json:"references,omitempty"`
 }
 
 const (
@@ -121,7 +124,8 @@ func makeEvidenceSkillCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ref, err := resolveActiveChangeRef(root, changeSlug)
+			readCtx := newStateReadContext(root)
+			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
 				return err
 			}
@@ -136,6 +140,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				route := commandInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "")
 
 				skillName = strings.TrimSpace(skillName)
 				def, err := validateEvidenceSkillName(root, skillName)
@@ -328,15 +333,16 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				}
 
 				view := evidenceSkillView{
-					Slug:       change.Slug,
-					Skill:      skillName,
-					SkillName:  skillName,
-					Verdict:    verdict,
-					RunVersion: runVersion,
-					Path:       displayPath,
-					Recorded:   true,
-					Stamped:    stamped,
-					References: references,
+					Slug:            change.Slug,
+					Skill:           skillName,
+					SkillName:       skillName,
+					Verdict:         verdict,
+					RunVersion:      runVersion,
+					InvocationRoute: route,
+					Path:            displayPath,
+					Recorded:        true,
+					Stamped:         stamped,
+					References:      references,
 				}
 				if jsonOutput {
 					return encodeJSONResponse(cmd, view)
@@ -387,7 +393,8 @@ func makeEvidenceTaskCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ref, err := resolveActiveChangeRef(root, changeSlug)
+			readCtx := newStateReadContext(root)
+			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
 				return err
 			}
@@ -402,6 +409,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				route := commandInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "")
 				if change.CurrentState != model.StateS2Implement && change.CurrentState != model.StateS3Review {
 					remediation := evidenceTaskWrongStateRemediation(root, change)
 					return newInvalidUsageError(
@@ -417,7 +425,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					if err := rejectEvidenceTaskResultFileLedgerFlags(cmd); err != nil {
 						return err
 					}
-					return recordEvidenceTaskResultFiles(cmd, root, change, resultFiles, jsonOutput)
+					return recordEvidenceTaskResultFiles(cmd, root, change, resultFiles, route, jsonOutput)
 				}
 
 				taskID = strings.TrimSpace(taskID)
@@ -625,6 +633,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					Slug:              change.Slug,
 					TaskID:            taskID,
 					RunSummaryVersion: runSummary,
+					InvocationRoute:   route,
 					Path:              state.DisplayPath(root, path),
 					Recorded:          true,
 					FreshnessInputs:   payload.FreshnessInputs,
@@ -679,6 +688,7 @@ func recordEvidenceTaskResultFiles(
 	root string,
 	change model.Change,
 	resultFiles []string,
+	route *invocationRouteView,
 	jsonOutput bool,
 ) error {
 	if len(resultFiles) == 0 {
@@ -748,6 +758,7 @@ func recordEvidenceTaskResultFiles(
 	taskVerdicts := make([]string, 0, len(prepared))
 	views := make([]evidenceTaskView, 0, len(prepared))
 	for _, item := range prepared {
+		item.view.InvocationRoute = route
 		taskIDs = append(taskIDs, item.payload.TaskID)
 		paths = append(paths, item.view.Path)
 		taskVerdicts = append(taskVerdicts, fmt.Sprintf("%s:%s", item.payload.TaskID, item.payload.Verdict))
@@ -782,6 +793,7 @@ func recordEvidenceTaskResultFiles(
 	view := evidenceTaskBatchView{
 		Slug:              change.Slug,
 		RunSummaryVersion: runSummary,
+		InvocationRoute:   route,
 		Recorded:          true,
 		RecordedCount:     len(views),
 		Tasks:             views,
