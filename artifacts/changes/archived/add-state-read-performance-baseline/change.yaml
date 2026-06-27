@@ -1,0 +1,45 @@
+version: 1
+slug: add-state-read-performance-baseline
+description: add state read performance baseline
+status: done
+current_state: DONE
+complexity_level: simple
+base_ref: HEAD
+created_at: 2026-06-27T10:19:56.288585Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/add-state-read-performance-baseline
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: ef7b7b5e67248af33f09a08bdb03edcec8268c2153443149eca94f35a9a3bc80
+        updated_at: 2026-06-27T11:44:40.650007292Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 4bf759ec22d12d3d84b1b136dd1f254bd05773bf8040b45ff0b0d88498c213c4
+        updated_at: 2026-06-27T10:20:51.837166355Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 32e84299b5a0064ec74c2bd57cdda46977ba23398ffbc936f82546400e1e3462
+        updated_at: 2026-06-27T10:21:50.411314182Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 10a129dd8617d401a5452b25b487a4e47281c29468e202911a7d55a489db3156
+        updated_at: 2026-06-27T10:57:27.225208573Z
+evidence_refs:
+    code-quality-review: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/code-quality-review.yaml
+    independent-review: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/independent-review.yaml
+    intake-clarification: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/intake-clarification.yaml
+    plan-audit: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/plan-audit.yaml
+    ship-verification: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/add-state-read-performance-baseline/artifacts/changes/add-state-read-performance-baseline/verification/wave-orchestration.yaml
