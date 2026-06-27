@@ -101,18 +101,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Measure governance-kernel coverage
+      - name: Measure governed coverage
         run: |
           mkdir -p tmp
-          kernel_pkgs="$(go list \
+          gated_pkgs="$(go list \
             ./internal/engine/gate \
             ./internal/engine/governance \
-            ./internal/engine/progression | paste -sd, -)"
+            ./internal/engine/progression \
+            ./cmd \
+            ./internal/state | paste -sd, -)"
           go test -timeout=20m ./... -count=1 \
-            -coverpkg="${kernel_pkgs}" \
-            -coverprofile=tmp/coverage-kernel.out
+            -coverpkg="${gated_pkgs}" \
+            -coverprofile=tmp/coverage-gated.out
       - name: Enforce kernel coverage baseline (fails closed on regression)
-        run: go run ./internal/coverage/cmd/covergate -check -profile tmp/coverage-kernel.out
+        run: go run ./internal/coverage/cmd/covergate -target kernel -check -profile tmp/coverage-gated.out
+      - name: Enforce public-surface coverage baseline (fails closed on regression)
+        run: go run ./internal/coverage/cmd/covergate -target public-surface -check -profile tmp/coverage-gated.out
   release-config:
     name: Release Config
     runs-on: ubuntu-latest

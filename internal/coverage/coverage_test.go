@@ -103,6 +103,24 @@ func TestCheckFailsClosedOnMissingPackage(t *testing.T) {
 	assert.True(t, regs[0].Missing)
 }
 
+func TestCheckCarriesActionableSurfaceMetadata(t *testing.T) {
+	b := Baseline{
+		Packages: map[string]float64{gatePkg: 80.0},
+		Surfaces: map[string][]Surface{
+			gatePkg: {
+				{Name: "status command", Files: []string{"cmd/status.go"}},
+				{Name: "next command", Files: []string{"cmd/next.go"}},
+			},
+		},
+	}
+
+	regs := b.Check(map[string]Stmts{gatePkg: {Covered: 7, Total: 10}})
+
+	require.Len(t, regs, 1)
+	assert.Equal(t, b.Surfaces[gatePkg], regs[0].Surfaces)
+	assert.Contains(t, regs[0].String(), "surfaces: status command (cmd/status.go); next command (cmd/next.go)")
+}
+
 func TestBuildBaselineComputesFloorsForSelected(t *testing.T) {
 	all := map[string]Stmts{
 		gatePkg:              {Covered: 3, Total: 4}, // 75.0

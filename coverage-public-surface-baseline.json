@@ -1,0 +1,52 @@
+{
+  "tool": "covergate",
+  "target": "public-surface",
+  "cover_packages": [
+    "github.com/signalridge/slipway/cmd",
+    "github.com/signalridge/slipway/internal/state"
+  ],
+  "surfaces": {
+    "github.com/signalridge/slipway/cmd": [
+      {
+        "name": "public lifecycle commands",
+        "files": [
+          "cmd/status.go",
+          "cmd/next.go",
+          "cmd/validate.go",
+          "cmd/done.go",
+          "cmd/evidence.go"
+        ]
+      },
+      {
+        "name": "release, security, and workflow-adjacent helpers",
+        "files": [
+          "cmd/tool_actions.go",
+          "cmd/tool_github.go",
+          "cmd/tool_sarif.go",
+          "cmd/release_workflow_contract_test.go"
+        ]
+      }
+    ],
+    "github.com/signalridge/slipway/internal/state": [
+      {
+        "name": "state verification authority",
+        "files": [
+          "internal/state/verification.go",
+          "internal/state/evidence_digests.go"
+        ]
+      },
+      {
+        "name": "worktree and runtime state authority",
+        "files": [
+          "internal/state/worktree.go",
+          "internal/state/store.go",
+          "internal/state/local_runtime_paths.go"
+        ]
+      }
+    ]
+  },
+  "packages": {
+    "github.com/signalridge/slipway/cmd": 80,
+    "github.com/signalridge/slipway/internal/state": 82.1
+  }
+}
