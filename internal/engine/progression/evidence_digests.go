@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/skill"
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"github.com/signalridge/slipway/internal/wave"
 	"gopkg.in/yaml.v3"
 )
 

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
+	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -283,7 +283,7 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 
 	blockers := make([]string, 0, len(summary.OpenBlockers)+1)
 	blockers = append(blockers, model.ReasonSpecs(summary.OpenBlockers)...)
-	if diagnostics.Status == string(ctxpack.EvidenceFreshnessStale) {
+	if diagnostics.Status == string(freshnesspkg.EvidenceFreshnessStale) {
 		if ExecutionFreshnessIsS3TaskPlanAmendment(change.CurrentState, diagnostics) {
 			return stringutil.UniqueSorted(blockers)
 		}
@@ -308,13 +308,13 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 func ProjectExecutionFreshnessForState(
 	workflowState model.WorkflowState,
 	diagnostics ExecutionFreshnessDiagnostics,
-) ctxpack.EvidenceFreshness {
-	status := ctxpack.EvidenceFreshness(strings.TrimSpace(diagnostics.Status))
+) freshnesspkg.EvidenceFreshness {
+	status := freshnesspkg.EvidenceFreshness(strings.TrimSpace(diagnostics.Status))
 	if status == "" {
-		status = ctxpack.EvidenceFreshnessUnknown
+		status = freshnesspkg.EvidenceFreshnessUnknown
 	}
 	if ExecutionFreshnessIsS3TaskPlanAmendment(workflowState, diagnostics) {
-		return ctxpack.EvidenceFreshnessFresh
+		return freshnesspkg.EvidenceFreshnessFresh
 	}
 	return status
 }
@@ -329,7 +329,7 @@ func ProjectExecutionFreshnessDiagnosticsForState(
 		return diagnostics
 	}
 	return ExecutionFreshnessDiagnostics{
-		Status:        string(ctxpack.EvidenceFreshnessFresh),
+		Status:        string(freshnesspkg.EvidenceFreshnessFresh),
 		PathAuthority: diagnostics.PathAuthority,
 	}
 }
@@ -346,7 +346,7 @@ func ExecutionFreshnessIsS3TaskPlanAmendment(
 // ExecutionFreshnessIsTaskPlanOnlyDrift reports a stale execution summary whose
 // only cause is the tasks.md -> wave-plan/execution-summary planning chain.
 func ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics ExecutionFreshnessDiagnostics) bool {
-	if strings.TrimSpace(diagnostics.Status) != string(ctxpack.EvidenceFreshnessStale) {
+	if strings.TrimSpace(diagnostics.Status) != string(freshnesspkg.EvidenceFreshnessStale) {
 		return false
 	}
 	if len(diagnostics.TaskInputDiffs) > 0 || len(diagnostics.StalePairs) == 0 {
@@ -388,17 +388,17 @@ func executionSummaryFreshnessEvaluation(
 	change model.Change,
 	summary *model.ExecutionSummary,
 	evidenceArtifact string,
-) (ctxpack.EvidenceFreshness, []ExecutionTaskInputDifference, []ExecutionFreshnessPair) {
+) (freshnesspkg.EvidenceFreshness, []ExecutionTaskInputDifference, []ExecutionFreshnessPair) {
 	taskInputDiffs := taskFreshnessInputDiffs(root, change, summary)
 	planningPairs := stalePlanningPairs(root, change, summary, evidenceArtifact)
 	if len(taskInputDiffs) > 0 || len(planningPairs) > 0 {
-		return ctxpack.EvidenceFreshnessStale, taskInputDiffs, planningPairs
+		return freshnesspkg.EvidenceFreshnessStale, taskInputDiffs, planningPairs
 	}
 	inputs := collectTaskEvidenceFreshnessInputs(change, summary)
 	if len(inputs) == 0 {
-		return ctxpack.EvidenceFreshnessUnknown, nil, nil
+		return freshnesspkg.EvidenceFreshnessUnknown, nil, nil
 	}
-	return ctxpack.EvaluateEvidenceFreshness(true, inputs), nil, nil
+	return freshnesspkg.EvaluateEvidenceFreshness(true, inputs), nil, nil
 }
 
 func executionSummaryEvidenceArtifact(root string, change model.Change) string {
@@ -411,7 +411,7 @@ func executionSummaryEvidenceArtifact(root string, change model.Change) string {
 
 func ExecutionSummaryFreshnessDiagnostics(root string, change model.Change, summary *model.ExecutionSummary) ExecutionFreshnessDiagnostics {
 	diagnostics := ExecutionFreshnessDiagnostics{
-		Status:        string(ctxpack.EvidenceFreshnessUnknown),
+		Status:        string(freshnesspkg.EvidenceFreshnessUnknown),
 		PathAuthority: ExecutionPathAuthorityDiagnostics(root, change, 0),
 	}
 	if !ExecutionSummaryReady(summary) || strings.TrimSpace(change.Slug) == "" {
@@ -449,7 +449,7 @@ func ExecutionSummaryFreshnessDiagnostics(root string, change model.Change, summ
 		return diagnostics
 	}
 
-	if freshness == ctxpack.EvidenceFreshnessStale {
+	if freshness == freshnesspkg.EvidenceFreshnessStale {
 		diagnostics.StalePairs = append(diagnostics.StalePairs, ExecutionFreshnessPair{
 			EvidenceArtifact:   evidenceArtifact,
 			Reason:             StaleExecutionEvidenceBlockerToken,
@@ -792,15 +792,15 @@ func formatFreshnessTime(t time.Time) string {
 func collectTaskEvidenceFreshnessInputs(
 	change model.Change,
 	summary *model.ExecutionSummary,
-) []ctxpack.EvidenceFreshnessInput {
+) []freshnesspkg.EvidenceFreshnessInput {
 	if !ExecutionSummaryReady(summary) {
 		return nil
 	}
 
-	inputs := []ctxpack.EvidenceFreshnessInput{}
+	inputs := []freshnesspkg.EvidenceFreshnessInput{}
 	for _, task := range summary.Tasks {
 		expected := ExpectedExecutionTaskFreshnessInputs(change, summary.RunSummaryVersion, task.TaskID, summary.TasksPlanHash)
-		inputs = append(inputs, ctxpack.EvidenceFreshnessInput{
+		inputs = append(inputs, freshnesspkg.EvidenceFreshnessInput{
 			ExpectedStructuralInput: expected.FieldMap(),
 			CurrentStructuralInput:  task.FreshnessInputs.FieldMap(),
 		})

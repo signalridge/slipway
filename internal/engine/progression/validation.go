@@ -11,10 +11,10 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/governance"
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 // ChangeSchemaResolution captures the resolved artifact schema plus
