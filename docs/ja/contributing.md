@@ -83,14 +83,15 @@ go test ./internal/toolgen -count=1
 - ホストコントラクトが変わったら、生成されるスキルやドキュメントを更新します。
 - アクティブな統制対象ワークトリー内で `go run . validate --json` を実行して検証します。
 
-## ガバナンスカーネルのカバレッジゲート
+## ガバナンス対象のカバレッジゲート
 
-ガバナンスカーネル、すなわち `internal/engine/gate`、`internal/engine/governance`、`internal/engine/progression`（レディネスリゾルバは `progression/readiness.go` にあります）は、回帰を許さないカバレッジゲートで保護されています。いずれかのカーネルパッケージのステートメントカバレッジがコミット済みのフロアを下回ると、CI は失敗します。このゲートはフェイルクローズで、フロアを自動的に下げることはなく、スキップ・強制・ソフトパスの経路もありません。
+ガバナンスカーネル、すなわち `internal/engine/gate`、`internal/engine/governance`、`internal/engine/progression`（レディネスリゾルバは `progression/readiness.go` にあります）は、回帰を許さないカバレッジゲートで保護されています。高リスクな公開ライフサイクル面は、`cmd` と `internal/state` を対象にした 2 つ目の階層ゲートで保護します。これには `status`、`next`、`validate`、`done`、`evidence`、verification、worktree、runtime state の経路が含まれます。いずれかの対象パッケージのステートメントカバレッジがコミット済みのフロアを下回ると、CI は失敗します。これらのゲートはフェイルクローズで、フロアを自動的に下げることはなく、スキップ・強制・ソフトパスの経路もありません。
 
-- **ベースライン**: `coverage-baseline.json`（リポジトリルート）に、ゲート対象の各パッケージのフロア（パーセント、小数第1位まで）を記録します。これは `covergate` ツールで生成し、手で編集することはありません。
-- **CI ジョブ**: `Kernel Coverage Gate` ジョブは、`-coverpkg` をカーネルパッケージにスコープしてスイート全体を実行し、続いて `covergate -check` を実行します。ベースラインを決定的にするため、カバレッジは単一の OS（ubuntu）で計測します。
+- **ベースライン**: `coverage-baseline.json` はカーネルのフロアを記録し、`coverage-public-surface-baseline.json` は公開面のフロアと診断に使う package/file/surface メタデータを記録します。どちらも `covergate` ツールで生成し、手で編集することはありません。
+- **CI ジョブ**: `Kernel Coverage Gate` ジョブは、カーネルと公開面のパッケージを合わせた `-coverpkg` でスイート全体を 1 回実行し、続いて `covergate -target kernel -check` と `covergate -target public-surface -check` を実行します。ベースラインを決定的にするため、カバレッジは単一の OS（ubuntu）で計測します。
 - **ユニオンセマンティクス**: 複数パッケージにまたがる実行で `-coverpkg` を使うと、同じブロックがテストバイナリごとに 1 回ずつ出力されます。`covergate` はそれらをユニオンします（ブロックは 1 回だけカウントし、いずれかの出現で実行されていればカバー済みとみなす）。これは `go tool cover` と同じ挙動です。
-- **モードの選択**: `covergate` は明示的な `-check` または `-write` を必要とし、モードなしの呼び出しは拒否されます。これにより、ゲートの呼び出しが誤ってソフトパスすることはありません。`-check` は常にコミット済みのベースラインをそのまま使い、`-exclude` のような書き込み時専用のフラグはチェックモードでは拒否されます。
+- **モードの選択**: `covergate` は明示的な `-check` または `-write` を必要とし、モードなしの呼び出しは拒否されます。`-target` で `kernel` または `public-surface` を選びます。`-check` は常にコミット済みのベースラインをそのまま使い、`-exclude` のような書き込み時専用のフラグはチェックモードでは拒否されます。
+- **公開面の診断**: 公開面の失敗は package と関連する surface/file メタデータを表示します。全体パーセンテージではなく、追加すべき対象テストが分かるようにするためです。
 
 ゲートをローカルで実行する:
 
@@ -101,11 +102,11 @@ just coverage-gate
 CI が回帰を報告した場合、通常の対処はカバレッジを回復させるテストを追加することです。低下が意図的でレビュー済みの場合（たとえばデッドコードを削除したとき)は、ベースラインをラチェットして差分をコミットし、変更がレビューで見えるようにしてください。
 
 ```bash
-just coverage-baseline   # regenerates coverage-baseline.json from current coverage
+just coverage-baseline   # regenerates governed coverage baselines from current coverage
 ```
 
 ベースラインを下げる編集が自動で行われることはありません。プルリクエストの差分に現れ、レビューを受ける必要があります。カバレッジを改善した後にフロアを引き上げるときも、同じコマンドを実行してください。
 
-**除外リスト**: `covergate` に `-exclude <prefix[,prefix...]>` を渡せるのは、ゲート対象セットを選ぶ `-write` 時のみです。これは、include セットを広げる場合に、カーネル以外・生成物・テスト専用のプレフィックスのために用意されており、必須のガバナンスカーネルパッケージのフロアを取り除くことはできません。ゲート対象セットはガバナンスカーネルに限定してください。
+**除外リスト**: `covergate` に `-exclude <prefix[,prefix...]>` を渡せるのは、ゲート対象セットを選ぶ `-write` 時のみです。これは、生成物・テスト専用のプレフィックスのために用意されていますが、必須のカーネルまたは公開面パッケージのフロアを取り除くことはできません。
 
-CI ジョブがデフォルトブランチでグリーンになったら、メンテナーは `Kernel Coverage Gate` をブランチ保護の必須ステータスチェックに追加し、回帰がレッドになってマージをブロックするようにしてください。
+CI ジョブがデフォルトブランチでグリーンになったら、メンテナーは `Kernel Coverage Gate` をブランチ保護の必須ステータスチェックに残し、カーネルまたは公開面の回帰がレッドになってマージをブロックするようにしてください。

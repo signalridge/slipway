@@ -97,6 +97,178 @@ func TestRunWithOptionsCheckModes(t *testing.T) {
 	}
 }
 
+func TestRunWithOptionsPublicSurfaceTargetPrintsActionableDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	profilePath := writeFile(t, dir, "coverage.out", profileWithBlocks(
+		block{pkg: publicSurfacePackages[0], covered: 7, total: 10},
+		block{pkg: publicSurfacePackages[1], covered: 10, total: 10},
+	))
+	baselinePath := filepath.Join(dir, PublicSurfaceBaselineFile)
+	writeBaseline(t, baselinePath, coveragepkg.Baseline{
+		Tool:          "covergate",
+		Target:        "public-surface",
+		CoverPackages: append([]string(nil), publicSurfacePackages...),
+		Surfaces:      cloneSurfaces(coverageTargets["public-surface"].Surfaces),
+		Packages: map[string]float64{
+			publicSurfacePackages[0]: 80.0,
+			publicSurfacePackages[1]: 100.0,
+		},
+	})
+
+	var stdout bytes.Buffer
+	err := runWithOptions(options{
+		check:    true,
+		target:   "public-surface",
+		profile:  profilePath,
+		baseline: baselinePath,
+		stdout:   &stdout,
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "coverage gate failed: 1 public-surface package(s) below baseline")
+	assert.Contains(t, stdout.String(), publicSurfacePackages[0]+": 70.0% < baseline 80.0%")
+	assert.Contains(t, stdout.String(), "surfaces: public lifecycle commands (cmd/status.go, cmd/next.go, cmd/validate.go, cmd/done.go, cmd/evidence.go)")
+}
+
+func TestRunWithOptionsPublicSurfaceTargetRejectsIncompleteBaseline(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		baseline        coveragepkg.Baseline
+		wantErr         string
+		wantDiagnostics []string
+	}{
+		{
+			name: "missing cover package includes public surface metadata",
+			baseline: coveragepkg.Baseline{
+				Tool:          "covergate",
+				Target:        "public-surface",
+				CoverPackages: []string{publicSurfacePackages[0]},
+				Surfaces:      cloneSurfaces(coverageTargets["public-surface"].Surfaces),
+				Packages: map[string]float64{
+					publicSurfacePackages[0]: 100.0,
+					publicSurfacePackages[1]: 100.0,
+				},
+			},
+			wantErr: "missing required public-surface cover package(s)",
+			wantDiagnostics: []string{
+				publicSurfacePackages[1],
+				"state verification authority",
+				"internal/state/verification.go",
+				"worktree and runtime state authority",
+				"internal/state/store.go",
+			},
+		},
+		{
+			name: "excluded required package includes public surface metadata",
+			baseline: coveragepkg.Baseline{
+				Tool:          "covergate",
+				Target:        "public-surface",
+				CoverPackages: append([]string(nil), publicSurfacePackages...),
+				Exclude:       []string{publicSurfacePackages[1]},
+				Surfaces:      cloneSurfaces(coverageTargets["public-surface"].Surfaces),
+				Packages: map[string]float64{
+					publicSurfacePackages[0]: 100.0,
+					publicSurfacePackages[1]: 100.0,
+				},
+			},
+			wantErr: "excludes required public-surface package(s)",
+			wantDiagnostics: []string{
+				publicSurfacePackages[1],
+				"state verification authority",
+				"internal/state/verification.go",
+				"worktree and runtime state authority",
+				"internal/state/local_runtime_paths.go",
+			},
+		},
+		{
+			name: "missing required floor includes public surface metadata",
+			baseline: coveragepkg.Baseline{
+				Tool:          "covergate",
+				Target:        "public-surface",
+				CoverPackages: append([]string(nil), publicSurfacePackages...),
+				Surfaces:      cloneSurfaces(coverageTargets["public-surface"].Surfaces),
+				Packages: map[string]float64{
+					publicSurfacePackages[0]: 100.0,
+				},
+			},
+			wantErr: "missing required public-surface package floor(s)",
+			wantDiagnostics: []string{
+				publicSurfacePackages[1],
+				"state verification authority",
+				"internal/state/evidence_digests.go",
+				"worktree and runtime state authority",
+				"internal/state/worktree.go",
+			},
+		},
+		{
+			name: "missing surface metadata",
+			baseline: coveragepkg.Baseline{
+				Tool:          "covergate",
+				Target:        "public-surface",
+				CoverPackages: append([]string(nil), publicSurfacePackages...),
+				Packages: map[string]float64{
+					publicSurfacePackages[0]: 100.0,
+					publicSurfacePackages[1]: 100.0,
+				},
+			},
+			wantErr: "missing required public-surface surface metadata",
+		},
+		{
+			name: "generic surface metadata",
+			baseline: coveragepkg.Baseline{
+				Tool:          "covergate",
+				Target:        "public-surface",
+				CoverPackages: append([]string(nil), publicSurfacePackages...),
+				Surfaces: map[string][]coveragepkg.Surface{
+					publicSurfacePackages[0]: {
+						{Name: "generic public surface", Files: []string{"cmd/generic.go"}},
+					},
+					publicSurfacePackages[1]: {
+						{Name: "generic state surface", Files: []string{"internal/state/generic.go"}},
+					},
+				},
+				Packages: map[string]float64{
+					publicSurfacePackages[0]: 100.0,
+					publicSurfacePackages[1]: 100.0,
+				},
+			},
+			wantErr: "missing required public-surface surface metadata",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			profilePath := writeFile(t, dir, "coverage.out", profileWithBlocks(
+				block{pkg: publicSurfacePackages[0], covered: 10, total: 10},
+				block{pkg: publicSurfacePackages[1], covered: 10, total: 10},
+			))
+			baselinePath := filepath.Join(dir, PublicSurfaceBaselineFile)
+			writeBaseline(t, baselinePath, tt.baseline)
+
+			err := runWithOptions(options{
+				check:    true,
+				target:   "public-surface",
+				profile:  profilePath,
+				baseline: baselinePath,
+			})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid coverage baseline")
+			assert.Contains(t, err.Error(), tt.wantErr)
+			for _, want := range tt.wantDiagnostics {
+				assert.Contains(t, err.Error(), want)
+			}
+		})
+	}
+}
+
 func TestRunWithOptionsWriteRoundTrip(t *testing.T) {
 	t.Parallel()
 

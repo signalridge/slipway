@@ -83,14 +83,15 @@ go test ./internal/toolgen -count=1
 - 工具契约变化时，更新生成的 skill 或文档。
 - 在当前受治理的 worktree 内用 `go run . validate --json` 验证。
 
-## 治理内核覆盖率门禁
+## 治理覆盖率门禁
 
-治理内核——`internal/engine/gate`、`internal/engine/governance` 和 `internal/engine/progression`（readiness 解析器位于 `progression/readiness.go`）——由一道“不可回退”的覆盖率门禁保护。任何内核包的语句覆盖率一旦跌破其已提交的下限，CI 就会失败。这道门禁是 fail-closed 的：它绝不会自动下调下限，也没有任何跳过、强制或软通过的路径。
+治理内核——`internal/engine/gate`、`internal/engine/governance` 和 `internal/engine/progression`（readiness 解析器位于 `progression/readiness.go`）——由一道“不可回退”的覆盖率门禁保护。高风险 public lifecycle surface 由第二道分层门禁保护，覆盖 `cmd` 与 `internal/state`，包括 `status`、`next`、`validate`、`done`、`evidence`、verification、worktree 和 runtime state 路径。任何受门禁约束的包的语句覆盖率一旦跌破已提交的下限，CI 就会失败。这些门禁是 fail-closed 的：它们绝不会自动下调下限，也没有任何跳过、强制或软通过路径。
 
-- **基线**：`coverage-baseline.json`（仓库根目录）记录每个受门禁约束的包的下限（百分比，保留一位小数）。它由 `covergate` 工具生成，绝不手改。
-- **CI 任务**：`Kernel Coverage Gate` 任务在 `-coverpkg` 限定到内核包的前提下跑完整套件，然后运行 `covergate -check`。覆盖率只在单一操作系统（ubuntu）上测量，以保证基线是确定的。
+- **基线**：`coverage-baseline.json` 记录内核下限；`coverage-public-surface-baseline.json` 记录 public-surface 下限，以及诊断使用的 package/file/surface 元数据。它们都由 `covergate` 工具生成，绝不手改。
+- **CI 任务**：`Kernel Coverage Gate` 任务用内核包和 public-surface 包的并集作为 `-coverpkg` 跑一次完整套件，然后分别运行 `covergate -target kernel -check` 和 `covergate -target public-surface -check`。覆盖率只在单一操作系统（ubuntu）上测量，以保证基线是确定的。
 - **并集语义**：在多包运行下，`-coverpkg` 会在每个测试二进制里发出同一个 block；`covergate` 会对它们取并集（一个 block 只计一次，只要任意一次运行覆盖到了就算覆盖），与 `go tool cover` 保持一致。
-- **模式选择**：`covergate` 必须显式指定 `-check` 或 `-write`；不带模式调用会被拒绝，这样门禁调用就不会意外软通过。`-check` 始终原样使用已提交的基线；像 `-exclude` 这类仅在 write 时使用的标志，在 check 模式下会被拒绝。
+- **模式选择**：`covergate` 必须显式指定 `-check` 或 `-write`；不带模式调用会被拒绝。`-target` 用来选择 `kernel` 或 `public-surface`。`-check` 始终原样使用已提交的基线；像 `-exclude` 这类仅在 write 时使用的标志，在 check 模式下会被拒绝。
+- **public-surface 诊断**：public-surface 失败会说明具体 package 以及相关 surface/file 元数据，让修复者知道缺的是哪一类目标测试，而不是只看到一个全局百分比。
 
 本地运行门禁：
 
@@ -101,11 +102,11 @@ just coverage-gate
 当 CI 报告覆盖率回退时，常规修法是补测试把覆盖率补回来。如果这次下降是有意为之且经过评审（比如删掉了死代码），就上调（ratchet）基线并提交这段差异，让改动在评审中可见：
 
 ```bash
-just coverage-baseline   # regenerates coverage-baseline.json from current coverage
+just coverage-baseline   # regenerates governed coverage baselines from current coverage
 ```
 
 向下调整基线永远不是自动的——它会出现在 PR 差异里，必须经过评审。提升覆盖率之后，用同一条命令把下限抬高。
 
-**排除列表**：只在 `-write` 时（即确定受门禁约束的集合时）给 `covergate` 传 `-exclude <prefix[,prefix...]>`。它保留给非内核、生成的或仅测试用的前缀，仅在 include 集合扩大时使用；它无法移除任何必须纳入的治理内核包下限。请把受门禁约束的集合限定在治理内核范围内。
+**排除列表**：只在 `-write` 时（即确定受门禁约束的集合时）给 `covergate` 传 `-exclude <prefix[,prefix...]>`。它保留给生成的或仅测试用的前缀；它无法移除任何必须纳入的内核或 public-surface 包下限。
 
-CI 任务在默认分支上变绿之后，维护者应把 `Kernel Coverage Gate` 加入分支保护的必需状态检查，这样一旦出现回退就会标红并阻止合并。
+CI 任务在默认分支上变绿之后，维护者应继续把 `Kernel Coverage Gate` 放在分支保护的必需状态检查里，这样内核或 public-surface 覆盖率回退都会标红并阻止合并。

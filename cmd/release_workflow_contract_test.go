@@ -131,6 +131,34 @@ func TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest(t *testing.T) {
 	assert.Equal(t, "${{ fromJSON(needs.release.outputs.binary_matrix) }}", workflowString(t, matrix, "include"))
 }
 
+func TestCIWorkflowEnforcesKernelAndPublicSurfaceCoverageGates(t *testing.T) {
+	workflow := readWorkflowYAML(t, ".github/workflows/ci.yml")
+	coverageJob := workflowMap(t, workflowMap(t, workflow, "jobs"), "coverage")
+	assert.Equal(t, "Kernel Coverage Gate", workflowString(t, coverageJob, "name"))
+
+	measureRun := firstStepRun(t, coverageJob, "Measure governed coverage")
+	for _, pkg := range []string{
+		"./internal/engine/gate",
+		"./internal/engine/governance",
+		"./internal/engine/progression",
+		"./cmd",
+		"./internal/state",
+	} {
+		assert.Contains(t, measureRun, pkg)
+	}
+	assert.Contains(t, measureRun, "-coverprofile=tmp/coverage-gated.out")
+
+	kernelRun := firstStepRun(t, coverageJob, "Enforce kernel coverage baseline (fails closed on regression)")
+	assert.Contains(t, kernelRun, "-target kernel")
+	assert.Contains(t, kernelRun, "-check")
+	assert.Contains(t, kernelRun, "-profile tmp/coverage-gated.out")
+
+	publicRun := firstStepRun(t, coverageJob, "Enforce public-surface coverage baseline (fails closed on regression)")
+	assert.Contains(t, publicRun, "-target public-surface")
+	assert.Contains(t, publicRun, "-check")
+	assert.Contains(t, publicRun, "-profile tmp/coverage-gated.out")
+}
+
 func readWorkflowYAML(t *testing.T, rel string) map[string]any {
 	t.Helper()
 	root := findRepoRootForWorkflowTest(t)
