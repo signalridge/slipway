@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -371,6 +372,56 @@ func TestBuildGovernedStatusViewPlanAuditKeepsNextAction(t *testing.T) {
 	view, err := buildStatusViewFromChange(root, change)
 	require.NoError(t, err)
 	assert.Contains(t, view.NextReadyActions, "next")
+}
+
+func TestStatusExplicitChangeUsesBoundedTimelineTail(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("status-bounded-tail")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	require.NoError(t, state.SaveChange(root, change))
+
+	logPath, err := state.LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(logPath), 0o755))
+	payload := []byte("{not-json}\n")
+	for i := 0; i < 450; i++ {
+		line, err := json.Marshal(state.LifecycleEvent{
+			Version:     1,
+			EventID:     fmt.Sprintf("tail-event-%03d", i),
+			ChangeSlug:  change.Slug,
+			OccurredAt:  time.Date(2026, 6, 27, 12, 0, i%60, 0, time.UTC),
+			Command:     "run",
+			EventType:   "skill.evidence_recorded",
+			Result:      "recorded",
+			BeforeState: model.StateS1Plan,
+			AfterState:  model.StateS1Plan,
+		})
+		require.NoError(t, err)
+		payload = append(payload, line...)
+		payload = append(payload, '\n')
+	}
+	require.NoError(t, os.WriteFile(logPath, payload, 0o644))
+
+	cmd := commandForRoot(t, root, makeStatusCmd())
+	cmd.SetArgs([]string{"--json", "--change", change.Slug})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	require.NoError(t, cmd.Execute())
+
+	var view statusView
+	require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+	require.Len(t, view.Timeline, 20)
+	assert.Equal(t, "tail-event-430", view.Timeline[0].EventID)
+	assert.Equal(t, "tail-event-449", view.Timeline[19].EventID)
+
+	_, err = state.ReadLifecycleEvents(root, change)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "line 1")
 }
 
 func TestStatusDirectExecutionView(t *testing.T) {

@@ -1,0 +1,60 @@
+version: 1
+slug: complete-state-read-fast-paths
+description: complete state read fast paths
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-27T13:41:25.278979Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/complete-state-read-fast-paths
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 97607c561cedc9d102ce61bc3b1cefb5513dab5204704fad3e28071c210ab28f
+        updated_at: 2026-06-27T14:06:18.31274765Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: e335a0d70477650f6530d205f8cd7472f59dfcbea430c4c3144ecbf6f8d94d99
+        updated_at: 2026-06-27T13:46:17.370945152Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 86987bd0493dc1154ac3a2be0807df5a47125cdfa88d52dde672dc7c29631a27
+        updated_at: 2026-06-27T13:42:46.41663667Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ba8e7c301d0602d0c62207df441c111a7744ecd1a5071f80ff147225ee6d8183
+        updated_at: 2026-06-27T13:46:17.370526695Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 8c579a66ac05f7d3dac4a0215b8812ea033f4f74537b68ccc9de8861be90b13a
+        updated_at: 2026-06-27T13:45:06.977406508Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 33c698ebfef061b7016c5289bb9b8da7147a04e47af06d0151721a1deebd3cd1
+        updated_at: 2026-06-27T14:05:34.926546641Z
+evidence_refs:
+    code-quality-review: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/code-quality-review.yaml
+    independent-review: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/independent-review.yaml
+    intake-clarification: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/intake-clarification.yaml
+    plan-audit: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/plan-audit.yaml
+    research-orchestration: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/research-orchestration.yaml
+    ship-verification: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/complete-state-read-fast-paths/artifacts/changes/complete-state-read-fast-paths/verification/wave-orchestration.yaml

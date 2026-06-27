@@ -279,13 +279,19 @@ func buildValidateViewForSlugWithReadContext(readCtx *stateReadContext, slug str
 
 	// Validate remains read-only, but includes artifact projection so JSON callers
 	// can distinguish stable artifacts from projected auto-amendments.
+	verificationRecords, err := readCtx.verificationRecords(change)
+	if err != nil {
+		return validateView{}, wrapGovernanceReadinessError("validate readiness", change.Slug, err)
+	}
 	readiness, err := progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
 		IncludeGateEvaluations:    true,
 		IncludeArtifactProjection: true,
+		VerificationRecords:       verificationRecords,
 	})
 	if err != nil && errors.Is(err, fs.ErrPermission) {
 		readiness, err = progression.EvaluateGovernanceReadiness(root, change, progression.GovernanceReadinessOptions{
 			IncludeGateEvaluations: true,
+			VerificationRecords:    verificationRecords,
 		})
 	}
 	if err != nil {
