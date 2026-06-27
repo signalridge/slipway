@@ -1,0 +1,61 @@
+version: 1
+slug: enforce-state-engine-boundary
+description: enforce state engine boundary
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-26T19:41:34.433049Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/enforce-state-engine-boundary
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 7c7f0480123b0e25ace6c4794e2d5b30ccd2ab5ec53e6f967689c597a16c90c4
+        updated_at: 2026-06-27T02:24:12.823634527Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: a4983fc2e8278c252ab9119394be4487de1556471efca82b595744156a3229eb
+        updated_at: 2026-06-27T01:32:29.160698929Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: ccc77669e86a479a2ab295613f49adb7f6bca45a4efff42d9b91bbc4444cfb46
+        updated_at: 2026-06-27T01:03:58.34458778Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 21ede9c75fa50d4da4da87f44c94f3b0ebc96f24e06d53c82372f7a0a18e42d8
+        updated_at: 2026-06-27T01:07:58.576431627Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 798316e4560823ccfb097d9bd17bac3a6f4cba89c9b990d01b525f388e9d65d0
+        updated_at: 2026-06-27T01:14:51.889023912Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 86b5924dd858d8b012d3fc424f065b4f9e90fbe19051aeff5613e5576f39e7fe
+        updated_at: 2026-06-27T01:45:46.87897739Z
+evidence_refs:
+    code-quality-review: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/code-quality-review.yaml
+    independent-review: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/independent-review.yaml
+    intake-clarification: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/intake-clarification.yaml
+    plan-audit: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/plan-audit.yaml
+    research-orchestration: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/research-orchestration.yaml
+    security-review: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/security-review.yaml
+    ship-verification: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/enforce-state-engine-boundary/artifacts/changes/enforce-state-engine-boundary/verification/wave-orchestration.yaml

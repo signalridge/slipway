@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/wave"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1733,11 +1733,11 @@ func TestTaskChangedFileScopeEscapeBlockers_DirectoryTargetCovers(t *testing.T) 
 	t.Parallel()
 	// A directory target covers a changed file nested beneath it (REQ-002 glob/dir
 	// coverage), so no scope-escape blocker is produced.
-	plan := scopeEscapePlan("t-01", "internal/engine/")
+	plan := scopeEscapePlan("t-01", "internal/")
 	tasks := []model.ExecutionTaskSummary{
 		{
 			TaskID:       "t-01",
-			ChangedFiles: []string{"internal/engine/wave/wave.go"},
+			ChangedFiles: []string{"internal/wave/wave.go"},
 		},
 	}
 	assert.Empty(t, TaskChangedFileScopeEscapeBlockers(plan, tasks))

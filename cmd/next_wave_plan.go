@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 // buildWavePlan returns a live projection from the current tasks.md in S2.

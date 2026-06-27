@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 // TasksContractStatus mirrors RequirementsContractStatus for tasks.md.

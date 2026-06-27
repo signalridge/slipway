@@ -13,8 +13,9 @@ import (
 	"strings"
 	"time"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
+	enginecontext "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/skill"
+	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -27,7 +28,7 @@ type changeRef struct {
 	Slug string
 }
 
-const governedExecutionMode = string(ctxpack.ExecutionModeGoverned)
+const governedExecutionMode = string(enginecontext.ExecutionModeGoverned)
 
 type invocationRouteView struct {
 	Kind                               string `json:"kind"`
@@ -1115,10 +1116,10 @@ func projectFreshnessForExecMode(
 	blockers []model.ReasonCode,
 ) string {
 	if !state.ExecutionSummaryReady(summary) || strings.TrimSpace(change.Slug) == "" {
-		return string(ctxpack.EvidenceFreshnessUnknown)
+		return string(freshnesspkg.EvidenceFreshnessUnknown)
 	}
 	if hasFreshnessBlocker(blockers) {
-		return string(ctxpack.EvidenceFreshnessStale)
+		return string(freshnesspkg.EvidenceFreshnessStale)
 	}
 	diagnostics := state.ExecutionSummaryFreshnessDiagnostics(root, change, summary)
 	return string(state.ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))

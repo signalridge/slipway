@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/control"
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 // GovernanceHealthCheck represents one governance health diagnostic.

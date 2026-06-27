@@ -20,10 +20,10 @@ import (
 const wavelessDependencyTasksFixture = `# Tasks
 
 - [ ] ` + "`t-01`" + ` cover parser retirement of declared waves
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: test
 - [ ] ` + "`t-02`" + ` cover dependency-derived wave computation
-  - target_files: ["internal/engine/wave/wave.go"]
+  - target_files: ["internal/wave/wave.go"]
   - task_kind: test
 - [ ] ` + "`t-03`" + ` align the wave-plan view with computed waves
   - target_files: ["cmd/next_wave_plan.go"]

@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/governance"
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 // TaskEvidencePayload is the parsed payload from a task evidence JSON file.

@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/stringutil"
+	"github.com/signalridge/slipway/internal/wave"
 )
 
 type Status string

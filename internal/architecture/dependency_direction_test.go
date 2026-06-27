@@ -24,6 +24,11 @@ func TestAuthorityPackagesDoNotImportSurfaceRenderers(t *testing.T) {
 		"github.com/signalridge/slipway/internal/tmpl",
 		"github.com/signalridge/slipway/internal/toolgen",
 	}
+	packageForbiddenImports := map[string][]string{
+		"internal/state": {
+			"github.com/signalridge/slipway/internal/engine",
+		},
+	}
 
 	for _, relDir := range authorityPackages {
 		relDir := relDir
@@ -48,12 +53,14 @@ func TestAuthorityPackagesDoNotImportSurfaceRenderers(t *testing.T) {
 				if err != nil {
 					return err
 				}
+				effectiveForbiddenImports := append([]string(nil), forbiddenImports...)
+				effectiveForbiddenImports = append(effectiveForbiddenImports, packageForbiddenImports[relDir]...)
 				for _, imported := range file.Imports {
 					importPath, err := strconv.Unquote(imported.Path.Value)
 					if err != nil {
 						return err
 					}
-					for _, forbidden := range forbiddenImports {
+					for _, forbidden := range effectiveForbiddenImports {
 						if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
 							t.Errorf("%s imports forbidden surface package %q", displayPath(root, path), importPath)
 						}

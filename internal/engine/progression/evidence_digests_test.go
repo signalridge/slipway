@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
+	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -1243,10 +1243,10 @@ func TestExecutionSummaryFreshnessUsesTaskPlanHashNotTaskMTime(t *testing.T) {
 
 	afterEvidence := capturedAt.Add(time.Hour)
 	require.NoError(t, os.Chtimes(tasksPath, afterEvidence, afterEvidence))
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessFresh), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 
 	require.NoError(t, os.WriteFile(tasksPath, []byte(realChangedDigestTasks()), 0o644))
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessStale), state.ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 }
 
 func TestWaveOrchestrationInputDigestUsesRuntimeTaskEvidenceNotExecutionSummary(t *testing.T) {
