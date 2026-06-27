@@ -119,9 +119,140 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		expectedArchive := filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug)
 		assert.Equal(t, state.DisplayPath(root, expectedArchive), view.ArchivePath)
 		assert.True(t, view.ArchiveCommitRequired)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "local_active", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
+		assert.True(t, view.InvocationRoute.LocalLifecycleExecutionAllowed)
+		assert.True(t, view.InvocationRoute.EffectiveLifecycleExecutionAllowed)
+		assert.Equal(t, state.DisplayPath(root, normalizedWT), view.InvocationRoute.BoundWorkspacePath)
 		require.FileExists(t, filepath.Join(expectedArchive, "change.yaml"))
 		require.NoFileExists(t, filepath.Join(root, "artifacts", "changes", "archived", slug, "change.yaml"))
 	})
+}
+
+func TestDoneJSONReportsExplicitBoundInvocationRoute(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-explicit-bound-route"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		writeShipReadyGovernedBundle(t, normalizedWT, change)
+		writeAssuranceMD(t, normalizedWT, slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+		writePassingShipVerificationEvidence(t, root, slug, 1)
+		gitCommitAll(t, normalizedWT, "ship-ready bundle")
+		refreshPassingSkillDigestsForTest(t, normalizedWT, slug)
+
+		var out bytes.Buffer
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
+		doneCmd.SetArgs([]string{"--json", "--change", slug})
+		doneCmd.SetOut(&out)
+		require.NoError(t, doneCmd.Execute())
+
+		var view doneView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "explicit_bound_change", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
+		assert.False(t, view.InvocationRoute.LocalLifecycleExecutionAllowed)
+		assert.True(t, view.InvocationRoute.EffectiveLifecycleExecutionAllowed)
+		assert.Equal(t, "slipway next --change "+slug, view.InvocationRoute.NextCommand)
+		assert.Contains(t, view.InvocationRoute.Remediation, "--change "+slug)
+	})
+}
+
+func TestDoneFromRootReportsBoundElsewhereWithoutArchiving(t *testing.T) {
+	root := t.TempDir()
+	initGitRepoForWorktreeTests(t, root)
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := "done-bound-elsewhere"
+		branch := "feat/" + slug
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		runGit(t, root, "worktree", "add", worktreeRoot, "-b", branch)
+		normalizedWT, err := state.NormalizePath(worktreeRoot)
+		require.NoError(t, err)
+
+		change := model.NewChange(slug)
+		change.WorktreePath = normalizedWT
+		change.WorktreeBranch = branch
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		var out bytes.Buffer
+		doneCmd := commandForRoot(t, root, makeDoneCmd())
+		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetOut(&out)
+		cliErr := asCLIError(doneCmd.Execute())
+		require.NotNil(t, cliErr)
+
+		assert.Equal(t, "change_bound_to_other_worktree", cliErr.ErrorCode)
+		assert.Equal(t, categoryPrecondition, cliErr.Category)
+		assert.Contains(t, cliErr.Remediation, "--change "+slug)
+		assert.Contains(t, cliErr.Remediation, normalizedWT)
+		assert.Contains(t, fmt.Sprint(cliErr.Details["bound_changes"]), slug)
+		assert.Contains(t, fmt.Sprint(cliErr.Details["bound_changes"]), normalizedWT)
+		assert.NotContains(t, out.String(), `"archive_path"`, "done must fail before rendering a success payload")
+		assert.NotContains(t, out.String(), `"invocation_route"`, "done must fail before rendering a success payload")
+		require.NoFileExists(t, filepath.Join(normalizedWT, "artifacts", "changes", "archived", slug, "change.yaml"))
+		require.FileExists(t, filepath.Join(normalizedWT, "artifacts", "changes", slug, "change.yaml"))
+	})
+}
+
+func TestDoneFailsClosedWithoutActiveChange(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	doneCmd := commandForRoot(t, root, makeDoneCmd())
+	doneCmd.SetArgs([]string{"--json"})
+	cliErr := asCLIError(doneCmd.Execute())
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "no_active_change", cliErr.ErrorCode)
+}
+
+func TestDoneChangeFlagRejectsArchivedTarget(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "done archived target")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	require.NoError(t, state.SaveChange(root, change))
+	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	doneCmd := commandForRoot(t, root, makeDoneCmd())
+	doneCmd.SetArgs([]string{"--json", "--change", slug})
+	cliErr := asCLIError(doneCmd.Execute())
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, slug, cliErr.Slug)
 }
 
 func TestDoneJSONWarnsButArchivesWhenWorktreeChangesAreUncommitted(t *testing.T) {
