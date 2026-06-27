@@ -161,10 +161,10 @@ func TestPlanWavesBumpsConflictingTargetsForEachConflictKind(t *testing.T) {
 	}{
 		{name: "exact path", left: "internal/db/schema.go", right: "internal/db/schema.go"},
 		{name: "dot slash alias", left: "a.go", right: "./a.go"},
-		{name: "backslash alias", left: `internal\engine\wave.go`, right: "internal/engine/wave.go"},
+		{name: "backslash alias", left: `internal\wave.go`, right: "internal/wave.go"},
 		{name: "case only alias", left: "Foo.go", right: "foo.go"},
-		{name: "parent directory contains child file", left: "internal/engine/progression", right: "internal/engine/progression/advance.go"},
-		{name: "glob overlaps concrete file", left: "internal/engine/wave/*.go", right: "internal/engine/wave/parse.go"},
+		{name: "parent directory contains child file", left: "internal/progression", right: "internal/progression/advance.go"},
+		{name: "glob overlaps concrete file", left: "internal/wave/*.go", right: "internal/wave/parse.go"},
 		{name: "double star overlaps nested file", left: "docs/**", right: "docs/guides/workflow.md"},
 		{name: "concrete file overlaps glob", left: "cmd/next.go", right: "cmd/*.go"},
 	}
@@ -308,12 +308,12 @@ Intro prose that is not task metadata.
 
 - [ ] ` + "`t-01`" + ` Build the parser
   - depends_on: []
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Cover the parser
   - depends_on: ["t-01"]
-  - target_files: ["internal/engine/wave/parse_test.go"]
+  - target_files: ["internal/wave/parse_test.go"]
   - task_kind: test
 `
 
@@ -326,12 +326,12 @@ Intro prose that is not task metadata.
 
 - [ ] ` + "`t-01`" + ` Build the parser
   - depends_on: []
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: code
 
 - [ ] ` + "`t-02`" + ` Cover the parser
   - depends_on: ["t-01"]
-  - target_files: ["internal/engine/wave/parse_test.go"]
+  - target_files: ["internal/wave/parse_test.go"]
   - task_kind: test
 `
 
@@ -424,15 +424,15 @@ func TestTargetCoversPath(t *testing.T) {
 	}{
 		{name: "exact match", targets: []string{"internal/a.go"}, file: "internal/a.go", want: true},
 		{name: "case insensitive match", targets: []string{"internal/Foo.go"}, file: "internal/foo.go", want: true},
-		{name: "normalization alias match", targets: []string{`internal\engine\wave.go`}, file: "internal/engine/wave.go", want: true},
-		{name: "parent directory covers child file", targets: []string{"internal/engine/"}, file: "internal/engine/wave/wave.go", want: true},
-		{name: "glob covers concrete match", targets: []string{"internal/engine/wave/*.go"}, file: "internal/engine/wave/parse.go", want: true},
+		{name: "normalization alias match", targets: []string{`internal\wave.go`}, file: "internal/wave.go", want: true},
+		{name: "parent directory covers child file", targets: []string{"internal/"}, file: "internal/wave/wave.go", want: true},
+		{name: "glob covers concrete match", targets: []string{"internal/wave/*.go"}, file: "internal/wave/parse.go", want: true},
 		{name: "double star covers nested file", targets: []string{"docs/**"}, file: "docs/guides/workflow.md", want: true},
 		{name: "malformed glob covers nothing", targets: []string{"internal/["}, file: "cmd/run.go", want: false},
 		{name: "covered by one of several targets", targets: []string{"internal/a.go", "internal/b.go"}, file: "internal/b.go", want: true},
 		{name: "file outside all targets", targets: []string{"internal/a.go"}, file: "internal/b.go", want: false},
-		{name: "sibling file not covered by concrete target", targets: []string{"internal/engine/wave/wave.go"}, file: "internal/engine/wave/parse.go", want: false},
-		{name: "child directory does not cover parent file", targets: []string{"internal/engine/wave/"}, file: "internal/engine/progression.go", want: false},
+		{name: "sibling file not covered by concrete target", targets: []string{"internal/wave/wave.go"}, file: "internal/wave/parse.go", want: false},
+		{name: "child directory does not cover parent file", targets: []string{"internal/wave/"}, file: "internal/progression.go", want: false},
 		{name: "empty targets", targets: nil, file: "internal/a.go", want: false},
 		{name: "empty file", targets: []string{"internal/a.go"}, file: "", want: false},
 	}
@@ -475,7 +475,7 @@ func TestAnalyzeWaveNarrowingCauses(t *testing.T) {
 		{
 			name: "broad directory target and linear chain report both advisories",
 			nodes: []Node{
-				{TaskID: "t-01", TargetFiles: []string{"internal/engine/"}},
+				{TaskID: "t-01", TargetFiles: []string{"internal/"}},
 				{TaskID: "t-02", DependsOn: []string{"t-01"}, TargetFiles: []string{"cmd/next.go"}},
 				{TaskID: "t-03", DependsOn: []string{"t-02"}, TargetFiles: []string{"cmd/run.go"}},
 			},
@@ -484,7 +484,7 @@ func TestAnalyzeWaveNarrowingCauses(t *testing.T) {
 		{
 			name: "broad glob target is reported",
 			nodes: []Node{
-				{TaskID: "t-01", TargetFiles: []string{"internal/engine/wave/*.go"}},
+				{TaskID: "t-01", TargetFiles: []string{"internal/wave/*.go"}},
 				{TaskID: "t-02", TargetFiles: []string{"cmd/next.go"}},
 			},
 			want: []string{"broad_target_files:t-01"},

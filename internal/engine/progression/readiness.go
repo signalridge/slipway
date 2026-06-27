@@ -12,11 +12,11 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/engine/sensitiveevidence"
+	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -45,7 +45,7 @@ type ArtifactProjection struct {
 
 type GovernanceReadiness struct {
 	ExecutionSummary     *model.ExecutionSummary
-	EvidenceFreshness    ctxpack.EvidenceFreshness
+	EvidenceFreshness    freshnesspkg.EvidenceFreshness
 	FreshnessDiagnostics state.ExecutionFreshnessDiagnostics
 	SummaryIssues        []model.ReasonCode
 	SignalSummary        *model.SignalSummary
@@ -156,7 +156,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	readers governanceReadinessReaders,
 ) (GovernanceReadiness, error) {
 	readiness := GovernanceReadiness{
-		EvidenceFreshness: ctxpack.EvidenceFreshnessUnknown,
+		EvidenceFreshness: freshnesspkg.EvidenceFreshnessUnknown,
 	}
 	effectiveState := change.CurrentState
 	if opts.WorkflowStateOverride != nil && *opts.WorkflowStateOverride != "" {
@@ -269,7 +269,7 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.Diagnostics = append(readiness.Diagnostics, planResult.Diagnostics...)
 	}
 	if state.ExecutionSummaryRelevantState(effectiveState) &&
-		readiness.EvidenceFreshness == ctxpack.EvidenceFreshnessStale {
+		readiness.EvidenceFreshness == freshnesspkg.EvidenceFreshnessStale {
 		readiness.Blockers = append(readiness.Blockers, model.NewReasonCode(state.StaleExecutionEvidenceBlockerToken, ""))
 	}
 	if state.ExecutionSummaryReady(execCtx.Summary) {

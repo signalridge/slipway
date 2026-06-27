@@ -70,15 +70,15 @@ func TestGenericEvidenceFreshnessDoesNotUseTimestampOrdering(t *testing.T) {
 		t.Fatalf("execution-summary freshness must not keep artifact-clock baseline helpers")
 	}
 
-	// The generic evidence-freshness evaluator (EvaluateEvidenceFreshness and its
-	// EvidenceFreshnessInput) is structural-only: it compares expected vs current
-	// structural inputs and must never reintroduce the removed timestamp fields
-	// (EvidenceTimestamp / LatestRelevantUpdateAt) or timestamp ordering. Importing
-	// "time" is the precondition for any of those, so forbid it outright at this
-	// boundary.
-	contextFile := parseFreshnessGuardFile(t, repoRoot, "internal/engine/context/context.go")
-	if fileImportsPackage(contextFile, "time") {
-		t.Fatalf("internal/engine/context/context.go must not import \"time\": " +
+	// The generic evidence-freshness evaluator (EvaluateEvidenceFreshness and
+	// its EvidenceFreshnessInput) is structural-only: it compares expected vs
+	// current structural inputs and must never reintroduce the removed timestamp
+	// fields (EvidenceTimestamp / LatestRelevantUpdateAt) or timestamp ordering.
+	// Importing "time" is the precondition for any of those, so forbid it
+	// outright at this boundary.
+	freshnessFile := parseFreshnessGuardFile(t, repoRoot, "internal/freshness/freshness.go")
+	if fileImportsPackage(freshnessFile, "time") {
+		t.Fatalf("internal/freshness/freshness.go must not import \"time\": " +
 			"generic evidence freshness must stay structural and must not reintroduce timestamp fields or ordering")
 	}
 }
@@ -113,7 +113,7 @@ func freshnessGuardProductionFiles(t *testing.T, repoRoot string) []string {
 	t.Helper()
 
 	files := []string{
-		"internal/engine/context/context.go",
+		"internal/freshness/freshness.go",
 		"internal/state/execution_repair.go",
 		"internal/state/execution_summary.go",
 		"internal/state/wave_execution.go",

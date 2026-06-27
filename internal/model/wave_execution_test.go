@@ -100,9 +100,9 @@ func TestNormalizePublicPath(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{name: "slash path", raw: "internal/engine/wave.go", want: "internal/engine/wave.go"},
-		{name: "windows separators", raw: `internal\engine\wave.go`, want: "internal/engine/wave.go"},
-		{name: "dot segments", raw: `./internal/engine/../model/wave_execution.go`, want: "internal/model/wave_execution.go"},
+		{name: "slash path", raw: "internal/wave.go", want: "internal/wave.go"},
+		{name: "windows separators", raw: `internal\wave.go`, want: "internal/wave.go"},
+		{name: "dot segments", raw: `./internal/wave/../model/wave_execution.go`, want: "internal/model/wave_execution.go"},
 		{name: "blank", raw: "  ", want: ""},
 	}
 

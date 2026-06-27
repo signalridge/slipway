@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/engine/wave"
 	"github.com/signalridge/slipway/internal/model"
+	"github.com/signalridge/slipway/internal/wave"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

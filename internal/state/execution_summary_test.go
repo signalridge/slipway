@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	ctxpack "github.com/signalridge/slipway/internal/engine/context"
+	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -289,7 +289,7 @@ func TestExecutionSummaryFreshnessIgnoresSummaryCapturedAtForPerTaskFreshness(t 
 		},
 	}
 
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessFresh), ExecutionSummaryFreshnessDiagnostics(root, change, summary).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, summary)
 	assert.Equal(t, "fresh", diagnostics.Status)
 	assert.Empty(t, diagnostics.StalePairs)
@@ -317,9 +317,9 @@ func TestExecutionSummaryFreshnessTreatsReadySummaryWithoutTasksAsUnknown(t *tes
 	require.NoError(t, err)
 	require.True(t, ExecutionSummaryReady(&loaded))
 
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessUnknown), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessUnknown), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessUnknown), diagnostics.Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessUnknown), diagnostics.Status)
 	assert.Empty(t, diagnostics.TaskInputDiffs)
 	assert.Empty(t, diagnostics.StalePairs)
 }
@@ -444,7 +444,7 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	loaded, err := LoadExecutionSummary(root, change.Slug)
 	require.NoError(t, err)
 
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)
@@ -452,9 +452,9 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanHashMismatchAsStale(t *testing.
 	assert.Contains(t, diagnostics.FirstStaleCause.SourceArtifact, "tasks.md")
 	assert.Empty(t, diagnostics.FirstStaleCause.SourceUpdatedAt)
 	assert.Equal(t, capturedAt.Format(time.RFC3339Nano), diagnostics.FirstStaleCause.EvidenceCapturedAt)
-	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
+	assert.Equal(t, freshnesspkg.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
 	projected := ProjectExecutionFreshnessDiagnosticsForState(change.CurrentState, diagnostics)
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), projected.Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessFresh), projected.Status)
 	assert.Empty(t, projected.StalePairs)
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)
@@ -517,7 +517,7 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanScopeHashMismatchAsS3TaskPlanDr
 
 	loaded, err := LoadExecutionSummary(root, change.Slug)
 	require.NoError(t, err)
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessStale), ExecutionSummaryFreshnessDiagnostics(root, change, &loaded).Status)
 	diagnostics := ExecutionSummaryFreshnessDiagnostics(root, change, &loaded)
 	assert.Equal(t, "stale", diagnostics.Status)
 	require.NotNil(t, diagnostics.FirstStaleCause)
@@ -526,10 +526,10 @@ func TestExecutionSummaryFreshnessTreatsTasksPlanScopeHashMismatchAsS3TaskPlanDr
 	assert.Contains(t, diagnostics.FirstStaleCause.EvidenceArtifact, WavePlanFileName)
 	assert.Empty(t, diagnostics.FirstStaleCause.SourceUpdatedAt)
 	assert.True(t, ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics))
-	assert.Equal(t, ctxpack.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
+	assert.Equal(t, freshnesspkg.EvidenceFreshnessFresh, ProjectExecutionFreshnessForState(change.CurrentState, diagnostics))
 
 	projected := ProjectExecutionFreshnessDiagnosticsForState(change.CurrentState, diagnostics)
-	assert.Equal(t, string(ctxpack.EvidenceFreshnessFresh), projected.Status)
+	assert.Equal(t, string(freshnesspkg.EvidenceFreshnessFresh), projected.Status)
 	assert.Empty(t, projected.StalePairs)
 
 	ctx, err := LoadRelevantExecutionSummaryContext(root, change)

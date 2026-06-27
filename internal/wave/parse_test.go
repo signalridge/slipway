@@ -110,7 +110,7 @@ func TestParseTaskPlan_AcceptsEvidenceAndAcceptanceMetadata(t *testing.T) {
 	md := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: code
   - evidence: verdict
   - acceptance: parser accepts evidence and acceptance metadata
@@ -127,7 +127,7 @@ func TestTaskPlanSemanticHashIncludesEvidenceAndAcceptance(t *testing.T) {
 	base := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: code
   - evidence: verdict
   - acceptance: first acceptance
@@ -135,7 +135,7 @@ func TestTaskPlanSemanticHashIncludesEvidenceAndAcceptance(t *testing.T) {
 	changed := `# Tasks
 
 - [ ] ` + "`t-01`" + ` Parser-compatible audit task
-  - target_files: ["internal/engine/wave/parse.go"]
+  - target_files: ["internal/wave/parse.go"]
   - task_kind: code
   - evidence: artifact
   - acceptance: second acceptance
