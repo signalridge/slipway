@@ -213,6 +213,41 @@ func TestEvaluateGovernanceReadinessFailsClosedOnMalformedVerificationWithoutReq
 	assert.Equal(t, brokenPath, loadErr.Path)
 }
 
+func TestEvaluateGovernanceReadinessUsesPreloadedVerificationRecords(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("readiness-preloaded-verification-records")
+	change.CurrentState = model.StateDone
+	change.Status = model.ChangeStatusDone
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	verificationDir := state.VerificationDir(root, change.Slug)
+	require.NoError(t, os.MkdirAll(verificationDir, 0o755))
+	brokenPath := filepath.Join(verificationDir, "broken.yaml")
+	require.NoError(t, os.WriteFile(brokenPath, []byte("not valid yaml: [[["), 0o644))
+
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{
+		VerificationRecords: map[string]model.VerificationRecord{},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, readiness.PassingSkills)
+
+	_, err = EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.Error(t, err)
+	var loadErr *state.VerificationLoadError
+	require.ErrorAs(t, err, &loadErr)
+	normalizedBrokenPath, normalizeErr := state.NormalizePath(brokenPath)
+	if normalizeErr == nil {
+		brokenPath = normalizedBrokenPath
+	}
+	assert.Equal(t, brokenPath, loadErr.Path)
+}
+
 func TestEvaluateGovernanceReadinessDoesNotRetainStaleControlsFromPersistedSnapshot(t *testing.T) {
 	t.Parallel()
 

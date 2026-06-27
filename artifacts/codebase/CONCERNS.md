@@ -1,33 +1,25 @@
 # Concerns
 
-- Live protection drift: GitHub rulesets and environments can change outside
-  git. This change records request bodies in verification artifacts and must
-  re-query live settings before final closeout.
-- Required check drift: branch rulesets use exact check context names. A future
-  workflow rename can block merges until ruleset `18174607` is updated.
-- Path-filtered check risk: ruleset required checks should avoid jobs that do
-  not always run. This change intentionally requires CI/security/title checks,
-  not docs or Nix path-filtered jobs.
-- Tag lockout risk: a tag ruleset with no bypass can prevent legitimate release
-  tags on a user-owned repo. Ruleset `18174614` keeps an explicit owner-user
-  bypass while restricting arbitrary `v*` tag mutation.
-- Secret exposure risk: release workflow inputs are untrusted. The only
-  acceptable flow is no-secret validation before any job can read `GH_PAT`,
-  `AUR_SSH_PRIVATE_KEY`, package/write/attestation permissions, or the
-  protected release environment.
-- Floating dependency risk: action tags and `@latest` tool installs are mutable
-  supply-chain inputs. Full SHA pins and fixed Go module versions are required
-  in workflows touched by this change.
-- Override token leakage risk: `SLIPWAY_GITHUB_API_URL` can point at a
-  non-public GitHub host. Ambient `GH_TOKEN` and `GITHUB_TOKEN` must not be sent
-  to override hosts; override hosts need exact allowlist plus
-  `SLIPWAY_GITHUB_API_TOKEN`.
-- Git ref confusion risk: `BaseRef` is not shell-interpolated, but option-like
-  values can still be parsed by Git as options. Validate before
-  `git worktree add`.
-- Release smoke drift: hard-coded artifact names rot as GoReleaser config
-  changes. Smoke jobs should consume asset names generated from actual `dist/`
-  outputs.
-- Local evidence gap: this workstation lacks a usable Docker daemon for full
-  container snapshot validation, and local syft runs through aqua. CI must cover
-  Docker/SBOM with explicit setup steps.
+- Authority drift risk: an invocation-scoped read context must not outlive one
+  command. It may reuse facts already read inside the command, but it must never
+  become a persistent cache or durable index.
+- Fail-closed risk: explicit `--change` fast paths must still preserve
+  `change_not_found`, archived-change, sibling-bundle, missing-authority,
+  bound-elsewhere, multi-active, and no-active semantics. Existing tests in
+  `cmd/common_test.go`, `cmd/resolve_explicit_change_authority_test.go`, and
+  `cmd/status_context_repair_test.go` are load-bearing.
+- Hidden sibling risk: `internal/state` intentionally distinguishes visible
+  workspace roots from hidden authority checks (`internal/state/store.go:170`,
+  `internal/state/verification.go:131`). Fast paths must not skip hidden
+  sibling checks where they are the reason a write/read fails closed.
+- Verification drift risk: `status` currently calls the slug-based
+  `ListVerifications` while readiness and next-skill views can use
+  `ListVerificationsForChange`. Reusing resolved verification inventory should
+  avoid duplicate reads but must keep strict YAML validation errors visible.
+- Timeline risk: status displays only the last 20 events, but the existing
+  reader validates the whole JSONL file. A tail reader improves performance but
+  cannot silently skip malformed lines inside the retained tail. Full-log
+  validation remains appropriate for health/repair surfaces.
+- Performance fixture risk: generated 25+ worktree fixtures are intentionally
+  bulky and must stay under `/tmp` or another ignored scratch area. Only the
+  benchmark recipe and timing artifact belong in git.

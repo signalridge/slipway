@@ -47,16 +47,17 @@ func missingCodebaseMapDocStates(docs map[string]string) map[string]string {
 	return states
 }
 
-// buildNextContextByMode populates change-specific fields on the view
+// buildNextContextByModeWithReadContext populates change-specific fields on the view
 // (state, lifecycle, artifacts, and execution resume context).
 // Returns the loaded Change plus its execution context so downstream next-path
 // consumers can reuse the same execution-summary read.
-func buildNextContextByMode(
-	root string,
+func buildNextContextByModeWithReadContext(
+	readCtx *stateReadContext,
 	view *nextView,
 	ref changeRef,
 ) (*model.Change, *executionContext, error) {
-	change, err := state.LoadChange(root, ref.Slug)
+	root := readCtx.root
+	change, err := readCtx.loadChange(ref.Slug)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,7 +74,7 @@ func buildNextContextByMode(
 	view.WorkflowProfile = profile.WorkflowProfile
 	view.NeedsDiscovery = profile.NeedsDiscovery
 	view.InputContext.Slug = change.Slug
-	if paths, err := state.ResolveChangePaths(root, change); err == nil {
+	if paths, err := readCtx.resolvedPaths(change); err == nil {
 		view.InputContext.WorkspaceRoot = paths.WorkspaceRoot
 		view.InputContext.ArtifactBundle = state.DisplayPath(root, paths.GovernedBundleDir)
 		view.InputContext.CodebaseMapDir = state.DisplayPath(paths.WorkspaceRoot, paths.CodebaseMapDir)
@@ -93,7 +94,7 @@ func buildNextContextByMode(
 	}
 	view.InputContext.SelectedPriorContext, view.InputContext.UnresolvedDependencies = buildSelectedPriorContext(root, change.ContextDependencies)
 
-	execCtx, err := loadExecutionContext(root, change)
+	execCtx, err := readCtx.loadExecution(change)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -170,6 +174,113 @@ func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 	assert.Equal(t, "event-transition-3", view.Timeline[5].EventID)
 }
 
+func TestStatusTimelineMarksDuplicateTransitionReplayOutsideRawTail(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	const displayLimit = 3
+	change := model.NewChange("timeline-duplicate-transition-tail-context")
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+
+	firstTransition := state.LifecycleEvent{
+		EventID:     "event-transition-context",
+		OccurredAt:  time.Date(2026, 6, 15, 16, 24, 40, 0, time.UTC),
+		Command:     "run",
+		EventType:   "state.transitioned",
+		Action:      "advanced",
+		Reason:      "state_progression",
+		Result:      "advanced",
+		BeforeState: model.StateS2Implement,
+		AfterState:  model.StateS3Review,
+	}
+	_, err := state.AppendLifecycleEvent(root, change, firstTransition)
+	require.NoError(t, err)
+	for i := 0; i < displayLimit*4+1; i++ {
+		_, err = state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
+			EventID:     fmt.Sprintf("event-tail-gap-%02d", i),
+			OccurredAt:  time.Date(2026, 6, 15, 16, 25+i, 0, 0, time.UTC),
+			Command:     "run",
+			EventType:   "state.blocked",
+			Action:      "blocked",
+			Reason:      "waiting_for_evidence",
+			Result:      "blocked",
+			BeforeState: model.StateS3Review,
+			AfterState:  model.StateS3Review,
+		})
+		require.NoError(t, err)
+	}
+	duplicateTransition := firstTransition
+	duplicateTransition.EventID = "event-transition-duplicate"
+	duplicateTransition.OccurredAt = time.Date(2026, 6, 15, 17, 0, 0, 0, time.UTC)
+	_, err = state.AppendLifecycleEvent(root, change, duplicateTransition)
+	require.NoError(t, err)
+
+	timeline, err := buildStatusTimelineWithReadContext(newStateReadContext(root), change, displayLimit)
+	require.NoError(t, err)
+	require.Len(t, timeline, displayLimit)
+	last := timeline[len(timeline)-1]
+	assert.Equal(t, "event-transition-duplicate", last.EventID)
+	assert.Equal(t, "state.transition.replayed", last.EventType)
+	assert.Equal(t, "replayed", last.Result)
+}
+
+func TestStatusTimelineIgnoresMalformedPrefixOutsidePredecessorContextBudget(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	const displayLimit = 3
+	readLimit := displayLimit * 4
+	change := model.NewChange("timeline-malformed-prefix-outside-context")
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+
+	firstTransition := state.LifecycleEvent{
+		EventID:     "event-transition-too-old",
+		OccurredAt:  time.Date(2026, 6, 15, 16, 24, 40, 0, time.UTC),
+		Command:     "run",
+		EventType:   "state.transitioned",
+		Action:      "advanced",
+		Reason:      "state_progression",
+		Result:      "advanced",
+		BeforeState: model.StateS2Implement,
+		AfterState:  model.StateS3Review,
+	}
+	path, err := state.LifecycleEventLogPath(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	payload := "{not-json}\n" + statusTimelineLifecycleEventLine(t, firstTransition)
+	for i := 0; i < readLimit*4+readLimit+1; i++ {
+		payload += statusTimelineLifecycleEventLine(t, state.LifecycleEvent{
+			EventID:     fmt.Sprintf("event-tail-gap-%02d", i),
+			OccurredAt:  time.Date(2026, 6, 15, 16, 25+i, 0, 0, time.UTC),
+			Command:     "run",
+			EventType:   "state.blocked",
+			Action:      "blocked",
+			Reason:      "waiting_for_evidence",
+			Result:      "blocked",
+			BeforeState: model.StateS3Review,
+			AfterState:  model.StateS3Review,
+		})
+	}
+	duplicateTransition := firstTransition
+	duplicateTransition.EventID = "event-transition-duplicate"
+	duplicateTransition.OccurredAt = time.Date(2026, 6, 15, 17, 0, 0, 0, time.UTC)
+	payload += statusTimelineLifecycleEventLine(t, duplicateTransition)
+	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
+
+	timeline, err := buildStatusTimelineWithReadContext(newStateReadContext(root), change, displayLimit)
+	require.NoError(t, err)
+	require.Len(t, timeline, displayLimit)
+	last := timeline[len(timeline)-1]
+	assert.Equal(t, "event-transition-duplicate", last.EventID)
+	assert.Equal(t, "state.transitioned", last.EventType)
+}
+
 func TestStatusTimelineKeepsSubstepTransitionDistinct(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -201,4 +312,15 @@ func TestStatusTimelineKeepsSubstepTransitionDistinct(t *testing.T) {
 	assert.Equal(t, "state.substep_transitioned", view.Timeline[0].EventType)
 	assert.Equal(t, model.StateS0Intake, view.Timeline[0].FromState)
 	assert.Equal(t, model.StateS0Intake, view.Timeline[0].ToState)
+}
+
+func statusTimelineLifecycleEventLine(t *testing.T, event state.LifecycleEvent) string {
+	t.Helper()
+	event.Version = 1
+	if event.ChangeSlug == "" {
+		event.ChangeSlug = "timeline-malformed-prefix-outside-context"
+	}
+	raw, err := json.Marshal(event)
+	require.NoError(t, err)
+	return string(raw) + "\n"
 }

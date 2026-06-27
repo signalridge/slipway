@@ -69,6 +69,26 @@ func TestStatusFromRootReportsBoundElsewhere(t *testing.T) {
 	})
 }
 
+func TestStatusChangeFlagRejectsInvalidSlugBeforeStateLookup(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	stdout, stderr, err := runRootCommandIn(root, []string{"status", "--json", "--change", "../not-a-slug"})
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+
+	var payload CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &payload))
+	assert.Equal(t, "invalid_change_slug", payload.ErrorCode)
+	assert.Equal(t, categoryInvalidUsage, payload.Category)
+	assert.Equal(t, exitCodeInvalidUsage, payload.ExitCode)
+	assert.Equal(t, "../not-a-slug", payload.Details["slug"])
+	assert.Empty(t, payload.Slug, "invalid usage must not report a resolved change slug")
+}
+
 func TestNextChangeFlagFromRootTargetsBoundWorktree(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

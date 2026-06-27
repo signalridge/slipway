@@ -169,8 +169,9 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			readCtx := newStateReadContext(root)
 
-			ref, err := resolveActiveChangeRef(root, changeSlug)
+			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
 				if strings.TrimSpace(changeSlug) == "" && shouldFallbackValidateDiagnostics(err) {
 					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
@@ -181,12 +182,12 @@ func makeValidateCmd() *cobra.Command {
 				return err
 			}
 
-			view, err := buildValidateViewForSlug(root, ref.Slug)
+			view, err := buildValidateViewForSlugWithReadContext(readCtx, ref.Slug)
 			if err != nil {
 				return err
 			}
 			applyValidateInvocationWorkspacePath(cmd, root, &view)
-			if change, loadErr := state.LoadChange(root, ref.Slug); loadErr == nil {
+			if change, loadErr := readCtx.loadChange(ref.Slug); loadErr == nil {
 				applyValidateInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
 			}
 			view.Mode = effectiveMode
@@ -203,12 +204,17 @@ func makeValidateCmd() *cobra.Command {
 }
 
 func buildValidateViewForSlug(root, slug string) (validateView, error) {
-	change, err := state.LoadChange(root, slug)
+	return buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
+}
+
+func buildValidateViewForSlugWithReadContext(readCtx *stateReadContext, slug string) (validateView, error) {
+	root := readCtx.root
+	change, err := readCtx.loadChange(slug)
 	if err != nil {
 		return validateView{}, err
 	}
 
-	execCtx, err := loadExecutionContext(root, change)
+	execCtx, err := readCtx.loadExecution(change)
 	if err != nil {
 		return validateView{}, err
 	}
@@ -238,7 +244,8 @@ func buildValidateViewForSlug(root, slug string) (validateView, error) {
 	var requirementsContract *artifactContractView
 	var tasksContract *artifactContractView
 	var decisionContract *artifactContractView
-	if bundleDir, err := state.GovernedBundleDir(root, change); err == nil {
+	if paths, err := readCtx.resolvedPaths(change); err == nil {
+		bundleDir := paths.GovernedBundleDir
 		contract, err := artifact.EvaluateRequirementsContract(bundleDir)
 		if err == nil {
 			requirementsContract = &artifactContractView{

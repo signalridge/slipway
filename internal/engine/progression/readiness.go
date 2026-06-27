@@ -16,6 +16,7 @@ import (
 	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/scopecontract"
 	"github.com/signalridge/slipway/internal/engine/sensitiveevidence"
+	"github.com/signalridge/slipway/internal/engine/skill"
 	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
@@ -54,18 +55,19 @@ type GovernanceReadiness struct {
 	// PassingSkills is intentionally scoped to the required skills for the
 	// requested workflow state and active planning sub-step. It is not a dump of
 	// every verification file found under verification/.
-	PassingSkills      map[string]model.VerificationRecord
-	SkillBlockers      []model.ReasonCode
-	GateEvaluations    map[gate.GateID]gate.GateEvaluation
-	ArtifactReadiness  ArtifactReadiness
-	ArtifactProjection *ArtifactProjection
-	ScopeContract      *scopecontract.Report
-	SensitiveEvidence  *sensitiveevidence.Report
-	ReviewSurface      *ReviewAuthority
-	reviewAuthority    *ReviewAuthority
-	ShipSurface        *ShipAuthority
-	Blockers           []model.ReasonCode
-	Diagnostics        []string
+	PassingSkills       map[string]model.VerificationRecord
+	verificationRecords map[string]model.VerificationRecord
+	SkillBlockers       []model.ReasonCode
+	GateEvaluations     map[gate.GateID]gate.GateEvaluation
+	ArtifactReadiness   ArtifactReadiness
+	ArtifactProjection  *ArtifactProjection
+	ScopeContract       *scopecontract.Report
+	SensitiveEvidence   *sensitiveevidence.Report
+	ReviewSurface       *ReviewAuthority
+	reviewAuthority     *ReviewAuthority
+	ShipSurface         *ShipAuthority
+	Blockers            []model.ReasonCode
+	Diagnostics         []string
 }
 
 type GovernanceReadinessOptions struct {
@@ -78,6 +80,10 @@ type GovernanceReadinessOptions struct {
 	IncludeArtifactProjection bool
 	IncludeReviewSurface      bool
 	IncludeShipSurface        bool
+	// VerificationRecords lets callers that already loaded the authoritative
+	// verification inventory reuse it for readiness. A nil map preserves the
+	// default strict disk read.
+	VerificationRecords map[string]model.VerificationRecord
 }
 
 const scopeContractRecoveryGuidanceDiagnostic = "scope_contract_recovery_guidance: out-of-scope drift preserves recorded wave evidence. Remove a build-artifact/scratch file or rely on an ignore/local exclude; to keep legitimate same-intent work, record a scope amendment by amending the owning task target_files in tasks.md. In S2, refresh the affected implementation evidence; in S3 review, keep the state in review/fix and let the selected reviewers verify the current plan/code/evidence. If the objective changed, open a new governed change."
@@ -206,14 +212,20 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	if artifactProjectionReader == nil {
 		artifactProjectionReader = contextualArtifactProjectionReader{ctx: artifactCtx}
 	}
+	verificationRecords, err := governanceReadinessVerificationRecords(root, evaluationChange, opts)
+	if err != nil {
+		return GovernanceReadiness{}, err
+	}
+	readiness.verificationRecords = cloneVerificationRecords(verificationRecords)
 	planningSubSteps := activePlanningSubStepsForState(evaluationChange, effectiveState)
-	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
+	passingSkills, skillBlockers, err := evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 		root,
 		evaluationChange,
 		effectiveState,
 		execCtx.LatestRunVersion,
 		FinalCloseoutEvidenceRequired(policy),
 		reviewSelection,
+		verificationRecords,
 		planningSubSteps...,
 	)
 	if err != nil {
@@ -314,7 +326,12 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 
 	if opts.IncludeReviewSurface || effectiveState == model.StateS3Review {
-		reviewSurface, err := EvaluateReviewAuthority(root, evaluationChange)
+		reviewSurface, err := evaluateReviewAuthorityWithPolicyAndRecords(
+			root,
+			evaluationChange,
+			policy,
+			verificationRecords,
+		)
 		if err != nil {
 			return GovernanceReadiness{}, err
 		}
@@ -463,6 +480,17 @@ func previewGovernanceSnapshotForReadiness(
 	return governance.PreviewGovernanceSnapshot(root, change, bundleDir)
 }
 
+func governanceReadinessVerificationRecords(
+	root string,
+	change model.Change,
+	opts GovernanceReadinessOptions,
+) (map[string]model.VerificationRecord, error) {
+	if opts.VerificationRecords != nil {
+		return cloneVerificationRecords(opts.VerificationRecords), nil
+	}
+	return state.ListVerificationsForChange(root, change)
+}
+
 func evaluateGateReadiness(
 	root string,
 	change model.Change,
@@ -477,13 +505,22 @@ func evaluateGateReadiness(
 	}
 	if opts.IncludeGateEvaluations {
 		result = map[gate.GateID]gate.GateEvaluation{}
+		verificationRecords := opts.VerificationRecords
+		if verificationRecords == nil {
+			verificationRecords = currentReadiness.verificationRecords
+		}
 		if planningGatesClosed(effectiveState) {
 			result[gate.GatePlan] = approvedGateEvaluation(gate.GatePlan)
 			if change.NeedsDiscovery {
 				result[gate.GateScope] = approvedGateEvaluation(gate.GateScope)
 			}
 		} else {
-			planSkills, planSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
+			planSkills, planSkillBlockers, err := gatePlanningSkillRecordsWithRecords(
+				root,
+				change,
+				model.PlanSubStepAudit,
+				verificationRecords,
+			)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -499,7 +536,12 @@ func evaluateGateReadiness(
 			}
 			result[gate.GatePlan] = planEval
 			if change.NeedsDiscovery && effectiveState != model.StateS0Intake {
-				scopeSkills, scopeSkillBlockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepResearch)
+				scopeSkills, scopeSkillBlockers, err := gatePlanningSkillRecordsWithRecords(
+					root,
+					change,
+					model.PlanSubStepResearch,
+					verificationRecords,
+				)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -529,6 +571,7 @@ func evaluateGateReadiness(
 			GovernanceReadinessOptions{
 				WorkflowStateOverride: &shipState,
 				IncludeReviewSurface:  true,
+				VerificationRecords:   currentReadiness.verificationRecords,
 			},
 		)
 		if err != nil {
@@ -1036,16 +1079,27 @@ func gatePlanningSkillRecords(
 	change model.Change,
 	planSubStep model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
+	return gatePlanningSkillRecordsWithRecords(root, change, planSubStep, nil)
+}
+
+func gatePlanningSkillRecordsWithRecords(
+	root string,
+	change model.Change,
+	planSubStep model.PlanSubStep,
+	verificationRecords map[string]model.VerificationRecord,
+) (map[string]model.VerificationRecord, []string, error) {
 	var subSteps []model.PlanSubStep
 	if planSubStep != model.PlanSubStepNone {
 		subSteps = []model.PlanSubStep{planSubStep}
 	}
-	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChange(
+	passingSkills, skillBlockers, err := evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 		root,
 		change,
 		model.StateS1Plan,
 		0,
 		false,
+		skill.ReviewSkillSelection{},
+		verificationRecords,
 		subSteps...,
 	)
 	if err != nil {

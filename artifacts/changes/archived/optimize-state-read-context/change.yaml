@@ -1,0 +1,61 @@
+version: 1
+slug: optimize-state-read-context
+description: optimize state read context
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-27T05:42:49.536711Z
+quality_mode: full
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/optimize-state-read-context
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 3bf5b672f55b4f271c1a59ff4cb57182f83d4c1d16da321ddbf4d09f5e94ecb7
+        updated_at: 2026-06-27T09:53:11.059314519Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 11b4b1a18c6c3b914f9aefb3ecf7f1595f7cb34b931cf84c0ecb06993512987f
+        updated_at: 2026-06-27T06:01:23.064511343Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 3be4324daa3c655116ef40e1d12feb8919b33a5c0acf488dd71c97a181bc1c40
+        updated_at: 2026-06-27T05:59:01.779802145Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: cc94e6002837d26b716cefe609e30191ae3904958517251d66b8f7a01908d409
+        updated_at: 2026-06-27T06:01:23.058542728Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: f9b12c042ef79a6a76ff0664322b9813ebb75b9afe81415740240dd7a9cd596d
+        updated_at: 2026-06-27T05:59:01.781114556Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 4403f356f31f768301660b0994b494ba902d629474f56acc7ee5b27226005c48
+        updated_at: 2026-06-27T09:08:57.925066061Z
+evidence_refs:
+    code-quality-review: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/code-quality-review.yaml
+    independent-review: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/independent-review.yaml
+    intake-clarification: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/intake-clarification.yaml
+    plan-audit: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/plan-audit.yaml
+    research-orchestration: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/research-orchestration.yaml
+    security-review: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/security-review.yaml
+    ship-verification: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/optimize-state-read-context/artifacts/changes/optimize-state-read-context/verification/wave-orchestration.yaml

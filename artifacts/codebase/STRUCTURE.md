@@ -1,36 +1,38 @@
 # Structure
 
-- `.github/workflows/release.yaml`
-  - `validate-tag`: no-secret, read-only tag validation job.
-  - `test`: checks out `needs.validate-tag.outputs.tag_name` and runs release
-    metadata smoke before any release secret is available.
-  - `release`: protected by `release-publish`, owns write/package/attestation
-    permissions, optional publishing secrets, GoReleaser, and generated smoke
-    outputs.
-  - `verify-*`: post-release smoke jobs consume release job outputs and run
-    `slipway --version` plus `slipway --help`.
-- `.github/workflows/ci.yml`
-  - `Release Config` installs fixed GoReleaser, syft, and Docker Buildx before
-    `goreleaser check` and snapshot dry run.
-  - `Build` depends on `Release Config`, so release-config breakage blocks PR
-    success before merge.
-- `.github/workflows/security.yaml`
-  - `govulncheck` and `go-licenses` install pinned module versions.
-  - security upload actions are full SHA-pinned like other workflows.
-- `.github/workflows/nix.yaml` and
-  `.github/workflows/flake-lock-update.yaml`
-  - DeterminateSystems actions are pinned to full commit SHAs rather than
-    `@main`.
-- `cmd/tool_github.go`
-  - Constants define default public GitHub API URL, allowlist env, override
-    token env, and ambient token env names.
-  - `resolveGitHubAPIConfigFromEnv` normalizes/validates base URL and chooses
-    the correct token class.
-  - `githubHTTPClient` serves both REST and GraphQL helper paths.
-- `cmd/release_workflow_contract_test.go`
-  - Reads the workflow from repo root.
-  - Asserts validation-before-secret behavior and generated smoke outputs.
-- `internal/state/worktree.go`
-  - `validateWorktreeBaseRef` is local to the worktree provisioning boundary.
-  - The helper defaults empty refs to `HEAD`, rejects option-like or malformed
-    refs, and verifies commit-ish resolution through `git rev-parse`.
+- `cmd/common.go`
+  - Owns shared command helpers such as `resolveActiveChangeRef`,
+    `resolveExplicitChange`, execution-summary loading, and invocation route
+    decoration helpers used by public lifecycle commands.
+- `cmd/status.go`
+  - Owns the public `status` command route order: explicit `--change`,
+    current-worktree binding, current-worktree archived fallback, then global
+    active-change summary.
+- `cmd/status_view_build.go`
+  - Owns status JSON/prose projection, evidence pointers, freshness fields,
+    gate display, and lifecycle timeline rendering.
+- `cmd/next.go` and `cmd/next_context_build.go`
+  - Own `next` command routing, read-only preview behavior, next-skill view
+    construction, input context, and handoff context projection.
+- `cmd/validate.go`
+  - Owns validate JSON projection, artifact contract display, readiness
+    projection, and route metadata for validation callers.
+- `internal/state/store.go`
+  - Owns active bundle discovery across visible workspace roots, strict
+    `change.yaml` loading, worktree visibility checks, and persistence
+    transaction ops.
+- `internal/state/worktree_binding.go`
+  - Owns git-local `worktree-binding.yaml` records used to resolve dedicated
+    worktree authority without persisting absolute paths into tracked bundles.
+- `internal/state/paths.go`
+  - Owns canonical path derivation for runtime evidence, governed bundles,
+    archive paths, and codebase map locations.
+- `internal/state/verification.go`
+  - Owns verification directory resolution, strict verification YAML loading,
+    and resolved-change verification inventory helpers.
+- `internal/state/lifecycle_event.go`
+  - Owns lifecycle event path resolution, append/readback, full-log reads, and
+    the new status-tail read surface planned by this change.
+- `internal/engine/progression/readiness.go`
+  - Owns governance readiness projection. It may accept preloaded verification
+    records if needed, but `internal/state` must not import engine packages.
