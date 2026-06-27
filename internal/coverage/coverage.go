@@ -163,15 +163,37 @@ func missingFloatKeys(have map[string]float64, required []string) []string {
 	return missing
 }
 
+// Surface names a high-risk behavior slice represented by a covered package.
+// Files keeps diagnostics actionable when package-level coverage regresses.
+type Surface struct {
+	Name  string   `json:"name"`
+	Files []string `json:"files,omitempty"`
+}
+
+func (s Surface) String() string {
+	name := strings.TrimSpace(s.Name)
+	if name == "" {
+		name = "unnamed surface"
+	}
+	files := append([]string(nil), s.Files...)
+	if len(files) == 0 {
+		return name
+	}
+	return fmt.Sprintf("%s (%s)", name, strings.Join(files, ", "))
+}
+
 // Baseline is the committed no-regression floor. Packages maps an import path to
 // its minimum acceptable coverage percentage (one decimal). CoverPackages and
 // Exclude record the gated set for transparency and for regenerating the
-// baseline via -write.
+// baseline via -write. Surfaces optionally maps a package to the public surfaces
+// that need targeted tests, making failure output actionable.
 type Baseline struct {
-	Tool          string             `json:"tool"`
-	CoverPackages []string           `json:"cover_packages"`
-	Exclude       []string           `json:"exclude,omitempty"`
-	Packages      map[string]float64 `json:"packages"`
+	Tool          string               `json:"tool"`
+	Target        string               `json:"target,omitempty"`
+	CoverPackages []string             `json:"cover_packages"`
+	Exclude       []string             `json:"exclude,omitempty"`
+	Surfaces      map[string][]Surface `json:"surfaces,omitempty"`
+	Packages      map[string]float64   `json:"packages"`
 }
 
 // MissingFloors returns required packages that have no committed floor in the
@@ -222,13 +244,28 @@ type Regression struct {
 	Baseline float64
 	Current  float64
 	Missing  bool
+	Surfaces []Surface
 }
 
 func (r Regression) String() string {
+	base := ""
 	if r.Missing {
-		return fmt.Sprintf("%s: baseline %.1f%% but package absent from coverage profile", r.Package, r.Baseline)
+		base = fmt.Sprintf("%s: baseline %.1f%% but package absent from coverage profile", r.Package, r.Baseline)
+	} else {
+		base = fmt.Sprintf("%s: %.1f%% < baseline %.1f%%", r.Package, r.Current, r.Baseline)
 	}
-	return fmt.Sprintf("%s: %.1f%% < baseline %.1f%%", r.Package, r.Current, r.Baseline)
+	if len(r.Surfaces) == 0 {
+		return base
+	}
+	return base + " | surfaces: " + formatSurfaces(r.Surfaces)
+}
+
+func formatSurfaces(surfaces []Surface) string {
+	parts := make([]string, 0, len(surfaces))
+	for _, surface := range surfaces {
+		parts = append(parts, surface.String())
+	}
+	return strings.Join(parts, "; ")
 }
 
 // Check compares current per-package coverage against the baseline floors and
@@ -247,11 +284,21 @@ func (b Baseline) Check(current map[string]Stmts) []Regression {
 		floor := b.Packages[pkg]
 		cur, ok := current[pkg]
 		if !ok {
-			regs = append(regs, Regression{Package: pkg, Baseline: floor, Missing: true})
+			regs = append(regs, Regression{
+				Package:  pkg,
+				Baseline: floor,
+				Missing:  true,
+				Surfaces: append([]Surface(nil), b.Surfaces[pkg]...),
+			})
 			continue
 		}
 		if cur.Percent() < floor {
-			regs = append(regs, Regression{Package: pkg, Baseline: floor, Current: cur.Percent()})
+			regs = append(regs, Regression{
+				Package:  pkg,
+				Baseline: floor,
+				Current:  cur.Percent(),
+				Surfaces: append([]Surface(nil), b.Surfaces[pkg]...),
+			})
 		}
 	}
 	return regs

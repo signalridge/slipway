@@ -1,0 +1,60 @@
+version: 1
+slug: add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o
+description: Add a high-risk public lifecycle surface coverage gate for opt.md section 3.2, covering status/next/validate/done/evidence and state verification/worktree/runtime surfaces with actionable changed-surface diagnostics.
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-27T02:58:13.876177Z
+quality_mode: standard
+workflow_preset: standard
+worktree_branch: feat/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 8a76aabaac296fe43a3fcc040fd9f8d2d613b761a6fee9a43eed64048057b3b4
+        updated_at: 2026-06-27T03:49:52.052555455Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 6e4cdb4d482acf0183d008cb91e374482b136935883980127afea598a83df91b
+        updated_at: 2026-06-27T03:07:23.354405647Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 13e51c047faa0d0ec2be997f25a80cb0407bbe1230c9e6e5c62c4b99310e6405
+        updated_at: 2026-06-27T03:01:48.514699237Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 76d211e01309024c1d54fe145271a657153b08ef21c8c7c3bcd17d78eab2688d
+        updated_at: 2026-06-27T03:07:23.353583718Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 77402d63dffe6713c80580ec6b4fd9db581efd6cb955d1ad374f025358fb2b8c
+        updated_at: 2026-06-27T03:04:43.63223539Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: b12906245eeb027f2f6ece96ed5e5abff61fd526f681b27db84c6849223a9dca
+        updated_at: 2026-06-27T03:35:36.247793462Z
+evidence_refs:
+    code-quality-review: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/code-quality-review.yaml
+    independent-review: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/independent-review.yaml
+    intake-clarification: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/intake-clarification.yaml
+    plan-audit: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/plan-audit.yaml
+    research-orchestration: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/research-orchestration.yaml
+    security-review: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/security-review.yaml
+    ship-verification: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/artifacts/changes/add-a-high-risk-public-lifecycle-surface-coverage-gate-for-o/verification/wave-orchestration.yaml
