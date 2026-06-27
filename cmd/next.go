@@ -510,6 +510,10 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		view.PresetUpgradeReasons = presetFields.PresetUpgradeReasons
 		view.GovernanceForecast = presetFields.GovernanceForecast
 
+		verificationRecords, err := readCtx.verificationRecords(*governedChange)
+		if err != nil {
+			return nextView{}, wrapGovernanceReadinessError("evaluate next skill evidence", ref.Slug, err)
+		}
 		readiness, err := progression.EvaluateGovernanceReadiness(
 			root,
 			*governedChange,
@@ -518,6 +522,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 				// Next needs projected artifact context for rendering, but keeps the
 				// reconcile read-only by requesting only the in-memory projection.
 				IncludeArtifactProjection: true,
+				VerificationRecords:       verificationRecords,
 			},
 		)
 		if err != nil {
