@@ -53,6 +53,12 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 		assert.Equal(t, progression.SkillPlanAudit, view.SkillName)
 		assert.Equal(t, model.VerificationVerdictPass, view.Verdict)
 		assert.Equal(t, 0, view.RunVersion)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "unbound_active", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
+		assert.True(t, view.InvocationRoute.LocalLifecycleExecutionAllowed)
+		assert.True(t, view.InvocationRoute.EffectiveLifecycleExecutionAllowed)
+		assert.Equal(t, "slipway next --change "+slug, view.InvocationRoute.NextCommand)
 		assert.Equal(t, expectedPath, view.Path)
 		assert.True(t, view.Recorded)
 
@@ -81,6 +87,82 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 		assert.Equal(t, "skill.evidence_recorded", events[len(events)-1].EventType)
 		assert.Equal(t, "recorded", events[len(events)-1].Result)
 	})
+}
+
+func TestEvidenceSkillChangeFlagRejectsMissingSlugWithoutDiagnosticsFallback(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	cmd := commandForRoot(t, root, makeEvidenceCmd())
+	cmd.SetArgs([]string{
+		"skill",
+		"--json",
+		"--change", "definitely-not-a-change",
+		"--skill", progression.SkillPlanAudit,
+		"--verdict", model.VerificationVerdictPass,
+		"--notes", "will not be recorded",
+	})
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cliErr := asCLIError(cmd.Execute())
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "change_not_found", cliErr.ErrorCode)
+	assert.Equal(t, "definitely-not-a-change", cliErr.Slug)
+	assert.NotContains(t, out.String(), "no active change or ambiguous")
+}
+
+func TestEvidenceSkillFailsClosedWithoutActiveChange(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	cmd := commandForRoot(t, root, makeEvidenceCmd())
+	cmd.SetArgs([]string{
+		"skill",
+		"--json",
+		"--skill", progression.SkillPlanAudit,
+		"--verdict", model.VerificationVerdictPass,
+		"--notes", "will not be recorded",
+	})
+	cliErr := asCLIError(cmd.Execute())
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "no_active_change", cliErr.ErrorCode)
+}
+
+func TestEvidenceSkillChangeFlagRejectsArchivedTarget(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence archived target")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.Status = model.ChangeStatusDone
+	change.CurrentState = model.StateDone
+	require.NoError(t, state.SaveChange(root, change))
+	_, err = state.ArchiveChange(root, change, model.ChangeStatusDone)
+	require.NoError(t, err)
+
+	cmd := commandForRoot(t, root, makeEvidenceCmd())
+	cmd.SetArgs([]string{
+		"skill",
+		"--json",
+		"--change", slug,
+		"--skill", progression.SkillPlanAudit,
+		"--verdict", model.VerificationVerdictPass,
+		"--notes", "will not be recorded",
+	})
+	cliErr := asCLIError(cmd.Execute())
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, slug, cliErr.Slug)
 }
 
 func TestEvidenceSkillAllowsStaleResearchRestampFromAuditSubstep(t *testing.T) {

@@ -1,0 +1,60 @@
+version: 1
+slug: repair-lifecycle-surface-contracts
+description: repair lifecycle surface contracts
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-27T14:46:33.825622Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/repair-lifecycle-surface-contracts
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: effbf8afb15de032edef32c03701e16709ca9ec73ea1eca5c4474073883648d0
+        updated_at: 2026-06-27T15:42:27.470123517Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: 440e0c53d584729c7d81aabb4c934b161af8bff3eb24e582040a641789a83317
+        updated_at: 2026-06-27T14:51:14.811212058Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: b6ea4ec900d7a2ad2d868e684eef5e5cba5ff9c43d058cc5ac3a4ef83cd47bd0
+        updated_at: 2026-06-27T14:47:41.2607373Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8dd94ff632b363fd98bc79602334866f8c2d62fdc99211f490d371fb0fe82cdb
+        updated_at: 2026-06-27T14:51:14.810639311Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 1fd90879d792fc8246bf3df5d5f2bdf2bc6fb3327bd379d9b8ab692b7fcbaa94
+        updated_at: 2026-06-27T14:50:08.209984295Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 4a6c3e742b9dd45ded6fb511c5fd86f14a13fc630a185f7ab2226cb89754b6ac
+        updated_at: 2026-06-27T15:04:39.648164966Z
+evidence_refs:
+    code-quality-review: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/code-quality-review.yaml
+    independent-review: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/independent-review.yaml
+    intake-clarification: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/intake-clarification.yaml
+    plan-audit: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/plan-audit.yaml
+    research-orchestration: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/research-orchestration.yaml
+    ship-verification: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/repair-lifecycle-surface-contracts/artifacts/changes/repair-lifecycle-surface-contracts/verification/wave-orchestration.yaml

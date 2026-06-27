@@ -28,6 +28,7 @@ type doneView struct {
 	EffectiveWorkflowPreset string                   `json:"effective_workflow_preset,omitempty"`
 	PresetUpgradeReasons    []string                 `json:"preset_upgrade_reasons,omitempty"`
 	NeedsDiscovery          bool                     `json:"needs_discovery,omitempty"`
+	InvocationRoute         *invocationRouteView     `json:"invocation_route,omitempty"`
 	Status                  string                   `json:"status"`
 	Archived                bool                     `json:"archived"`
 	ArchivePath             string                   `json:"archive_path,omitempty"`
@@ -263,21 +264,27 @@ func makeDoneCmd() *cobra.Command {
 				return encodeJSONResponse(cmd, view)
 			}
 
-			active, err := resolveActiveChangeRef(root, changeSlug)
+			readCtx := newStateReadContext(root)
+			active, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
 				return err
 			}
 
 			return withChangeStateLock(root, active.Slug, "done", func() error {
-				change, err := loadActiveChange(
-					root,
-					active.Slug,
-					"cannot finalize non-active change status %q",
-					"Only active changes can be finalized.",
-				)
+				change, err := readCtx.reloadChange(active.Slug)
 				if err != nil {
 					return err
 				}
+				if change.Status != model.ChangeStatusActive {
+					return newPreconditionError(
+						"not_active",
+						fmt.Sprintf("cannot finalize non-active change status %q", change.Status),
+						"Only active changes can be finalized.",
+						change.Slug,
+						map[string]any{"status": string(change.Status)},
+					)
+				}
+				route := commandInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "")
 
 				if !action.CanFinalizeDone(change.CurrentState) {
 					return newGovernanceBlockedError(
@@ -346,6 +353,7 @@ func makeDoneCmd() *cobra.Command {
 					EffectiveWorkflowPreset: presetFields.EffectiveWorkflowPreset,
 					PresetUpgradeReasons:    presetFields.PresetUpgradeReasons,
 					NeedsDiscovery:          profile.NeedsDiscovery,
+					InvocationRoute:         route,
 					Status:                  string(model.ChangeStatusDone),
 					Archived:                true,
 					ArchivePath:             state.DisplayPath(root, archivePaths.GovernedBundleArchive),

@@ -64,6 +64,11 @@ func applyStatusInvocationRoute(cmd *cobra.Command, root string, change model.Ch
 	view.InvocationRoute = buildInvocationRouteView(root, change, workspace, explicitChange)
 }
 
+func commandInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool) *invocationRouteView {
+	workspace := invocationWorkspaceRootFromCommand(cmd, root)
+	return buildInvocationRouteView(root, change, workspace, explicitChange)
+}
+
 func attachFreshnessDiagnostics(diagnostics state.ExecutionFreshnessDiagnostics) *state.ExecutionFreshnessDiagnostics {
 	if strings.TrimSpace(diagnostics.Status) == "" {
 		return nil

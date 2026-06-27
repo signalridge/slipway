@@ -55,6 +55,11 @@ func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.
 		assert.Equal(t, slug, view.Slug)
 		assert.Equal(t, "t-01", view.TaskID)
 		assert.True(t, view.Recorded)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "unbound_active", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
+		assert.True(t, view.InvocationRoute.LocalLifecycleExecutionAllowed)
+		assert.True(t, view.InvocationRoute.EffectiveLifecycleExecutionAllowed)
 		assert.True(t, view.FreshnessInputs.Equal(expectedFreshnessInputs))
 
 		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
@@ -131,6 +136,9 @@ func TestEvidenceTaskImportsResultFileWithDerivedLedgerFields(t *testing.T) {
 		assert.Equal(t, "t-01", view.TaskID)
 		assert.Equal(t, 1, view.RunSummaryVersion)
 		assert.True(t, view.Recorded)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "unbound_active", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
 
 		wavePlan, err := state.LoadWavePlanForChange(root, change)
 		require.NoError(t, err)
@@ -175,10 +183,17 @@ func TestEvidenceTaskImportsMultipleResultFilesAtomically(t *testing.T) {
 		assert.Equal(t, slug, view.Slug)
 		assert.Equal(t, 1, view.RunSummaryVersion)
 		assert.True(t, view.Recorded)
+		require.NotNil(t, view.InvocationRoute)
+		assert.Equal(t, "unbound_active", view.InvocationRoute.Kind)
+		assert.Equal(t, slug, view.InvocationRoute.ChangeSlug)
 		assert.Equal(t, 2, view.RecordedCount)
 		require.Len(t, view.Tasks, 2)
 		assert.Equal(t, "t-01", view.Tasks[0].TaskID)
 		assert.Equal(t, "t-02", view.Tasks[1].TaskID)
+		for _, task := range view.Tasks {
+			require.NotNil(t, task.InvocationRoute)
+			assert.Equal(t, view.InvocationRoute, task.InvocationRoute)
+		}
 
 		wavePlan, err := state.LoadWavePlanForChange(root, change)
 		require.NoError(t, err)
