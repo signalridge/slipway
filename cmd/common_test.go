@@ -218,6 +218,57 @@ func TestValidateChangeFlagRejectsArchivedSlugWithConcreteDiagnostic(t *testing.
 	assert.NotContains(t, out.String(), "no active change or ambiguous")
 }
 
+func TestExplicitChangeCommandsUseFastPathWhenOtherBundleIsOrphaned(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "explicit fast path target")
+	orphanDir := filepath.Join(root, "artifacts", "changes", "orphaned-active-bundle")
+	require.NoError(t, os.MkdirAll(orphanDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphanDir, "notes.md"), []byte("orphaned\n"), 0o644))
+
+	t.Run("status", func(t *testing.T) {
+		cmd := commandForRoot(t, root, makeStatusCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, cmd.Execute())
+
+		var view statusView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+	})
+
+	t.Run("next", func(t *testing.T) {
+		cmd := commandForRoot(t, root, makeNextCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+	})
+
+	t.Run("validate", func(t *testing.T) {
+		cmd := commandForRoot(t, root, makeValidateCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		require.NoError(t, cmd.Execute())
+
+		var view validateView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.Equal(t, slug, view.Slug)
+	})
+}
+
 func TestResolveExplicitChangeSurfacesCorruptState(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
