@@ -350,9 +350,14 @@ func planningNote(currentState model.WorkflowState, planSubStep model.PlanSubSte
 }
 
 func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error) {
+	return resolveActiveChangeRefWithReadContext(newStateReadContext(root), explicitSlug)
+}
+
+func resolveActiveChangeRefWithReadContext(readCtx *stateReadContext, explicitSlug string) (changeRef, error) {
+	root := readCtx.root
 	// When --change is provided, load that specific change.
 	if strings.TrimSpace(explicitSlug) != "" {
-		return resolveExplicitChange(root, strings.TrimSpace(explicitSlug))
+		return resolveExplicitChangeWithReadContext(readCtx, strings.TrimSpace(explicitSlug))
 	}
 
 	// Worktree-based resolution.
@@ -361,6 +366,13 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 		return changeRef{}, wrapResolutionError(err)
 	}
 	if worktreePath != "" {
+		if change, ok, err := resolveActiveChangeRefFromWorktreeBinding(root, worktreePath); err != nil {
+			return changeRef{}, err
+		} else if ok {
+			readCtx.rememberChange(change)
+			return changeRef{Slug: change.Slug}, nil
+		}
+
 		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
 		if err != nil {
 			// Before surfacing "no active change here" or "bound to another
@@ -372,7 +384,7 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 				if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
 					return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
 				} else if ok {
-					return resolveExplicitChange(root, archived.Slug)
+					return resolveExplicitChangeWithReadContext(readCtx, archived.Slug)
 				}
 			}
 			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
@@ -387,9 +399,10 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 			if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
 				return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
 			} else if ok {
-				return resolveExplicitChange(root, archived.Slug)
+				return resolveExplicitChangeWithReadContext(readCtx, archived.Slug)
 			}
 		}
+		readCtx.rememberChange(change)
 		return changeRef{Slug: change.Slug}, nil
 	}
 
@@ -400,7 +413,21 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 		}
 		return changeRef{}, wrapResolutionError(err)
 	}
+	readCtx.rememberChange(change)
 	return changeRef{Slug: change.Slug}, nil
+}
+
+func resolveActiveChangeRefFromWorktreeBinding(root, worktreePath string) (model.Change, bool, error) {
+	change, err := state.FindActiveChangeByWorktreeBinding(root, worktreePath)
+	if err == nil {
+		return change, true, nil
+	}
+	if errors.Is(err, state.ErrNoActiveChange) ||
+		errors.Is(err, os.ErrNotExist) ||
+		state.IsMissingBundleAuthority(err) {
+		return model.Change{}, false, nil
+	}
+	return model.Change{}, false, wrapResolutionError(err)
 }
 
 func shouldTryArchivedWorktreeFallback(err error) bool {
@@ -417,16 +444,16 @@ func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
 
 // resolveExplicitChange loads a change by slug and verifies it is active.
 func resolveExplicitChange(root string, slug string) (changeRef, error) {
+	return resolveExplicitChangeWithReadContext(newStateReadContext(root), slug)
+}
+
+func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string) (changeRef, error) {
+	root := readCtx.root
 	slug = strings.TrimSpace(slug)
 	if err := state.ValidateChangeSlug(slug); err != nil {
-		return changeRef{}, newInvalidUsageError(
-			"invalid_change_slug",
-			fmt.Sprintf("invalid change slug %q: %v", slug, err),
-			"Use a canonical change slug containing lowercase letters, digits, and single hyphen separators.",
-			map[string]any{"slug": slug},
-		)
+		return changeRef{}, invalidChangeSlugUsageError(slug, err)
 	}
-	change, err := state.LoadChange(root, slug)
+	change, err := readCtx.loadChange(slug)
 	if err != nil {
 		// An archived DONE change can leave its active bundle directory behind
 		// after its change.yaml is moved to the archive. LoadChange then reports a
@@ -496,8 +523,18 @@ func resolveExplicitChange(root string, slug string) (changeRef, error) {
 	return changeRef{Slug: change.Slug}, nil
 }
 
-func loadChangeBySlug(root, slug string) (model.Change, error) {
-	change, err := state.LoadChange(root, slug)
+func invalidChangeSlugUsageError(slug string, err error) *CLIError {
+	return newInvalidUsageError(
+		"invalid_change_slug",
+		fmt.Sprintf("invalid change slug %q: %v", slug, err),
+		"Use a canonical change slug containing lowercase letters, digits, and single hyphen separators.",
+		map[string]any{"slug": slug},
+	)
+}
+
+func loadChangeBySlugWithReadContext(readCtx *stateReadContext, slug string) (model.Change, error) {
+	root := readCtx.root
+	change, err := readCtx.loadChange(slug)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {

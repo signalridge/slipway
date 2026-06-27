@@ -655,6 +655,72 @@ func TestLoadChangeSkipsLocalStaleBundleWhenAuthorityOwnedBySiblingWorktree(t *t
 	assert.Equal(t, wantWorktree, loaded.WorktreePath)
 }
 
+func TestLoadChangeFastUsesRuntimeWorktreeBinding(t *testing.T) {
+	t.Parallel()
+
+	root, worktreeRoot := setupRepoWithWorktree(t)
+
+	change := model.NewChange("fast-bound-worktree")
+	change.WorktreePath = worktreeRoot
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	require.NoError(t, os.Remove(filepath.Join(worktreeRoot, ".slipway.yaml")))
+	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
+
+	loaded, err := LoadChangeFast(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS2Implement, loaded.CurrentState)
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
+}
+
+func TestLoadChangeFastSkipsLocalStaleBundleWhenBindingOwnsWorktree(t *testing.T) {
+	t.Parallel()
+
+	root, worktreeRoot := setupRepoWithWorktree(t)
+
+	change := model.NewChange("fast-local-stale-bundle")
+	change.WorktreePath = worktreeRoot
+	change.CurrentState = model.StateS2Implement
+	change.PlanSubStep = model.PlanSubStepNone
+	change.Description = "owning bundle"
+	require.NoError(t, SaveChange(root, change))
+
+	staleCopy := change
+	staleCopy.Description = "stale local bundle"
+	raw, err := yaml.Marshal(staleCopy)
+	require.NoError(t, err)
+
+	localBundlePath := BundleChangeFilePath(root, change.Slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(localBundlePath), 0o755))
+	require.NoError(t, os.WriteFile(localBundlePath, raw, 0o644))
+
+	loaded, err := LoadChangeFast(root, change.Slug)
+	require.NoError(t, err)
+	assert.Equal(t, "owning bundle", loaded.Description)
+	wantWorktree, err := NormalizePath(worktreeRoot)
+	require.NoError(t, err)
+	assert.Equal(t, wantWorktree, loaded.WorktreePath)
+}
+
+func TestLoadChangeFastReportsMissingBundleAuthorityFile(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", "fast-broken-change")
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+
+	_, err := LoadChangeFast(root, "fast-broken-change")
+	require.Error(t, err)
+	assert.True(t, IsMissingBundleAuthority(err))
+	assert.False(t, errors.Is(err, os.ErrNotExist))
+	assert.Contains(t, err.Error(), "slipway repair")
+}
+
 func TestLoadChangeDoesNotReadRegistryOnlyMirror(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)

@@ -69,6 +69,15 @@ func EvaluateReviewAuthority(root string, change model.Change) (ReviewAuthority,
 }
 
 func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy governance.PresetPolicy) (ReviewAuthority, error) {
+	return evaluateReviewAuthorityWithPolicyAndRecords(root, change, policy, nil)
+}
+
+func evaluateReviewAuthorityWithPolicyAndRecords(
+	root string,
+	change model.Change,
+	policy governance.PresetPolicy,
+	verificationRecords map[string]model.VerificationRecord,
+) (ReviewAuthority, error) {
 	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
 	if err != nil {
 		return ReviewAuthority{}, err
@@ -78,23 +87,33 @@ func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy 
 		return ReviewAuthority{}, err
 	}
 	selectedReviewSkills := selectedReviewSkillsForSelection(change, reviewSelection)
-	passingSkills, skillBlockers, err := EvaluateRequiredSkillsForChangeWithReviewSelection(
+	if verificationRecords == nil {
+		verificationRecords, err = state.ListVerificationsForChange(root, change)
+		if err != nil {
+			return ReviewAuthority{}, err
+		}
+	} else {
+		verificationRecords = cloneVerificationRecords(verificationRecords)
+	}
+	passingSkills, skillBlockers, err := evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 		root,
 		change,
 		model.StateS3Review,
 		executionSummaryCtx.LatestRunVersion,
 		policy.CloseoutRefreshRequired,
 		reviewSelection,
+		verificationRecords,
 	)
 	if err != nil {
 		return ReviewAuthority{}, err
 	}
-	extraPassing, extraSkillBlockers, err := loadFreshPassingRecordsForSkills(
+	extraPassing, extraSkillBlockers, err := loadFreshPassingRecordsForSkillsWithRecords(
 		root,
 		change,
 		selectedReviewSkills,
 		executionSummaryCtx.Summary,
 		passingSkills,
+		verificationRecords,
 	)
 	if err != nil {
 		return ReviewAuthority{}, err
@@ -164,28 +183,44 @@ func reviewSkillSelectionForAuthority(root string, change model.Change) (engines
 	return ReviewSkillSelectionFromControls(snap.ActiveControls), nil
 }
 
-func loadFreshPassingRecordsForSkills(
+func loadFreshPassingRecordsForSkillsWithRecords(
 	root string,
 	change model.Change,
 	skillNames []string,
 	summary *model.ExecutionSummary,
 	existing map[string]model.VerificationRecord,
+	verificationRecords map[string]model.VerificationRecord,
 ) (map[string]model.VerificationRecord, []model.ReasonCode, error) {
-	return loadFreshPassingRecordsForSkillsWithRequirement(root, change, skillNames, summary, existing, true)
+	return loadFreshPassingRecordsForSkillsFromRecords(
+		root,
+		change,
+		skillNames,
+		summary,
+		existing,
+		verificationRecords,
+		true,
+	)
 }
 
-func loadFreshPassingRecordsForSkillsWithRequirement(
+func loadFreshPassingRecordsForSkillsFromRecords(
 	root string,
 	change model.Change,
 	skillNames []string,
 	summary *model.ExecutionSummary,
 	existing map[string]model.VerificationRecord,
+	verificationRecords map[string]model.VerificationRecord,
 	required bool,
 ) (map[string]model.VerificationRecord, []model.ReasonCode, error) {
 	out := map[string]model.VerificationRecord{}
-	verifications, err := state.ListVerificationsForChange(root, change)
-	if err != nil {
-		return nil, nil, err
+	var verifications map[string]model.VerificationRecord
+	var err error
+	if verificationRecords != nil {
+		verifications = cloneVerificationRecords(verificationRecords)
+	} else {
+		verifications, err = state.ListVerificationsForChange(root, change)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	for _, skillName := range stringutil.UniqueSorted(skillNames) {
 		skillName = strings.TrimSpace(skillName)
@@ -259,12 +294,13 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	}
 	verifyPassingSkills := cloneVerificationRecords(readiness.PassingSkills)
 	selectedReviewSkills := selectedReviewSkillsForAuthority(reviewAuthority)
-	shipPassing, shipSkillBlockers, err := loadFreshPassingRecordsForSkills(
+	shipPassing, shipSkillBlockers, err := loadFreshPassingRecordsForSkillsWithRecords(
 		root,
 		change,
 		[]string{SkillShipVerification},
 		readiness.ExecutionSummary,
 		verifyPassingSkills,
+		readiness.verificationRecords,
 	)
 	if err != nil {
 		return ShipAuthority{}, err

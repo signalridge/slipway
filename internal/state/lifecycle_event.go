@@ -2,6 +2,7 @@ package state
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -15,6 +16,8 @@ import (
 )
 
 const LifecycleEventLogFileName = "lifecycle.jsonl"
+
+const lifecyclePredecessorContextMultiplier = 4
 
 // LifecycleSideEffect records a runtime-owned mutation associated with a
 // lifecycle event. It deliberately mirrors progression side effects without
@@ -128,6 +131,40 @@ func ReadLifecycleEvents(root string, change model.Change) ([]LifecycleEvent, er
 	return readLifecycleEventsFromPath(path)
 }
 
+// ReadLifecycleEventTail reads at most the last limit lifecycle events. It is
+// intended for display surfaces that only render recent history; full integrity
+// checks should keep using ReadLifecycleEvents.
+func ReadLifecycleEventTail(root string, change model.Change, limit int) ([]LifecycleEvent, error) {
+	if limit <= 0 {
+		return ReadLifecycleEvents(root, change)
+	}
+	path, err := lifecycleEventLogPathForRead(root, change)
+	if err != nil {
+		return nil, err
+	}
+	return ReadLifecycleEventTailFromPath(path, limit)
+}
+
+// ReadLifecycleEventTailFromPath reads at most the last limit lifecycle events
+// from a caller-resolved lifecycle event log path.
+func ReadLifecycleEventTailFromPath(path string, limit int) ([]LifecycleEvent, error) {
+	if limit <= 0 {
+		return readLifecycleEventsFromPath(path)
+	}
+	return readLifecycleEventTailFromPath(path, limit)
+}
+
+// ReadLifecycleEventTailWithPredecessorTransitionFromPath reads the bounded
+// tail plus the nearest earlier state.transitioned event when that predecessor
+// is outside the retained tail. Display surfaces use the predecessor only as
+// replay-classification context before trimming their final view.
+func ReadLifecycleEventTailWithPredecessorTransitionFromPath(path string, limit int) ([]LifecycleEvent, error) {
+	if limit <= 0 {
+		return readLifecycleEventsFromPath(path)
+	}
+	return readLifecycleEventTailWithPredecessorTransitionFromPath(path, limit)
+}
+
 func normalizeLifecycleEvent(change model.Change, event LifecycleEvent) (LifecycleEvent, error) {
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
@@ -230,4 +267,177 @@ func readLifecycleEventsFromPath(path string) ([]LifecycleEvent, error) {
 		return nil, err
 	}
 	return events, nil
+}
+
+func readLifecycleEventTailFromPath(path string, limit int) ([]LifecycleEvent, error) {
+	file, err := os.Open(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() == 0 {
+		return nil, nil
+	}
+
+	const chunkSize int64 = 64 * 1024
+	offset := info.Size()
+	var tail []byte
+	var lines []string
+	for offset > 0 {
+		readSize := chunkSize
+		if offset < readSize {
+			readSize = offset
+		}
+		offset -= readSize
+
+		chunk := make([]byte, readSize)
+		if _, err := file.ReadAt(chunk, offset); err != nil {
+			return nil, err
+		}
+		tail = append(append([]byte(nil), chunk...), tail...)
+		lines = nonEmptyJSONLLines(tail)
+		if offset == 0 || len(lines) > limit {
+			break
+		}
+	}
+	if len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+
+	return decodeLifecycleEventLines(lines, "tail")
+}
+
+func readLifecycleEventTailWithPredecessorTransitionFromPath(path string, limit int) ([]LifecycleEvent, error) {
+	file, err := os.Open(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() == 0 {
+		return nil, nil
+	}
+
+	const chunkSize int64 = 64 * 1024
+	contextLimit := lifecyclePredecessorContextLimit(limit)
+	offset := info.Size()
+	var raw []byte
+	var lines []string
+	var predecessor *LifecycleEvent
+	for offset > 0 {
+		readSize := chunkSize
+		if offset < readSize {
+			readSize = offset
+		}
+		offset -= readSize
+
+		chunk := make([]byte, readSize)
+		if _, err := file.ReadAt(chunk, offset); err != nil {
+			return nil, err
+		}
+		raw = append(append([]byte(nil), chunk...), raw...)
+		lines = nonEmptyJSONLLines(raw)
+		if len(lines) <= limit && offset > 0 {
+			continue
+		}
+
+		tailStart := len(lines) - limit
+		if tailStart < 0 {
+			tailStart = 0
+		}
+		contextStart := 0
+		if offset > 0 {
+			// The first line can be a partial record until the scan reaches the
+			// file start. Do not parse it as context before it is complete.
+			contextStart = 1
+		}
+		searchStart := tailStart - contextLimit
+		if searchStart < contextStart {
+			searchStart = contextStart
+		}
+		for i := tailStart - 1; i >= searchStart; i-- {
+			event, err := decodeLifecycleEventContextLine(lines[i], tailStart-i)
+			if err != nil {
+				return nil, err
+			}
+			if event.EventType == "state.transitioned" {
+				copy := event
+				predecessor = &copy
+				break
+			}
+		}
+		if predecessor != nil || offset == 0 || tailStart-contextStart >= contextLimit {
+			break
+		}
+	}
+	if len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
+
+	events, err := decodeLifecycleEventLines(lines, "tail")
+	if err != nil {
+		return nil, err
+	}
+	if predecessor == nil {
+		return events, nil
+	}
+	withContext := make([]LifecycleEvent, 0, len(events)+1)
+	withContext = append(withContext, *predecessor)
+	withContext = append(withContext, events...)
+	return withContext, nil
+}
+
+func lifecyclePredecessorContextLimit(limit int) int {
+	if limit <= 0 {
+		return 0
+	}
+	return limit * lifecyclePredecessorContextMultiplier
+}
+
+func decodeLifecycleEventLines(lines []string, context string) ([]LifecycleEvent, error) {
+	events := make([]LifecycleEvent, 0, len(lines))
+	for i, line := range lines {
+		var event LifecycleEvent
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			return nil, fmt.Errorf("decode lifecycle event log %s line %d: %w", context, i+1, err)
+		}
+		events = append(events, event)
+	}
+	return events, nil
+}
+
+func decodeLifecycleEventContextLine(line string, distanceFromTail int) (LifecycleEvent, error) {
+	var event LifecycleEvent
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		return LifecycleEvent{}, fmt.Errorf("decode lifecycle event log context line %d before tail: %w", distanceFromTail, err)
+	}
+	return event, nil
+}
+
+func nonEmptyJSONLLines(raw []byte) []string {
+	parts := bytes.Split(raw, []byte{'\n'})
+	lines := make([]string, 0, len(parts))
+	for _, part := range parts {
+		line := strings.TrimSpace(string(part))
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	return lines
 }

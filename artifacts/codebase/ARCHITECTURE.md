@@ -1,32 +1,34 @@
 # Architecture
 
-- Question: Which release and supply-chain seams must change so `opt.md`
-  section 2 is actually closed rather than documented?
-- GitHub repository protection is external state, but this change stores the
-  applied request bodies under
-  `artifacts/changes/harden-release-supply-chain/verification/`. The live
-  authority is GitHub API rulesets `18174607` for `main` and `18174614` for
-  `refs/tags/v*`, plus environment `release-publish`.
-- `.github/workflows/release.yaml` owns tag-release and manual-release control
-  flow. The hardened flow is `validate-tag` -> `test` -> `release` -> smoke
-  jobs. `validate-tag` is intentionally no-secret/read-only; `release` is the
-  only job that carries write/package/attestation permissions and publishing
-  secrets.
-- `.github/workflows/ci.yml` owns PR verification. The new `Release Config`
-  job validates the GoReleaser config and runs a snapshot dry run before the
-  normal build job can pass.
-- `.github/workflows/security.yaml`, `.github/workflows/nix.yaml`, and
-  `.github/workflows/flake-lock-update.yaml` are supply-chain entry points for
-  scanner/tool installs and Nix setup. Floating action refs and `go install
-  ...@latest` are not acceptable there.
-- `cmd/tool_github.go` owns token-backed REST/GraphQL helper construction for
-  GitHub tools. `newGitHubHTTPClient` is the shared choke point for
-  `SLIPWAY_GITHUB_API_URL`, token selection, and HTTP client setup.
-- `cmd/release_workflow_contract_test.go` is the static workflow policy test
-  for REQ-002 and REQ-006. It parses `.github/workflows/release.yaml` and
-  asserts the secret-exposure ordering and smoke-manifest wiring.
-- `cmd/tool_test.go` covers GitHub API override and token isolation behavior
-  through TLS test servers and an injected HTTP transport.
-- `internal/state/worktree.go` owns governed default worktree provisioning.
-  `EnsureDefaultWorktreeForChange` now validates `change.BaseRef` before the
-  value is passed to `git worktree add`.
+- Question: Which state-read hot paths must be optimized so `status`, `next`,
+  and `validate` remain interactive across many worktrees, bundles, and
+  verification records without weakening current-worktree authority?
+- Entry points: `cmd/status.go` routes explicit `--change` through
+  `loadStatusChangeBySlug`, worktree-local status through
+  `statusChangeFromCurrentWorktreeBinding`, then root/multi-active status
+  through `state.ListChanges` and `resolveStatusRouteForRoot`
+  (`cmd/status.go:226`, `cmd/status.go:252`, `cmd/status.go:285`,
+  `cmd/status.go:365`). `cmd/next.go` and `cmd/validate.go` both call
+  `resolveActiveChangeRef` before building their JSON views
+  (`cmd/next.go:341`, `cmd/validate.go:173`).
+- State authority: `internal/state` owns bundle discovery, strict
+  `change.yaml` loading, worktree visibility, local runtime binding, and
+  lifecycle JSONL reads. `LoadChange` currently resolves candidate workspace
+  roots for every slug load (`internal/state/store.go:437`), while
+  `ListChanges` discovers slugs and then loads each slug again
+  (`internal/state/store.go:780`).
+- Current duplication: command views often reload a change after already
+  resolving its slug. `status` reloads inside `showStatusForChange`
+  (`cmd/status.go:514`), `next` reloads for route decoration after building
+  its view (`cmd/next.go:379`), and `validate` reloads after
+  `buildValidateViewForSlug` (`cmd/validate.go:189`).
+- Read collaborators: `ResolveChangePaths` is a pure root/change path
+  derivation (`internal/state/paths.go:29`); verification has both slug-based
+  reads and resolved-change reads (`internal/state/verification.go:279`,
+  `internal/state/verification.go:292`); lifecycle event reads currently decode
+  the full log (`internal/state/lifecycle_event.go:123`,
+  `internal/state/lifecycle_event.go:204`).
+- Blast radius: keep changes inside command read assembly and `internal/state`
+  read helpers. Do not change lifecycle append crash-safety, durable
+  authority, mutation ordering, or `internal/state -> internal/engine`
+  dependency direction.

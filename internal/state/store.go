@@ -226,6 +226,36 @@ func candidateBundlePaths(root, slug string) ([]bundleCandidate, error) {
 	return bundleCandidatesForRoots(roots, slug), nil
 }
 
+func fastBundleCandidates(root, slug string) ([]bundleCandidate, error) {
+	normalizedRoot, err := NormalizePath(root)
+	if err != nil {
+		normalizedRoot = filepath.Clean(root)
+	}
+
+	candidates := []bundleCandidate{{
+		WorkspaceRoot: normalizedRoot,
+		Path:          BundleChangeFilePath(normalizedRoot, slug),
+	}}
+	seen := map[string]struct{}{candidates[0].Path: {}}
+
+	binding, ok := readWorktreeBinding(normalizedRoot, slug)
+	if !ok {
+		return candidates, nil
+	}
+	workspaceRoot, err := scopeRootInWorkspace(normalizedRoot, binding.WorktreePath)
+	if err != nil {
+		return candidates, nil
+	}
+	path := BundleChangeFilePath(workspaceRoot, slug)
+	if _, ok := seen[path]; ok {
+		return candidates, nil
+	}
+	return append(candidates, bundleCandidate{
+		WorkspaceRoot: workspaceRoot,
+		Path:          path,
+	}), nil
+}
+
 func candidateArchivedBundlePaths(root, slug string) ([]bundleCandidate, error) {
 	roots, err := allWorkspaceRoots(root)
 	if err != nil {
@@ -440,6 +470,25 @@ func LoadChange(root, slug string) (model.Change, error) {
 		return model.Change{}, rootsErr
 	}
 	return loadChangeFromCandidates(root, paths)
+}
+
+// LoadChangeFast loads an active change using the invocation-local authority
+// first: the caller's bundle and the git-local worktree binding for slug. It
+// falls back to the full workspace scan only when that narrow authority cannot
+// establish the change location.
+func LoadChangeFast(root, slug string) (model.Change, error) {
+	paths, err := fastBundleCandidates(root, slug)
+	if err != nil {
+		return model.Change{}, err
+	}
+	change, err := loadChangeFromCandidates(root, paths)
+	if err == nil {
+		return change, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, errMissingBundleAuthority) {
+		return LoadChange(root, slug)
+	}
+	return model.Change{}, err
 }
 
 func loadArchivedChangeWithCandidate(root, slug string) (model.Change, bundleCandidate, error) {
