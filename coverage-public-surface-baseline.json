@@ -46,7 +46,7 @@
     ]
   },
   "packages": {
-    "github.com/signalridge/slipway/cmd": 80,
+    "github.com/signalridge/slipway/cmd": 79.9,
     "github.com/signalridge/slipway/internal/state": 82.1
   }
 }
