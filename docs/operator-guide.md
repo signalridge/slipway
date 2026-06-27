@@ -164,6 +164,50 @@ Run the docs build (Astro Starlight) only when Node dependencies are available
 locally; run `cd website && npm install` first. CI runs the same docs build for
 verification.
 
+## State-Read Performance Baseline
+
+State-read-heavy lifecycle commands have a repeatable built-binary baseline in
+`state-read-performance-baseline.json`. Refresh it after intentional state-read
+performance work:
+
+```bash
+go run ./internal/perfbaseline/cmd/state-read-baseline \
+  -mode refresh \
+  -out state-read-performance-baseline.json
+```
+
+The tool builds a temporary `slipway` binary unless `-binary <path>` is passed,
+creates a synthetic fixture by default, warms each command once, and records the
+fastest of seven timed samples for:
+
+- root worktree `status --json`;
+- bound worktree `status --json`;
+- bound worktree `next --json --diagnostics`;
+- bound worktree `validate --json`;
+- root worktree `status --json --change <slug>`.
+
+The default fixture includes at least 25 Git worktrees, 300 `change.yaml` files,
+and 100 verification records. Temporary fixture directories are removed after
+the run unless `-keep-fixture` is set.
+
+Check a new local measurement against the committed baseline with the default
+30% real-time regression budget. Check mode requires an explicit `-out` path so
+it cannot overwrite the committed baseline by accident:
+
+```bash
+go run ./internal/perfbaseline/cmd/state-read-baseline \
+  -mode check \
+  -baseline state-read-performance-baseline.json \
+  -out /tmp/slipway-state-read-current.json
+```
+
+The check reports the specific command whose `real_ms` exceeds the allowed
+threshold. By default it runs up to three independent measurement attempts and
+passes as soon as one attempt stays within the 30% budget; persistent
+regressions must exceed the budget on every attempt. Write the output
+measurement to a temporary path or to the active change's ignored
+`verification/` directory when keeping local governed evidence.
+
 ## Adapter Refresh
 
 Refresh generated AI-tool surfaces after changing templates or command contracts:
