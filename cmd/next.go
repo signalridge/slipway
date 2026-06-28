@@ -14,49 +14,53 @@ import (
 )
 
 type nextView struct {
-	Command                   string                               `json:"command,omitempty"`
-	DelegatedTo               string                               `json:"delegated_to,omitempty"`
-	Slug                      string                               `json:"slug"`
-	QualityMode               string                               `json:"quality_mode,omitempty"`
-	WorkflowProfile           string                               `json:"workflow_profile,omitempty"`
-	WorkflowPreset            string                               `json:"workflow_preset,omitempty"`
-	SuggestedWorkflowPreset   string                               `json:"suggested_workflow_preset,omitempty"`
-	EffectiveWorkflowPreset   string                               `json:"effective_workflow_preset,omitempty"`
-	PresetConfirmationPending bool                                 `json:"preset_confirmation_pending,omitempty"`
-	PresetUpgradeReasons      []string                             `json:"preset_upgrade_reasons,omitempty"`
-	GovernanceForecast        *governanceForecastView              `json:"governance_forecast,omitempty"`
-	NeedsDiscovery            bool                                 `json:"needs_discovery,omitempty"`
-	ComplexityLevel           string                               `json:"complexity_level,omitempty"`
-	GuardrailDomain           string                               `json:"guardrail_domain,omitempty"`
-	Phase                     model.UserPhase                      `json:"phase"`
-	ExecutionMode             string                               `json:"execution_mode"`
-	CurrentState              model.WorkflowState                  `json:"current_state"`
-	IntakeSubStep             model.IntakeSubStep                  `json:"intake_substep,omitempty"`
-	PlanSubStep               model.PlanSubStep                    `json:"plan_substep,omitempty"`
-	PlanningNote              string                               `json:"planning_note,omitempty"`
-	LifecycleStatus           string                               `json:"lifecycle_status"`
-	InvocationRoute           *invocationRouteView                 `json:"invocation_route,omitempty"`
-	CurrentActionKind         string                               `json:"current_action_kind,omitempty"`
-	CurrentActionCommand      string                               `json:"current_action_command,omitempty"`
-	HostCapabilities          []hostCapabilityView                 `json:"host_capabilities,omitempty"`
-	Advanced                  *progression.AdvanceSummary          `json:"advanced,omitempty"`
-	AutoTransitions           []progression.AdvanceSummary         `json:"auto_transitions,omitempty"`
-	NextSkill                 *nextSkillView                       `json:"next_skill"`
-	ReviewBatch               *reviewBatchView                     `json:"review_batch,omitempty"`
-	InputContext              nextContext                          `json:"input_context"`
-	ContextBudget             *contextBudget                       `json:"context_budget,omitempty"`
-	Constraints               *agentConstraints                    `json:"constraints,omitempty"`
-	GovernanceSignals         *governanceSignalView                `json:"governance_signals,omitempty"`
-	ActiveControls            []governanceControlView              `json:"active_controls,omitempty"`
-	RequiredActions           []governanceActionView               `json:"required_actions,omitempty"`
-	SkillEvidence             []skillEvidenceEntry                 `json:"skill_evidence,omitempty"`
-	AutoPassEligible          []model.AutoPassedState              `json:"auto_pass_eligible,omitempty"`
-	ArtifactAmendments        []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
-	FreshnessDiagnostics      *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
-	Warnings                  []string                             `json:"warnings,omitempty"`
-	Blockers                  []model.ReasonCode                   `json:"blockers"`
-	Recovery                  *model.RecoverySummary               `json:"recovery,omitempty"`
-	ConfirmationRequirement   confirmationRequirement              `json:"confirmation_requirement"`
+	Command                     string                               `json:"command,omitempty"`
+	DelegatedTo                 string                               `json:"delegated_to,omitempty"`
+	Slug                        string                               `json:"slug"`
+	QualityMode                 string                               `json:"quality_mode,omitempty"`
+	WorkflowProfile             string                               `json:"workflow_profile,omitempty"`
+	WorkflowPreset              string                               `json:"workflow_preset,omitempty"`
+	SuggestedWorkflowPreset     string                               `json:"suggested_workflow_preset,omitempty"`
+	EffectiveWorkflowPreset     string                               `json:"effective_workflow_preset,omitempty"`
+	PresetConfirmationPending   bool                                 `json:"preset_confirmation_pending,omitempty"`
+	PresetUpgradeReasons        []string                             `json:"preset_upgrade_reasons,omitempty"`
+	GovernanceForecast          *governanceForecastView              `json:"governance_forecast,omitempty"`
+	NeedsDiscovery              bool                                 `json:"needs_discovery,omitempty"`
+	ComplexityLevel             string                               `json:"complexity_level,omitempty"`
+	GuardrailDomain             string                               `json:"guardrail_domain,omitempty"`
+	Phase                       model.UserPhase                      `json:"phase"`
+	ExecutionMode               string                               `json:"execution_mode"`
+	CurrentState                model.WorkflowState                  `json:"current_state"`
+	IntakeSubStep               model.IntakeSubStep                  `json:"intake_substep,omitempty"`
+	PlanSubStep                 model.PlanSubStep                    `json:"plan_substep,omitempty"`
+	PlanningNote                string                               `json:"planning_note,omitempty"`
+	LifecycleStatus             string                               `json:"lifecycle_status"`
+	InvocationRoute             *invocationRouteView                 `json:"invocation_route,omitempty"`
+	CurrentActionKind           string                               `json:"current_action_kind,omitempty"`
+	CurrentActionCommand        string                               `json:"current_action_command,omitempty"`
+	HostCapabilities            []hostCapabilityView                 `json:"host_capabilities,omitempty"`
+	Advanced                    *progression.AdvanceSummary          `json:"advanced,omitempty"`
+	AutoTransitions             []progression.AdvanceSummary         `json:"auto_transitions,omitempty"`
+	NextSkill                   *nextSkillView                       `json:"next_skill"`
+	ReviewBatch                 *reviewBatchView                     `json:"review_batch,omitempty"`
+	InputContext                nextContext                          `json:"input_context"`
+	ContextBudget               *contextBudget                       `json:"context_budget,omitempty"`
+	Constraints                 *agentConstraints                    `json:"constraints,omitempty"`
+	GovernanceSignals           *governanceSignalView                `json:"governance_signals,omitempty"`
+	ActiveControls              []governanceControlView              `json:"active_controls,omitempty"`
+	RequiredActions             []governanceActionView               `json:"required_actions,omitempty"`
+	SkillEvidence               []skillEvidenceEntry                 `json:"skill_evidence,omitempty"`
+	AutoPassEligible            []model.AutoPassedState              `json:"auto_pass_eligible,omitempty"`
+	ArtifactAmendments          []artifact.AmendmentEvent            `json:"artifact_amendments,omitempty"`
+	EvidenceFreshness           string                               `json:"evidence_freshness,omitempty"`
+	ExecutionEvidenceFreshness  string                               `json:"execution_evidence_freshness,omitempty"`
+	GovernanceEvidenceFreshness string                               `json:"governance_evidence_freshness,omitempty"`
+	OverallReadinessFreshness   string                               `json:"overall_readiness_freshness,omitempty"`
+	FreshnessDiagnostics        *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	Warnings                    []string                             `json:"warnings,omitempty"`
+	Blockers                    []model.ReasonCode                   `json:"blockers"`
+	Recovery                    *model.RecoverySummary               `json:"recovery,omitempty"`
+	ConfirmationRequirement     confirmationRequirement              `json:"confirmation_requirement"`
 
 	// planLocked records whether the lifecycle G_plan gate has approved the plan.
 	// It is unexported (never serialized) and drives whether a parsed decision.md
@@ -453,11 +457,15 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 	command = strings.TrimSpace(command)
 
 	view := nextView{
-		Command:                 command,
-		Slug:                    ref.Slug,
-		Phase:                   model.PhasePlanning,
-		ConfirmationRequirement: confirmationNoBoundary("initializing"),
-		auto:                    auto,
+		Command:                     command,
+		Slug:                        ref.Slug,
+		Phase:                       model.PhasePlanning,
+		EvidenceFreshness:           "unknown",
+		ExecutionEvidenceFreshness:  "unknown",
+		GovernanceEvidenceFreshness: "unknown",
+		OverallReadinessFreshness:   "unknown",
+		ConfirmationRequirement:     confirmationNoBoundary("initializing"),
+		auto:                        auto,
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -489,6 +497,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 	finalize := func() (nextView, error) {
 		applyReadyAdvanceDiagnostics(root, governedChange, &view)
 		applyHostCapabilityContractToNext(&view)
+		refreshOverallReadinessFreshnessForNext(&view)
 		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
 		view.CurrentActionKind = view.ConfirmationRequirement.NextActionKind
 		view.CurrentActionCommand = view.ConfirmationRequirement.NextCommand
@@ -531,6 +540,11 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
 		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
 		view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+		var summary *model.ExecutionSummary
+		if execCtx != nil {
+			summary = execCtx.Summary
+		}
+		applyReadinessFreshnessToNext(root, &view, *governedChange, summary, readiness)
 		if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
 			view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
 		}

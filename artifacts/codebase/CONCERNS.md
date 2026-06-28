@@ -1,25 +1,30 @@
 # Concerns
 
-- Authority drift risk: an invocation-scoped read context must not outlive one
-  command. It may reuse facts already read inside the command, but it must never
-  become a persistent cache or durable index.
-- Fail-closed risk: explicit `--change` fast paths must still preserve
-  `change_not_found`, archived-change, sibling-bundle, missing-authority,
-  bound-elsewhere, multi-active, and no-active semantics. Existing tests in
-  `cmd/common_test.go`, `cmd/resolve_explicit_change_authority_test.go`, and
-  `cmd/status_context_repair_test.go` are load-bearing.
-- Hidden sibling risk: `internal/state` intentionally distinguishes visible
-  workspace roots from hidden authority checks (`internal/state/store.go:170`,
-  `internal/state/verification.go:131`). Fast paths must not skip hidden
-  sibling checks where they are the reason a write/read fails closed.
-- Verification drift risk: `status` currently calls the slug-based
-  `ListVerifications` while readiness and next-skill views can use
-  `ListVerificationsForChange`. Reusing resolved verification inventory should
-  avoid duplicate reads but must keep strict YAML validation errors visible.
-- Timeline risk: status displays only the last 20 events, but the existing
-  reader validates the whole JSONL file. A tail reader improves performance but
-  cannot silently skip malformed lines inside the retained tail. Full-log
-  validation remains appropriate for health/repair surfaces.
-- Performance fixture risk: generated 25+ worktree fixtures are intentionally
-  bulky and must stay under `/tmp` or another ignored scratch area. Only the
-  benchmark recipe and timing artifact belong in git.
+- Public JSON compatibility risk: route and freshness fields are public command
+  surface. The repair must add fields without removing or renaming existing
+  fields; `nextView`, `doneView`, status/validate diagnostics, and CLIError
+  therefore keep legacy `evidence_freshness` while adding split fields
+  (`cmd/next.go:55`, `cmd/done.go:32`, `cmd/errors.go:46`).
+- Lifecycle execution safety risk: diagnostic route kinds must not imply
+  executable lifecycle authority. No-active, multi-active, explicit-missing,
+  and bound-elsewhere routes explicitly set local/effective lifecycle execution
+  disabled unless the existing successful explicit route permits it
+  (`cmd/common.go:56`, `cmd/common.go:113`, `cmd/common.go:1184`).
+- Freshness truthfulness risk: host capability blockers are appended late in
+  `next` construction, so overall readiness freshness must be recomputed after
+  those blockers are added (`cmd/next.go:500`,
+  `cmd/status_view_build.go:244`). Otherwise `next`/`run` could report stale or
+  misleading readiness.
+- Human status risk: printing one line as `Evidence Freshness: fresh` can hide
+  stale governance evidence. Text output must show execution, governance, and
+  overall readiness separately (`cmd/status_render.go:145`,
+  `cmd/status_render.go:157`).
+- Host capability fail-closed risk: independent-review must continue to block
+  when the host cannot provide fresh subagent review. Registry metadata can make
+  the requirement discoverable, but fallback remains explicit and bounded
+  (`internal/engine/capability/registry_default.go:47`,
+  `internal/engine/capability/resolver.go:140`).
+- Template drift risk: generated skills are public agent contracts. The
+  independent-review source template and registry must stay mirrored through
+  `TestFrontmatterMirrorsRegistryHostCapabilities`
+  (`internal/engine/capability/gates_test.go:76`).

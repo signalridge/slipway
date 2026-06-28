@@ -85,6 +85,16 @@ type Binding struct {
 	Attachment AttachmentMode `yaml:"attachment"`
 }
 
+// HostCapabilityContract declares a host/runtime capability needed to run a
+// selected skill with its intended evidence semantics.
+type HostCapabilityContract struct {
+	Capability          string   `yaml:"capability"`
+	Required            bool     `yaml:"required"`
+	FallbackModes       []string `yaml:"fallback_modes,omitempty"`
+	EvidenceRequirement string   `yaml:"evidence_requirement"`
+	Remediation         string   `yaml:"remediation"`
+}
+
 // Skill is the authoritative runtime record for one catalog skill.
 //
 // The fields mirror the SKILL.md frontmatter contract. The binding-compare
@@ -99,6 +109,7 @@ type Skill struct {
 	Summary           string
 	Evidence          EvidenceContract
 	Bindings          []Binding
+	HostCapabilities  []HostCapabilityContract
 	HydrateReferences []HydrateReference
 }
 
@@ -233,6 +244,22 @@ func validateSkill(sk Skill) error {
 		}
 		if !validAttachment(b.Attachment) {
 			return fmt.Errorf("binding[%d]: invalid attachment %q", i, b.Attachment)
+		}
+	}
+	for i, cap := range sk.HostCapabilities {
+		if strings.TrimSpace(cap.Capability) == "" {
+			return fmt.Errorf("host_capabilities[%d]: empty capability", i)
+		}
+		if strings.TrimSpace(cap.EvidenceRequirement) == "" {
+			return fmt.Errorf("host_capabilities[%d]: empty evidence_requirement", i)
+		}
+		if strings.TrimSpace(cap.Remediation) == "" {
+			return fmt.Errorf("host_capabilities[%d]: empty remediation", i)
+		}
+		for j, fallback := range cap.FallbackModes {
+			if strings.TrimSpace(fallback) == "" {
+				return fmt.Errorf("host_capabilities[%d].fallback_modes[%d]: empty fallback mode", i, j)
+			}
 		}
 	}
 	return nil

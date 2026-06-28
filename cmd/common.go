@@ -42,6 +42,99 @@ type invocationRouteView struct {
 	NextCommand                        string `json:"next_command,omitempty"`
 }
 
+func displayRoutePath(root, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if strings.TrimSpace(root) == "" {
+		return filepath.Clean(path)
+	}
+	return state.DisplayPath(root, path)
+}
+
+func buildDiagnosticInvocationRouteView(
+	root string,
+	invocationWorkspace string,
+	kind string,
+	changeSlug string,
+	remediation string,
+	nextCommand string,
+) *invocationRouteView {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return nil
+	}
+	route := &invocationRouteView{
+		Kind:        kind,
+		ChangeSlug:  strings.TrimSpace(changeSlug),
+		Remediation: strings.TrimSpace(remediation),
+		NextCommand: strings.TrimSpace(nextCommand),
+	}
+	if workspace := displayRoutePath(root, invocationWorkspace); workspace != "" {
+		route.InvocationWorkspacePath = workspace
+	}
+	return route
+}
+
+func buildNoActiveInvocationRouteView(root, invocationWorkspace string) *invocationRouteView {
+	return buildDiagnosticInvocationRouteView(
+		root,
+		invocationWorkspace,
+		"no_active",
+		"",
+		"Use `slipway new` to create a governed change.",
+		"slipway new",
+	)
+}
+
+func buildMultiActiveInvocationRouteView(root, invocationWorkspace string) *invocationRouteView {
+	return buildDiagnosticInvocationRouteView(
+		root,
+		invocationWorkspace,
+		"multi_active",
+		"",
+		"Specify change explicitly with `--change <slug>`, or run `slipway status` for diagnostics.",
+		"",
+	)
+}
+
+func buildExplicitMissingInvocationRouteView(root, invocationWorkspace, slug string) *invocationRouteView {
+	return buildDiagnosticInvocationRouteView(
+		root,
+		invocationWorkspace,
+		"explicit_missing",
+		slug,
+		"Check the slug with `slipway status`.",
+		"",
+	)
+}
+
+func buildBoundElsewhereInvocationRouteView(
+	root string,
+	invocationWorkspace string,
+	bound state.BoundChangeRef,
+) *invocationRouteView {
+	slug := strings.TrimSpace(bound.Slug)
+	route := buildDiagnosticInvocationRouteView(
+		root,
+		invocationWorkspace,
+		"bound_elsewhere",
+		slug,
+		fmt.Sprintf("Use `slipway next --change %s` / `slipway run --change %s`, or cd into %s.", slug, slug, bound.WorktreePath),
+		"",
+	)
+	if route == nil {
+		return nil
+	}
+	route.BoundWorkspacePath = displayRoutePath(root, bound.WorktreePath)
+	if slug != "" && strings.TrimSpace(bound.WorktreePath) != "" {
+		route.ChangeAuthorityPath = displayRoutePath(root, filepath.Join(bound.WorktreePath, "artifacts", "changes", slug, "change.yaml"))
+		route.NextCommand = "slipway next --change " + slug
+	}
+	return route
+}
+
 type projectRootContextKey struct{}
 
 func projectRootFromCommand(cmd *cobra.Command) (string, error) {
@@ -363,7 +456,7 @@ func resolveActiveChangeRefWithReadContext(readCtx *stateReadContext, explicitSl
 	// Worktree-based resolution.
 	worktreePath, err := currentWorktreeRoot()
 	if err != nil {
-		return changeRef{}, wrapResolutionError(err)
+		return changeRef{}, wrapResolutionErrorForRoot(root, err)
 	}
 	if worktreePath != "" {
 		if change, ok, err := resolveActiveChangeRefFromWorktreeBinding(root, worktreePath); err != nil {
@@ -390,7 +483,7 @@ func resolveActiveChangeRefWithReadContext(readCtx *stateReadContext, explicitSl
 			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
 				return changeRef{}, recoveryErr
 			}
-			return changeRef{}, wrapResolutionError(err)
+			return changeRef{}, wrapResolutionErrorForRoot(root, err)
 		}
 		if strings.TrimSpace(change.WorktreePath) == "" {
 			// A single unbound active change is only a fallback. In an archived
@@ -411,7 +504,7 @@ func resolveActiveChangeRefWithReadContext(readCtx *stateReadContext, explicitSl
 		if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
 			return changeRef{}, recoveryErr
 		}
-		return changeRef{}, wrapResolutionError(err)
+		return changeRef{}, wrapResolutionErrorForRoot(root, err)
 	}
 	readCtx.rememberChange(change)
 	return changeRef{Slug: change.Slug}, nil
@@ -427,7 +520,7 @@ func resolveActiveChangeRefFromWorktreeBinding(root, worktreePath string) (model
 		state.IsMissingBundleAuthority(err) {
 		return model.Change{}, false, nil
 	}
-	return model.Change{}, false, wrapResolutionError(err)
+	return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 }
 
 func shouldTryArchivedWorktreeFallback(err error) bool {
@@ -466,7 +559,7 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 				if path, pathErr := state.ArchivedChangeFilePathForRead(root, slug); pathErr == nil {
 					archivePath = state.DisplayPath(root, path)
 				}
-				return changeRef{}, newPreconditionError(
+				cliErr := newPreconditionError(
 					"archived_change_not_validatable",
 					fmt.Sprintf("change %q is archived with status=%s; active governance commands only validate active changes", slug, archived.Status),
 					fmt.Sprintf("Inspect archived evidence at %s, or choose an active change with `slipway status`.", archivePath),
@@ -477,6 +570,8 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 						"status":       string(archived.Status),
 					},
 				)
+				cliErr.InvocationRoute = buildInvocationRouteView(root, archived, root, true)
+				return changeRef{}, cliErr
 			}
 			// No archived record was found. Only os.ErrNotExist (no bundle at all)
 			// softens to no_active_change. A missing-authority error without an
@@ -486,13 +581,15 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 				if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
 					return changeRef{}, recoveryErr
 				}
-				return changeRef{}, newPreconditionError(
+				cliErr := newPreconditionError(
 					"change_not_found",
 					fmt.Sprintf("no change found for slug %q", slug),
 					"Check the slug with `slipway status`.",
 					slug,
 					nil,
 				)
+				cliErr.InvocationRoute = buildExplicitMissingInvocationRouteView(root, root, slug)
+				return changeRef{}, cliErr
 			}
 		}
 		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
@@ -501,7 +598,7 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 		return changeRef{}, newChangeStateLoadFailedError(slug, err)
 	}
 	if change.Status != model.ChangeStatusActive {
-		return changeRef{}, newPreconditionError(
+		cliErr := newPreconditionError(
 			"not_active",
 			fmt.Sprintf("change %q is not active; current status=%s", slug, change.Status),
 			"Use `slipway status` to choose an active change, or inspect `artifacts/changes/<slug>/change.yaml` for state.",
@@ -510,6 +607,8 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 				"status": string(change.Status),
 			},
 		)
+		cliErr.InvocationRoute = buildInvocationRouteView(root, change, root, true)
+		return changeRef{}, cliErr
 	}
 	if err := state.ValidateChangeSlug(change.Slug); err != nil {
 		return changeRef{}, newStateIntegrityError(
@@ -957,6 +1056,11 @@ func wrapArchivedWorktreeResolutionError(err error) error {
 }
 
 func wrapResolutionError(err error) error {
+	return wrapResolutionErrorForRoot("", err)
+}
+
+func wrapResolutionErrorForRoot(root string, err error) error {
+	invocationWorkspace := root
 	var boundElsewhere *state.ChangeBoundElsewhereError
 	if errors.As(err, &boundElsewhere) {
 		boundChanges := make([]map[string]string, 0, len(boundElsewhere.BoundChanges))
@@ -973,7 +1077,7 @@ func wrapResolutionError(err error) error {
 			change := boundElsewhere.BoundChanges[0]
 			remediation = fmt.Sprintf("Use `slipway next --change %s` / `slipway run --change %s`, or cd into %s. To discard it instead, run `slipway delete --change %s` (add --worktree to also remove its worktree).", change.Slug, change.Slug, change.WorktreePath, change.Slug)
 		}
-		return newPreconditionError(
+		cliErr := newPreconditionError(
 			"change_bound_to_other_worktree",
 			"active change is bound to another worktree: "+strings.Join(parts, ", "),
 			remediation,
@@ -982,24 +1086,34 @@ func wrapResolutionError(err error) error {
 				"bound_changes": boundChanges,
 			},
 		)
+		if len(boundElsewhere.BoundChanges) == 1 {
+			cliErr.InvocationRoute = buildBoundElsewhereInvocationRouteView(root, invocationWorkspace, boundElsewhere.BoundChanges[0])
+		} else {
+			cliErr.InvocationRoute = buildMultiActiveInvocationRouteView(root, invocationWorkspace)
+		}
+		return cliErr
 	}
 	if errors.Is(err, state.ErrNoActiveChange) {
-		return newPreconditionError(
+		cliErr := newPreconditionError(
 			"no_active_change",
 			"no active change; start one with `slipway new`",
 			"Use `slipway new` to create a governed change.",
 			"",
 			nil,
 		)
+		cliErr.InvocationRoute = buildNoActiveInvocationRouteView(root, invocationWorkspace)
+		return cliErr
 	}
 	if errors.Is(err, state.ErrMultipleActiveChanges) {
-		return newPreconditionError(
+		cliErr := newPreconditionError(
 			"active_context_ambiguous",
 			"active change context is ambiguous; use `--change <slug>` or run `slipway status`",
 			"Specify change explicitly with `--change <slug>`, or run `slipway status` for diagnostics.",
 			"",
 			nil,
 		)
+		cliErr.InvocationRoute = buildMultiActiveInvocationRouteView(root, invocationWorkspace)
+		return cliErr
 	}
 	return err
 }
@@ -1093,7 +1207,12 @@ func buildInvocationRouteView(
 	route.EffectiveLifecycleExecutionAllowed = localAllowed || explicitChange
 	switch {
 	case change.Status != model.ChangeStatusActive:
-		route.Kind = "archived"
+		if localAllowed {
+			route.Kind = "archived_local"
+		} else {
+			route.Kind = "archived"
+		}
+		route.LocalLifecycleExecutionAllowed = false
 		route.EffectiveLifecycleExecutionAllowed = false
 	case strings.TrimSpace(change.WorktreePath) == "":
 		route.Kind = "unbound_active"

@@ -177,6 +177,18 @@ func makeValidateCmd() *cobra.Command {
 					view := diagnosticValidateView("no active change or ambiguous; use `--change <slug>` or run `slipway repair`")
 					view.Mode = effectiveMode
 					view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
+					if cliErr := asCLIError(err); cliErr != nil && cliErr.InvocationRoute != nil {
+						view.InvocationRoute = cliErr.InvocationRoute
+					} else {
+						view.InvocationRoute = buildDiagnosticInvocationRouteView(
+							root,
+							invocationWorkspaceRootFromCommand(cmd, root),
+							"no_active",
+							"",
+							"Use `slipway new` to create a governed change, or specify an active change with `--change <slug>`.",
+							"slipway new",
+						)
+					}
 					return encodeJSONResponse(cmd, view)
 				}
 				return err

@@ -142,7 +142,23 @@ func renderStatusText(view statusView) string {
 		}
 	}
 
-	writeLine("Evidence Freshness: %s\n", view.EvidenceFreshness)
+	executionFreshness := strings.TrimSpace(view.ExecutionEvidenceFreshness)
+	if executionFreshness == "" {
+		executionFreshness = view.EvidenceFreshness
+	}
+	governanceFreshness := strings.TrimSpace(view.GovernanceEvidenceFreshness)
+	if governanceFreshness == "" {
+		governanceFreshness = "unknown"
+	}
+	overallFreshness := strings.TrimSpace(view.OverallReadinessFreshness)
+	if overallFreshness == "" {
+		overallFreshness = "unknown"
+	}
+	writeLine("Evidence Freshness:\n")
+	writeLine("  Execution Evidence:   %s\n", executionFreshness)
+	writeLine("  Governance Evidence:  %s\n", governanceFreshness)
+	writeLine("  Overall Readiness:    %s\n", overallFreshness)
+	writeLine("\n")
 
 	if view.GovernanceSignals != nil {
 		writeLine("\nDetected Signals:\n")
@@ -234,8 +250,11 @@ func writeStatusText(w io.Writer, view statusView) error {
 	return err
 }
 
-func printMultiChangeSummary(cmd *cobra.Command, changes []model.Change, format string) error {
-	view := buildMultiChangeSummaryView(changes)
+func printMultiChangeSummary(cmd *cobra.Command, root string, changes []model.Change, format string) error {
+	view := buildMultiChangeSummaryViewWithRoute(
+		changes,
+		buildMultiActiveInvocationRouteView(root, invocationWorkspaceRootFromCommand(cmd, root)),
+	)
 
 	switch format {
 	case "json":

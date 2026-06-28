@@ -38,6 +38,16 @@ func loadFrontmatter(t *testing.T, templates fs.FS, name string) frontmatter {
 	return fm
 }
 
+func loadRenderedFrontmatter(t *testing.T, name string, data any) frontmatter {
+	t.Helper()
+	rendered, err := tmpl.Render(name, data)
+	require.NoError(t, err)
+	text := extractFrontmatterBlock(t, rendered)
+	var fm frontmatter
+	require.NoError(t, yaml.Unmarshal([]byte(text), &fm))
+	return fm
+}
+
 // TestFrontmatterMirrorsRegistryBindings is the binding-compare gate.
 // It parses each SKILL.md's frontmatter and asserts the bindings[] list
 // matches the Go-owned Skill entry exactly.
@@ -71,6 +81,28 @@ func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
 			assertHydrateReferencesEqual(t, sk, fm.HydrateReferences)
 		})
 	}
+}
+
+func TestFrontmatterMirrorsRegistryHostCapabilities(t *testing.T) {
+	t.Parallel()
+	reg := DefaultRegistry()
+	templates := skillsFS()
+	for _, sk := range reg.All() {
+		sk := sk
+		t.Run(sk.ID, func(t *testing.T) {
+			t.Parallel()
+			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
+			assertHostCapabilitiesEqual(t, sk, fm.HostCapabilities)
+		})
+	}
+
+	t.Run("independent-review/SKILL.md.tmpl", func(t *testing.T) {
+		t.Parallel()
+		sk, ok := reg.Lookup("independent-review")
+		require.True(t, ok)
+		fm := loadRenderedFrontmatter(t, "skills/independent-review/SKILL.md.tmpl", nil)
+		assertHostCapabilitiesEqual(t, sk, fm.HostCapabilities)
+	})
 }
 
 // TestSizeBudgetsForRegisteredSkills enforces the tier-aware size-lint
@@ -137,16 +169,17 @@ func TestFrontmatterHasRequiredFields(t *testing.T) {
 }
 
 type frontmatter struct {
-	SkillID           string            `yaml:"skill_id"`
-	Domain            string            `yaml:"domain"`
-	Function          string            `yaml:"function"`
-	Tier              string            `yaml:"tier"`
-	PrimaryAttachment string            `yaml:"primary_attachment"`
-	Summary           string            `yaml:"summary"`
-	SizeRationale     string            `yaml:"size_rationale"`
-	EvidenceContract  string            `yaml:"evidence_contract"`
-	Bindings          []frontBinding    `yaml:"bindings"`
-	HydrateReferences []frontHydrateRef `yaml:"hydrate_references"`
+	SkillID           string                `yaml:"skill_id"`
+	Domain            string                `yaml:"domain"`
+	Function          string                `yaml:"function"`
+	Tier              string                `yaml:"tier"`
+	PrimaryAttachment string                `yaml:"primary_attachment"`
+	Summary           string                `yaml:"summary"`
+	SizeRationale     string                `yaml:"size_rationale"`
+	EvidenceContract  string                `yaml:"evidence_contract"`
+	Bindings          []frontBinding        `yaml:"bindings"`
+	HostCapabilities  []frontHostCapability `yaml:"host_capabilities"`
+	HydrateReferences []frontHydrateRef     `yaml:"hydrate_references"`
 }
 
 type frontBinding struct {
@@ -158,6 +191,14 @@ type frontBinding struct {
 type frontHydrateRef struct {
 	Name   string `yaml:"name"`
 	Reason string `yaml:"reason"`
+}
+
+type frontHostCapability struct {
+	Capability          string   `yaml:"capability"`
+	Required            bool     `yaml:"required"`
+	FallbackModes       []string `yaml:"fallback_modes"`
+	EvidenceRequirement string   `yaml:"evidence_requirement"`
+	Remediation         string   `yaml:"remediation"`
 }
 
 func extractFrontmatterBlock(t *testing.T, content string) string {
@@ -216,6 +257,50 @@ func assertBindingsEqual(t *testing.T, sk Skill, frontBindings []frontBinding) {
 
 func bindingKey(typ, target, attachment string) string {
 	return typ + "|" + target + "|" + attachment
+}
+
+func assertHostCapabilitiesEqual(t *testing.T, sk Skill, frontCapabilities []frontHostCapability) {
+	t.Helper()
+	require.Equalf(t, len(sk.HostCapabilities), len(frontCapabilities),
+		"skill %s: host_capabilities count drift (registry=%d, frontmatter=%d)",
+		sk.ID, len(sk.HostCapabilities), len(frontCapabilities))
+
+	goKeys := make([]string, 0, len(sk.HostCapabilities))
+	for _, cap := range sk.HostCapabilities {
+		goKeys = append(goKeys, hostCapabilityKey(
+			cap.Capability,
+			cap.Required,
+			cap.FallbackModes,
+			cap.EvidenceRequirement,
+			cap.Remediation,
+		))
+	}
+	frontKeys := make([]string, 0, len(frontCapabilities))
+	for _, cap := range frontCapabilities {
+		frontKeys = append(frontKeys, hostCapabilityKey(
+			cap.Capability,
+			cap.Required,
+			cap.FallbackModes,
+			cap.EvidenceRequirement,
+			cap.Remediation,
+		))
+	}
+	sort.Strings(goKeys)
+	sort.Strings(frontKeys)
+	assert.Equal(t, goKeys, frontKeys, "skill %s: frontmatter host_capabilities do not mirror registry", sk.ID)
+}
+
+func hostCapabilityKey(capability string, required bool, fallbackModes []string, evidenceRequirement, remediation string) string {
+	modes := append([]string(nil), fallbackModes...)
+	sort.Strings(modes)
+	return fmt.Sprintf(
+		"%s|%t|%s|%s|%s",
+		strings.TrimSpace(capability),
+		required,
+		strings.Join(modes, ","),
+		strings.TrimSpace(evidenceRequirement),
+		strings.TrimSpace(remediation),
+	)
 }
 
 func assertHydrateReferencesEqual(t *testing.T, sk Skill, frontRefs []frontHydrateRef) {
