@@ -373,8 +373,8 @@ Environment variables:
 					if err != nil {
 						return err
 					}
-					applyNextInvocationWorkspacePath(cmd, root, &view)
-					applyNextInvocationRoute(cmd, root, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
+					applyNextInvocationWorkspacePathWithReadContext(cmd, readCtx, &view)
+					applyNextInvocationRouteWithReadContext(cmd, readCtx, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
 					return encodeJSONResponse(cmd, buildNextHandoffView(view))
 				}
 
@@ -389,8 +389,8 @@ Environment variables:
 				if err != nil {
 					return err
 				}
-				applyNextInvocationWorkspacePath(cmd, root, &view)
-				applyNextInvocationRoute(cmd, root, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
+				applyNextInvocationWorkspacePathWithReadContext(cmd, readCtx, &view)
+				applyNextInvocationRouteWithReadContext(cmd, readCtx, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
 
 				if contextGuard {
 					return writeContextGuardHookMessages(cmd.OutOrStdout(), view)

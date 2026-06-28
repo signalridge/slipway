@@ -1480,6 +1480,50 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.Equal(t, "review_batch", fallbackView.ConfirmationRequirement.Reason)
 }
 
+func TestReviewBatchHostCapabilityAvailableDoesNotBlockCommandSurfaces(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "delegation")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+	var nextOutputView nextView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextOutputView))
+	nextCapability := requireIndependentReviewHostCapability(t, nextOutputView.HostCapabilities)
+	assert.Equal(t, "available", nextCapability.Availability)
+	assert.False(t, nextCapability.FallbackSelected)
+	assert.NotContains(t, model.ReasonSpecs(nextOutputView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "review_batch", nextOutputView.ConfirmationRequirement.Reason)
+
+	validateCmd := commandForRoot(t, root, makeValidateCmd())
+	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	var validateOut bytes.Buffer
+	validateCmd.SetOut(&validateOut)
+	require.NoError(t, validateCmd.Execute())
+	var validate validateView
+	require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+	validateCapability := requireIndependentReviewHostCapability(t, validate.HostCapabilities)
+	assert.Equal(t, "available", validateCapability.Availability)
+	assert.False(t, validateCapability.FallbackSelected)
+	assert.NotContains(t, model.ReasonSpecs(validate.Blockers), "host_capability_unavailable:independent-review:subagent")
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var runOut bytes.Buffer
+	runCmd.SetOut(&runOut)
+	require.NoError(t, runCmd.Execute())
+	var runView nextView
+	require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
+	runCapability := requireIndependentReviewHostCapability(t, runView.HostCapabilities)
+	assert.Equal(t, "available", runCapability.Availability)
+	assert.False(t, runCapability.FallbackSelected)
+	assert.NotContains(t, model.ReasonSpecs(runView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
+}
+
 func prepareReviewBatchHostCapabilityFixture(t *testing.T) (string, string) {
 	t.Helper()
 

@@ -99,3 +99,57 @@ func TestStateReadContextResolvesPathsOncePerInvocation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, expectedBundleDir, first.GovernedBundleDir)
 }
+
+func TestStateReadContextCachesActiveRouteWithinInvocation(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		ensureTestGitRepo(t, root)
+		initTestWorkspace(t, root)
+
+		first := model.NewChange("read-context-route-a")
+		require.NoError(t, state.SaveChange(root, first))
+
+		readCtx := newStateReadContext(root)
+		ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
+		require.NoError(t, err)
+		assert.Equal(t, first.Slug, ref.Slug)
+
+		second := model.NewChange("read-context-route-b")
+		require.NoError(t, state.SaveChange(root, second))
+
+		cachedRef, err := resolveActiveChangeRefWithReadContext(readCtx, "")
+		require.NoError(t, err)
+		assert.Equal(t, first.Slug, cachedRef.Slug)
+
+		_, err = resolveActiveChangeRefWithReadContext(newStateReadContext(root), "")
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "active_context_ambiguous", cliErr.ErrorCode)
+	})
+}
+
+func TestStateReadContextReloadInvalidatesActiveRouteCache(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		ensureTestGitRepo(t, root)
+		initTestWorkspace(t, root)
+
+		first := model.NewChange("read-context-route-reload-a")
+		require.NoError(t, state.SaveChange(root, first))
+
+		readCtx := newStateReadContext(root)
+		ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
+		require.NoError(t, err)
+		assert.Equal(t, first.Slug, ref.Slug)
+
+		second := model.NewChange("read-context-route-reload-b")
+		require.NoError(t, state.SaveChange(root, second))
+		_, err = readCtx.reloadChange(first.Slug)
+		require.NoError(t, err)
+
+		_, err = resolveActiveChangeRefWithReadContext(readCtx, "")
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "active_context_ambiguous", cliErr.ErrorCode)
+	})
+}

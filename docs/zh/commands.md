@@ -258,6 +258,10 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `archived_change_not_validatable` 失败，并返回终态状态以及已归档的 `change.yaml` 路径，而不是返回
 通用的“无活动变更”诊断。这是一项活动就绪契约：`validate` 在 `done` 之前证明当前活动的受治理状态；
 它不是面向已冻结包的归档后审计面。
+如果明确给出的 slug 不对应活动或归档变更，`validate --change <slug> --json` 会 fail closed，
+以退出码 3 和 `error_code=change_not_found` 返回。相对地，未指定 `--change` 的
+`validate --json` 在没有活动变更时是诊断视图：退出码为 0，并报告
+`invocation_route.kind=no_active` 与 `next_command=slipway new`。
 
 `artifacts/codebase/**` 下的持久 codebase map 不计入 scope-contract 的改动文件核算。当只有这些
 上下文文件是脏的时候，它们不会进入 `scope_contract.changed_files` 和

@@ -293,6 +293,11 @@ an archived terminal change, the command fails with
 `change.yaml` path instead of the generic no-active diagnostic. This is an
 active-readiness contract: `validate` proves the currently active governed state
 before `done`; it is not a post-archive audit surface for frozen bundles.
+If the explicit slug does not name an active or archived change, `validate
+--change <slug> --json` fails closed with exit code 3 and
+`error_code=change_not_found`. By contrast, unscoped `validate --json` with no
+active change is a diagnostics view: it exits 0 and reports
+`invocation_route.kind=no_active` with `next_command=slipway new`.
 
 The durable codebase map under `artifacts/codebase/**` is exempt from
 scope-contract changed-file accounting. When only those context files are dirty,
