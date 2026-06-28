@@ -226,7 +226,7 @@ func candidateBundlePaths(root, slug string) ([]bundleCandidate, error) {
 	return bundleCandidatesForRoots(roots, slug), nil
 }
 
-func fastBundleCandidates(root, slug string) ([]bundleCandidate, error) {
+func fastBundleCandidates(root, slug string) []bundleCandidate {
 	normalizedRoot, err := NormalizePath(root)
 	if err != nil {
 		normalizedRoot = filepath.Clean(root)
@@ -240,20 +240,20 @@ func fastBundleCandidates(root, slug string) ([]bundleCandidate, error) {
 
 	binding, ok := readWorktreeBinding(normalizedRoot, slug)
 	if !ok {
-		return candidates, nil
+		return candidates
 	}
 	workspaceRoot, err := scopeRootInWorkspace(normalizedRoot, binding.WorktreePath)
 	if err != nil {
-		return candidates, nil
+		return candidates
 	}
 	path := BundleChangeFilePath(workspaceRoot, slug)
 	if _, ok := seen[path]; ok {
-		return candidates, nil
+		return candidates
 	}
 	return append(candidates, bundleCandidate{
 		WorkspaceRoot: workspaceRoot,
 		Path:          path,
-	}), nil
+	})
 }
 
 func candidateArchivedBundlePaths(root, slug string) ([]bundleCandidate, error) {
@@ -371,16 +371,14 @@ func ChangeSlugExists(root, slug string) (bool, error) {
 		return false, err
 	}
 
-	if _, _, err := loadArchivedChangeWithCandidate(root, slug); err == nil {
+	_, err := loadArchivedChangeWithCandidate(root, slug)
+	if err == nil || errors.Is(err, errMissingBundleAuthority) {
 		return true, nil
-	} else if errors.Is(err, errMissingBundleAuthority) {
-		return true, nil
-	} else if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return false, err
 	}
-	return false, nil
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return false, err
 }
 
 func loadChangeFromCandidates(root string, paths []bundleCandidate) (model.Change, error) {
@@ -477,10 +475,7 @@ func LoadChange(root, slug string) (model.Change, error) {
 // falls back to the full workspace scan only when that narrow authority cannot
 // establish the change location.
 func LoadChangeFast(root, slug string) (model.Change, error) {
-	paths, err := fastBundleCandidates(root, slug)
-	if err != nil {
-		return model.Change{}, err
-	}
+	paths := fastBundleCandidates(root, slug)
 	change, err := loadChangeFromCandidates(root, paths)
 	if err == nil {
 		return change, nil
@@ -491,12 +486,13 @@ func LoadChangeFast(root, slug string) (model.Change, error) {
 	return model.Change{}, err
 }
 
-func loadArchivedChangeWithCandidate(root, slug string) (model.Change, bundleCandidate, error) {
+func loadArchivedChangeWithCandidate(root, slug string) (bundleCandidate, error) {
 	paths, err := candidateArchivedBundlePaths(root, slug)
 	if err != nil {
-		return model.Change{}, bundleCandidate{}, err
+		return bundleCandidate{}, err
 	}
-	return loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, loadChangeCandidate)
+	_, candidate, err := loadChangeFromCandidatesWithLoaderAndCandidate(root, paths, loadChangeCandidate)
+	return candidate, err
 }
 
 func loadChangeRegardlessOfVisibility(root, slug string) (model.Change, error) {

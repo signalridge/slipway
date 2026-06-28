@@ -113,7 +113,7 @@ README.md only.
 各引き継ぎの後に、読み取り専用の確認を繰り返します。
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -147,7 +147,7 @@ AI が完了したら、差分を確認します。
 
 ```bash
 git diff -- README.md
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -172,7 +172,7 @@ slipway fix --json
 状態が done-ready を報告したら:
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 続いて、何が変わったかを確認します。

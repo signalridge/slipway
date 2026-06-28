@@ -34,7 +34,7 @@ func LoadArchivedChange(root, slug string) (model.Change, error) {
 }
 
 func ArchivedChangeFilePathForRead(root, slug string) (string, error) {
-	_, candidate, err := loadArchivedChangeWithCandidate(root, slug)
+	candidate, err := loadArchivedChangeWithCandidate(root, slug)
 	if err != nil {
 		return "", err
 	}

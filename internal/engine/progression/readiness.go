@@ -223,7 +223,6 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		evaluationChange,
 		effectiveState,
 		execCtx.LatestRunVersion,
-		FinalCloseoutEvidenceRequired(policy),
 		reviewSelection,
 		verificationRecords,
 		planningSubSteps...,
@@ -619,12 +618,12 @@ func filterS3ReviewAlignmentInputBlockers(blockers []model.ReasonCode) []model.R
 }
 
 func s3ReviewAlignmentInputBlocker(blocker model.ReasonCode) bool {
+	if state.ExecutionFreshnessInputBlocker(blocker) {
+		return true
+	}
 	code := strings.TrimSpace(blocker.Code)
 	switch code {
-	case state.StalePlanningEvidenceBlockerToken,
-		state.StaleExecutionEvidenceBlockerToken,
-		"tasks_plan_changed_since_task_evidence",
-		scopecontract.ReasonScopeContractDrift,
+	case scopecontract.ReasonScopeContractDrift,
 		scopecontract.ReasonScopeContractChangedFilesMissing:
 		return true
 	case "required_skill_stale":
@@ -1074,14 +1073,6 @@ func gitNameOnlyResult(workspaceRoot string, args ...string) ([]string, error) {
 	return files, nil
 }
 
-func gatePlanningSkillRecords(
-	root string,
-	change model.Change,
-	planSubStep model.PlanSubStep,
-) (map[string]model.VerificationRecord, []string, error) {
-	return gatePlanningSkillRecordsWithRecords(root, change, planSubStep, nil)
-}
-
 func gatePlanningSkillRecordsWithRecords(
 	root string,
 	change model.Change,
@@ -1097,7 +1088,6 @@ func gatePlanningSkillRecordsWithRecords(
 		change,
 		model.StateS1Plan,
 		0,
-		false,
 		skill.ReviewSkillSelection{},
 		verificationRecords,
 		subSteps...,

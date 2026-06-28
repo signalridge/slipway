@@ -89,7 +89,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"intake_substep_invalid",
 		"intent_drift",
 		"invalid_blocker",
-		"legacy_runtime_handoff",
 		"lifecycle_event_log_unreadable",
 		"lifecycle_event_scan_failed",
 		"lifecycle_event_scan_skipped",
@@ -101,8 +100,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"missing_required_artifact",
 		"missing_run_summary",
 		"missing_task_evidence_for_run_summary",
-		"missing_worktree_branch",
-		"missing_worktree_path",
 		"multiple_active_changes",
 		"new_change_required",
 		"no_skill_required",
@@ -116,8 +113,6 @@ func canonicalReasonCodeSnapshot() []string {
 		"orphaned_change_bundle",
 		"parallel_wave_changed_file_overlap",
 		"plan_audit_budget_exhausted",
-		"plan_audit_evidence_missing",
-		"plan_audit_failed",
 		"plan_audit_iteration",
 		"plan_audit_origin_invalid",
 		"plan_audit_stalled",
@@ -186,14 +181,12 @@ func canonicalReasonCodeSnapshot() []string {
 		"tasks_checklist_unreadable",
 		"tasks_plan_changed_since_task_evidence",
 		"unknown_reason_code",
-		"wave_execution_blocked",
 		"wave_execution_unavailable",
 		"wave_orchestration_run_summary_version_invalid",
 		"wave_orchestration_stale_task_evidence",
 		"wave_plan_drift",
 		"wave_plan_load_failed",
 		"wave_plan_missing",
-		"wave_plan_repair_blocked",
 		"wave_plan_unreadable",
 		"wave_run_missing",
 		"wave_run_version_mismatch",
@@ -222,7 +215,6 @@ func canonicalReasonSeveritySnapshot(codes []string) map[string]ReasonSeverity {
 		"codebase_map_freshness_stale":         ReasonSeverityWarning,
 		"codebase_map_freshness_unknown":       ReasonSeverityWarning,
 		"execution_interrupted":                ReasonSeverityWarning,
-		"legacy_runtime_handoff":               ReasonSeverityWarning,
 		"lifecycle_event_scan_skipped":         ReasonSeverityWarning,
 		"no_skill_required":                    ReasonSeverityInfo,
 		"run_slipway_done_to_finalize":         ReasonSeverityWarning,
@@ -304,6 +296,36 @@ func TestWaveTestImplDistinctnessVocabularyRetired(t *testing.T) {
 
 	assert.Falsef(t, IsCanonicalReasonCode(retired),
 		"%q must no longer be recognized as a canonical reason code", retired)
+}
+
+func TestNoLongerEmittedReasonCodeVocabularyRetired(t *testing.T) {
+	t.Parallel()
+
+	retiredCodes := []string{
+		"missing_worktree_branch",
+		"missing_worktree_path",
+		"plan_audit_evidence_missing",
+		"plan_audit_failed",
+		"wave_execution_blocked",
+		"wave_plan_repair_blocked",
+	}
+	for _, retired := range retiredCodes {
+		retired := retired
+		t.Run(retired, func(t *testing.T) {
+			t.Parallel()
+
+			_, inRegistry := canonicalReasonDefinitions[retired]
+			assert.Falsef(t, inRegistry,
+				"the canonical reason registry must not define the retired blocker %q", retired)
+
+			_, inRemediations := blockerRemediations[retired]
+			assert.Falsef(t, inRemediations,
+				"the remediation vocabulary must not define the retired blocker %q", retired)
+
+			assert.Falsef(t, IsCanonicalReasonCode(retired),
+				"%q must no longer be recognized as a canonical reason code", retired)
+		})
+	}
 }
 
 func TestReviewAlignmentAndNewChangeRecoveryVocabularyRegistered(t *testing.T) {

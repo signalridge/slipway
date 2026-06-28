@@ -1,7 +1,6 @@
 package state
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -54,9 +53,7 @@ func loadWavePlanFromPath(path string) (model.WavePlan, error) {
 		return model.WavePlan{}, err
 	}
 	var plan model.WavePlan
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&plan); err != nil {
+	if err := decodeYAMLKnownFields(raw, &plan); err != nil {
 		return model.WavePlan{}, fmt.Errorf("%w: parse wave plan: %w", ErrWavePlanCacheUnreadable, err)
 	}
 	plan.Normalize()
@@ -339,9 +336,7 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 			continue
 		}
 		var run model.WaveRun
-		decoder := yaml.NewDecoder(bytes.NewReader(raw))
-		decoder.KnownFields(true)
-		if err := decoder.Decode(&run); err != nil {
+		if err := decodeYAMLKnownFields(raw, &run); err != nil {
 			return nil, fmt.Errorf("parse wave run %q: %w", path, err)
 		}
 		run.Normalize()

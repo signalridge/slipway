@@ -404,7 +404,6 @@ func makeDoneCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&allReady, "all-ready", false, "Archive every active change that is done-ready")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	cmd.Flags().Bool("json", false, "JSON output")
 	return cmd
 }
 

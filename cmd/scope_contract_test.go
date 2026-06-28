@@ -21,7 +21,7 @@ func TestValidateIncludesScopeContractDriftReport(t *testing.T) {
 
 	root, slug := writeScopeContractDriftFixture(t)
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	require.NotNil(t, view.ScopeContract)
 	assert.Equal(t, "fail", view.ScopeContract.Status)
@@ -34,7 +34,7 @@ func TestValidateAndNextTreatS3ScopeContractDriftAsReviewInput(t *testing.T) {
 
 	root, slug := writeScopeContractDriftFixtureInState(t, model.StateS3Review)
 
-	validateView, err := buildValidateViewForSlug(root, slug)
+	validateView, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.NotContains(t, model.ReasonSpecs(validateView.Blockers), "scope_contract_drift:cmd/review.go")
 	diagnostics := strings.Join(validateView.Diagnostics, "\n")

@@ -318,13 +318,6 @@
     },
     {
       "kind": "json-contract",
-      "name": "done-json",
-      "source": "cmd/done.go",
-      "docs": "docs/reference/commands.md",
-      "token": "slipway done --json"
-    },
-    {
-      "kind": "json-contract",
       "name": "evidence-skill-json",
       "source": "cmd/evidence.go",
       "docs": "docs/reference/commands.md",
@@ -434,13 +427,6 @@
       "source": "cmd/status.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway status --json"
-    },
-    {
-      "kind": "json-contract",
-      "name": "validate-json",
-      "source": "cmd/validate.go",
-      "docs": "docs/reference/commands.md",
-      "token": "slipway validate --json"
     },
     {
       "kind": "skill",

@@ -11,12 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState, closeoutRequired bool) []string {
+func requiredSkillsForState(needsDiscovery bool, state model.WorkflowState) []string {
 	return RequiredSkillsForStateWithRegistryWithReviewSelection(
 		definitionsToSortedSlice(defaultGovernanceRegistry),
 		needsDiscovery,
 		state,
-		closeoutRequired,
 		ReviewSkillSelection{},
 	)
 }
@@ -33,33 +32,33 @@ func TestRequiredSkillsByNeedsDiscoveryAndState(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{"wave-orchestration"},
-		requiredSkillsForState(false, model.StateS2Implement, false),
+		requiredSkillsForState(false, model.StateS2Implement),
 	)
 	// Non-discovery at S1_PLAN returns plan-audit only (discovery skills are discovery-only)
 	assert.Equal(
 		t,
 		[]string{"plan-audit"},
-		requiredSkillsForState(false, model.StateS1Plan, false),
+		requiredSkillsForState(false, model.StateS1Plan),
 	)
 	// Discovery at S1_PLAN returns all planning skills
 	assert.Equal(
 		t,
 		[]string{"plan-audit", "research-orchestration"},
-		requiredSkillsForState(true, model.StateS1Plan, false),
+		requiredSkillsForState(true, model.StateS1Plan),
 	)
 	// Non-discovery at S3_REVIEW returns the selected review gate skills plus
 	// the always-required ship-verification terminal gate.
 	assert.Equal(
 		t,
 		[]string{"code-quality-review", "independent-review", "ship-verification", "spec-compliance-review"},
-		requiredSkillsForState(false, model.StateS3Review, false),
+		requiredSkillsForState(false, model.StateS3Review),
 	)
-	// ship-verification is always required at S3_REVIEW regardless of closeout,
-	// since goal-verification and final-closeout are merged into it.
+	// ship-verification is always required at S3_REVIEW since
+	// goal-verification and final-closeout are merged into it.
 	assert.Equal(
 		t,
 		[]string{"code-quality-review", "independent-review", "ship-verification", "spec-compliance-review"},
-		requiredSkillsForState(true, model.StateS3Review, true),
+		requiredSkillsForState(true, model.StateS3Review),
 	)
 }
 
@@ -71,7 +70,6 @@ func TestRequiredSkillsForStateWithRegistry_S3SecuritySelection(t *testing.T) {
 		registry,
 		false,
 		model.StateS3Review,
-		false,
 		ReviewSkillSelection{SecurityReviewSelected: true},
 	)
 
@@ -124,21 +122,21 @@ func TestIntakeClarificationRequiredAtS0Intake(t *testing.T) {
 	assert.Equal(
 		t,
 		[]string{"intake-clarification"},
-		requiredSkillsForState(false, model.StateS0Intake, false),
+		requiredSkillsForState(false, model.StateS0Intake),
 	)
 	assert.Equal(
 		t,
 		[]string{"intake-clarification"},
-		requiredSkillsForState(true, model.StateS0Intake, false),
+		requiredSkillsForState(true, model.StateS0Intake),
 	)
 }
 
 func TestResearchOrchestrationRequiredForDiscoveryAtS1Plan(t *testing.T) {
 	t.Parallel()
-	required := requiredSkillsForState(true, model.StateS1Plan, false)
+	required := requiredSkillsForState(true, model.StateS1Plan)
 	assert.Equal(t, []string{"plan-audit", "research-orchestration"}, required)
 	// Non-discovery only returns plan-audit (research/scope are discovery-only)
-	assert.Equal(t, []string{"plan-audit"}, requiredSkillsForState(false, model.StateS1Plan, false))
+	assert.Equal(t, []string{"plan-audit"}, requiredSkillsForState(false, model.StateS1Plan))
 }
 
 func TestLoadGovernanceRegistryFromGeneratedSkills(t *testing.T) {

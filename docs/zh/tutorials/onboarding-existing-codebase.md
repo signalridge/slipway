@@ -113,7 +113,7 @@ one task can verify whether the map improved planning.
 每次交接之后：
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -140,7 +140,7 @@ guessing.
 
 ```bash
 git diff --stat
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -156,13 +156,13 @@ slipway next --json --diagnostics
 跑一次最终的只读检查：
 
 ```bash
-slipway validate --json
+slipway validate
 ```
 
 达到可完成状态后：
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 把试点差异和归档的受治理记录一起提交。

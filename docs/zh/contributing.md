@@ -81,7 +81,7 @@ go test ./internal/toolgen -count=1
 - 在所属的包里加一个聚焦的回归测试。
 - 把共享语义收敛到一个 helper 里，不要重复 Markdown 或状态解析逻辑。
 - 工具契约变化时，更新生成的 skill 或文档。
-- 在当前受治理的 worktree 内用 `go run . validate --json` 验证。
+- 在当前受治理的 worktree 内用 `go run . validate` 验证。
 
 ## 治理覆盖率门禁
 

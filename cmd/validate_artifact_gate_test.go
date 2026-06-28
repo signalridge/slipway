@@ -35,7 +35,7 @@ func TestValidateBlocksWhenGovernedBundleIsIncompleteAtSpecBundle(t *testing.T) 
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -76,7 +76,7 @@ func TestValidateReportsDeferredArtifactsMissingAfterRealScaffold(t *testing.T) 
 		require.ErrorIsf(t, err, os.ErrNotExist, "%s must be deferred to skill authoring", file)
 	}
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	specs := model.ReasonSpecs(view.Blockers)
 	assert.Contains(t, specs, "missing_required_artifact:requirements.md")
@@ -86,7 +86,7 @@ func TestValidateReportsDeferredArtifactsMissingAfterRealScaffold(t *testing.T) 
 	assert.Contains(t, recoveryStepCodes(view.Recovery), "missing_required_artifact")
 }
 
-func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
+func TestValidateRejectsRetiredJSONFlag(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -96,12 +96,11 @@ func TestValidateAllowsJsonFalseAsDefaultJSONOutput(t *testing.T) {
 		cmd.SetArgs([]string{"--json=false"})
 		cmd.SetOut(&out)
 
-		require.NoError(t, cmd.Execute())
-
-		var view validateView
-		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		assert.Equal(t, "diagnostics", view.ExecutionMode)
-		assert.Empty(t, view.Mode, "default validate (no --focus) should omit mode")
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "invalid_usage", cliErr.ErrorCode)
 	})
 }
 
@@ -113,7 +112,7 @@ func TestValidatePreAuditDefaultViewOmitsShipGateDebt(t *testing.T) {
 
 	slug := createGovernedRequest(t, root, levelNonDiscovery, "validate should omit ship gate debt before verify")
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.NotContains(t, view.GateDetails, "G_ship")
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_key_links_missing_target_files")
@@ -173,7 +172,7 @@ func TestValidateBlocksPlanAuditAdvanceWhenArtifactsAreMissingEvenIfSkillIsReady
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -228,7 +227,7 @@ THEN G_plan remains blocked with a decision contract blocker.
 		Timestamp: time.Now().UTC(),
 	})
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 
 	assert.False(t, view.CanAdvance)
@@ -274,7 +273,7 @@ func TestValidateUsesFilesystemArtifactReadinessWithoutPersistingReconcile(t *te
 	bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
 	require.NoError(t, os.Remove(artifact.ResolveArtifactPath(bundlePath, "decision.md")))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "missing_required_artifact:decision.md")
 
@@ -315,7 +314,7 @@ func TestValidateExposesArtifactAmendmentsWithoutPersistingReconcile(t *testing.
 
 	require.NoError(t, os.WriteFile(intentPath, []byte("# Intent\nValidate amended content\n"), 0o644))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	require.Len(t, view.ArtifactAmendments, 1)
 	assert.Equal(t, "intent", view.ArtifactAmendments[0].ArtifactID)
@@ -345,7 +344,7 @@ func TestValidateOnlyRequiresActivePlanningSkillAtPlanAudit(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView
@@ -381,7 +380,7 @@ func TestValidateSkillsReadyScopesToActivePlanningSubStep(t *testing.T) {
 		Timestamp: time.Now().UTC().Add(time.Second),
 	})
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Equal(t, "pass", view.SkillsReady["plan-audit"])
 	assert.NotContains(t, view.SkillsReady, "research-orchestration")
@@ -401,7 +400,7 @@ func TestValidateExposesPlanningRecoveryState(t *testing.T) {
 	change.PlanSubStep = model.PlanSubStepValidate
 	require.NoError(t, state.SaveChange(root, change))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Equal(t, model.PlanSubStepValidate, view.PlanSubStep)
 	assert.Contains(t, view.PlanningNote, "recovery-only")
@@ -425,7 +424,7 @@ func TestValidateDoesNotLeakBundleBlockersBeforeWorktreeBinding(t *testing.T) {
 	change.NeedsDiscovery = true
 	require.NoError(t, state.SaveChange(root, change))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "dedicated_worktree_metadata_required")
 }
@@ -447,7 +446,7 @@ func TestValidateIncludesGovernanceActionBlockersAtReviewState(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 	writeAuthReviewGovernedBundle(t, root, slug)
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.False(t, view.CanAdvance)
 }
@@ -482,7 +481,7 @@ REQ-001: The system must authenticate requests.
   - target_files: [cmd/validate.go]
 `), 0o644))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	diagnostics := strings.Join(view.Diagnostics, "\n")
 	assert.Contains(t, diagnostics, "plan_dimension_context_missing_task_kind_warning:t-01")
@@ -519,7 +518,7 @@ REQ-001: The system must authenticate requests.
   - target_files: [cmd/validate.go]
 `), 0o644))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_dependency_unknown:t-01->t-99")
 	require.NotNil(t, view.Recovery)
@@ -545,7 +544,7 @@ func TestValidateAtShipGateRequiresReviewEvidence(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 
@@ -598,7 +597,7 @@ func TestValidateBlocksWhenExecutionEvidenceIsStale(t *testing.T) {
   - covers: [REQ-001]
 `), 0o644))
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "stale_planning_evidence")
 	assert.False(t, view.CanAdvance)
@@ -610,7 +609,7 @@ func TestValidateTreatsS3TaskPlanDriftAsReviewInput(t *testing.T) {
 	root := t.TempDir()
 	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
 
-	view, err := buildValidateViewForSlug(root, slug)
+	view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 
 	reasons := strings.Join(model.ReasonSpecs(view.Blockers), "\n")

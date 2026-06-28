@@ -179,7 +179,7 @@ func sourceTargetFilesByTask(content string) map[string][]string {
 
 func taskIDFromCheckboxLine(line string) (string, bool) {
 	trimmed := strings.TrimSpace(line)
-	if !(strings.HasPrefix(trimmed, "- [") || strings.HasPrefix(trimmed, "* [")) {
+	if !strings.HasPrefix(trimmed, "- [") && !strings.HasPrefix(trimmed, "* [") {
 		return "", false
 	}
 	closing := strings.Index(trimmed, "]")

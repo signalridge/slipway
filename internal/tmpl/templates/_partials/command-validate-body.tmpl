@@ -16,7 +16,7 @@ slipway validate
 - Does not modify state — read-only diagnostic.
 - Show validation summary to user with actionable remediation steps.
 - `--change <slug>` is fail-closed: a missing explicit slug returns exit code
-  3 with `error_code=change_not_found`. Unscoped `validate --json` with no
+  3 with `error_code=change_not_found`. Unscoped `validate` with no
   active change is a diagnostics view that exits 0 and reports
   `invocation_route.kind=no_active`.
 
@@ -24,6 +24,5 @@ slipway validate
 - `--focus <alias>`: run a focus check (see `--list-focuses`)
 - `--list-focuses`: list available validate focuses
 - `--format <text|json>`: output format for `--list-focuses` (validate's main output is JSON-only)
-- `--json`: JSON output
 - `--change <slug>`: target a specific active change
 {{- end -}}

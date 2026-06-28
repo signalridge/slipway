@@ -32,10 +32,8 @@ func (e *GovernanceRegistryError) Unwrap() error {
 }
 
 type governanceFrontMatter struct {
-	// Active fields (used by loader)
-	SkillID     string `yaml:"skill_id"`
-	Name        string `yaml:"name"`
-	Description string `yaml:"description"`
+	SkillID string `yaml:"skill_id"`
+	Name    string `yaml:"name"`
 }
 
 func LoadGovernanceRegistry(root string) ([]Definition, error) {

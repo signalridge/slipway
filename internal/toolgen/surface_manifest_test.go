@@ -121,6 +121,8 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		assert.Equal(t, "docs/reference/commands.md", row.Docs)
 		assert.Contains(t, row.Token, "json")
 	}
+	assert.NotContains(t, rowsByKey, "json-contract/done-json")
+	assert.NotContains(t, rowsByKey, "json-contract/validate-json")
 
 	for _, path := range []string{"README.md", "docs/reference/ai-tools.md", "docs/reference/commands.md", "docs/how-to/recover-and-troubleshoot.md"} {
 		key := "documentation/" + path

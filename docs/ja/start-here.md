@@ -95,7 +95,7 @@ slipway run --json --diagnostics
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 slipway health --doctor --json
 ```

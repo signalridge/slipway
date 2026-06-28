@@ -148,7 +148,6 @@ func buildValidateRecovery(blockers []model.ReasonCode, gateDetails map[string]m
 func makeValidateCmd() *cobra.Command {
 	var changeSlug string
 	var focus string
-	var jsonOutput bool
 	var listFocuses bool
 	var discoveryFormat string
 	cmd := &cobra.Command{
@@ -209,14 +208,9 @@ func makeValidateCmd() *cobra.Command {
 	}
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit active change slug")
 	cmd.Flags().StringVar(&focus, "focus", "", "Validate focus (e.g. sast, property, mutation)")
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output (validate currently emits JSON only)")
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
-}
-
-func buildValidateViewForSlug(root, slug string) (validateView, error) {
-	return buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 }
 
 func buildValidateViewForSlugWithReadContext(readCtx *stateReadContext, slug string) (validateView, error) {

@@ -101,8 +101,6 @@ func configDescriptions() map[string]string {
 		"governance.thresholds.independent_review_blast_radius": "Minimum blast radius that triggers the independent-review control.",
 		"governance.thresholds.security_review_blast_radius":    "Minimum blast radius that triggers the security-review control.",
 		"governance.thresholds.worktree_blast_radius":           "Minimum blast radius that triggers the worktree-isolation control.",
-		"validation.enforce_rfc2119":                            "Require RFC-2119 keywords in merged requirements.",
-		"validation.enforce_requirement_scenarios":              "Require scenarios for each merged requirement.",
 		"context.tech_stack":                                    "Project tech stack injected into skill templates.",
 		"context.conventions":                                   "Project conventions injected into skill templates.",
 		"context.test_cmd":                                      "Project test command injected into skill templates.",

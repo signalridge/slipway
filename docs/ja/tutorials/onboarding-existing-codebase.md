@@ -113,7 +113,7 @@ one task can verify whether the map improved planning.
 各ハンドオフのあとに実行します。
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -140,7 +140,7 @@ guessing.
 
 ```bash
 git diff --stat
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -156,13 +156,13 @@ slipway next --json --diagnostics
 最後に読み取り専用のチェックを実行します。
 
 ```bash
-slipway validate --json
+slipway validate
 ```
 
 done-ready になったら実行します。
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 パイロットの差分とアーカイブされたガバナンス記録をまとめてコミットします。

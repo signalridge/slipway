@@ -1,0 +1,47 @@
+version: 1
+slug: cleanup-stale-code-surfaces
+description: cleanup stale code surfaces
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-28T07:46:45.304105Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/cleanup-stale-code-surfaces
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 8ec4f705bfd64f83c882740d0d727eb93aa264f21ac62bb7a596080688a0ee5a
+        updated_at: 2026-06-28T13:26:52.993255665Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 6afd74bd40e64151a13f0a1c352b85e27db465f73d9aef32d1b71655881667e6
+        updated_at: 2026-06-28T13:41:17.41693727Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 3d621268049930cb53f0cf0a622a7a70b8f1922c3e614df70cf2873e563e7f8c
+        updated_at: 2026-06-28T10:47:14.967129244Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 78a888de4327ba341e7ed51eec87ff140ced31b3ebef949500a453a3fea76ed0
+        updated_at: 2026-06-28T13:50:13.707051934Z
+evidence_refs:
+    code-quality-review: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/code-quality-review.yaml
+    independent-review: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/independent-review.yaml
+    intake-clarification: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/intake-clarification.yaml
+    plan-audit: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/plan-audit.yaml
+    security-review: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/security-review.yaml
+    ship-verification: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/wave-orchestration.yaml

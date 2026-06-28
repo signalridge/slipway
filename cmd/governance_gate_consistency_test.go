@@ -550,7 +550,7 @@ func runReadOnlyGovernanceViewsForChange(t *testing.T, root, slug string) (statu
 
 	go func() {
 		defer wg.Done()
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		if err != nil {
 			errCh <- err
 			return

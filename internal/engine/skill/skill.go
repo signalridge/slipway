@@ -8,16 +8,15 @@ import (
 )
 
 type Definition struct {
-	Name                string              `json:"name"`
-	State               model.WorkflowState `json:"state"`
-	PlanSubStep         model.PlanSubStep   `json:"plan_substep,omitempty"`
-	Mitigation          string              `json:"mitigation"`
-	RunSummaryBound     bool                `json:"run_summary_bound"`
-	DiscoveryOnly       bool                `json:"discovery_only,omitempty"`
-	CloseoutConditional bool                `json:"closeout_conditional,omitempty"`
-	AllowedOperations   []string            `json:"allowed_operations,omitempty"`
-	RequiredOutputs     []string            `json:"required_outputs,omitempty"`
-	HardGate            string              `json:"hard_gate,omitempty"`
+	Name              string              `json:"name"`
+	State             model.WorkflowState `json:"state"`
+	PlanSubStep       model.PlanSubStep   `json:"plan_substep,omitempty"`
+	Mitigation        string              `json:"mitigation"`
+	RunSummaryBound   bool                `json:"run_summary_bound"`
+	DiscoveryOnly     bool                `json:"discovery_only,omitempty"`
+	AllowedOperations []string            `json:"allowed_operations,omitempty"`
+	RequiredOutputs   []string            `json:"required_outputs,omitempty"`
+	HardGate          string              `json:"hard_gate,omitempty"`
 }
 
 const (
@@ -148,7 +147,6 @@ func RequiredSkillsForStateWithRegistryWithReviewSelection(
 	registry []Definition,
 	needsDiscovery bool,
 	state model.WorkflowState,
-	closeoutRequired bool,
 	reviewSelection ReviewSkillSelection,
 	planSubSteps ...model.PlanSubStep,
 ) []string {
@@ -169,9 +167,6 @@ func RequiredSkillsForStateWithRegistryWithReviewSelection(
 			if !activeSubSteps[def.PlanSubStep] {
 				continue
 			}
-		}
-		if def.CloseoutConditional && !closeoutRequired {
-			continue
 		}
 		if def.DiscoveryOnly && !needsDiscovery {
 			continue

@@ -22,6 +22,7 @@ import (
 const ExecutionSummaryFileName = "execution-summary.yaml"
 const StaleExecutionEvidenceBlockerToken = "stale_execution_evidence"
 const StalePlanningEvidenceBlockerToken = "stale_planning_evidence"
+const TasksPlanChangedSinceTaskEvidenceBlockerToken = "tasks_plan_changed_since_task_evidence"
 const planAuditFileName = "plan-audit.yaml"
 
 // S3TaskPlanAmendmentDiagnostic explains why S3 task-plan edits stay in the
@@ -77,6 +78,21 @@ func ExecutionSummaryRelevantState(state model.WorkflowState) bool {
 	default:
 		return false
 	}
+}
+
+func ExecutionFreshnessInputBlocker(blocker model.ReasonCode) bool {
+	switch strings.TrimSpace(blocker.Code) {
+	case StalePlanningEvidenceBlockerToken,
+		StaleExecutionEvidenceBlockerToken,
+		TasksPlanChangedSinceTaskEvidenceBlockerToken:
+		return true
+	default:
+		return false
+	}
+}
+
+func StalePlanningEvidenceBlocker(blocker model.ReasonCode) bool {
+	return strings.TrimSpace(blocker.Code) == StalePlanningEvidenceBlockerToken
 }
 
 // ExecutionSummaryPathForRead returns the authoritative read path candidate for
@@ -271,9 +287,13 @@ func LatestRelevantExecutionRunVersion(root string, change model.Change) (int, e
 }
 
 func decodeExecutionSummaryStrict(raw []byte, summary *model.ExecutionSummary) error {
+	return decodeYAMLKnownFields(raw, summary)
+}
+
+func decodeYAMLKnownFields(raw []byte, out any) error {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
-	return decoder.Decode(summary)
+	return decoder.Decode(out)
 }
 
 func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *model.ExecutionSummary, diagnostics ExecutionFreshnessDiagnostics) []string {
@@ -287,18 +307,7 @@ func collectExecutionSummaryIssuesFromDiagnostics(change model.Change, summary *
 		if ExecutionFreshnessIsS3TaskPlanAmendment(change.CurrentState, diagnostics) {
 			return stringutil.UniqueSorted(blockers)
 		}
-		hasPlanningDrift := false
-		for _, pair := range diagnostics.StalePairs {
-			if pair.Reason == StalePlanningEvidenceBlockerToken {
-				hasPlanningDrift = true
-				break
-			}
-		}
-		if hasPlanningDrift {
-			blockers = append(blockers, StalePlanningEvidenceBlockerToken)
-		} else {
-			blockers = append(blockers, StaleExecutionEvidenceBlockerToken)
-		}
+		blockers = append(blockers, executionFreshnessBlockerCode(diagnostics))
 	}
 	return stringutil.UniqueSorted(blockers)
 }
@@ -353,11 +362,31 @@ func ExecutionFreshnessIsTaskPlanOnlyDrift(diagnostics ExecutionFreshnessDiagnos
 		return false
 	}
 	for _, pair := range diagnostics.StalePairs {
-		if strings.TrimSpace(pair.Reason) != StalePlanningEvidenceBlockerToken {
+		if !executionFreshnessPairHasPlanningCause(pair) {
 			return false
 		}
 	}
 	return true
+}
+
+func executionFreshnessBlockerCode(diagnostics ExecutionFreshnessDiagnostics) string {
+	if executionFreshnessHasPlanningCause(diagnostics) {
+		return StalePlanningEvidenceBlockerToken
+	}
+	return StaleExecutionEvidenceBlockerToken
+}
+
+func executionFreshnessHasPlanningCause(diagnostics ExecutionFreshnessDiagnostics) bool {
+	for _, pair := range diagnostics.StalePairs {
+		if executionFreshnessPairHasPlanningCause(pair) {
+			return true
+		}
+	}
+	return false
+}
+
+func executionFreshnessPairHasPlanningCause(pair ExecutionFreshnessPair) bool {
+	return strings.TrimSpace(pair.Reason) == StalePlanningEvidenceBlockerToken
 }
 
 func ExpectedExecutionTaskFreshnessInputs(change model.Change, runSummaryVersion int, taskID string, tasksPlanHash ...string) model.ExecutionTaskFreshnessInputs {

@@ -23,13 +23,6 @@ const (
 	StageContextAuditOrigin = "audit_origin"
 	StageContextReview      = "review"
 	StageContextFix         = "fix"
-
-	// Deprecated: the folded S3 lifecycle no longer records or accepts
-	// goal-stage context-origin evidence.
-	StageContextGoal = "goal"
-	// Deprecated: the folded S3 lifecycle no longer records or accepts
-	// closeout-stage context-origin evidence.
-	StageContextCloseout = "closeout"
 )
 
 // ContextOriginReferencePrefix is the literal prefix of a verification reference
@@ -133,7 +126,7 @@ func parseContextOriginReference(raw string) (stage, handle string, ok bool) {
 
 func isRetiredContextOriginStage(stage string) bool {
 	switch stage {
-	case StageContextGoal, StageContextCloseout:
+	case "goal", "closeout":
 		return true
 	default:
 		return false

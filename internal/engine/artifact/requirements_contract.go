@@ -1,10 +1,7 @@
 package artifact
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -38,29 +35,24 @@ type RequirementsContractResult struct {
 }
 
 func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult, error) {
-	sourcePath := ResolveArtifactPath(bundleDir, "requirements.md")
-	if _, err := os.Stat(sourcePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return RequirementsContractResult{
-				Status:  RequirementsContractStatusMissing,
-				Source:  sourcePath,
-				Message: "requirements.md is missing",
-			}, nil
-		}
-		return RequirementsContractResult{}, err
-	}
-
-	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	source, ok, err := readArtifactContractSource(bundleDir, "requirements.md")
 	if err != nil {
 		return RequirementsContractResult{}, err
 	}
+	if !ok {
+		return RequirementsContractResult{
+			Status:  RequirementsContractStatusMissing,
+			Source:  source.Path,
+			Message: "requirements.md is missing",
+		}, nil
+	}
 
-	content := string(raw)
+	content := source.Content
 	requirementCount := len(ParseRequirementBlocks(content))
 	if requirementCount == 0 {
 		return RequirementsContractResult{
 			Status:  RequirementsContractStatusInvalid,
-			Source:  sourcePath,
+			Source:  source.Path,
 			Message: "requirements.md is not well-formed: no Requirement blocks found",
 		}, nil
 	}
@@ -69,7 +61,7 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 	if len(missingStableIDs) > 0 {
 		return RequirementsContractResult{
 			Status: RequirementsContractStatusInvalid,
-			Source: sourcePath,
+			Source: source.Path,
 			Message: fmt.Sprintf(
 				"requirements.md is not well-formed: requirement blocks missing stable REQ-* IDs: %s",
 				strings.Join(missingStableIDs, ", "),
@@ -80,7 +72,7 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 	if substanceBlockers := RequirementSubstanceBlockers(content); len(substanceBlockers) > 0 {
 		return RequirementsContractResult{
 			Status: RequirementsContractStatusInvalid,
-			Source: sourcePath,
+			Source: source.Path,
 			Message: fmt.Sprintf(
 				"requirements.md is not substantive: %s",
 				strings.Join(substanceBlockers, "; "),
@@ -90,7 +82,7 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 
 	return RequirementsContractResult{
 		Status:  RequirementsContractStatusValid,
-		Source:  sourcePath,
+		Source:  source.Path,
 		Message: fmt.Sprintf("requirements.md validated (%d requirements)", requirementCount),
 	}, nil
 }

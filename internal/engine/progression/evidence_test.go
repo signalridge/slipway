@@ -71,7 +71,7 @@ base_ref: HEAD
 func TestEvaluateRequiredSkills_NoRegistry(t *testing.T) {
 	t.Parallel()
 	change := model.NewChange("req-1")
-	_, _, err := EvaluateRequiredSkillsForChange("/tmp/nonexistent", change, model.StateS1Plan, 0, false)
+	_, _, err := EvaluateRequiredSkillsForChange("/tmp/nonexistent", change, model.StateS1Plan, 0)
 	// Either an error or empty results is acceptable; just shouldn't panic.
 	_ = err
 }
@@ -81,7 +81,7 @@ func TestEvaluateRequiredSkills_MissingEvidenceReturnsBlocker(t *testing.T) {
 	root := t.TempDir()
 
 	change := model.NewChange("missing-evidence")
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestEvaluateRequiredSkills_PassingEvidenceIsReturned(t *testing.T) {
 	}
 	writeVerificationForTest(t, root, slug, SkillPlanAudit, rec)
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestEvaluateRequiredSkills_FailsClosedWhenRunSummaryBoundSkillHasNoSummary(
 	}
 	writeVerificationForTest(t, root, slug, SkillSpecComplianceReview, rec)
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 0, false)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 0)
 	require.NoError(t, err)
 	assert.Empty(t, passing)
 	var runSummaryBlocker string
@@ -188,7 +188,6 @@ func TestEvaluateRequiredSkillsForChange_RequiresExplicitPlanSubStep(t *testing.
 		change,
 		model.StateS1Plan,
 		0,
-		false,
 	)
 	require.NoError(t, err)
 	assert.Contains(t, blockersWithoutExplicitSubStep, "required_skill_missing:research-orchestration")
@@ -198,7 +197,6 @@ func TestEvaluateRequiredSkillsForChange_RequiresExplicitPlanSubStep(t *testing.
 		change,
 		model.StateS1Plan,
 		0,
-		false,
 		model.PlanSubStepAudit,
 	)
 	require.NoError(t, err)
@@ -213,7 +211,7 @@ func TestEvaluateRequiredSkillsForChange_DocsProfileSkipsCodeQualityReview(t *te
 	change.CurrentState = model.StateS3Review
 	change.WorkflowProfile = model.WorkflowProfileDocs
 
-	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
+	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_missing:spec-compliance-review")
 	assert.Contains(t, blockers, "required_skill_missing:independent-review")
@@ -229,7 +227,7 @@ func TestEvaluateRequiredSkillsForChange_ResearchProfileSkipsCodeQualityReviewOn
 	change.CurrentState = model.StateS3Review
 	change.WorkflowProfile = model.WorkflowProfileResearch
 
-	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1, false)
+	_, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS3Review, 1)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_missing:spec-compliance-review")
 	assert.Contains(t, blockers, "required_skill_missing:independent-review")
@@ -249,7 +247,6 @@ func TestEvaluateRequiredSkillsForChange_S3SecurityReviewSelection(t *testing.T)
 		change,
 		model.StateS3Review,
 		1,
-		false,
 		engineskill.ReviewSkillSelection{},
 	)
 	require.NoError(t, err)
@@ -263,7 +260,6 @@ func TestEvaluateRequiredSkillsForChange_S3SecurityReviewSelection(t *testing.T)
 		change,
 		model.StateS3Review,
 		1,
-		false,
 		engineskill.ReviewSkillSelection{SecurityReviewSelected: true},
 	)
 	require.NoError(t, err)

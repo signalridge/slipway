@@ -256,7 +256,7 @@ func TestLateAssuranceEditDoesNotStalePlanAuditAtS1(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte("# Assurance\nrewritten during closeout\n"), 0o644))
 	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "assurance.md"), afterVerdict, afterVerdict))
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers, "a late assurance.md edit must not stale plan-audit")
 	assert.Contains(t, passing, SkillPlanAudit)
@@ -287,14 +287,14 @@ func TestEvaluateRequiredSkillsUsesContentDigestNotMTime(t *testing.T) {
 
 	olderThanEvidence := rec.Timestamp.Add(-time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "requirements.md"), olderThanEvidence, olderThanEvidence))
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillPlanAudit)
 
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte("# Requirements\nREQ-001 real change\n"), 0o644))
 	require.NoError(t, os.Chtimes(filepath.Join(bundleDir, "requirements.md"), olderThanEvidence, olderThanEvidence))
-	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	assert.Empty(t, passing)
 	assert.Contains(t, blockers, "required_skill_stale:plan-audit:requirements.md")
@@ -330,7 +330,7 @@ func TestEvaluateRequiredSkillsAcceptsRefreshedVerdictAfterDigestDrift(t *testin
 	refreshed := original
 	refreshed.Timestamp = refreshedAt
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, refreshed)
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	require.Contains(t, passing, SkillPlanAudit)
@@ -377,7 +377,7 @@ func TestEvaluateRequiredSkillsIgnoresUnchangedTaskMTimeInRefreshedVerdictWindow
 	refreshed := original
 	refreshed.Timestamp = refreshedAt
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, refreshed)
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillPlanAudit)
@@ -407,7 +407,7 @@ func TestMissingDigestEntryStampsCurrentPlanningInputsWithoutTimestampRefusal(t 
 		require.NoError(t, os.Chtimes(filepath.Join(bundleDir, rel), afterVerdict, afterVerdict))
 	}
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	require.Contains(t, passing, SkillPlanAudit)
@@ -700,7 +700,7 @@ func TestStampPassingSkillDigestsBlocksDirectPassingSkillWhenDigestInputUnavaila
 	}
 	writeVerificationForTest(t, root, change.Slug, SkillPlanAudit, rec)
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	assert.Empty(t, passing)
 	assert.Contains(t, blockers, "required_skill_stale:plan-audit:input_digest_unavailable")
@@ -830,7 +830,7 @@ func TestFeatureActiveMissingDigestEntryBackfillsWhenInputsUnchanged(t *testing.
 		Skills:  map[string]model.SkillDigest{},
 	}))
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillPlanAudit, "first host verdict can be accepted and stamped by the next mutating run")
@@ -845,7 +845,7 @@ func TestFeatureActiveMissingDigestEntryBackfillsWhenInputsUnchanged(t *testing.
 
 	// New contract: a recorded orphan stays passing and is stamped by the next
 	// mutating acceptance; no timestamp or input_digest_missing gate applies.
-	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepAudit)
+	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepAudit)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillPlanAudit)
@@ -894,7 +894,7 @@ func TestStampPassingSkillDigestsDoesNotBackfillFeatureActiveMissingResearchDige
 		},
 	}))
 
-	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepResearch)
+	passing, blockers, err := EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepResearch)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillResearchOrchestration)
@@ -907,7 +907,7 @@ func TestStampPassingSkillDigestsDoesNotBackfillFeatureActiveMissingResearchDige
 	assert.NotContains(t, digests.Skills, SkillResearchOrchestration,
 		"closed planning evidence is no longer backfilled after S2/S3; review owns later alignment")
 
-	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, false, model.PlanSubStepResearch)
+	passing, blockers, err = EvaluateRequiredSkillsForChange(root, change, model.StateS1Plan, 0, model.PlanSubStepResearch)
 	require.NoError(t, err)
 	require.Empty(t, blockers)
 	assert.Contains(t, passing, SkillResearchOrchestration)
@@ -1207,7 +1207,7 @@ func TestGatePlanningSkillRecordsPreservesStaleDigestArtifactName(t *testing.T) 
 	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillPlanAudit, rec, nil))
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte("# Decision\nchanged after plan audit\n"), 0o644))
 
-	_, blockers, err := gatePlanningSkillRecords(root, change, model.PlanSubStepAudit)
+	_, blockers, err := gatePlanningSkillRecordsWithRecords(root, change, model.PlanSubStepAudit, nil)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:plan-audit:decision.md")
 }

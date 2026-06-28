@@ -5,9 +5,10 @@ operator reference remains available at [Commands](../commands.md); this page
 keeps the generated surface manifest anchored under `docs/reference/`.
 
 Most routed commands support `--json` when structured output is useful.
-`slipway validate` emits JSON for its main report, `slipway init` is
-setup-only, while `slipway config`, `slipway tool`, and `slipway hook` are
-public CLI-only surfaces without generated adapter prompt wrappers.
+`slipway validate` and `slipway done` emit JSON without a separate `--json`
+flag, `slipway init` is setup-only, while `slipway config`, `slipway tool`, and
+`slipway hook` are public CLI-only surfaces without generated adapter prompt
+wrappers.
 
 ## Command Index
 
@@ -55,8 +56,6 @@ slipway next --json
 slipway run --json
 slipway status --json
 slipway handoff show --json
-slipway validate --json
-slipway done --json
 slipway codebase-map --json
 slipway preset <level> --json
 slipway abort --json
@@ -91,7 +90,7 @@ These commands inspect state without changing lifecycle authority:
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -107,7 +106,7 @@ slipway plan --json
 slipway implement --json
 slipway review --json
 slipway fix --json
-slipway done --json
+slipway done
 slipway run --json --diagnostics
 ```
 

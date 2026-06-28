@@ -16,7 +16,7 @@ Run these from the governed worktree:
 ```bash
 git status --short --branch
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -43,7 +43,7 @@ change through lifecycle gates.
 
 ## Missing Or Stale Task Evidence
 
-Symptoms usually appear in `validate --json` or `next --json --diagnostics` as
+Symptoms usually appear in `validate` or `next --json --diagnostics` as
 missing runtime task evidence, stale execution summaries, or mismatched
 freshness inputs.
 
@@ -52,7 +52,7 @@ Safe recovery:
 1. Identify the task and required evidence path in the JSON output.
 2. Rerun the owning implementation or wave-orchestration handoff.
 3. Record task evidence through the owning Slipway command or generated skill.
-4. Rerun `slipway validate --json`.
+4. Rerun `slipway validate`.
 
 Do not write files under `.git/slipway/runtime/changes/<slug>/evidence/` by
 hand.
@@ -88,7 +88,7 @@ rerun the affected selected reviewers and then rerun:
 
 ```bash
 slipway review --json
-slipway validate --json
+slipway validate
 ```
 
 Selected reviewer evidence must be fresh for the current diff, planning
@@ -110,7 +110,7 @@ Do not hide a changed file by editing evidence.
 
 ## Dirty Worktrees After Done
 
-`slipway done --json` can archive a done-ready change while returning a
+`slipway done` can archive a done-ready change while returning a
 `worktree_dirty_warning` for non-active files that still need committing.
 
 Safe recovery:
@@ -145,7 +145,7 @@ disagree, trust the current-worktree CLI output and refresh the generated files.
 | Symptom | Inspect | Safe action |
 | --- | --- | --- |
 | Unsure what to do next | `slipway next --json --diagnostics` | Follow returned skill, blocker, or command. |
-| Gate says stale evidence | `slipway validate --json` | Rerun the owning stage, reviewer, or task evidence path. |
+| Gate says stale evidence | `slipway validate` | Rerun the owning stage, reviewer, or task evidence path. |
 | Local state looks corrupt | `slipway health --doctor --json` | Run `slipway repair --json` only for named bounded repairs. |
 | Artifact is placeholder-only | `slipway instructions <artifact> --json` | Author real content and rerun validation. |
 | Review found issues | `slipway fix --json` | Repair in a fresh context, rerun affected reviewers. |

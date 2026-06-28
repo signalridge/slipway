@@ -248,7 +248,7 @@ type Regression struct {
 }
 
 func (r Regression) String() string {
-	base := ""
+	var base string
 	if r.Missing {
 		base = fmt.Sprintf("%s: baseline %.1f%% but package absent from coverage profile", r.Package, r.Baseline)
 	} else {

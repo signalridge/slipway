@@ -19,6 +19,6 @@ List remaining risks or accepted exceptions.
 Summarize rollback constraints, prerequisites, and verification status when rollback planning is required.
 
 ## Archive Decision
-Record archive readiness decision. Include whether active `validate --json`
+Record archive readiness decision. Include whether active `validate`
 freshness/readiness proof was captured before `done`; do not describe archived
 bundles as revalidated through the active validate gate.

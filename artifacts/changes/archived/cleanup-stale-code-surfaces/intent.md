@@ -9,8 +9,9 @@ complex
 Rationale: this is a cross-package cleanup touching CLI view helpers, governance
 progression internals, model/state definitions, config, tests, generated
 surface metadata, and public command contracts. The change is intentionally not
-batch-limited: every cleanup candidate from the pasted reports that remains
-true under current-main fact confirmation is in scope.
+batch-limited: every cleanup candidate from the pasted reports captured in
+`redundancy-candidates.md` that remains true under current-main
+fact confirmation is in scope.
 
 ## Guardrail Domains
 <!-- none detected -->
@@ -18,7 +19,8 @@ true under current-main fact confirmation is in scope.
 ## In Scope
 - Clean up current-main stale/dead/redundant code surfaces confirmed by a fresh
   read-only pass in this worktree.
-- Complete the full pasted cleanup set in one governed change rather than a
+- Complete the full pasted cleanup set captured in
+  `redundancy-candidates.md` in one governed change rather than a
   first-pass subset.
 - Remove or inline production wrappers only kept alive by tests when the
   current production path has a newer direct helper.
@@ -42,12 +44,12 @@ true under current-main fact confirmation is in scope.
 - Retire confirmed old-state compatibility readers and public no-op command
   tokens, including retired workflow-state canonicalization and no-op
   `done/validate --json` flags, with generated docs/manifest updates.
-- Consolidate the remaining confirmed redundancy items from the pasted reports,
-  including S3 review template duplication, artifact contract helper
-  duplication, verification test helpers, tiny command `findRepoRoot`
-  duplication, command route/freshness wiring, GitHub helper duplication, stale
-  evidence repair predicates, strict cache loaders, load-error wrappers, and
-  reason/remediation table drift.
+- Consolidate the remaining confirmed redundancy items from
+  `redundancy-candidates.md`, including S3 review template
+  duplication, artifact contract helper duplication, verification test helpers,
+  tiny command `findRepoRoot` duplication, command route/freshness wiring,
+  GitHub helper duplication, stale evidence repair predicates, strict cache
+  loaders, load-error wrappers, and reason/remediation table drift.
 
 ## Out of Scope
 - Do not inspect or reuse old worktrees as source evidence. Only the new
@@ -83,7 +85,9 @@ true under current-main fact confirmation is in scope.
   --tests=false ./...`.
 - `go run ./internal/toolgen/cmd/gen-surface-manifest --check` passes if command
   surfaces or generated public metadata are in scope.
-- `go run . validate --json` and `go run . next --json --diagnostics` show the
+- Every candidate in `redundancy-candidates.md` has a task evidence
+  disposition before final assurance.
+- `go run . validate` and `go run . next --json --diagnostics` show the
   governed change has reached the appropriate ready state for its lifecycle
   stage.
 
@@ -101,8 +105,9 @@ None
 ## Approved Summary
 Confirmed by user on 2026-06-28: proceed with the full cleanup scope in one
 governed change. The user clarified this is not a first batch and should include
-all confirmed cleanup objects from the pasted reports, with no backward
-compatibility preservation for stale/dead surfaces.
+all confirmed cleanup objects from the pasted reports captured in
+`redundancy-candidates.md`, with no backward compatibility
+preservation for stale/dead surfaces.
 
 This change cleans current-main stale/dead/redundant Slipway code surfaces after
 parallel read-only fact confirmation. It includes lint-confirmed production
@@ -111,7 +116,8 @@ wrappers and cleanup findings, inert internal wiring such as
 and methods, narrow retired reader/shim branches, unused reason-code catalog
 entries, no-op/dead config and public command tokens, retired workflow-state
 compatibility, duplicate wiring consolidation, and the medium-priority
-redundancy cleanup items from the pasted reports. It excludes old worktree
+redundancy cleanup items from `redundancy-candidates.md`. It
+excludes old worktree
 evidence, fail-closed retired-input defenses, live artifact-schema behavior
 (`core`, `expanded`, and `custom`), ignored local agent surfaces, and unrelated
 dirt.

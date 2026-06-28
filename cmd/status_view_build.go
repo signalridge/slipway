@@ -14,10 +14,6 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
-func buildStatusViewFromChange(root string, change model.Change) (statusView, error) {
-	return buildStatusViewFromChangeWithReadContext(newStateReadContext(root), change)
-}
-
 func buildStatusViewFromChangeWithReadContext(readCtx *stateReadContext, change model.Change) (statusView, error) {
 	readCtx.rememberChange(change)
 	return buildGovernedStatusViewWithReadContext(readCtx, change)
@@ -204,26 +200,22 @@ func applyReadinessFreshnessToStatus(view *statusView, readiness progression.Gov
 	if view == nil {
 		return
 	}
-	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
-	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
-	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
-		view.ExecutionEvidenceFreshness,
-		view.GovernanceEvidenceFreshness,
-		view.Blockers,
-	)
+	freshness := projectReadinessFreshnessFields(view.EvidenceFreshness, readiness, view.Blockers)
+	view.EvidenceFreshness = freshness.EvidenceFreshness
+	view.ExecutionEvidenceFreshness = freshness.ExecutionEvidenceFreshness
+	view.GovernanceEvidenceFreshness = freshness.GovernanceEvidenceFreshness
+	view.OverallReadinessFreshness = freshness.OverallReadinessFreshness
 }
 
 func applyReadinessFreshnessToValidate(view *validateView, readiness progression.GovernanceReadiness) {
 	if view == nil {
 		return
 	}
-	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
-	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
-	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
-		view.ExecutionEvidenceFreshness,
-		view.GovernanceEvidenceFreshness,
-		view.Blockers,
-	)
+	freshness := projectReadinessFreshnessFields(view.EvidenceFreshness, readiness, view.Blockers)
+	view.EvidenceFreshness = freshness.EvidenceFreshness
+	view.ExecutionEvidenceFreshness = freshness.ExecutionEvidenceFreshness
+	view.GovernanceEvidenceFreshness = freshness.GovernanceEvidenceFreshness
+	view.OverallReadinessFreshness = freshness.OverallReadinessFreshness
 }
 
 func applyReadinessFreshnessToNext(
@@ -236,9 +228,16 @@ func applyReadinessFreshnessToNext(
 	if view == nil {
 		return
 	}
-	view.EvidenceFreshness = projectFreshnessForExecMode(root, change, summary, view.Blockers)
-	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
-	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
+	freshness := projectReadinessFreshnessFieldsForExecMode(
+		root,
+		change,
+		summary,
+		readiness,
+		view.Blockers,
+	)
+	view.EvidenceFreshness = freshness.EvidenceFreshness
+	view.ExecutionEvidenceFreshness = freshness.ExecutionEvidenceFreshness
+	view.GovernanceEvidenceFreshness = freshness.GovernanceEvidenceFreshness
 	refreshOverallReadinessFreshnessForNext(view)
 }
 
@@ -264,15 +263,57 @@ func applyReadinessFreshnessToDone(
 	if view == nil {
 		return
 	}
-	view.EvidenceFreshness = projectFreshnessForExecMode(root, change, summary, blockers)
-	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
-	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
-	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
-		view.ExecutionEvidenceFreshness,
-		view.GovernanceEvidenceFreshness,
+	freshness := projectReadinessFreshnessFieldsForExecMode(
+		root,
+		change,
+		summary,
+		readiness,
 		blockers,
 	)
+	view.EvidenceFreshness = freshness.EvidenceFreshness
+	view.ExecutionEvidenceFreshness = freshness.ExecutionEvidenceFreshness
+	view.GovernanceEvidenceFreshness = freshness.GovernanceEvidenceFreshness
+	view.OverallReadinessFreshness = freshness.OverallReadinessFreshness
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+}
+
+type readinessFreshnessFields struct {
+	EvidenceFreshness           string
+	ExecutionEvidenceFreshness  string
+	GovernanceEvidenceFreshness string
+	OverallReadinessFreshness   string
+}
+
+func projectReadinessFreshnessFieldsForExecMode(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	readiness progression.GovernanceReadiness,
+	blockers []model.ReasonCode,
+) readinessFreshnessFields {
+	return projectReadinessFreshnessFields(
+		projectFreshnessForExecMode(root, change, summary, blockers),
+		readiness,
+		blockers,
+	)
+}
+
+func projectReadinessFreshnessFields(
+	executionFreshness string,
+	readiness progression.GovernanceReadiness,
+	blockers []model.ReasonCode,
+) readinessFreshnessFields {
+	governanceFreshness := projectGovernanceEvidenceFreshness(readiness)
+	return readinessFreshnessFields{
+		EvidenceFreshness:           executionFreshness,
+		ExecutionEvidenceFreshness:  executionFreshness,
+		GovernanceEvidenceFreshness: governanceFreshness,
+		OverallReadinessFreshness: projectOverallReadinessFreshness(
+			executionFreshness,
+			governanceFreshness,
+			blockers,
+		),
+	}
 }
 
 func projectGovernanceEvidenceFreshness(readiness progression.GovernanceReadiness) string {
@@ -422,8 +463,8 @@ func buildStatusTimelineWithReadContext(readCtx *stateReadContext, change model.
 			Command:   event.Command,
 			EventType: event.EventType,
 			Result:    event.Result,
-			FromState: event.BeforeState.Canonical(),
-			ToState:   event.AfterState.Canonical(),
+			FromState: event.BeforeState,
+			ToState:   event.AfterState,
 			GateID:    event.GateID,
 			ControlID: event.ControlID,
 			SkillID:   event.SkillID,
@@ -469,8 +510,8 @@ func duplicateLifecycleTransition(previous, current state.LifecycleEvent) bool {
 		previous.Action != current.Action ||
 		previous.Reason != current.Reason ||
 		previous.Result != current.Result ||
-		previous.BeforeState.Canonical() != current.BeforeState.Canonical() ||
-		previous.AfterState.Canonical() != current.AfterState.Canonical() ||
+		previous.BeforeState != current.BeforeState ||
+		previous.AfterState != current.AfterState ||
 		previous.BeforeSubStep != current.BeforeSubStep ||
 		previous.AfterSubStep != current.AfterSubStep ||
 		previous.GateID != current.GateID ||
@@ -553,10 +594,6 @@ func applyDoneReadyProjection(change model.Change, evaluations map[gate.GateID]g
 		view.Blockers,
 		[]model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
 	)
-}
-
-func buildMultiChangeSummaryView(changes []model.Change) multiChangeSummaryView {
-	return buildMultiChangeSummaryViewWithRoute(changes, nil)
 }
 
 func buildMultiChangeSummaryViewWithRoute(changes []model.Change, route *invocationRouteView) multiChangeSummaryView {

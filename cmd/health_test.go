@@ -49,7 +49,7 @@ func TestHealthCommandReportsRepairableFindings(t *testing.T) {
 	})
 }
 
-func TestHealthCommandReportsLegacyRuntimeHandoff(t *testing.T) {
+func TestHealthCommandIgnoresRetiredRepoLevelRuntimeHandoff(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
@@ -66,22 +66,9 @@ func TestHealthCommandReportsLegacyRuntimeHandoff(t *testing.T) {
 
 		var view healthView
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
-		found := false
 		for _, finding := range view.Findings {
-			if finding.Category != "runtime_hygiene" {
-				continue
-			}
-			if !healthFindingHasReasonCode(finding, "legacy_runtime_handoff") {
-				continue
-			}
-			found = true
-			assert.False(t, finding.Repairable)
-			assert.Contains(t, finding.RepairHint, "runtime/changes/<slug>/handoff.md")
-			require.NotEmpty(t, finding.Reasons)
-			assert.Equal(t, "legacy_runtime_handoff", finding.Reasons[0].Code)
-			assert.Contains(t, finding.Reasons[0].Detail, "handoff-s3.md")
+			assert.NotEqual(t, "runtime_hygiene", finding.Category)
 		}
-		assert.True(t, found, "expected legacy runtime handoff finding")
 	})
 }
 

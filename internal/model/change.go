@@ -108,7 +108,6 @@ func (c *Change) Normalize() {
 	if c.Version == 0 {
 		c.Version = ChangeVersion
 	}
-	c.CurrentState = c.CurrentState.Canonical()
 	// Enforce substep consistency: clear substeps that do not belong to the
 	// current state and seed entry defaults for states that require them.
 	if c.CurrentState != StateS0Intake {

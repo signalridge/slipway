@@ -33,8 +33,8 @@ Workflow:
 2. Create the change with `slipway new "add a short README usage note" --profile docs`.
 3. Use `slipway next --json --diagnostics` to see the current handoff.
 4. Let the returned skill author the required artifact or implementation step.
-5. Run `slipway validate --json` after implementation.
-6. Run `slipway done --json` only after the state is done-ready.
+5. Run `slipway validate` after implementation.
+6. Run `slipway done` only after the state is done-ready.
 
 Done means:
 
@@ -154,7 +154,7 @@ Workflow:
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 slipway health --doctor --json
 ```

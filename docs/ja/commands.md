@@ -1,6 +1,6 @@
 # コマンドリファレンス
 
-ルーティングされるほとんどのコマンドは、構造化された出力が役立つ場面で `--json` をサポートします。例外が 2 つあります。`slipway init` はセットアップ専用（`--tools`/`--refresh`、`--json` なし）で、`slipway validate` は JSON のみを出力します（その `--format` フラグはメインレポートではなく `--list-focuses` の出力を整形します）。
+ルーティングされるほとんどのコマンドは、構造化された出力が役立つ場面で `--json` をサポートします。例外は、セットアップ専用の `slipway init`（`--tools`/`--refresh`、`--json` なし）と、別個の `--json` フラグなしで JSON を出力する `slipway validate` / `slipway done` です。`validate --format` はメインレポートではなく `--list-focuses` の出力を整形します。
 
 生成されるホストコマンドサーフェスは、ホストプロンプトを利用するよう登録されたコマンドを対象とします。`slipway tool` や `slipway hook` のような CLI 専用のヘルパー名前空間は、ここおよびサーフェスマニフェストに登録されますが、`$slipway-tool`、`$slipway-hook`、ホストプロンプトのラッパーは生成しません。生成されたスキルとホストフック設定は、ヘルパーサブコマンドを直接呼び出します。
 
@@ -127,7 +127,7 @@ slipway fix --json
 slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
-slipway validate --json
+slipway validate
 slipway handoff show --json
 slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
@@ -143,7 +143,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | codebase-map JSON | `slipway codebase-map --json` |
 | config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
-| done JSON | `slipway done --json` |
+| done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
@@ -160,7 +160,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | review JSON | `slipway review --json` |
 | run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
-| validate JSON | `slipway validate --json` |
+| validate JSON | `slipway validate` |
 
 `next --json` は AI ツールへのハンドオフ向けに `next_skill.name` を含みます。ホストツールは、自身のアダプター規約からローカルの `SKILL.md` パスを導出します。
 
@@ -173,14 +173,14 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 
 `run --auto` / `run --no-auto` は、1 回の呼び出しに限り `execution.auto` を上書きします。設定レベルの `execution.auto` は `intake`、`plan`、`implement` にも適用されます。これらのステージコマンドに上書きフラグはありません。auto は純粋なペーシングの境界のみを越えます。`security-review` の境界、センシティブ／ガードレールの確認、インテークの Approved Summary、エビデンスゲートは引き続き停止点です。
 
-`validate --json` はアクティブな準備状況の権威です。現在の統制状態が今すぐ前進できるかに答え、実行可能なレビューハンドオフを `actionable_next_skill` を通じてミラーします。これには、実行可能なスキルが供給すべき正確なレイヤー参照のための `required_tokens` が含まれます。`run --json` は変更を伴う遷移サーフェスです。`advanced` はこの呼び出しが何を変更したかを報告し、`blockers` は遷移後の現在の停止条件を報告します。したがって前進の成功に続いて、次の必須スキルに対するエラー重大度のブロッカーが報告されることがあります。`health --governance --json` は診断的なヘルスフィードバックです。コントロールやトレーサビリティの詳細を確認するために使い、`run` が今前進したかを判定するライフサイクルの権威としては使わないでください。
+`validate` はアクティブな準備状況の権威です。現在の統制状態が今すぐ前進できるかに答え、実行可能なレビューハンドオフを `actionable_next_skill` を通じてミラーします。これには、実行可能なスキルが供給すべき正確なレイヤー参照のための `required_tokens` が含まれます。`run --json` は変更を伴う遷移サーフェスです。`advanced` はこの呼び出しが何を変更したかを報告し、`blockers` は遷移後の現在の停止条件を報告します。したがって前進の成功に続いて、次の必須スキルに対するエラー重大度のブロッカーが報告されることがあります。`health --governance --json` は診断的なヘルスフィードバックです。コントロールやトレーサビリティの詳細を確認するために使い、`run` が今前進したかを判定するライフサイクルの権威としては使わないでください。
 
 `status --json` は、実行エビデンスが陳腐化していると分かっている場合に `freshness_diagnostics` を含め、各 `artifact_dag` ノードに `blocking` と `blocking_reason` を付与します。これにより、ドラフトの計画アーティファクトが現在のレビューブロッカーと取り違えられないようにします。
 
 `validate --change <slug>` は明示的なアクティブ変更を選択します。slug がアーカイブ済みの終端変更を指す場合、コマンドは `archived_change_not_validatable` で失敗し、汎用の no-active 診断の代わりに終端状態とアーカイブ済みの `change.yaml` パスを返します。これはアクティブな準備状況のコントラクトです。`validate` は `done` の前に現在アクティブな統制状態を証明するものであり、凍結されたバンドルに対するアーカイブ後の監査サーフェスではありません。
-明示した slug がアクティブ変更またはアーカイブ済み変更を指さない場合、`validate --change <slug> --json` は fail closed し、終了コード 3 と `error_code=change_not_found` を返します。一方、`--change` を指定しない `validate --json` は、アクティブ変更がない場合でも診断ビューとして終了コード 0 で返り、`invocation_route.kind=no_active` と `next_command=slipway new` を報告します。
+明示した slug がアクティブ変更またはアーカイブ済み変更を指さない場合、`validate --change <slug>` は fail closed し、終了コード 3 と `error_code=change_not_found` を返します。一方、`--change` を指定しない `validate` は、アクティブ変更がない場合でも診断ビューとして終了コード 0 で返り、`invocation_route.kind=no_active` と `next_command=slipway new` を報告します。
 
-`artifacts/codebase/**` 配下の耐久性あるコードベースマップは、スコープコントラクトの変更ファイル計上から免除されます。それらのコンテキストファイルのみがダーティな場合、`scope_contract.changed_files` と `scope_contract.out_of_scope_files` に含まれず、`scope_contract.status` は `pass` のままです。リフレッシュされたコードベースマップ単独ではスコープコントラクトのドリフトを引き起こしません。このフィルタリングを `git diff` の不一致から推測させるのではなく可視にするため、免除されたファイルは `scope_contract.exempt_context_files` フィールドで明示的に開示され、`slipway validate --json`、`slipway status --json`、`slipway review --json` で表示されます。
+`artifacts/codebase/**` 配下の耐久性あるコードベースマップは、スコープコントラクトの変更ファイル計上から免除されます。それらのコンテキストファイルのみがダーティな場合、`scope_contract.changed_files` と `scope_contract.out_of_scope_files` に含まれず、`scope_contract.status` は `pass` のままです。リフレッシュされたコードベースマップ単独ではスコープコントラクトのドリフトを引き起こしません。このフィルタリングを `git diff` の不一致から推測させるのではなく可視にするため、免除されたファイルは `scope_contract.exempt_context_files` フィールドで明示的に開示され、`slipway validate`、`slipway status --json`、`slipway review --json` で表示されます。
 
 `slipway evidence task` は、wave-orchestration の同期のために、フラットなランタイムタスク JSON を `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 配下に書き込みます。既定の S2 コーディネーターパスは `--result-file <path>` で、コーディネーターが 1 つのアトミックなバッチインポートを行いたいときは繰り返します。各エグゼキューターの結果 JSON には `task_id`、`verdict`、`evidence_ref`、`changed_files`、`blockers`、および任意の `session_id` が含まれます。バッチはすべてのファイルをプリフライトし、重複する `task_id` エントリを拒否し、いずれかのメンバーが無効ならタスクエビデンスを一切書き込みません。エグゼキューターの結果ファイルには、ledger 所有のフィールド（`run_summary_version`、`task_kind`、`target_files`、`captured_at`、`freshness_inputs`、`input_hash`）を含めてはなりません。Slipway はそれらをアクティブなウェーブ計画と現在のタスクエビデンスランから導出します。手動フラグモードはホスト内部または復旧フォールバック用に引き続き利用可能です。現在のフラグコントラクトは `slipway evidence task --help` を参照してください。コマンドは `freshness_inputs` を計算し、タスク種別／verdict／ブロッカーを検証し、手書き JSON に頼る代わりに未知またはパス安全でないタスク ID を拒否します。`freshness_inputs` には現在のタスク由来の `tasks_plan_hash` が含まれるため、`tasks.md` が意味的に変わった後にタスクエビデンスを再利用できません。
 
@@ -192,7 +192,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 
 `repair --json` は `applied_repairs` と `unrepaired_drift` を分離します。applied repairs は実際に実行された、範囲を限定したローカル修正です。unrepaired drift には、Slipway が自動的に変更しなかったエビデンスやアーティファクト作業についての target、reason、`next_action` が含まれます。ランタイムタスクエビデンスが新しいという理由だけで陳腐化した ready な execution summary は、現在のウェーブ裏付けのタスクエビデンスから再構築できます。陳腐化した計画ソースのドリフトは未修復のまま残ります。アーカイブ後のクリーンアップで残った空のオーファンなアクティブバンドルディレクトリは `empty_orphan_bundle` の applied repairs として削除されます。空でないオーファンバンドルはオペレーターレビューが必要な整合性所見として残ります。`.git/slipway/runtime/handoff.md` のようなレガシーのリポジトリレベルのハンドオフファイルは、`.git/slipway/runtime/changes/<slug>/handoff.md` への手動移行のために報告されます。保持されていない空のロックアンカーは `cleaned_lock_anchor` として報告されます。`change-create.lock` と `repair.lock` は、変更ごとのロックではなくワークスペース／スコープレベルの調整ロックのままです。欠落したタスクエビデンスのブロッカーには、ランタイムタスクエビデンスパス、`record_command=slipway evidence task --result-file <path> --json`、コンパクトな結果スキーマ `task_id,verdict,evidence_ref,changed_files,blockers,session_id` が含まれます。アトミックなバッチインポートには `--result-file` を繰り返します。`health --json` の所見には `active_change_blocking` と `active_change_impact` が含まれます。アドバイザリなコードベースマップ警告は、アクティブな変更に対して非ブロッキングとしてマークされます。
 
-`done --json` は、ソースファイルや非アクティブな統制アーティファクトが未コミットでも、done-ready でワークトリーにバインドされた変更をアーカイブし、非ブロッキングの `worktree_dirty_warning` を `worktree_dirty_files` 付きで返します。これにより、オペレーターはそれらのファイルをアーカイブされたバンドルと一緒にコミットできます。`done` はワークトリーを決して削除せず、`git worktree remove` は既にダーティなワークトリーの削除を拒否するため、このアドバイザリがハードブロックを置き換えます。アクティブな `artifacts/changes/<slug>/` バンドルは、`done` がそれを `artifacts/changes/archived/<slug>/` へ書き換えるため、アドバイザリから除外されます。兄弟バンドルやアーカイブ済みバンドルは一覧表示されます。
+`done` は、ソースファイルや非アクティブな統制アーティファクトが未コミットでも、done-ready でワークトリーにバインドされた変更をアーカイブし、非ブロッキングの `worktree_dirty_warning` を `worktree_dirty_files` 付きで返します。これにより、オペレーターはそれらのファイルをアーカイブされたバンドルと一緒にコミットできます。`done` はワークトリーを決して削除せず、`git worktree remove` は既にダーティなワークトリーの削除を拒否するため、このアドバイザリがハードブロックを置き換えます。アクティブな `artifacts/changes/<slug>/` バンドルは、`done` がそれを `artifacts/changes/archived/<slug>/` へ書き換えるため、アドバイザリから除外されます。兄弟バンドルやアーカイブ済みバンドルは一覧表示されます。
 
 ## 実行の再開
 

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/toolgen"
 )
 
@@ -28,7 +29,7 @@ func run() error {
 	flag.BoolVar(&write, "write", false, "rewrite docs/SURFACE-MANIFEST.json")
 	flag.Parse()
 
-	repoRoot, err := findRepoRoot()
+	repoRoot, err := fsutil.FindRepoRoot("")
 	if err != nil {
 		return err
 	}
@@ -86,23 +87,6 @@ func runWithOptions(repoRoot string, opts manifestCommandOptions) error {
 	default:
 		_, err := opts.stdout.Write(live)
 		return err
-	}
-}
-
-func findRepoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("get working directory: %w", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", errors.New("could not find repository root containing go.mod")
-		}
-		dir = parent
 	}
 }
 

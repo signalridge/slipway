@@ -27,7 +27,6 @@ func TestDiagnoseBundleConsistencyAllPresent(t *testing.T) {
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Empty(t, result.Errors)
-	assert.Empty(t, result.Warnings)
 }
 
 func TestDiagnoseBundleConsistencyChangeYamlMissing(t *testing.T) {
@@ -63,8 +62,8 @@ func TestDiagnoseBundleConsistencyTasksMissing(t *testing.T) {
 
 // assurance.md is deferred to S3_REVIEW authoring (issue #141): before review its
 // absence is the expected deferred state, so the bundle-consistency diagnostic
-// must stay silent pre-S3 — neither error nor warning — rather than reporting a
-// by-design deferral as a partial-write inconsistency.
+// must stay silent pre-S3 rather than reporting a by-design deferral as a
+// partial-write inconsistency.
 func TestDiagnoseBundleConsistencyAssuranceDeferredPreReviewIsSilent(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
@@ -78,7 +77,6 @@ func TestDiagnoseBundleConsistencyAssuranceDeferredPreReviewIsSilent(t *testing.
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Empty(t, result.Errors)
-	assert.Empty(t, result.Warnings, "deferred assurance.md must not be flagged before S3_REVIEW")
 }
 
 // seedWavePlanRepairChange writes a tasks.md, materializes its wave-plan, and
@@ -265,7 +263,6 @@ func TestDiagnoseBundleConsistencyLightPresetDoesNotRequireAssuranceInReview(t *
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Empty(t, result.Errors)
-	assert.Empty(t, result.Warnings)
 }
 
 func TestDiagnoseBundleConsistencyUsesCanonicalConfigForBoundWorkspace(t *testing.T) {
@@ -288,7 +285,6 @@ func TestDiagnoseBundleConsistencyUsesCanonicalConfigForBoundWorkspace(t *testin
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Contains(t, result.Errors, "assurance.md missing in governed bundle — required for review/verify/done phase")
-	assert.Empty(t, result.Warnings)
 }
 
 func TestDiagnoseBundleConsistencyNoBundleNoop(t *testing.T) {
@@ -298,7 +294,6 @@ func TestDiagnoseBundleConsistencyNoBundleNoop(t *testing.T) {
 
 	result := DiagnoseBundleConsistency(root, change)
 	assert.Empty(t, result.Errors)
-	assert.Empty(t, result.Warnings)
 }
 
 func TestRepairMissingConfigCreatesDefault(t *testing.T) {

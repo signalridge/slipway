@@ -6,6 +6,9 @@
 REQ-001: The change MUST clean only stale/dead/redundant code surfaces that were
 confirmed against the current latest `main` in the new governed worktree, and it
 MUST NOT use old worktrees as evidence or edit unrelated local dirt.
+The canonical cleanup candidate inventory is
+`redundancy-candidates.md`; pasted-report scope is not executable
+unless captured there.
 
 #### Scenario: cleanup uses current facts
 GIVEN the governed worktree is based on the refreshed current `main`
@@ -17,6 +20,14 @@ output, or both.
 GIVEN older worktrees exist in the repository
 WHEN deciding whether a candidate is in scope
 THEN those worktrees are not used as source evidence for deletion or retention.
+
+#### Scenario: cleanup inventory is durable
+GIVEN `redundancy-candidates.md` lists the cleanup candidates with
+candidate IDs, source anchors or tool-output requirements, owning tasks,
+expected actions, and allowed prove-still-live outcomes
+WHEN implementation and final assurance are recorded
+THEN every listed candidate has exactly one recorded disposition in the owning
+task evidence or final assurance.
 
 ### Requirement: Remove confirmed dead and test-held surfaces
 REQ-002: The system MUST remove or inline confirmed unused internal surfaces,
@@ -62,8 +73,8 @@ WHEN no-backward-compatibility cleanup is applied
 THEN the reader no longer canonicalizes those states into current states, and
 tests that preserved that compatibility are removed or rewritten. This is an
 intentional behavior change: change loading no longer normalizes those retired
-states, and status timeline rendering no longer hides retired state strings by
-canonicalizing lifecycle events.
+states, and source/test/doc/README surfaces do not keep those retired workflow
+state tokens as compatibility fixtures.
 
 ### Requirement: Remove no-longer-emitted reason codes
 REQ-004: The system MUST delete reason-code catalog, remediation, and snapshot
@@ -141,8 +152,9 @@ new public contract.
 
 ### Requirement: Consolidate confirmed redundant implementations
 REQ-008: The system MUST consolidate the remaining confirmed redundant
-implementations from the pasted reports in the same governed change, including
-command route/freshness wiring, `statusRoute` vs route-kind overlap,
+implementations from `redundancy-candidates.md` in the same
+governed change, including command route/freshness wiring,
+`statusRoute` vs route-kind overlap,
 `EvidenceFreshness` vs `ExecutionEvidenceFreshness` synchronization,
 `cmd/tool_github` pagination/check-run/status extraction duplication, stale
 evidence repair predicates, S3 review template text, artifact contract helper
