@@ -60,6 +60,7 @@ type statusView struct {
 	FreshnessDiagnostics        *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
 	CurrentActionKind           string                               `json:"current_action_kind,omitempty"`
 	CurrentActionCommand        string                               `json:"current_action_command,omitempty"`
+	ActionableNextSkill         *actionableNextSkillView             `json:"actionable_next_skill,omitempty"`
 	SelectedReviewSkills        []string                             `json:"selected_review_skills,omitempty"`
 	ScopeContract               *scopeContractView                   `json:"scope_contract,omitempty"`
 	SourceStateFile             string                               `json:"source_state_file,omitempty"`

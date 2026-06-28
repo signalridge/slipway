@@ -148,6 +148,7 @@ func buildGovernedStatusViewWithReadContext(readCtx *stateReadContext, change mo
 	view.Recovery = model.BuildRecovery(view.Blockers)
 	applyReadinessFreshnessToStatus(&view, readiness)
 	view.CurrentActionKind, view.CurrentActionCommand = projectCurrentActionContract(change, readiness)
+	view.ActionableNextSkill = buildActionableNextSkillView(change, readiness)
 	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 	view.Diagnostics = append([]string(nil), projection.Diagnostics...)
 	view.Diagnostics = append(view.Diagnostics, waveDiagnostics...)
