@@ -250,10 +250,15 @@ func writeStatusText(w io.Writer, view statusView) error {
 	return err
 }
 
-func printMultiChangeSummary(cmd *cobra.Command, root string, changes []model.Change, format string) error {
+func printMultiChangeSummaryWithRoute(
+	cmd *cobra.Command,
+	changes []model.Change,
+	format string,
+	route *invocationRouteView,
+) error {
 	view := buildMultiChangeSummaryViewWithRoute(
 		changes,
-		buildMultiActiveInvocationRouteView(root, invocationWorkspaceRootFromCommand(cmd, root)),
+		route,
 	)
 
 	switch format {

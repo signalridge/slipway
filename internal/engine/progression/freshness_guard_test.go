@@ -73,7 +73,7 @@ func TestGenericEvidenceFreshnessDoesNotUseTimestampOrdering(t *testing.T) {
 	// The generic evidence-freshness evaluator (EvaluateEvidenceFreshness and
 	// its EvidenceFreshnessInput) is structural-only: it compares expected vs
 	// current structural inputs and must never reintroduce the removed timestamp
-	// fields (EvidenceTimestamp / LatestRelevantUpdateAt) or timestamp ordering.
+	// fields or timestamp ordering.
 	// Importing "time" is the precondition for any of those, so forbid it
 	// outright at this boundary.
 	freshnessFile := parseFreshnessGuardFile(t, repoRoot, "internal/freshness/freshness.go")

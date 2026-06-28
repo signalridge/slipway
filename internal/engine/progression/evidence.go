@@ -18,7 +18,6 @@ func EvaluateRequiredSkillsForChange(
 	change model.Change,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
-	closeoutRequired bool,
 	planSubSteps ...model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
 	return EvaluateRequiredSkillsForChangeWithReviewSelection(
@@ -26,7 +25,6 @@ func EvaluateRequiredSkillsForChange(
 		change,
 		workflowState,
 		latestRunSummaryVersion,
-		closeoutRequired,
 		skill.ReviewSkillSelection{},
 		planSubSteps...,
 	)
@@ -37,7 +35,6 @@ func EvaluateRequiredSkillsForChangeWithReviewSelection(
 	change model.Change,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
-	closeoutRequired bool,
 	reviewSelection skill.ReviewSkillSelection,
 	planSubSteps ...model.PlanSubStep,
 ) (map[string]model.VerificationRecord, []string, error) {
@@ -46,7 +43,6 @@ func EvaluateRequiredSkillsForChangeWithReviewSelection(
 		change,
 		workflowState,
 		latestRunSummaryVersion,
-		closeoutRequired,
 		reviewSelection,
 		nil,
 		planSubSteps...,
@@ -58,7 +54,6 @@ func evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 	change model.Change,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
-	closeoutRequired bool,
 	reviewSelection skill.ReviewSkillSelection,
 	verificationRecords map[string]model.VerificationRecord,
 	planSubSteps ...model.PlanSubStep,
@@ -70,7 +65,6 @@ func evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 		change.EffectiveWorkflowProfile(),
 		workflowState,
 		latestRunSummaryVersion,
-		closeoutRequired,
 		reviewSelection,
 		verificationRecordsLoader(root, change, verificationRecords),
 		planSubSteps...,
@@ -106,7 +100,6 @@ func evaluateRequiredSkills(
 	workflowProfile model.WorkflowProfile,
 	workflowState model.WorkflowState,
 	latestRunSummaryVersion int,
-	closeoutRequired bool,
 	reviewSelection skill.ReviewSkillSelection,
 	loadVerifications func() (map[string]model.VerificationRecord, error),
 	planSubSteps ...model.PlanSubStep,
@@ -119,7 +112,6 @@ func evaluateRequiredSkills(
 		registry,
 		needsDiscovery,
 		workflowState,
-		closeoutRequired,
 		reviewSelection,
 		planSubSteps...,
 	)

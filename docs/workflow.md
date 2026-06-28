@@ -154,7 +154,10 @@ These commands inspect state without mutating lifecycle authority:
 - `slipway status`
 - `slipway validate`
 
-Use `--json` for machine-readable output. Use `--diagnostics` on `next` or `run` when you need gate details, artifact readiness, transition traces, or context-budget diagnostics.
+Use `validate` directly for its machine-readable JSON report. Use `--json` on
+read-only commands that still expose text by default, such as `next` and
+`status`. Use `--diagnostics` on `next` or `run` when you need gate details,
+artifact readiness, transition traces, or context-budget diagnostics.
 
 ## Open Questions Semantics
 
@@ -199,7 +202,7 @@ silent.
 When the governed state is done-ready:
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 `done` finalizes the active change and archives terminal state. If local state looks inconsistent after interruption, inspect first with `slipway health --doctor`, then run `slipway repair` if the suggested repairs match the issue.

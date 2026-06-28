@@ -13,7 +13,7 @@
 ```bash
 git status --short --branch
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -37,14 +37,14 @@ slipway repair --json
 
 ## 任务证据缺失或过期
 
-症状通常出现在 `validate --json` 或 `next --json --diagnostics` 中，表现为运行时任务证据缺失、执行摘要过期，或时效性输入不匹配。
+症状通常出现在 `validate` 或 `next --json --diagnostics` 中，表现为运行时任务证据缺失、执行摘要过期，或时效性输入不匹配。
 
 安全的恢复方式：
 
 1. 在 JSON 输出中找出对应的任务和所需的证据路径。
 2. 重新运行负责该任务的 implementation 或 wave-orchestration 交接。
 3. 通过负责该任务的 Slipway 命令或生成的技能来记录任务证据。
-4. 重新运行 `slipway validate --json`。
+4. 重新运行 `slipway validate`。
 
 不要手工在 `.git/slipway/runtime/changes/<slug>/evidence/` 下写文件。
 
@@ -74,7 +74,7 @@ slipway fix --json
 
 ```bash
 slipway review --json
-slipway validate --json
+slipway validate
 ```
 
 选定评审者的证据必须对当前差异、规划产物和执行摘要输入都当前有效。唯一权威的完整测试套件由终态 `ship-verification` gate 在各评审者收敛之后运行，而不是来自某个评审者共享的关键凭证。
@@ -91,7 +91,7 @@ slipway validate --json
 
 ## Done 之后 worktree 不干净
 
-`slipway done --json` 可能在归档一个已就绪变更的同时，返回一个 `worktree_dirty_warning`，提示还有非活跃文件需要提交。
+`slipway done` 可能在归档一个已就绪变更的同时，返回一个 `worktree_dirty_warning`，提示还有非活跃文件需要提交。
 
 安全的恢复方式：
 
@@ -123,7 +123,7 @@ git status --short .claude .codex .cursor .opencode
 | 症状 | 检查 | 安全操作 |
 | --- | --- | --- |
 | 不确定下一步该做什么 | `slipway next --json --diagnostics` | 按返回的技能、阻塞项或命令处理。 |
-| Gate 提示证据过期 | `slipway validate --json` | 重新运行对应的 stage、评审者或任务证据路径。 |
+| Gate 提示证据过期 | `slipway validate` | 重新运行对应的 stage、评审者或任务证据路径。 |
 | 本地状态看起来损坏 | `slipway health --doctor --json` | 仅针对具名的有限修复运行 `slipway repair --json`。 |
 | 产物只有占位内容 | `slipway instructions <artifact> --json` | 撰写真实内容并重新运行校验。 |
 | 评审发现问题 | `slipway fix --json` | 在全新上下文中修复，重新运行受影响的评审者。 |

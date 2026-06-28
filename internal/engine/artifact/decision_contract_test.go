@@ -76,6 +76,25 @@ func TestDecisionSubstanceBlockers(t *testing.T) {
 	assert.NotEmpty(t, DecisionSubstanceBlockers(emptySection), "a structurally empty section must be rejected")
 }
 
+func TestReadArtifactContractSource(t *testing.T) {
+	t.Parallel()
+
+	bundleDir := t.TempDir()
+	sourcePath := ResolveArtifactPath(bundleDir, "decision.md")
+	source, ok, err := readArtifactContractSource(bundleDir, "decision.md")
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Equal(t, sourcePath, source.Path)
+	assert.Empty(t, source.Content)
+
+	require.NoError(t, os.WriteFile(sourcePath, []byte("# Decision\n\nAuthored content.\n"), 0o644))
+	source, ok, err = readArtifactContractSource(bundleDir, "decision.md")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, sourcePath, source.Path)
+	assert.Equal(t, "# Decision\n\nAuthored content.\n", source.Content)
+}
+
 func TestEvaluateDecisionContract(t *testing.T) {
 	t.Parallel()
 

@@ -178,7 +178,7 @@ func sampleBaseline() Baseline {
 			ID:          "bound-validate-json",
 			Description: "bound validate",
 			CWD:         "/tmp/fixture/.worktrees/bound-change",
-			Args:        []string{"validate", "--json"},
+			Args:        []string{"validate"},
 			RealMS:      60,
 			UserMS:      16,
 			SystemMS:    7,

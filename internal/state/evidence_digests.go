@@ -1,7 +1,6 @@
 package state
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -97,9 +96,7 @@ func loadEvidenceDigestsFromPath(path string) (model.EvidenceDigests, error) {
 		return model.EvidenceDigests{}, err
 	}
 	var digests model.EvidenceDigests
-	decoder := yaml.NewDecoder(bytes.NewReader(raw))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&digests); err != nil {
+	if err := decodeYAMLKnownFields(raw, &digests); err != nil {
 		return model.EvidenceDigests{}, fmt.Errorf("parse evidence digests: %w: %w", errUnusableEvidenceCache, err)
 	}
 	digests.Normalize()

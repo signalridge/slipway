@@ -104,7 +104,7 @@ When lifecycle, artifact, or gate semantics change:
 - Add a focused regression test in the owning package.
 - Keep shared semantics in a helper rather than duplicating Markdown or state parsing.
 - Update generated skills or docs when the host contract changes.
-- Verify with `go run . validate --json` inside the active governed worktree.
+- Verify with `go run . validate` inside the active governed worktree.
 
 ## Governed Coverage Gates
 

@@ -459,7 +459,7 @@ func TestEvidenceSkillFailOverwritesPlanAuditAndPrunesDigest(t *testing.T) {
 			"--change", slug,
 			"--skill", progression.SkillPlanAudit,
 			"--verdict", model.VerificationVerdictFail,
-			"--blocker", "plan_audit_failed",
+			"--blocker", "required_skill_missing:plan-audit",
 			"--notes", "Plan audit now fails.",
 		})
 		require.NoError(t, failCmd.Execute())
@@ -536,7 +536,7 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 			References: []string{
 				"layer:R0=pass",
 				"layer:R3=pass",
-				model.ContextOriginReferencePrefix + model.StageContextGoal + "=retired-goal-context",
+				model.ContextOriginReferencePrefix + "goal=retired-goal-context",
 			},
 		})
 		refreshPassingSkillDigestsForTest(t, root, slug, progression.SkillSpecComplianceReview)
@@ -567,7 +567,7 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
 		require.True(t, ok)
 		assert.Equal(t, "fresh-spec-review-context", handle.Handle)
-		assert.NotContains(t, rec.References, model.ContextOriginReferencePrefix+model.StageContextGoal+"=retired-goal-context")
+		assert.NotContains(t, rec.References, model.ContextOriginReferencePrefix+"goal=retired-goal-context")
 	})
 }
 

@@ -130,8 +130,8 @@ slipway intake --json
 slipway plan --json
 slipway implement --json
 slipway review --json
-slipway validate --json
-slipway done --json
+slipway validate
+slipway done
 ```
 
 `slipway run --json --diagnostics` is the shortcut driver. It delegates to the

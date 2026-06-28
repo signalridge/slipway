@@ -16,7 +16,7 @@ Slipway がブロッカー、古い証跡、不足するアーティファクト
 ```bash
 git status --short --branch
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -45,7 +45,7 @@ slipway repair --json
 ## タスク証跡の不足または陳腐化
 
 症状は通常、ランタイムのタスク証跡の不足、実行サマリーの陳腐化、あるいは
-現在の入力との不一致として、`validate --json` または `next --json --diagnostics` に
+現在の入力との不一致として、`validate` または `next --json --diagnostics` に
 現れます。
 
 安全なリカバリー:
@@ -53,7 +53,7 @@ slipway repair --json
 1. JSON 出力から、対象のタスクと必要な証跡パスを特定する。
 2. 担当する実装または wave-orchestration のハンドオフを再実行する。
 3. 担当する Slipway コマンドまたは生成されたスキルを通じてタスク証跡を記録する。
-4. `slipway validate --json` を再実行する。
+4. `slipway validate` を再実行する。
 
 `.git/slipway/runtime/changes/<slug>/evidence/` 配下のファイルを手で書いては
 いけません。
@@ -89,7 +89,7 @@ slipway fix --json
 
 ```bash
 slipway review --json
-slipway validate --json
+slipway validate
 ```
 
 選定レビュアーの証跡は、現在の差分、計画アーティファクト、実行サマリーの入力と
@@ -111,7 +111,7 @@ slipway validate --json
 
 ## Done 後の汚れたワークトリー
 
-`slipway done --json` は、コミットがまだ必要な非アクティブファイルについて
+`slipway done` は、コミットがまだ必要な非アクティブファイルについて
 `worktree_dirty_warning` を返しつつ、done-ready の変更をアーカイブできます。
 
 安全なリカバリー:
@@ -146,7 +146,7 @@ git status --short .claude .codex .cursor .opencode
 | 症状 | 調査 | 安全なアクション |
 | --- | --- | --- |
 | 次に何をすべきか分からない | `slipway next --json --diagnostics` | 返されたスキル、ブロッカー、コマンドに従う。 |
-| ゲートが古い証跡だと報告する | `slipway validate --json` | 担当するステージ、レビュアー、タスク証跡パスを再実行する。 |
+| ゲートが古い証跡だと報告する | `slipway validate` | 担当するステージ、レビュアー、タスク証跡パスを再実行する。 |
 | ローカル状態が壊れて見える | `slipway health --doctor --json` | 名前付きの限定的な修復に対してのみ `slipway repair --json` を実行する。 |
 | アーティファクトがプレースホルダーのみ | `slipway instructions <artifact> --json` | 実際の内容を作成し、検証を再実行する。 |
 | レビューで問題が見つかった | `slipway fix --json` | 新しいコンテキストで修復し、影響を受けたレビュアーを再実行する。 |

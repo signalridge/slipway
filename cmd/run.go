@@ -174,7 +174,7 @@ func validateResumeEntryForCommand(
 		return newInvalidUsageError(
 			"resume_unavailable",
 			"--resume requested but no resumable governed execution state is available; current_state="+string(change.CurrentState),
-			"Resume only applies to interrupted S2_IMPLEMENT wave execution. For the current state, use `slipway "+commandName+"`, `slipway validate --json`, or record the required review evidence.",
+			"Resume only applies to interrupted S2_IMPLEMENT wave execution. For the current state, use `slipway "+commandName+"`, `slipway validate`, or record the required review evidence.",
 			map[string]any{
 				"current_state":    change.CurrentState,
 				"resumable_states": []model.WorkflowState{model.StateS2Implement},

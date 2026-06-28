@@ -157,14 +157,14 @@ func TestBuildExecutionSummarySyncsDerivedFieldsAndWaveBlockers(t *testing.T) {
 			},
 		},
 		capturedAt,
-		&model.VerificationRecord{Blockers: []model.ReasonCode{model.NewReasonCode("wave_execution_blocked", "review")}},
+		&model.VerificationRecord{Blockers: []model.ReasonCode{model.NewReasonCode("wave_execution_unavailable", "review")}},
 	)
 
 	assert.Equal(t, model.ExecutionVerdictFail, summary.OverallVerdict)
 	assert.Equal(t, []string{"task-a"}, summary.CompletedTasks)
 	assert.Equal(t, []string{"task-b"}, summary.NonPassTasks)
 	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "task", "task-b:required_skill_missing:plan-audit"))
-	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "wave_execution_blocked", "review"))
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "wave_execution_unavailable", "review"))
 }
 
 func TestBuildExecutionSummaryPreservesDistinctTaskBlockerDetails(t *testing.T) {

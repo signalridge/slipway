@@ -103,12 +103,6 @@ func CollectHealthReport(root string, activeSlugOpt ...string) (HealthReport, er
 		return HealthReport{}, err
 	}
 	findings = append(findings, hiddenScopeDiagnostics.Findings...)
-	runtimeHygieneFindings, err := legacyRuntimeHygieneFindings(root)
-	if err != nil {
-		return HealthReport{}, err
-	}
-	findings = append(findings, runtimeHygieneFindings...)
-
 	seenExecutionSummaryChecks := map[string]struct{}{}
 	appendExecutionFindings := func(change model.Change) error {
 		slug := strings.TrimSpace(change.Slug)
@@ -464,55 +458,6 @@ func runtimeStateHealthFindings(change model.Change) []HealthFinding {
 		})
 	}
 	return findings
-}
-
-// LegacyRuntimeHandoffPaths returns retired repo-level handoff files that must
-// no longer be treated as the current runtime session handoff surface. It scans
-// the git runtime dir for any non-directory handoff*.md file.
-func LegacyRuntimeHandoffPaths(root string) ([]string, error) {
-	runtimeDir := GitRuntimeDir(root)
-	globbed, err := filepath.Glob(filepath.Join(runtimeDir, "handoff*.md"))
-	if err != nil {
-		return nil, err
-	}
-
-	paths := []string{}
-	for _, path := range globbed {
-		info, err := os.Stat(path)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return nil, err
-		}
-		if !info.IsDir() {
-			paths = append(paths, path)
-		}
-	}
-	slices.Sort(paths)
-	return paths, nil
-}
-
-func legacyRuntimeHygieneFindings(root string) ([]HealthFinding, error) {
-	findings := []HealthFinding{}
-
-	handoffPaths, err := LegacyRuntimeHandoffPaths(root)
-	if err != nil {
-		return nil, err
-	}
-	for _, path := range handoffPaths {
-		displayPath := DisplayPath(root, path)
-		findings = append(findings, HealthFinding{
-			Severity:   model.ReasonSeverityWarning,
-			Category:   "runtime_hygiene",
-			Message:    "Legacy repo-level runtime handoff file exists",
-			Repairable: false,
-			RepairHint: "Move any useful context into the active change's `.git/slipway/runtime/changes/<slug>/handoff.md`, then remove the legacy file manually.",
-			Reasons:    []model.ReasonCode{model.NewReasonCode("legacy_runtime_handoff", displayPath)},
-		})
-	}
-
-	return findings, nil
 }
 
 func dedicatedWorktreeHealthReasons(root string, change model.Change) ([]model.ReasonCode, error) {

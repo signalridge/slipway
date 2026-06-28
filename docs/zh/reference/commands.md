@@ -4,9 +4,9 @@
 [命令](../commands.md)；本页让生成的命令面清单锚定在 `docs/reference/` 之下。
 
 大多数路由命令在需要结构化输出时都支持 `--json`。
-`slipway validate` 的主报告以 JSON 形式输出，`slipway init` 仅用于初始化配置，
-而 `slipway config`、`slipway tool` 和 `slipway hook` 是公开的纯 CLI 命令面，
-不生成适配器 prompt 包装。
+`slipway validate` 和 `slipway done` 不需要单独的 `--json` 标志就输出 JSON，
+`slipway init` 仅用于初始化配置，而 `slipway config`、`slipway tool` 和
+`slipway hook` 是公开的纯 CLI 命令面，不生成适配器 prompt 包装。
 
 ## 命令索引
 
@@ -53,8 +53,8 @@ slipway next --json
 slipway run --json
 slipway status --json
 slipway handoff show --json
-slipway validate --json
-slipway done --json
+slipway validate
+slipway done
 slipway codebase-map --json
 slipway preset <level> --json
 slipway abort --json
@@ -89,7 +89,7 @@ slipway config list --json
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -105,7 +105,7 @@ slipway plan --json
 slipway implement --json
 slipway review --json
 slipway fix --json
-slipway done --json
+slipway done
 slipway run --json --diagnostics
 ```
 

@@ -122,7 +122,7 @@ README.md only.
 Repeat the read-only inspection after each handoff:
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -158,7 +158,7 @@ After the AI finishes, inspect the diff:
 
 ```bash
 git diff -- README.md
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -187,7 +187,7 @@ affected reviewers.
 When the state reports done-ready:
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 Then inspect what changed:

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/signalridge/slipway/internal/coverage"
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 // BaselineFile is the committed kernel per-package coverage floor, at the repo root.
@@ -146,7 +147,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	repoRoot, err := findRepoRoot()
+	repoRoot, err := fsutil.FindRepoRoot("")
 	if err != nil {
 		return err
 	}
@@ -386,21 +387,4 @@ func sortedKeys(m map[string]float64) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func findRepoRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("get working directory: %w", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", errors.New("could not find repository root containing go.mod")
-		}
-		dir = parent
-	}
 }

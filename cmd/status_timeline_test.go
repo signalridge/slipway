@@ -56,34 +56,6 @@ func TestStatusViewIncludesLifecycleTimeline(t *testing.T) {
 	assert.Equal(t, model.StateS2Implement, view.Timeline[1].ToState)
 }
 
-func TestStatusTimelineCanonicalizesRetiredWorkflowStates(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	ensureTestGitRepo(t, root)
-	initTestWorkspace(t, root)
-
-	change := model.NewChange("timeline-retired-state")
-	change.CurrentState = model.StateS3Review
-	require.NoError(t, state.SaveChange(root, change))
-	_, err := state.AppendLifecycleEvent(root, change, state.LifecycleEvent{
-		EventID:     "event-retired-state",
-		OccurredAt:  time.Date(2026, 6, 18, 1, 2, 3, 0, time.UTC),
-		Command:     "run",
-		EventType:   "state.transitioned",
-		Action:      "advanced",
-		Result:      "advanced",
-		BeforeState: model.RetiredStateS2Execute,
-		AfterState:  model.RetiredStateS4Verify,
-	})
-	require.NoError(t, err)
-
-	view, err := buildStatusViewFromChange(root, change)
-	require.NoError(t, err)
-	require.Len(t, view.Timeline, 1)
-	assert.Equal(t, model.StateS2Implement, view.Timeline[0].FromState)
-	assert.Equal(t, model.StateS3Review, view.Timeline[0].ToState)
-}
-
 func TestStatusTimelineMarksDuplicateTransitionReplay(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

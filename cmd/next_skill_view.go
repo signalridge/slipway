@@ -30,13 +30,6 @@ var fullSkillViewOptions = assembleSkillViewOptions{
 	IncludeAgentContext:  true,
 }
 
-var handoffSkillViewOptions = assembleSkillViewOptions{
-	IncludeSkillEvidence: false,
-	IncludeReviewContext: true,
-	IncludeContextBudget: true,
-	IncludeAgentContext:  false,
-}
-
 const (
 	testDesignTechniqueHintName = "skill:test-design"
 	languageTestingHintName     = "capability:language-testing"
@@ -61,6 +54,10 @@ func assembleSkillView(
 	artifactProjection *progression.ArtifactProjection,
 	autoSkipEvidence bool,
 ) error {
+	options := fullSkillViewOptions
+	if autoSkipEvidence {
+		options.IncludeSkillEvidence = false
+	}
 	return assembleSkillViewWithOptions(
 		root,
 		view,
@@ -70,8 +67,7 @@ func assembleSkillView(
 		execCtx,
 		precomputedPassingSkills,
 		artifactProjection,
-		autoSkipEvidence,
-		fullSkillViewOptions,
+		options,
 	)
 }
 
@@ -84,7 +80,6 @@ func assembleSkillViewWithOptions(
 	execCtx *executionContext,
 	precomputedPassingSkills map[string]model.VerificationRecord,
 	artifactProjection *progression.ArtifactProjection,
-	autoSkipEvidence bool,
 	options assembleSkillViewOptions,
 ) error {
 	// Build a synthetic Change for skill resolution when no governed change exists.
@@ -120,10 +115,6 @@ func assembleSkillViewWithOptions(
 			evidenceMap = precomputedPassingSkills
 		} else {
 			var evalErr error
-			presetPolicy, policyErr := governance.ResolvePresetPolicy(root, *governedChange)
-			if policyErr != nil {
-				return policyErr
-			}
 			var latestRunVersion int
 			if execCtx != nil {
 				latestRunVersion = execCtx.LatestRunVersion
@@ -140,7 +131,6 @@ func assembleSkillViewWithOptions(
 				*governedChange,
 				view.CurrentState,
 				latestRunVersion,
-				progression.FinalCloseoutEvidenceRequired(presetPolicy),
 				reviewSelection,
 				planningSubSteps...,
 			)
@@ -796,11 +786,8 @@ func buildRequiredSkillEvidence(
 	staleSkills map[string]bool,
 	reviewSelection skill.ReviewSkillSelection,
 ) ([]skillEvidenceEntry, error) {
-	presetPolicy, err := governance.ResolvePresetPolicy(root, change)
-	if err != nil {
-		return nil, err
-	}
 	var latestRunVersion int
+	var err error
 	if execCtx != nil {
 		latestRunVersion = execCtx.LatestRunVersion
 	} else {
@@ -821,7 +808,6 @@ func buildRequiredSkillEvidence(
 		registry,
 		change.NeedsDiscovery,
 		workflowState,
-		progression.FinalCloseoutEvidenceRequired(presetPolicy),
 		reviewSelection,
 		planSubSteps...,
 	)

@@ -520,7 +520,7 @@ None; the change is behind the standard/strict gate only.
 Single commit; git revert restores prior behavior.
 
 ## Archive Decision
-Archived after a fresh validate --json freshness proof was captured before done.`
+Archived after a fresh validate freshness proof was captured before done.`
 
 	blockers := AssuranceStructureBlockers(content)
 	assert.Equal(t, []string{"assurance_section_placeholder:## Scope Summary"}, blockers)
@@ -583,7 +583,7 @@ None beyond the documented light-preset exclusion.
 Revert the single feature commit.
 
 ## Archive Decision
-Ready to archive; validate --json freshness proof captured before done.`
+Ready to archive; validate freshness proof captured before done.`
 
 	assert.Empty(t, AssuranceStructureBlockers(content))
 }

@@ -240,7 +240,7 @@ func TestValidateDiagnosticsFocusStillAdvertisesHydrateReferences(t *testing.T) 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--focus", "sast"})
+		cmd.SetArgs([]string{"--focus", "sast"})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView
@@ -265,7 +265,7 @@ func TestValidateFocusPropertyAdvertisesHydrateReferences(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--focus", "property"})
+		cmd.SetArgs([]string{"--focus", "property"})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView
@@ -302,7 +302,7 @@ func TestValidateFocusMutationAdvertisesHydrateReferences(t *testing.T) {
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"--json", "--focus", "mutation"})
+		cmd.SetArgs([]string{"--focus", "mutation"})
 		require.NoError(t, cmd.Execute())
 
 		var view validateView

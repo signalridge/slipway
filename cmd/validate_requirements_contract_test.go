@@ -37,7 +37,7 @@ WHEN it reaches a protected route
 THEN the system returns 401 and does not serve the resource.
 `), 0o644))
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, "valid", view.RequirementsContract.Status)
@@ -58,7 +58,7 @@ func TestValidateReportsMissingRequirementsContract(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.Remove(filepath.Join(bundleDir, "requirements.md")))
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, "missing", view.RequirementsContract.Status)
@@ -82,7 +82,7 @@ func TestValidateReportsInvalidRequirementsContract(t *testing.T) {
 No requirement blocks here.
 `), 0o644))
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, "invalid", view.RequirementsContract.Status)
@@ -102,7 +102,7 @@ func TestValidateOmitsRequirementsContractWhenPresetConfirmationPending(t *testi
 		change.SuggestedWorkflowPreset = model.WorkflowPresetStandard
 		require.NoError(t, state.SaveChange(root, change))
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		assert.True(t, view.PresetConfirmationPending)
 		assert.Nil(t, view.RequirementsContract)
@@ -118,7 +118,7 @@ func TestValidateDiagnosticsModeOmitsRequirementsContract(t *testing.T) {
 		cmd := makeValidateCmd()
 		cmd.SetOut(&out)
 		cmd.SetErr(&out)
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		require.NoError(t, cmd.Execute())
 
 		payload := map[string]any{}
@@ -155,7 +155,7 @@ func TestValidateUsesDedicatedWorktreePathInRequirementsContractSource(t *testin
 REQ-001: The system must authenticate requests.
 `), 0o644))
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		require.NotNil(t, view.RequirementsContract)
 		assert.Equal(t, artifact.ResolveArtifactPath(bundleDir, "requirements.md"), view.RequirementsContract.Source)
@@ -193,7 +193,7 @@ func TestValidateOmitsRequirementsContractWhenRequirementsFileIsUnreadable(t *te
 			_ = os.Chmod(reqPath, 0o644)
 		})
 
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		assert.Nil(t, view.RequirementsContract)
 		assert.Contains(t, model.ReasonSpecs(view.Blockers), "plan_dimension_coverage_spec_unreadable")

@@ -305,7 +305,7 @@ func TestExplicitValidateRoutesToDeleteAfterPartialDelete(t *testing.T) {
 		slug, worktreePath := newGovernedChangeForDelete(t, root, "accidental change")
 		partiallyDeleteBundleForDelete(t, worktreePath, slug)
 
-		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
+		_, stderr, err := runRootCommandIn(root, []string{"validate", "--change", slug})
 		require.Error(t, err, "explicit validate must route partially-deleted changes to delete recovery")
 		payload := decodeJSONMap(t, stderr)
 		assertOrphanErrorDeleteRecovery(t, payload, slug)
@@ -386,7 +386,7 @@ func TestValidateRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
 		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
 		fullyDeleteBundleForDelete(t, worktreePath, slug)
 
-		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json"})
+		_, stderr, err := runRootCommandIn(root, []string{"validate"})
 		require.Error(t, err, "validate must route a stale runtime binding to delete recovery")
 		payload := decodeJSONMap(t, stderr)
 		assertStaleRuntimeErrorDeleteRecovery(t, payload, slug)
@@ -398,7 +398,7 @@ func TestExplicitValidateRoutesToDeleteAfterFullBundleDelete(t *testing.T) {
 		slug, worktreePath := newGovernedChangeForDelete(t, root, "stale runtime binding")
 		fullyDeleteBundleForDelete(t, worktreePath, slug)
 
-		_, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
+		_, stderr, err := runRootCommandIn(root, []string{"validate", "--change", slug})
 		require.Error(t, err, "explicit validate must route a stale runtime binding to delete recovery")
 		payload := decodeJSONMap(t, stderr)
 		assertStaleRuntimeErrorDeleteRecovery(t, payload, slug)

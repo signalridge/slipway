@@ -120,7 +120,7 @@ func TestStatusReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeStatusCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -152,7 +152,7 @@ func TestValidateReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeValidateCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -187,7 +187,7 @@ func TestReviewReadinessFailureUsesGovernanceReadinessEnvelope(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeReviewCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()
@@ -260,7 +260,7 @@ func TestRunReadinessFailurePreservesInterruptedExecutionMarker(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := makeRunCmd()
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		cmd.SetOut(&out)
 
 		err = cmd.Execute()

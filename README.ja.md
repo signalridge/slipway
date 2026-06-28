@@ -133,8 +133,8 @@ slipway intake --json
 slipway plan --json
 slipway implement --json
 slipway review --json
-slipway validate --json
-slipway done --json
+slipway validate
+slipway done
 ```
 
 `slipway run --json --diagnostics` はショートカットドライバーです。現在の主要な

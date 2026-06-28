@@ -749,40 +749,8 @@ func repairSummaryForHealthFinding(finding state.HealthFinding) string {
 			}
 			return fmt.Sprintf("%s: execution summary unreadable: %s", slug, reason.Detail)
 		}
-	case "runtime_hygiene":
-		if finding.Repairable {
-			return ""
-		}
-		switch {
-		case healthFindingHasReasonCode(finding, "legacy_runtime_handoff"):
-			return fmt.Sprintf(
-				"legacy runtime handoff requires manual migration: %s; replacement=.git/slipway/runtime/changes/<slug>/handoff.md",
-				runtimeHygieneReasonDetail(finding, "legacy_runtime_handoff"),
-			)
-		}
 	}
 	return ""
-}
-
-func healthFindingHasReasonCode(finding state.HealthFinding, code string) bool {
-	for _, reason := range finding.Reasons {
-		if reason.Code == code {
-			return true
-		}
-	}
-	return false
-}
-
-func runtimeHygieneReasonDetail(finding state.HealthFinding, code string) string {
-	for _, reason := range finding.Reasons {
-		if reason.Code != code {
-			continue
-		}
-		if detail := strings.TrimSpace(reason.Detail); detail != "" {
-			return detail
-		}
-	}
-	return "workspace"
 }
 
 func dropRepairedExecutionSummaryFindings(findings []string, rebuiltSlugs []string) []string {

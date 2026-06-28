@@ -504,19 +504,19 @@ func TestCrossStageContextCollisions(t *testing.T) {
 		{
 			name: "two single-handle participants sharing a handle collide",
 			participants: map[string]ContextParticipant{
-				StageContextGoal:   {Handle: "ctx-shared"},
-				StageContextReview: {Handle: "ctx-shared"},
+				StageContextPlanOrigin: {Handle: "ctx-shared"},
+				StageContextReview:     {Handle: "ctx-shared"},
 			},
-			ownedStages: map[string]struct{}{StageContextGoal: {}, StageContextReview: {}},
-			want:        [][2]string{{StageContextGoal, StageContextReview}},
+			ownedStages: map[string]struct{}{StageContextPlanOrigin: {}, StageContextReview: {}},
+			want:        [][2]string{{StageContextPlanOrigin, StageContextReview}},
 		},
 		{
 			name: "distinct single handles do not collide",
 			participants: map[string]ContextParticipant{
-				StageContextGoal:   {Handle: "ctx-a"},
-				StageContextReview: {Handle: "ctx-b"},
+				StageContextPlanOrigin: {Handle: "ctx-a"},
+				StageContextReview:     {Handle: "ctx-b"},
 			},
-			ownedStages: map[string]struct{}{StageContextGoal: {}, StageContextReview: {}},
+			ownedStages: map[string]struct{}{StageContextPlanOrigin: {}, StageContextReview: {}},
 			want:        nil,
 		},
 		{
@@ -540,22 +540,22 @@ func TestCrossStageContextCollisions(t *testing.T) {
 		{
 			name: "collision on an edge with no owned endpoint is filtered out",
 			participants: map[string]ContextParticipant{
-				StageContextGoal:     {Handle: "ctx-shared"},
-				StageContextReview:   {Handle: "ctx-shared"},
-				StageContextCloseout: {Handle: "ctx-closeout"},
+				StageContextPlanOrigin:  {Handle: "ctx-shared"},
+				StageContextReview:      {Handle: "ctx-shared"},
+				StageContextAuditOrigin: {Handle: "ctx-audit"},
 			},
-			ownedStages: map[string]struct{}{StageContextCloseout: {}},
+			ownedStages: map[string]struct{}{StageContextAuditOrigin: {}},
 			want:        nil,
 		},
 		{
 			name: "collision retained when one endpoint is owned",
 			participants: map[string]ContextParticipant{
-				StageContextReview:   {Handle: "ctx-shared"},
-				StageContextGoal:     {Handle: "ctx-shared"},
-				StageContextCloseout: {Handle: "ctx-closeout"},
+				StageContextReview:      {Handle: "ctx-shared"},
+				StageContextPlanOrigin:  {Handle: "ctx-shared"},
+				StageContextAuditOrigin: {Handle: "ctx-audit"},
 			},
-			ownedStages: map[string]struct{}{StageContextGoal: {}},
-			want:        [][2]string{{StageContextGoal, StageContextReview}},
+			ownedStages: map[string]struct{}{StageContextPlanOrigin: {}},
+			want:        [][2]string{{StageContextPlanOrigin, StageContextReview}},
 		},
 	}
 
@@ -660,6 +660,22 @@ func TestContextAttestationPrefixConstsArePinned(t *testing.T) {
 	assert.Equal(t, "audit_origin", StageContextAuditOrigin)
 	assert.Equal(t, "review", StageContextReview)
 	assert.Equal(t, "fix", StageContextFix)
-	assert.Equal(t, "goal", StageContextGoal)
-	assert.Equal(t, "closeout", StageContextCloseout)
+}
+
+func TestContextOriginHandlesRejectRetiredStages(t *testing.T) {
+	t.Parallel()
+
+	for _, stage := range []string{"goal", "closeout"} {
+		stage := stage
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+
+			handles, ok := ContextOriginHandlesFromVerification(VerificationRecord{
+				References: []string{ContextOriginReferencePrefix + stage + "=ctx-retired"},
+			})
+
+			assert.False(t, ok)
+			assert.Nil(t, handles)
+		})
+	}
 }

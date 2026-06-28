@@ -113,7 +113,7 @@ README.md only.
 每次交接之后，重复这套只读检查：
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -147,7 +147,7 @@ AI 完成后，检查差异：
 
 ```bash
 git diff -- README.md
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -172,7 +172,7 @@ slipway fix --json
 当状态报告 done-ready 时：
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 然后查看有哪些东西发生了变化：

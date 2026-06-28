@@ -16,7 +16,6 @@ type Config struct {
 	Defaults        ConfigDefaults        `yaml:"defaults" json:"defaults"`
 	Execution       ConfigExecution       `yaml:"execution" json:"execution"`
 	Governance      ConfigGovernance      `yaml:"governance,omitempty" json:"governance,omitempty"`
-	Validation      ConfigValidation      `yaml:"validation,omitempty" json:"validation,omitempty"`
 	Context         ProjectContext        `yaml:"context,omitempty" json:"context,omitempty"`
 	CustomArtifacts []ArtifactDefinition  `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	UnknownTopLevel map[string]*yaml.Node `yaml:"-" json:"-"`
@@ -99,12 +98,6 @@ func (t ConfigGovernanceThresholds) Validate() error {
 		return fmt.Errorf("governance.thresholds.worktree_blast_radius: invalid signal level %q", t.WorktreeBlastRadius)
 	}
 	return nil
-}
-
-// ConfigValidation controls optional validation rules for spec merges.
-type ConfigValidation struct {
-	EnforceRFC2119              bool `yaml:"enforce_rfc2119,omitempty" json:"enforce_rfc2119,omitempty"`
-	EnforceRequirementScenarios bool `yaml:"enforce_requirement_scenarios,omitempty" json:"enforce_requirement_scenarios,omitempty"`
 }
 
 // ProjectContext provides project-specific context injected into skill templates.
@@ -308,10 +301,6 @@ func ParseConfigYAML(data []byte) (Config, error) {
 			}
 		case "agents":
 			return Config{}, fmt.Errorf("top-level agents configuration has been removed; governed handoff is skill-based via next_skill.name and slipway-{name}/SKILL.md host skill surfaces")
-		case "validation":
-			if err := decodeNodeStrict(value, &cfg.Validation); err != nil {
-				return Config{}, fmt.Errorf("decode validation: %w", err)
-			}
 		case "context":
 			if err := decodeNodeStrict(value, &cfg.Context); err != nil {
 				return Config{}, fmt.Errorf("decode context: %w", err)
@@ -357,14 +346,6 @@ func (c Config) ToYAML() ([]byte, error) {
 			return nil, err
 		}
 		appendMappingEntry(root, "governance", governanceNode)
-	}
-
-	if cfg.Validation.EnforceRFC2119 || cfg.Validation.EnforceRequirementScenarios {
-		validationNode, err := encodeYAMLNode(cfg.Validation)
-		if err != nil {
-			return nil, err
-		}
-		appendMappingEntry(root, "validation", validationNode)
 	}
 
 	// Emit the context section whenever any context leaf is set. Reuse IsZero()

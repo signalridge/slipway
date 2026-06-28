@@ -34,23 +34,9 @@ const (
 	StateS2Implement WorkflowState = "S2_IMPLEMENT"
 	StateS3Review    WorkflowState = "S3_REVIEW"
 	StateDone        WorkflowState = "DONE"
-
-	RetiredStateS2Execute WorkflowState = "S2_EXECUTE"
-	RetiredStateS4Verify  WorkflowState = "S4_VERIFY"
 )
 
 func (s WorkflowState) String() string { return string(s) }
-
-func (s WorkflowState) Canonical() WorkflowState {
-	switch s {
-	case RetiredStateS2Execute:
-		return StateS2Implement
-	case RetiredStateS4Verify:
-		return StateS3Review
-	default:
-		return s
-	}
-}
 
 func (s WorkflowState) IsValid() bool {
 	switch s {

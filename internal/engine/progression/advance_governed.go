@@ -227,11 +227,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			// command can record a scope amendment or task evidence repair without
 			// mutating lifecycle state backward.
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
-		} else {
-			// S3 owns plan/code/evidence alignment through the selected review peers.
-			// Do not force implement/wave-orchestration to replay after review has
-			// started.
 		}
+		// S3 owns plan/code/evidence alignment through the selected review peers.
+		// Do not force implement/wave-orchestration to replay after review has
+		// started.
 	}
 	if target, err := sensitiveEvidenceRepairTarget(root, change, executionSummaryCtx.Summary); err != nil {
 		return AdvanceSummary{}, err
@@ -281,7 +280,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// review set is evaluated there, so the conventional primary skill is
 	// sufficient as the non-empty/worktree-preflight gate signal here.
 	nextSkillName, evidenceState := PrimaryNextSkillWithReviewSelection(change, reviewSelection)
-	closeoutRequired := FinalCloseoutEvidenceRequired(presetPolicy)
 
 	var passingSkills map[string]model.VerificationRecord
 	// worktree-preflight is not a governance skill; its gate is checked in
@@ -295,7 +293,6 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			change,
 			model.WorkflowState(evidenceState),
 			executionSummaryCtx.LatestRunVersion,
-			closeoutRequired,
 			reviewSelection,
 			change.PlanSubStep,
 		)

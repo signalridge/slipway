@@ -61,7 +61,7 @@ func TestStatusFromRootReportsBoundElsewhere(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd := commandForRoot(t, root, makeStatusCmd())
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		cmd.SetOut(&out)
 		err := cmd.Execute()
 
@@ -144,7 +144,7 @@ func TestNoActiveStatusAndValidateExposeInvocationRoute(t *testing.T) {
 
 	var validateOut bytes.Buffer
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json"})
+	validateCmd.SetArgs(nil)
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())
 	var validate validateView
@@ -164,7 +164,7 @@ func TestNoActiveStatusAndValidateExposeInvocationRoute(t *testing.T) {
 	assert.Equal(t, "slipway new", nextErr.InvocationRoute.NextCommand)
 
 	doneCmd := commandForRoot(t, root, makeDoneCmd())
-	doneCmd.SetArgs([]string{"--json"})
+	doneCmd.SetArgs(nil)
 	doneErr := asCLIError(doneCmd.Execute())
 	require.NotNil(t, doneErr)
 	require.NotNil(t, doneErr.InvocationRoute)
@@ -276,7 +276,7 @@ func TestBoundWorktreeCommandsExposeConsistentLocalInvocationRoute(t *testing.T)
 
 			var validateOut bytes.Buffer
 			validateCmd := makeValidateCmd()
-			validateCmd.SetArgs([]string{"--json"})
+			validateCmd.SetArgs(nil)
 			validateCmd.SetOut(&validateOut)
 			require.NoError(t, validateCmd.Execute())
 			var validate validateView
@@ -345,7 +345,7 @@ func TestValidateChangeFlagRejectsMissingSlugWithoutWritingState(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	cmd := commandForRoot(t, root, makeValidateCmd())
-	cmd.SetArgs([]string{"--json", "--change", "missing-explicit-change"})
+	cmd.SetArgs([]string{"--change", "missing-explicit-change"})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	err := cmd.Execute()
@@ -377,7 +377,7 @@ func TestRunFromRootReportsBoundElsewhere(t *testing.T) {
 		require.NoError(t, state.SaveChange(root, change))
 
 		cmd := commandForRoot(t, root, makeRunCmd())
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		err := cmd.Execute()
 
 		cliErr := asCLIError(err)

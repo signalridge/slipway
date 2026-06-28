@@ -38,8 +38,7 @@ func applyNextInvocationRouteWithReadContext(cmd *cobra.Command, readCtx *stateR
 	if view == nil {
 		return
 	}
-	workspace := invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx)
-	view.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, workspace, explicitChange)
+	view.InvocationRoute = commandInvocationRouteWithReadContext(cmd, readCtx, change, explicitChange)
 }
 
 func applyValidateInvocationWorkspacePathWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, view *validateView) {
@@ -53,8 +52,7 @@ func applyValidateInvocationRouteWithReadContext(cmd *cobra.Command, readCtx *st
 	if view == nil {
 		return
 	}
-	workspace := invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx)
-	view.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, workspace, explicitChange)
+	view.InvocationRoute = commandInvocationRouteWithReadContext(cmd, readCtx, change, explicitChange)
 }
 
 func applyStatusInvocationWorkspacePathWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, view *statusView) {
@@ -72,8 +70,7 @@ func applyStatusInvocationRouteWithReadContext(cmd *cobra.Command, readCtx *stat
 	if view == nil {
 		return
 	}
-	workspace := invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx)
-	view.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, workspace, explicitChange)
+	view.InvocationRoute = commandInvocationRouteWithReadContext(cmd, readCtx, change, explicitChange)
 }
 
 func commandInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool) *invocationRouteView {

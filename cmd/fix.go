@@ -152,7 +152,7 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 		CurrentState:         string(change.CurrentState),
 		SelectedReviewSkills: selected,
 		RepairTargets:        targets,
-		Contract:             reviewFixContract(slug, selected),
+		Contract:             reviewFixContract(slug),
 		Blockers:             model.NormalizeReasonCodes(readiness.Blockers),
 	}, nil
 }
@@ -344,7 +344,7 @@ func compactFixRepairTargets(targets []fixRepairTarget) []fixRepairTarget {
 	return out
 }
 
-func reviewFixContract(slug string, selected []string) fixRepairContract {
+func reviewFixContract(slug string) fixRepairContract {
 	batchID := "s3-review-repair:" + strings.TrimSpace(slug)
 	return fixRepairContract{
 		RepairBatchID:                         batchID,

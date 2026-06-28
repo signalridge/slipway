@@ -53,7 +53,7 @@ func TestGovernanceBlockedErrorCarriesRecovery(t *testing.T) {
 		"CLIError recovery must match what the views produce for the same reasons")
 }
 
-// validate --json must carry a primary repair command for blocked states
+// validate must carry a primary repair command for blocked states
 // (REQ-003); buildValidateViewBase is the seam both validate paths share.
 func TestValidateViewBaseCarriesRecovery(t *testing.T) {
 	t.Parallel()
@@ -61,7 +61,7 @@ func TestValidateViewBaseCarriesRecovery(t *testing.T) {
 	root := t.TempDir()
 	change := model.NewChange("recovery-validate")
 	change.CurrentState = model.StateS1Plan
-	blockers := model.ReasonCodesFromSpecs([]string{"plan_audit_failed"})
+	blockers := model.ReasonCodesFromSpecs([]string{"required_skill_missing:plan-audit"})
 
 	view := buildValidateViewBase(root, change, nil, blockers, nil, nil)
 

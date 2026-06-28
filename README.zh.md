@@ -108,8 +108,8 @@ slipway intake --json
 slipway plan --json
 slipway implement --json
 slipway review --json
-slipway validate --json
-slipway done --json
+slipway validate
+slipway done
 ```
 
 `slipway run --json --diagnostics` 是快捷驱动器。它会委派给当前主阶段对应的命令，并在面向操作者的边界处停下。

@@ -42,11 +42,11 @@ they stay out of `scope_contract.changed_files` and
 `scope_contract.out_of_scope_files`, and `scope_contract.status` stays `pass`.
 To keep that filtering visible rather than inferred from a `git diff`
 disagreement, the exempted files are disclosed in the
-`scope_contract.exempt_context_files` field surfaced by `slipway validate --json`,
+`scope_contract.exempt_context_files` field surfaced by `slipway validate`,
 `slipway status --json`, and `slipway review --json`.
 After `slipway done`, Git-safe archived records remain in the owning worktree; commit or merge them before removing that worktree.
 When a worktree-bound change still has uncommitted source or non-active
-governance changes, `done --json` archives anyway and returns a non-blocking
+governance changes, `done` archives anyway and returns a non-blocking
 `worktree_dirty_warning` with `worktree_dirty_files` so the operator commits
 those files together with the archived bundle. `done` does not remove the
 worktree, and `git worktree remove` refuses to drop a dirty worktree, so the
@@ -61,7 +61,7 @@ Inspect before mutating:
 
 ```bash
 slipway health --doctor --json
-slipway validate --json
+slipway validate
 slipway status --json
 ```
 
@@ -97,7 +97,7 @@ execution summaries record task freshness inputs such as `change_id`,
 `run_summary_version`, `task_id`, and `guardrail_domain`; old hash-only
 summaries are treated as stale and must be regenerated.
 
-`next --json --diagnostics`, `run --json --diagnostics`, `validate --json`, and
+`next --json --diagnostics`, `run --json --diagnostics`, `validate`, and
 `status --json` expose freshness failures with stale source/evidence pairs,
 first stale cause, downstream evidence chain, expected/current task input
 values, authoritative bundle and runtime paths, and a safe next action.
@@ -183,7 +183,7 @@ fastest of seven timed samples for:
 - root worktree `status --json`;
 - bound worktree `status --json`;
 - bound worktree `next --json --diagnostics`;
-- bound worktree `validate --json`;
+- bound worktree `validate`;
 - root worktree `status --json --change <slug>`.
 
 The default fixture includes at least 25 Git worktrees, 300 `change.yaml` files,
@@ -224,14 +224,14 @@ touches host-global `$CODEX_HOME/prompts` files.
 
 Before `done`:
 
-1. Confirm `go run . validate --json` reports the relevant active-change gates
+1. Confirm `go run . validate` reports the relevant active-change gates
    approved. This is a pre-archive freshness/readiness gate, not a promise that
    the same archived bundle can be revalidated after `done`.
 2. Confirm task evidence is fresh for the current run version.
 3. Confirm `git diff --check`.
 4. Stage intended files only.
 5. Confirm `git diff --cached --check`.
-6. Run `slipway done --json` when the change is done-ready. The active change
+6. Run `slipway done` when the change is done-ready. The active change
    bundle does not need a pre-`done` commit.
 7. If `worktree_dirty_warning` is returned, the change is already archived;
    commit the listed `worktree_dirty_files` together with the archived bundle

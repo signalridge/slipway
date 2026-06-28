@@ -1,8 +1,9 @@
 # 命令参考
 
-大多数路由命令在需要结构化输出时都支持 `--json`。有两个例外：`slipway init`
-只用于初始化（`--tools`/`--refresh`，没有 `--json`），而 `slipway validate`
-只输出 JSON（它的 `--format` 标志只决定 `--list-focuses` 的输出格式，不影响主报告）。
+大多数路由命令在需要结构化输出时都支持 `--json`。例外是仅用于初始化的
+`slipway init`（`--tools`/`--refresh`，没有 `--json`），以及不需要单独
+`--json` 标志就输出 JSON 的 `slipway validate` / `slipway done`。
+`validate --format` 只决定 `--list-focuses` 的输出格式，不影响主报告。
 
 生成的宿主命令面向那些选择启用宿主提示词的已注册命令。仅供 CLI 使用的辅助命名空间
 （例如 `slipway tool` 和 `slipway hook`）会在这里和命令面清单中注册，但不会生成
@@ -187,7 +188,7 @@ slipway fix --json
 slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
-slipway validate --json
+slipway validate
 slipway handoff show --json
 slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
@@ -203,7 +204,7 @@ slipway health --doctor --json
 | codebase-map JSON | `slipway codebase-map --json` |
 | config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
-| done JSON | `slipway done --json` |
+| done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
@@ -220,7 +221,7 @@ slipway health --doctor --json
 | review JSON | `slipway review --json` |
 | run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
-| validate JSON | `slipway validate --json` |
+| validate JSON | `slipway validate` |
 
 `next --json` 会包含 `next_skill.name`，用于 AI 工具交接。宿主工具会按自己的适配器约定推导出本地
 `SKILL.md` 路径。
@@ -244,7 +245,7 @@ slipway health --doctor --json
 于 `intake`、`plan` 和 `implement`；这些阶段命令没有覆盖标志。auto 只跨越纯节奏边界。
 `security-review` 边界、敏感/guardrail 确认、intake 的 Approved Summary 以及证据门禁仍然是停点。
 
-`validate --json` 是活动就绪状态的权威：它回答当前受治理状态现在能否推进，并通过
+`validate` 是活动就绪状态的权威：它回答当前受治理状态现在能否推进，并通过
 `actionable_next_skill` 映射可执行的评审交接，其中包括可执行 skill 必须提供的确切层引用
 `required_tokens`。`run --json` 是发生变更的转换面：`advanced` 报告本次调用改了什么，而 `blockers`
 报告任何转换之后的当前停止条件。因此一次成功的推进之后，可能紧跟着针对下一个必需 skill 的
@@ -258,9 +259,9 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `archived_change_not_validatable` 失败，并返回终态状态以及已归档的 `change.yaml` 路径，而不是返回
 通用的“无活动变更”诊断。这是一项活动就绪契约：`validate` 在 `done` 之前证明当前活动的受治理状态；
 它不是面向已冻结包的归档后审计面。
-如果明确给出的 slug 不对应活动或归档变更，`validate --change <slug> --json` 会 fail closed，
+如果明确给出的 slug 不对应活动或归档变更，`validate --change <slug>` 会 fail closed，
 以退出码 3 和 `error_code=change_not_found` 返回。相对地，未指定 `--change` 的
-`validate --json` 在没有活动变更时是诊断视图：退出码为 0，并报告
+`validate` 在没有活动变更时是诊断视图：退出码为 0，并报告
 `invocation_route.kind=no_active` 与 `next_command=slipway new`。
 
 `artifacts/codebase/**` 下的持久 codebase map 不计入 scope-contract 的改动文件核算。当只有这些
@@ -268,7 +269,7 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `scope_contract.out_of_scope_files`，而 `scope_contract.status` 保持 `pass`——单单刷新一次
 codebase map 不会触发 scope-contract 漂移。为了让这种过滤是可见的、而不是从 Git 差异输出的不一致
 里去推断，被豁免的文件会在 `scope_contract.exempt_context_files` 字段里显式披露，由
-`slipway validate --json`、`slipway status --json` 和 `slipway review --json` 呈现。
+`slipway validate`、`slipway status --json` 和 `slipway review --json` 呈现。
 
 `slipway evidence task` 把扁平的运行时任务 JSON 写到
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。默认的 S2
@@ -319,7 +320,7 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 批量导入。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 
-`done --json` 会归档 done-ready 且绑定 worktree 的变更，即使源文件或非活动治理产物仍未提交，并返回
+`done` 会归档 done-ready 且绑定 worktree 的变更，即使源文件或非活动治理产物仍未提交，并返回
 一个非阻塞的 `worktree_dirty_warning`，带上 `worktree_dirty_files`，让操作员把这些文件和已归档的
 包一起提交。`done` 永远不会移除 worktree，而 `git worktree remove` 本来就会拒绝删除一个脏 worktree，
 所以这条提示取代了硬阻塞。当前的 `artifacts/changes/<slug>/` 包不在提示范围内，因为 `done` 会把它

@@ -731,7 +731,7 @@ func addShipVerificationInputs(
 	if !state.ExecutionSummaryReady(summary) {
 		return errDigestInputsUnavailable
 	}
-	if err := addSharedReviewerInputs(root, change, summary, inputs); err != nil {
+	if err := addSharedReviewerInputs(summary, inputs); err != nil {
 		return err
 	}
 	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
@@ -789,7 +789,7 @@ func addReviewSkillInputs(
 		}
 		summary = loaded
 	}
-	if err := addSharedReviewerInputs(root, change, summary, inputs); err != nil {
+	if err := addSharedReviewerInputs(summary, inputs); err != nil {
 		return err
 	}
 	if err := addPlanningArtifactInputs(root, change, inputs); err != nil {
@@ -810,12 +810,7 @@ func addReviewSkillInputs(
 // addSharedReviewerInputs contributes the execution-summary-derived inputs shared
 // across the S3 review peers and ship-verification. The suite-result keystone has
 // been retired, so the shared baseline is the ready execution summary itself.
-func addSharedReviewerInputs(
-	root string,
-	change model.Change,
-	summary *model.ExecutionSummary,
-	inputs map[string]string,
-) error {
+func addSharedReviewerInputs(summary *model.ExecutionSummary, inputs map[string]string) error {
 	return addExecutionSummaryInputs(summary, inputs)
 }
 
@@ -941,7 +936,7 @@ func addWaveOrchestrationInputs(
 		}
 		summary = loaded
 	}
-	runVersion := 0
+	var runVersion int
 	if state.ExecutionSummaryReady(summary) {
 		runVersion = summary.RunSummaryVersion
 	} else {

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -62,74 +61,19 @@ func TestCollectHealthReportFindsBrokenConfig(t *testing.T) {
 	assert.Contains(t, categories, "config")
 }
 
-func TestLegacyRuntimeHandoffPathsScansGlobAndSkipsDirs(t *testing.T) {
+func TestCollectHealthReportIgnoresRetiredRepoLevelRuntimeHandoffFiles(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeRepoLayout(t)
-	runtimeDir := GitRuntimeDir(root)
-	require.NoError(t, os.MkdirAll(runtimeDir, 0o755))
-	for _, name := range []string{
-		"handoff.md",
-		"handoff-s3.md",
-	} {
-		require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, name), []byte("legacy"), 0o644))
-	}
-	require.NoError(t, os.WriteFile(filepath.Join(runtimeDir, "notes.md"), []byte("other"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(runtimeDir, "handoff-dir.md"), 0o755))
+	legacyPath := filepath.Join(GitRuntimeDir(root), "handoff-old.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
+	require.NoError(t, os.WriteFile(legacyPath, []byte("old handoff"), 0o644))
 
-	paths, err := LegacyRuntimeHandoffPaths(root)
+	report, err := CollectHealthReport(root)
 	require.NoError(t, err)
 
-	want := []string{
-		filepath.Join(runtimeDir, "handoff-s3.md"),
-		filepath.Join(runtimeDir, "handoff.md"),
-	}
-	slices.Sort(want)
-	assert.Equal(t, want, paths)
-	assert.True(t, slices.IsSorted(paths))
-}
-
-func TestCollectHealthReportReportsLegacyRuntimeHandoffFiles(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		filename string
-	}{
-		{name: "base handoff", filename: "handoff.md"},
-		{name: "globbed handoff alias", filename: "handoff-old.md"},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			root := createRuntimeRepoLayout(t)
-			legacyPath := filepath.Join(GitRuntimeDir(root), tt.filename)
-			require.NoError(t, os.MkdirAll(filepath.Dir(legacyPath), 0o755))
-			require.NoError(t, os.WriteFile(legacyPath, []byte("old handoff"), 0o644))
-
-			report, err := CollectHealthReport(root)
-			require.NoError(t, err)
-
-			found := false
-			for _, finding := range report.Findings {
-				if finding.Category != "runtime_hygiene" {
-					continue
-				}
-				if !healthFindingHasReasonCode(finding, "legacy_runtime_handoff") {
-					continue
-				}
-				found = true
-				assert.False(t, finding.Repairable)
-				assert.Contains(t, finding.RepairHint, "runtime/changes/<slug>/handoff.md")
-				require.NotEmpty(t, finding.Reasons)
-				assert.Equal(t, "legacy_runtime_handoff", finding.Reasons[0].Code)
-				assert.Contains(t, finding.Reasons[0].Detail, tt.filename)
-			}
-			assert.True(t, found, "expected legacy handoff health finding")
-		})
+	for _, finding := range report.Findings {
+		assert.NotEqual(t, "runtime_hygiene", finding.Category)
 	}
 }
 

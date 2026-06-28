@@ -182,7 +182,7 @@ func TestLoadStatusChangeBySlugFallsBackToArchivedForMissingActiveAuthority(t *t
 	require.NoError(t, os.MkdirAll(filepath.Dir(activePath), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(activePath), "notes.md"), []byte("orphaned active bundle\n"), 0o644))
 
-	loaded, archived, err := loadStatusChangeBySlug(root, slug)
+	loaded, archived, err := loadStatusChangeBySlugWithReadContext(newStateReadContext(root), slug)
 	require.NoError(t, err)
 	assert.True(t, archived)
 	assert.Equal(t, slug, loaded.Slug)
@@ -209,7 +209,7 @@ func TestLoadStatusChangeBySlugDoesNotMaskMalformedActiveAuthorityWithArchive(t 
 	require.NoError(t, os.MkdirAll(filepath.Dir(activePath), 0o755))
 	require.NoError(t, os.WriteFile(activePath, []byte("slug: [\n"), 0o644))
 
-	_, archived, err := loadStatusChangeBySlug(root, slug)
+	_, archived, err := loadStatusChangeBySlugWithReadContext(newStateReadContext(root), slug)
 	require.Error(t, err)
 	assert.False(t, archived)
 	cliErr := asCLIError(err)
@@ -366,6 +366,22 @@ func TestBuildGovernedStatusViewDoesNotUseChecklistProgressWhenExecutionSummaryI
 	assert.Equal(t, 0, view.Progress.TasksTotal)
 	assert.Equal(t, 1, view.Progress.RunSummaryVersion)
 	assert.Equal(t, "unknown", view.EvidenceFreshness)
+}
+
+func TestProjectReadinessFreshnessFieldsKeepsLegacyExecutionAlias(t *testing.T) {
+	t.Parallel()
+
+	blockers := []model.ReasonCode{model.NewReasonCode("required_skill_missing", "ship-verification")}
+	fields := projectReadinessFreshnessFields(
+		"fresh",
+		progression.GovernanceReadiness{SkillBlockers: blockers},
+		blockers,
+	)
+
+	assert.Equal(t, "fresh", fields.EvidenceFreshness)
+	assert.Equal(t, fields.EvidenceFreshness, fields.ExecutionEvidenceFreshness)
+	assert.Equal(t, "stale", fields.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", fields.OverallReadinessFreshness)
 }
 
 func TestBuildGovernedStatusViewIgnoresExecutionSummaryOutsideExecutionStates(t *testing.T) {

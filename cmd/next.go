@@ -690,7 +690,6 @@ func advisoryDoneReadyWarnings(root string, ref changeRef, governedChange *model
 		change,
 		change.CurrentState,
 		latestRunVersion,
-		true,
 	)
 	if err != nil {
 		return nil, wrapRequiredSkillsEvaluationError("evaluate ship-verification evidence", ref.Slug, err)

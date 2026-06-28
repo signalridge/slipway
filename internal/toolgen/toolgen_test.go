@@ -183,6 +183,10 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 	require.NotEmpty(t, fixDef.Notes)
 	assert.Contains(t, fixDef.Notes[0], "Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state")
 	assert.Contains(t, fixDef.Notes[0], "`slipway fix --start-reexecution` explicitly reopens S2")
+	assert.NotContains(t, CommandArguments("done"), "--json",
+		"done emits JSON unconditionally and should not publish a no-op --json flag")
+	assert.NotContains(t, CommandArguments("validate"), "--json",
+		"validate emits JSON unconditionally and should not publish a no-op --json flag")
 
 	// Verify commandIDs() returns a sorted list covering every command that
 	// ships a prompt surface. CLI-only helpers such as `tool` remain registered
@@ -1857,17 +1861,17 @@ func realisticLegacyCodexRetiredCommandSkillForTest(t *testing.T, id string) str
 			"- Show pivot summary with before/after state.",
 			"- Confirm pivot action with user before executing.",
 			"- `--reroute` (the default when no flag is given) is valid in `S1_PLAN`,",
-			"  `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`; it returns the change to `S1_PLAN`",
+			"  `S2_IMPLEMENT`, or `S3_REVIEW`; it returns the change to `S1_PLAN`",
 			"  with discovery forced on. An invalid state is blocked (`pivot_state_invalid`).",
-			"- `--rescope` is valid in `S2_EXECUTE`, `S3_REVIEW`, or `S4_VERIFY`; it returns",
+			"- `--rescope` is valid in `S2_IMPLEMENT` or `S3_REVIEW`; it returns",
 			"  the change to `S0_INTAKE` (intake/clarify) and clears the intent",
 			"  `## Approved Summary` so it must be re-confirmed. Before execution",
 			"  (`S0_INTAKE`/`S1_PLAN`) and terminal states are blocked",
 			"  (`rescope_state_invalid`).",
 			"",
 			"## Flags",
-			"- `--reroute`: Re-evaluate routing/discovery and re-enter `S1_PLAN` (valid in S1_PLAN/S2_EXECUTE/S3_REVIEW/S4_VERIFY).",
-			"- `--rescope`: Reopen intake — return to `S0_INTAKE` to amend scope, clearing the Approved Summary (valid in S2_EXECUTE/S3_REVIEW/S4_VERIFY).",
+			"- `--reroute`: Re-evaluate routing/discovery and re-enter `S1_PLAN` (valid in S1_PLAN/S2_IMPLEMENT/S3_REVIEW).",
+			"- `--rescope`: Reopen intake — return to `S0_INTAKE` to amend scope, clearing the Approved Summary (valid in S2_IMPLEMENT/S3_REVIEW).",
 			"- `--json`: JSON output",
 			"- `--change <slug>`: target a specific active change",
 			"",

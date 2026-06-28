@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -74,37 +73,24 @@ func TestSaveLoadChangeSlugRoundTrip(t *testing.T) {
 	assert.NotNil(t, loaded.EvidenceRefs)
 }
 
-func TestLoadChangeNormalizesRetiredWorkflowStates(t *testing.T) {
+func TestLoadChangeRejectsUnknownWorkflowState(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		raw  string
-		want model.WorkflowState
-	}{
-		{name: "s2 execute", raw: "S2_EXECUTE", want: model.StateS2Implement},
-		{name: "s4 verify", raw: "S4_VERIFY", want: model.StateS3Review},
-	}
+	const rawState = "UNKNOWN_WORKFLOW_STATE"
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			root := createRuntimeLayout(t)
-			slug := "retired-" + strings.ToLower(strings.ReplaceAll(tc.raw, "_", "-"))
-			path := BundleChangeFilePath(root, slug)
-			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-			require.NoError(t, os.WriteFile(path, []byte(`version: 1
+	root := createRuntimeLayout(t)
+	slug := "unknown-workflow-state"
+	path := BundleChangeFilePath(root, slug)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`version: 1
 slug: `+slug+`
 status: active
-current_state: `+tc.raw+`
+current_state: `+rawState+`
 `), 0o644))
 
-			loaded, err := LoadChange(root, slug)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, loaded.CurrentState)
-		})
-	}
+	_, err := LoadChange(root, slug)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid current_state")
 }
 
 func TestSaveChangePersistsRuntimeFieldsInChangeAuthority(t *testing.T) {

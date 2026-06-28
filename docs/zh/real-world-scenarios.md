@@ -31,8 +31,8 @@ reports stale evidence or out-of-scope files.
 2. 用 `slipway new "add a short README usage note" --profile docs` 创建改动。
 3. 用 `slipway next --json --diagnostics` 查看当前的 handoff。
 4. 让返回的 skill 来撰写所需的产物或完成实现步骤。
-5. 实现完成后运行 `slipway validate --json`。
-6. 仅在状态已经 done-ready 后才运行 `slipway done --json`。
+5. 实现完成后运行 `slipway validate`。
+6. 仅在状态已经 done-ready 后才运行 `slipway done`。
 
 完成的标志：
 
@@ -145,7 +145,7 @@ recovery command or explain why none applies.
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 slipway health --doctor --json
 ```

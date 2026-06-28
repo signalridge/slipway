@@ -92,7 +92,7 @@ For bulky review artifacts, keep the coordinator thin:
 - changed files are covered by relevant spec sections
 
 ### Scope Contract Evidence
-When `validate --json`, `status --json`, or `review --json` exposes
+When `validate`, `status --json`, or `review --json` exposes
 `scope_contract`, include it in the review. A pass requires
 `scope_contract.status=pass`; a fail must be recorded as
 `scope_contract:fail:<reason>` and treated as artifact-to-code drift until the

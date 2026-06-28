@@ -1524,7 +1524,7 @@ func TestValidateAfterNewWithoutPresetShowsPendingConfirmation(t *testing.T) {
 		require.NoError(t, create.Execute())
 
 		slug := singleChangeSlug(t, state.ActiveBundlesDir(root))
-		view, err := buildValidateViewForSlug(root, slug)
+		view, err := buildValidateViewForSlugWithReadContext(newStateReadContext(root), slug)
 		require.NoError(t, err)
 		assert.True(t, view.PresetConfirmationPending)
 		assert.NotEmpty(t, view.SuggestedWorkflowPreset)

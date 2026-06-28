@@ -508,7 +508,7 @@ func TestConfigListTextSurfacesEffectiveDefaultsAndDescriptions(t *testing.T) {
 				assert.Contains(t, line, "true", "auto_provision_worktree default must render as enabled")
 			}
 		}
-		assertConfigListLineContains(t, out, "validation.enforce_rfc2119", "false")
+		assert.NotContains(t, out, "validation.enforce_rfc2119", "removed no-op validation flags must not appear in config list")
 	})
 }
 
