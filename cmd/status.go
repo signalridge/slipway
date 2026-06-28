@@ -409,10 +409,6 @@ func resolveStatusRouteForRootWithReadContext(readCtx *stateReadContext, active 
 	return statusRoute{change: &change}, nil
 }
 
-func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, error) {
-	return statusChangeFromCurrentWorktreeBindingWithReadContext(newStateReadContext(root))
-}
-
 func statusChangeFromCurrentWorktreeBindingWithReadContext(readCtx *stateReadContext) (model.Change, bool, error) {
 	root := readCtx.root
 	worktreePath, err := readCtx.currentWorktree()
@@ -438,10 +434,6 @@ func statusChangeFromCurrentWorktreeBindingWithReadContext(readCtx *stateReadCon
 // dedicated worktree is the current invocation worktree, so unscoped status in
 // an archived-change worktree reports that local archived change instead of an
 // unrelated global active change bound elsewhere (#283).
-func statusArchivedChangeForCurrentWorktree(root string) (model.Change, bool, error) {
-	return statusArchivedChangeForCurrentWorktreeWithReadContext(newStateReadContext(root))
-}
-
 func statusArchivedChangeForCurrentWorktreeWithReadContext(readCtx *stateReadContext) (model.Change, bool, error) {
 	root := readCtx.root
 	worktreePath, err := readCtx.currentWorktree()

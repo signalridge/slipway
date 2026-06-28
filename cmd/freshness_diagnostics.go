@@ -34,20 +34,12 @@ func applyNextInvocationWorkspacePathWithReadContext(cmd *cobra.Command, readCtx
 	applyCommandInvocationWorkspacePathWithReadContext(cmd, readCtx, view.FreshnessDiagnostics)
 }
 
-func applyNextInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool, view *nextView) {
-	applyNextInvocationRouteWithReadContext(cmd, newStateReadContext(root), change, explicitChange, view)
-}
-
 func applyNextInvocationRouteWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, change model.Change, explicitChange bool, view *nextView) {
 	if view == nil {
 		return
 	}
 	workspace := invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx)
 	view.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, workspace, explicitChange)
-}
-
-func applyValidateInvocationWorkspacePath(cmd *cobra.Command, root string, view *validateView) {
-	applyValidateInvocationWorkspacePathWithReadContext(cmd, newStateReadContext(root), view)
 }
 
 func applyValidateInvocationWorkspacePathWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, view *validateView) {
@@ -57,20 +49,12 @@ func applyValidateInvocationWorkspacePathWithReadContext(cmd *cobra.Command, rea
 	applyCommandInvocationWorkspacePathWithReadContext(cmd, readCtx, view.FreshnessDiagnostics)
 }
 
-func applyValidateInvocationRoute(cmd *cobra.Command, root string, change model.Change, explicitChange bool, view *validateView) {
-	applyValidateInvocationRouteWithReadContext(cmd, newStateReadContext(root), change, explicitChange, view)
-}
-
 func applyValidateInvocationRouteWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, change model.Change, explicitChange bool, view *validateView) {
 	if view == nil {
 		return
 	}
 	workspace := invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx)
 	view.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, workspace, explicitChange)
-}
-
-func applyStatusInvocationWorkspacePath(cmd *cobra.Command, root string, view *statusView) {
-	applyStatusInvocationWorkspacePathWithReadContext(cmd, newStateReadContext(root), view)
 }
 
 func applyStatusInvocationWorkspacePathWithReadContext(cmd *cobra.Command, readCtx *stateReadContext, view *statusView) {
