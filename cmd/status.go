@@ -255,7 +255,7 @@ func makeStatusCmd() *cobra.Command {
 				return showStatusForChangeWithReadContext(cmd, readCtx, change, outputFormat, effectiveView, hydrateKeys, hydrate, true)
 			}
 
-			if change, ok, err := statusChangeFromCurrentWorktreeBinding(root); err != nil {
+			if change, ok, err := statusChangeFromCurrentWorktreeBindingWithReadContext(readCtx); err != nil {
 				return err
 			} else if ok {
 				readCtx.rememberChange(change)
@@ -275,7 +275,7 @@ func makeStatusCmd() *cobra.Command {
 			// unscoped status silently reports that unrelated active change as if it
 			// were local, switching the review context out from under an
 			// archived-change review (#283).
-			if change, ok, err := statusArchivedChangeForCurrentWorktree(root); err != nil {
+			if change, ok, err := statusArchivedChangeForCurrentWorktreeWithReadContext(readCtx); err != nil {
 				return err
 			} else if ok {
 				effectiveView := resolveEffectiveFocus("status", explicitFocus)
@@ -289,7 +289,7 @@ func makeStatusCmd() *cobra.Command {
 				return showArchivedStatusForChange(cmd, root, change, outputFormat, effectiveView, hydrateKeys, hydrate)
 			}
 
-			changes, err := state.ListChanges(root)
+			changes, err := readCtx.listChanges()
 			if err != nil {
 				// A partially-deleted change (a governed bundle directory that
 				// survived without its change.yaml authority) otherwise dead-ends
@@ -322,7 +322,7 @@ func makeStatusCmd() *cobra.Command {
 				route.diagnostics.Mode = explicitFocus
 				route.diagnostics.InvocationRoute = buildNoActiveInvocationRouteView(
 					root,
-					invocationWorkspaceRootFromCommand(cmd, root),
+					invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx),
 				)
 				if explicitFocus != "" {
 					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
@@ -409,8 +409,9 @@ func resolveStatusRouteForRootWithReadContext(readCtx *stateReadContext, active 
 	return statusRoute{change: &change}, nil
 }
 
-func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, error) {
-	worktreePath, err := currentWorktreeRoot()
+func statusChangeFromCurrentWorktreeBindingWithReadContext(readCtx *stateReadContext) (model.Change, bool, error) {
+	root := readCtx.root
+	worktreePath, err := readCtx.currentWorktree()
 	if err != nil {
 		return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 	}
@@ -433,8 +434,9 @@ func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, er
 // dedicated worktree is the current invocation worktree, so unscoped status in
 // an archived-change worktree reports that local archived change instead of an
 // unrelated global active change bound elsewhere (#283).
-func statusArchivedChangeForCurrentWorktree(root string) (model.Change, bool, error) {
-	worktreePath, err := currentWorktreeRoot()
+func statusArchivedChangeForCurrentWorktreeWithReadContext(readCtx *stateReadContext) (model.Change, bool, error) {
+	root := readCtx.root
+	worktreePath, err := readCtx.currentWorktree()
 	if err != nil {
 		return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 	}
@@ -535,8 +537,8 @@ func showStatusForChangeWithReadContext(cmd *cobra.Command, readCtx *stateReadCo
 		if err != nil {
 			return err
 		}
-		applyStatusInvocationWorkspacePath(cmd, root, &view)
-		applyStatusInvocationRoute(cmd, root, lockedChange, explicitChange, &view)
+		applyStatusInvocationWorkspacePathWithReadContext(cmd, readCtx, &view)
+		applyStatusInvocationRouteWithReadContext(cmd, readCtx, lockedChange, explicitChange, &view)
 		view.Mode = requestedView
 		view.HydrateReferences = hydrateKeys
 		return printStatusView(cmd, root, view, outputFormat, hydrate)

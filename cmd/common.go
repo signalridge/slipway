@@ -447,67 +447,7 @@ func resolveActiveChangeRef(root string, explicitSlug string) (changeRef, error)
 }
 
 func resolveActiveChangeRefWithReadContext(readCtx *stateReadContext, explicitSlug string) (changeRef, error) {
-	root := readCtx.root
-	// When --change is provided, load that specific change.
-	if strings.TrimSpace(explicitSlug) != "" {
-		return resolveExplicitChangeWithReadContext(readCtx, strings.TrimSpace(explicitSlug))
-	}
-
-	// Worktree-based resolution.
-	worktreePath, err := currentWorktreeRoot()
-	if err != nil {
-		return changeRef{}, wrapResolutionErrorForRoot(root, err)
-	}
-	if worktreePath != "" {
-		if change, ok, err := resolveActiveChangeRefFromWorktreeBinding(root, worktreePath); err != nil {
-			return changeRef{}, err
-		} else if ok {
-			readCtx.rememberChange(change)
-			return changeRef{Slug: change.Slug}, nil
-		}
-
-		change, err := state.FindActiveChangeForWorktree(root, worktreePath)
-		if err != nil {
-			// Before surfacing "no active change here" or "bound to another
-			// worktree", prefer this worktree's own archived change when it hosts
-			// one, so an archived-change worktree reports its own terminal state
-			// (archived_change_not_validatable) instead of an unrelated active
-			// change bound to a different worktree (#283).
-			if shouldTryArchivedWorktreeFallback(err) {
-				if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
-					return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
-				} else if ok {
-					return resolveExplicitChangeWithReadContext(readCtx, archived.Slug)
-				}
-			}
-			if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
-				return changeRef{}, recoveryErr
-			}
-			return changeRef{}, wrapResolutionErrorForRoot(root, err)
-		}
-		if strings.TrimSpace(change.WorktreePath) == "" {
-			// A single unbound active change is only a fallback. In an archived
-			// review worktree, local archived authority is more specific and must
-			// fail closed before commands operate on the unrelated unbound change.
-			if archived, ok, archErr := state.FindArchivedChangeForWorktree(root, worktreePath); archErr != nil {
-				return changeRef{}, wrapArchivedWorktreeResolutionError(archErr)
-			} else if ok {
-				return resolveExplicitChangeWithReadContext(readCtx, archived.Slug)
-			}
-		}
-		readCtx.rememberChange(change)
-		return changeRef{Slug: change.Slug}, nil
-	}
-
-	change, err := state.FindActiveChange(root)
-	if err != nil {
-		if recoveryErr := deleteRecoveryError(root, ""); recoveryErr != nil {
-			return changeRef{}, recoveryErr
-		}
-		return changeRef{}, wrapResolutionErrorForRoot(root, err)
-	}
-	readCtx.rememberChange(change)
-	return changeRef{Slug: change.Slug}, nil
+	return readCtx.activeRef(explicitSlug)
 }
 
 func resolveActiveChangeRefFromWorktreeBinding(root, worktreePath string) (model.Change, bool, error) {
@@ -1187,6 +1127,16 @@ func buildInvocationRouteView(
 	invocationWorkspace string,
 	explicitChange bool,
 ) *invocationRouteView {
+	return buildInvocationRouteViewWithReadContext(newStateReadContext(root), change, invocationWorkspace, explicitChange)
+}
+
+func buildInvocationRouteViewWithReadContext(
+	readCtx *stateReadContext,
+	change model.Change,
+	invocationWorkspace string,
+	explicitChange bool,
+) *invocationRouteView {
+	root := readCtx.root
 	slug := strings.TrimSpace(change.Slug)
 	if slug == "" {
 		return nil
@@ -1197,7 +1147,7 @@ func buildInvocationRouteView(
 	if strings.TrimSpace(invocationWorkspace) != "" {
 		route.InvocationWorkspacePath = state.DisplayPath(root, invocationWorkspace)
 	}
-	if paths, err := state.ResolveChangePaths(root, change); err == nil {
+	if paths, err := readCtx.resolvedPaths(change); err == nil {
 		route.BoundWorkspacePath = state.DisplayPath(root, paths.WorkspaceRoot)
 		route.ChangeAuthorityPath = state.DisplayPath(root, filepath.Join(paths.GovernedBundleDir, "change.yaml"))
 	}
