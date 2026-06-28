@@ -178,6 +178,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 `status --json` は、実行エビデンスが陳腐化していると分かっている場合に `freshness_diagnostics` を含め、各 `artifact_dag` ノードに `blocking` と `blocking_reason` を付与します。これにより、ドラフトの計画アーティファクトが現在のレビューブロッカーと取り違えられないようにします。
 
 `validate --change <slug>` は明示的なアクティブ変更を選択します。slug がアーカイブ済みの終端変更を指す場合、コマンドは `archived_change_not_validatable` で失敗し、汎用の no-active 診断の代わりに終端状態とアーカイブ済みの `change.yaml` パスを返します。これはアクティブな準備状況のコントラクトです。`validate` は `done` の前に現在アクティブな統制状態を証明するものであり、凍結されたバンドルに対するアーカイブ後の監査サーフェスではありません。
+明示した slug がアクティブ変更またはアーカイブ済み変更を指さない場合、`validate --change <slug> --json` は fail closed し、終了コード 3 と `error_code=change_not_found` を返します。一方、`--change` を指定しない `validate --json` は、アクティブ変更がない場合でも診断ビューとして終了コード 0 で返り、`invocation_route.kind=no_active` と `next_command=slipway new` を報告します。
 
 `artifacts/codebase/**` 配下の耐久性あるコードベースマップは、スコープコントラクトの変更ファイル計上から免除されます。それらのコンテキストファイルのみがダーティな場合、`scope_contract.changed_files` と `scope_contract.out_of_scope_files` に含まれず、`scope_contract.status` は `pass` のままです。リフレッシュされたコードベースマップ単独ではスコープコントラクトのドリフトを引き起こしません。このフィルタリングを `git diff` の不一致から推測させるのではなく可視にするため、免除されたファイルは `scope_contract.exempt_context_files` フィールドで明示的に開示され、`slipway validate --json`、`slipway status --json`、`slipway review --json` で表示されます。
 

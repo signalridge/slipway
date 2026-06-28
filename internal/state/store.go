@@ -687,7 +687,12 @@ func FindActiveChange(root string) (model.Change, error) {
 	if err != nil {
 		return model.Change{}, err
 	}
+	return SelectActiveChange(changes)
+}
 
+// SelectActiveChange resolves the single active change from an already-loaded
+// change list. It mirrors FindActiveChange without re-running discovery.
+func SelectActiveChange(changes []model.Change) (model.Change, error) {
 	var active []model.Change
 	for _, c := range changes {
 		if c.Status == model.ChangeStatusActive {
@@ -706,14 +711,20 @@ func FindActiveChange(root string) (model.Change, error) {
 
 // FindActiveChangeForWorktree finds the active change bound to the given worktree path.
 func FindActiveChangeForWorktree(root, currentWorktreePath string) (model.Change, error) {
-	normalizedCurrent, err := NormalizePath(currentWorktreePath)
-	if err != nil {
-		return model.Change{}, fmt.Errorf("normalize worktree path: %w", err)
-	}
-
 	changes, err := ListChanges(root)
 	if err != nil {
 		return model.Change{}, err
+	}
+	return SelectActiveChangeForWorktree(changes, currentWorktreePath)
+}
+
+// SelectActiveChangeForWorktree resolves the active change for worktree from an
+// already-loaded change list. It mirrors FindActiveChangeForWorktree without
+// re-running discovery.
+func SelectActiveChangeForWorktree(changes []model.Change, currentWorktreePath string) (model.Change, error) {
+	normalizedCurrent, err := NormalizePath(currentWorktreePath)
+	if err != nil {
+		return model.Change{}, fmt.Errorf("normalize worktree path: %w", err)
 	}
 
 	// Phase 1: Match by worktree path.

@@ -182,7 +182,7 @@ func makeValidateCmd() *cobra.Command {
 					} else {
 						view.InvocationRoute = buildDiagnosticInvocationRouteView(
 							root,
-							invocationWorkspaceRootFromCommand(cmd, root),
+							invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx),
 							"no_active",
 							"",
 							"Use `slipway new` to create a governed change, or specify an active change with `--change <slug>`.",
@@ -198,9 +198,9 @@ func makeValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			applyValidateInvocationWorkspacePath(cmd, root, &view)
+			applyValidateInvocationWorkspacePathWithReadContext(cmd, readCtx, &view)
 			if change, loadErr := readCtx.loadChange(ref.Slug); loadErr == nil {
-				applyValidateInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "", &view)
+				applyValidateInvocationRouteWithReadContext(cmd, readCtx, change, strings.TrimSpace(changeSlug) != "", &view)
 			}
 			view.Mode = effectiveMode
 			view.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("validate", focus))
