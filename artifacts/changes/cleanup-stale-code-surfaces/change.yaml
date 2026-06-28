@@ -1,0 +1,16 @@
+version: 1
+slug: cleanup-stale-code-surfaces
+description: cleanup stale code surfaces
+status: active
+current_state: S2_IMPLEMENT
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-28T07:46:45.304105Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/cleanup-stale-code-surfaces
+artifact_schema: core
+evidence_refs:
+    intake-clarification: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/intake-clarification.yaml
+    plan-audit: .worktrees/cleanup-stale-code-surfaces/artifacts/changes/cleanup-stale-code-surfaces/verification/plan-audit.yaml
