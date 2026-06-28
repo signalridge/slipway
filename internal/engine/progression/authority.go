@@ -51,15 +51,6 @@ func loadRuntimeGovernanceInputs(root string, change model.Change) (runtimeGover
 	}, nil
 }
 
-// FinalCloseoutEvidenceRequired returns whether the closeout-conditional ship
-// governance evidence is required for the resolved policy. The merged
-// ship-verification gate is always required at S3 regardless of this value; the
-// helper is retained for the registry's CloseoutConditional filtering and for
-// caller-signature stability.
-func FinalCloseoutEvidenceRequired(policy governance.PresetPolicy) bool {
-	return policy.CloseoutRefreshRequired || policy.EffectivePreset != model.WorkflowPresetLight
-}
-
 func EvaluateReviewAuthority(root string, change model.Change) (ReviewAuthority, error) {
 	policy, err := governance.ResolvePresetPolicy(root, change)
 	if err != nil {
@@ -100,7 +91,6 @@ func evaluateReviewAuthorityWithPolicyAndRecords(
 		change,
 		model.StateS3Review,
 		executionSummaryCtx.LatestRunVersion,
-		policy.CloseoutRefreshRequired,
 		reviewSelection,
 		verificationRecords,
 	)
@@ -123,7 +113,6 @@ func evaluateReviewAuthorityWithPolicyAndRecords(
 	}
 	skillBlockers = append(skillBlockers, model.ReasonSpecs(extraSkillBlockers)...)
 	blockers := model.ReasonCodesFromSpecs(skillBlockers)
-	layerBlockers := []model.ReasonCode{}
 	if artifactReviewEvidence, ok := passingSkills[SkillSpecComplianceReview]; ok {
 		artifactCtx := resolveArtifactEvaluationContext(change, policy.EffectivePreset)
 		projection, err := projectArtifactProjectionWithContext(root, change, artifactCtx)
@@ -131,7 +120,7 @@ func evaluateReviewAuthorityWithPolicyAndRecords(
 			return ReviewAuthority{}, err
 		}
 		implementationReviewEvidence := passingSkills[SkillCodeQualityReview]
-		layerBlockers = EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, &projection, false)
+		layerBlockers := EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, &projection, false)
 		blockers = append(blockers, layerBlockers...)
 	}
 	blockers = append(blockers, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)...)
@@ -347,7 +336,7 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	artifactReady := readiness.ArtifactReadiness.Ready
 	verificationReady := len(verifySkillBlockers) == 0 &&
 		len(reviewAuthority.Blockers) == 0 &&
-		ComputeVerificationReadiness(verifyPassingSkills, FinalCloseoutEvidenceRequired(inputs.Policy))
+		ComputeVerificationReadiness(verifyPassingSkills)
 	requiredActions := cloneRequiredActions(readiness.RequiredActions)
 	// G_ship's guardrail high-risk satisfaction is owned SOLELY by the
 	// ship-verification record (REQ-005). Extracting over the whole passing-skill

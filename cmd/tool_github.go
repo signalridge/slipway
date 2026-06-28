@@ -124,11 +124,12 @@ func withGitHubBackendHelp(long string) string {
 }
 
 const (
-	githubBackendAPI  = "api"
-	githubBackendAuto = "auto"
-	githubBackendGH   = "gh"
-	githubBodyCap     = 16 << 20
-	githubStderrCap   = 64 << 10
+	githubBackendAPI   = "api"
+	githubBackendAuto  = "auto"
+	githubBackendGH    = "gh"
+	githubBodyCap      = 16 << 20
+	githubStderrCap    = 64 << 10
+	githubRESTMaxPages = 100
 
 	githubDefaultAPIBaseURL        = "https://api.github.com"
 	githubAPIURLEnv                = "SLIPWAY_GITHUB_API_URL"
@@ -329,9 +330,8 @@ func newGitHubHTTPClient() (githubHTTPClient, error) {
 }
 
 type githubAPIConfig struct {
-	baseURL  string
-	token    string
-	override bool
+	baseURL string
+	token   string
 }
 
 func resolveGitHubAPIConfigFromEnv() (githubAPIConfig, error) {
@@ -368,7 +368,7 @@ func resolveGitHubAPIConfigFromEnv() (githubAPIConfig, error) {
 			nil,
 		)
 	}
-	return githubAPIConfig{baseURL: baseURL, token: token, override: override}, nil
+	return githubAPIConfig{baseURL: baseURL, token: token}, nil
 }
 
 func normalizeGitHubAPIBaseURL(raw string) (string, error) {
@@ -471,6 +471,77 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+type githubPageHandler func(raw []byte) (int, error)
+
+type githubPageWalker func(githubPageHandler) error
+
+func collectGitHubPaginatedObjects(walk githubPageWalker) ([]map[string]any, error) {
+	collected := make([]map[string]any, 0)
+	err := walk(func(raw []byte) (int, error) {
+		batch, err := decodeGitHubObjectPage(raw)
+		if err != nil {
+			return 0, err
+		}
+		collected = append(collected, batch...)
+		return len(batch), nil
+	})
+	return collected, err
+}
+
+func collectGitHubPaginatedCheckRuns(walk githubPageWalker) (int, []map[string]any, error) {
+	runs := make([]map[string]any, 0)
+	totalCount := 0
+	first := true
+	err := walk(func(raw []byte) (int, error) {
+		if len(bytes.TrimSpace(raw)) == 0 {
+			return 0, nil
+		}
+		pageTotal, batch, err := decodeGitHubCheckRunsPage(raw)
+		if err != nil {
+			return 0, err
+		}
+		if first {
+			totalCount = pageTotal
+			first = false
+		}
+		runs = append(runs, batch...)
+		return len(batch), nil
+	})
+	return totalCount, runs, err
+}
+
+func decodeGitHubObjectPage(raw []byte) ([]map[string]any, error) {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, nil
+	}
+	var batch []map[string]any
+	if err := json.Unmarshal(raw, &batch); err != nil {
+		return nil, err
+	}
+	return batch, nil
+}
+
+func decodeGitHubCheckRunsPage(raw []byte) (int, []map[string]any, error) {
+	var envelope struct {
+		TotalCount int              `json:"total_count"`
+		CheckRuns  []map[string]any `json:"check_runs"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return 0, nil, err
+	}
+	return envelope.TotalCount, envelope.CheckRuns, nil
+}
+
+func extractGitHubCombinedStatuses(combined map[string]any) []map[string]any {
+	statuses := make([]map[string]any, 0)
+	for _, raw := range ghSlice(combined, "statuses") {
+		if m := ghMap(raw); m != nil {
+			statuses = append(statuses, m)
+		}
+	}
+	return statuses
+}
+
 func (c githubHTTPClient) getJSON(path string, out any) error {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
@@ -490,57 +561,27 @@ func (c githubHTTPClient) getJSON(path string, out any) error {
 // RFC5988 Link rel="next" when present and otherwise walks ?per_page=100&page=N
 // until an empty page is returned. Pages are bounded to avoid runaway loops.
 func (c githubHTTPClient) getPaginated(path string) ([]map[string]any, error) {
-	collected := make([]map[string]any, 0)
-	err := c.walkPages(path, func(raw []byte) (int, error) {
-		var batch []map[string]any
-		if len(bytes.TrimSpace(raw)) == 0 {
-			return 0, nil
-		}
-		if err := json.Unmarshal(raw, &batch); err != nil {
-			return 0, err
-		}
-		collected = append(collected, batch...)
-		return len(batch), nil
+	return collectGitHubPaginatedObjects(func(handle githubPageHandler) error {
+		return c.walkPages(path, handle)
 	})
-	return collected, err
 }
 
 // getPaginatedCheckRuns walks the object-wrapped check-runs endpoint
 // ({total_count, check_runs:[...]}) accumulating check_runs across pages while
 // preserving total_count from the first page.
 func (c githubHTTPClient) getPaginatedCheckRuns(path string) (int, []map[string]any, error) {
-	runs := make([]map[string]any, 0)
-	totalCount := 0
-	first := true
-	err := c.walkPages(path, func(raw []byte) (int, error) {
-		if len(bytes.TrimSpace(raw)) == 0 {
-			return 0, nil
-		}
-		var envelope struct {
-			TotalCount int              `json:"total_count"`
-			CheckRuns  []map[string]any `json:"check_runs"`
-		}
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			return 0, err
-		}
-		if first {
-			totalCount = envelope.TotalCount
-			first = false
-		}
-		runs = append(runs, envelope.CheckRuns...)
-		return len(envelope.CheckRuns), nil
+	return collectGitHubPaginatedCheckRuns(func(handle githubPageHandler) error {
+		return c.walkPages(path, handle)
 	})
-	return totalCount, runs, err
 }
 
 // walkPages drives REST pagination, invoking handle with each page's raw body
 // and using its returned item count to decide when a page-number walk is empty.
 // It follows RFC5988 Link rel="next" when the server provides it.
 func (c githubHTTPClient) walkPages(path string, handle func(raw []byte) (int, error)) error {
-	const maxPages = 100
 	next := c.firstPageURL(path)
 	usedLink := false
-	for page := 1; next != "" && page <= maxPages; page++ {
+	for page := 1; next != "" && page <= githubRESTMaxPages; page++ {
 		req, err := http.NewRequest(http.MethodGet, next, nil)
 		if err != nil {
 			return err
@@ -582,12 +623,11 @@ func (c githubHTTPClient) walkPages(path string, handle func(raw []byte) (int, e
 }
 
 func (c githubHTTPClient) firstPageURL(path string) string {
-	return c.baseURL + addQueryParam(path, "per_page", "100")
+	return c.baseURL + addGitHubPaginationParams(path, 0)
 }
 
 func (c githubHTTPClient) nextPageURL(path string, page int) string {
-	withPer := addQueryParam(path, "per_page", "100")
-	return c.baseURL + addQueryParam(withPer, "page", fmt.Sprint(page))
+	return c.baseURL + addGitHubPaginationParams(path, page)
 }
 
 func (c githubHTTPClient) authorizePaginationURL(raw string) (string, error) {
@@ -658,6 +698,14 @@ func addQueryParam(path, key, value string) string {
 		sep = "&"
 	}
 	return path + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
+}
+
+func addGitHubPaginationParams(path string, page int) string {
+	withPerPage := addQueryParam(path, "per_page", "100")
+	if page <= 0 {
+		return withPerPage
+	}
+	return addQueryParam(withPerPage, "page", fmt.Sprint(page))
 }
 
 // parseLinkNext extracts the URL of the rel="next" entry from an RFC5988 Link
@@ -802,50 +850,20 @@ func (c githubCLIClient) getJSON(path string, out any) error {
 }
 
 func (c githubCLIClient) getPaginated(path string) ([]map[string]any, error) {
-	collected := make([]map[string]any, 0)
-	err := c.walkPages(path, func(raw []byte) (int, error) {
-		var batch []map[string]any
-		if len(bytes.TrimSpace(raw)) == 0 {
-			return 0, nil
-		}
-		if err := json.Unmarshal(raw, &batch); err != nil {
-			return 0, err
-		}
-		collected = append(collected, batch...)
-		return len(batch), nil
+	return collectGitHubPaginatedObjects(func(handle githubPageHandler) error {
+		return c.walkPages(path, handle)
 	})
-	return collected, err
 }
 
 func (c githubCLIClient) getPaginatedCheckRuns(path string) (int, []map[string]any, error) {
-	runs := make([]map[string]any, 0)
-	totalCount := 0
-	first := true
-	err := c.walkPages(path, func(raw []byte) (int, error) {
-		if len(bytes.TrimSpace(raw)) == 0 {
-			return 0, nil
-		}
-		var envelope struct {
-			TotalCount int              `json:"total_count"`
-			CheckRuns  []map[string]any `json:"check_runs"`
-		}
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			return 0, err
-		}
-		if first {
-			totalCount = envelope.TotalCount
-			first = false
-		}
-		runs = append(runs, envelope.CheckRuns...)
-		return len(envelope.CheckRuns), nil
+	return collectGitHubPaginatedCheckRuns(func(handle githubPageHandler) error {
+		return c.walkPages(path, handle)
 	})
-	return totalCount, runs, err
 }
 
 func (c githubCLIClient) walkPages(path string, handle func(raw []byte) (int, error)) error {
-	const maxPages = 100
-	for page := 1; page <= maxPages; page++ {
-		raw, err := c.api(addQueryParam(addQueryParam(path, "per_page", "100"), "page", fmt.Sprint(page)))
+	for page := 1; page <= githubRESTMaxPages; page++ {
+		raw, err := c.api(addGitHubPaginationParams(path, page))
 		if err != nil {
 			return err
 		}
@@ -865,13 +883,7 @@ func (c githubCLIClient) getCombinedStatus(repoPath, sha string) (map[string]any
 	if err := c.getJSON("/repos/"+repoPath+"/commits/"+url.PathEscape(sha)+"/status", &combined); err != nil {
 		return nil, nil, err
 	}
-	statuses := make([]map[string]any, 0)
-	for _, raw := range ghSlice(combined, "statuses") {
-		if m := ghMap(raw); m != nil {
-			statuses = append(statuses, m)
-		}
-	}
-	return combined, statuses, nil
+	return combined, extractGitHubCombinedStatuses(combined), nil
 }
 
 func (c githubCLIClient) summarizeFailedCheckRun(repoPath string, run map[string]any) map[string]any {
@@ -943,7 +955,7 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	if b.limit <= 0 {
 		return len(p), nil
 	}
-	remaining := b.limit - b.Buffer.Len()
+	remaining := b.limit - b.Len()
 	if remaining <= 0 {
 		b.overflow = true
 		return len(p), nil
@@ -1187,13 +1199,7 @@ func (c githubHTTPClient) getCombinedStatus(repoPath, sha string) (map[string]an
 	if err := c.getJSON("/repos/"+repoPath+"/commits/"+url.PathEscape(sha)+"/status", &combined); err != nil {
 		return nil, nil, err
 	}
-	statuses := make([]map[string]any, 0)
-	for _, raw := range ghSlice(combined, "statuses") {
-		if m := ghMap(raw); m != nil {
-			statuses = append(statuses, m)
-		}
-	}
-	return combined, statuses, nil
+	return combined, extractGitHubCombinedStatuses(combined), nil
 }
 
 // summarizeFailedCheckRun produces a compact record of a failed check run,
@@ -1425,9 +1431,6 @@ func extractFeedbackItem(body, author string, opts feedbackItemOpts) map[string]
 	if opts.outdated {
 		item["outdated"] = true
 	}
-	if opts.reviewBot {
-		item["review_bot"] = true
-	}
 	if opts.threadID != "" {
 		item["thread_id"] = opts.threadID
 	}
@@ -1435,13 +1438,12 @@ func extractFeedbackItem(body, author string, opts feedbackItemOpts) map[string]
 }
 
 type feedbackItemOpts struct {
-	path      string
-	line      int
-	url       string
-	resolved  bool
-	outdated  bool
-	reviewBot bool
-	threadID  string
+	path     string
+	line     int
+	url      string
+	resolved bool
+	outdated bool
+	threadID string
 }
 
 func runFetchPRFeedback(cmd *cobra.Command, repo string, pr int, backend string) error {

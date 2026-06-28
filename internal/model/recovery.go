@@ -299,16 +299,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
-	"missing_worktree_branch": {
-		Remediation:     "Repair the change worktree binding so it records a branch.",
-		CommandTemplate: "slipway repair",
-		Class:           RecoveryClassSatisfyControl,
-	},
-	"missing_worktree_path": {
-		Remediation:     "Repair the change worktree binding so it records a path.",
-		CommandTemplate: "slipway repair",
-		Class:           RecoveryClassSatisfyControl,
-	},
 	"non_pass_task": {
 		Remediation:     "Resolve the failing task evidence for task {subject}, then re-run wave-orchestration.",
 		CommandTemplate: "slipway run",
@@ -491,16 +481,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
-	"plan_audit_failed": {
-		Remediation:     "Plan audit did not pass; fix the bundle blockers and re-run plan-audit.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRerunSkill,
-	},
-	"plan_audit_evidence_missing": {
-		Remediation:     "Plan audit evidence is missing; run plan-audit and record passing evidence.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRerunSkill,
-	},
 	"plan_audit_iteration": {
 		Remediation:     "Plan audit is iterating; incorporate checker feedback before continuing.",
 		CommandTemplate: "slipway run",
@@ -661,11 +641,6 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassSatisfyControl,
 	},
-	"wave_execution_blocked": {
-		Remediation:     "Resolve the reported wave execution blocker, then re-run wave-orchestration.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRefreshWave,
-	},
 	"wave_execution_unavailable": {
 		Remediation:     "Repair the wave execution context before re-running wave-orchestration.",
 		CommandTemplate: "slipway repair",
@@ -683,11 +658,6 @@ var blockerRemediations = map[string]blockerRemediation{
 	},
 	"wave_plan_missing": {
 		Remediation:     "Rebuild wave-plan.yaml from the current tasks.md before wave execution.",
-		CommandTemplate: "slipway repair",
-		Class:           RecoveryClassSatisfyControl,
-	},
-	"wave_plan_repair_blocked": {
-		Remediation:     "Rebuild the derived wave plan from current tasks.md, then refresh affected execution evidence.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassSatisfyControl,
 	},

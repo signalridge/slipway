@@ -31,8 +31,8 @@ reports stale evidence or out-of-scope files.
 2. `slipway new "add a short README usage note" --profile docs` で変更を作成する。
 3. `slipway next --json --diagnostics` で現在のハンドオフを確認する。
 4. 返されたスキルに、必要な成果物または実装ステップをオーサリングさせる。
-5. 実装後に `slipway validate --json` を実行する。
-6. ステートが done-ready になってから、`slipway done --json` を実行する。
+5. 実装後に `slipway validate` を実行する。
+6. ステートが done-ready になってから、`slipway done` を実行する。
 
 完了の条件:
 
@@ -145,7 +145,7 @@ recovery command or explain why none applies.
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 slipway health --doctor --json
 ```

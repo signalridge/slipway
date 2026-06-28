@@ -52,7 +52,6 @@ func advanceIntakeClarify(root string, change *model.Change, fromState model.Wor
 			*change,
 			model.WorkflowState(evidenceState),
 			executionSummaryCtx.LatestRunVersion,
-			false,
 		)
 		if err != nil {
 			return AdvanceSummary{}, err
@@ -346,7 +345,6 @@ func intakeClarificationEvidenceBlockers(root string, change model.Change) ([]mo
 		change,
 		model.StateS0Intake,
 		summaryCtx.LatestRunVersion,
-		false,
 	)
 	if err != nil {
 		return nil, nil, err

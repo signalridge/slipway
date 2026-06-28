@@ -22,6 +22,60 @@ func testExecutionSummaryPath(root, slug string) string {
 	return filepath.Join(VerificationDir(root, slug), ExecutionSummaryFileName)
 }
 
+func TestExecutionFreshnessInputBlocker(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		blocker model.ReasonCode
+		want    bool
+	}{
+		{
+			name:    "stale planning evidence",
+			blocker: model.NewReasonCode(StalePlanningEvidenceBlockerToken, ""),
+			want:    true,
+		},
+		{
+			name:    "stale execution evidence",
+			blocker: model.NewReasonCode(StaleExecutionEvidenceBlockerToken, ""),
+			want:    true,
+		},
+		{
+			name:    "task plan changed after task evidence",
+			blocker: model.NewReasonCode(TasksPlanChangedSinceTaskEvidenceBlockerToken, "t-01"),
+			want:    true,
+		},
+		{
+			name:    "scope contract remains a separate recovery domain",
+			blocker: model.NewReasonCode("scope_contract_drift", "cmd/status.go"),
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, ExecutionFreshnessInputBlocker(tt.blocker))
+		})
+	}
+}
+
+func TestExecutionFreshnessBlockerCodePrefersPlanningCause(t *testing.T) {
+	t.Parallel()
+
+	diagnostics := ExecutionFreshnessDiagnostics{
+		Status: string(freshnesspkg.EvidenceFreshnessStale),
+		StalePairs: []ExecutionFreshnessPair{
+			{Reason: StalePlanningEvidenceBlockerToken},
+			{Reason: StaleExecutionEvidenceBlockerToken},
+		},
+		TaskInputDiffs: []ExecutionTaskInputDifference{{TaskID: "t-01", Field: "change_id"}},
+	}
+
+	assert.Equal(t, StalePlanningEvidenceBlockerToken, executionFreshnessBlockerCode(diagnostics))
+}
+
 func TestExecutionSummaryFileLivesInVerificationDir(t *testing.T) {
 	t.Parallel()
 

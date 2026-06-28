@@ -86,21 +86,21 @@ Pending.
 		},
 	}))
 
-	writeGovernanceVerification(t, root, change.Slug, "wave-orchestration", model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, "wave-orchestration", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 2,
 		References: []string{"run_summary_version=2"},
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(time.Second),
 		RunVersion: 1, // stale
 		References: []string{"layer:R0=pass"},
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(2 * time.Second),
@@ -164,7 +164,7 @@ func TestResolveRuntimeRequiredActionsExplainsDomainReviewSatisfiedBySpecComplia
 			},
 		},
 	}))
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -218,7 +218,7 @@ func TestResolveRuntimeRequiredActionsDoesNotUseCodeQualityForIndependentReview(
 			},
 		},
 	}))
-	writeGovernanceVerification(t, root, change.Slug, "code-quality-review", model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, "code-quality-review", model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -268,7 +268,7 @@ func TestResolveRuntimeRequiredActionsExplainsSecurityReviewSatisfiedBySecurityR
 			},
 		},
 	}))
-	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -511,13 +511,13 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenRunSummaryIsMissing(t *test
 	change.PlanSubStep = model.PlanSubStepNone
 	require.NoError(t, state.SaveChange(root, change))
 
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 5,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -569,13 +569,13 @@ func TestResolveRuntimeRequiredActionsRejectsExecutionSummaryLevelBlockers(t *te
 		OpenBlockers:      []model.ReasonCode{model.NewReasonCode("session_isolation_warning", "session_id=abc:shared_by=task-a,task-b")},
 	}))
 
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 3,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -634,19 +634,19 @@ func TestResolveRuntimeRequiredActionsAbsorbsS3TaskPlanDriftAfterReviewEvidence(
 		},
 	}))
 
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 7,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 7,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -700,19 +700,19 @@ func TestResolveRuntimeRequiredActionsDoesNotAbsorbStaleExecutionEvidence(t *tes
 		},
 	}))
 
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 8,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 8,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSecurityReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -799,14 +799,14 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 	state.ApplyExecutionSummaryFreshnessInputs(&summary, change)
 	summary.SyncDerivedFields()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, summary))
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 2,
 		References: []string{"layer:R0=pass"},
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC().Add(time.Second),
@@ -861,12 +861,12 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenExecutionSummaryIsInvalid(t
 	}))
 	require.NoError(t, os.WriteFile(state.ExecutionSummaryPathForRead(root, change.Slug), []byte("version: ["), 0o644))
 
-	writeGovernanceVerification(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillSpecComplianceReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 4,
 	})
-	writeGovernanceVerification(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIndependentReview, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 4,
@@ -971,7 +971,7 @@ Standard deployment.
 Internal docs.
 `), 0o644))
 
-	writeGovernanceVerification(t, root, change.Slug, skillIntakeClarification, model.VerificationRecord{
+	writeVerificationForTest(t, root, change.Slug, skillIntakeClarification, model.VerificationRecord{
 		Verdict:    model.VerificationVerdictPass,
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
@@ -1070,11 +1070,6 @@ func TestRequiredActionBlockersHandlesReleaseAndUnknownScopes(t *testing.T) {
 	require.Len(t, blockers, 1)
 	assert.Contains(t, blockers[0], "governance_action_required:rollback-required")
 	assert.NotContains(t, blockers[0], "unknown scope should not block")
-}
-
-func writeGovernanceVerification(t *testing.T, root, slug, skillName string, rec model.VerificationRecord) {
-	t.Helper()
-	writeVerificationForTest(t, root, slug, skillName, rec)
 }
 
 func initGitRepoForRuntimeActionsTests(t *testing.T, root string) {

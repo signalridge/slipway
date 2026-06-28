@@ -320,27 +320,6 @@ func (s ExecutionSummary) Equal(other ExecutionSummary) bool {
 	return true
 }
 
-func (s ExecutionSummary) TasksByVerdict() map[string]int {
-	counts := map[string]int{}
-	for _, task := range s.Tasks {
-		counts[string(task.Verdict)]++
-	}
-	if len(counts) == 0 {
-		return nil
-	}
-	return counts
-}
-
-func (s ExecutionSummary) LatestRelevantUpdateAt() time.Time {
-	latest := s.CapturedAt
-	for _, task := range s.Tasks {
-		if task.CapturedAt.After(latest) {
-			latest = task.CapturedAt
-		}
-	}
-	return latest
-}
-
 func sortedStringCopy(values []string) []string {
 	if len(values) == 0 {
 		return nil

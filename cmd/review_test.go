@@ -17,53 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHasIntentDriftSignal_BlockerExactMatch(t *testing.T) {
-	t.Parallel()
-	empty := model.VerificationRecord{}
-
-	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"new_change_required:intent_conflict"}), empty))
-	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"intent_drift"}), empty))
-	assert.True(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"intent_drift:severe"}), empty))
-}
-
-func TestHasIntentDriftSignal_BlockerSubstringRejected(t *testing.T) {
-	t.Parallel()
-	empty := model.VerificationRecord{}
-
-	// Loose substrings that previously matched should NOT match now.
-	assert.False(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"some_intent_drift_thing"}), empty))
-	assert.False(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"no_intent_drift_here"}), empty))
-	assert.False(t, hasIntentDriftSignal(model.ReasonCodesFromSpecs([]string{"prefix_intent_drift"}), empty))
-}
-
-func TestHasIntentDriftSignal_ReferenceMatch(t *testing.T) {
-	t.Parallel()
-	record := model.VerificationRecord{
-		References: []string{"intent_drift:true"},
-	}
-	assert.True(t, hasIntentDriftSignal(nil, record))
-
-	record.References = []string{"intent_drift:yes"}
-	assert.True(t, hasIntentDriftSignal(nil, record))
-}
-
-func TestHasIntentDriftSignal_ReferenceNoMatch(t *testing.T) {
-	t.Parallel()
-	record := model.VerificationRecord{
-		References: []string{"intent_drift:false"},
-	}
-	assert.False(t, hasIntentDriftSignal(nil, record))
-
-	record.References = []string{"some_other_ref"}
-	assert.False(t, hasIntentDriftSignal(nil, record))
-}
-
-func TestHasIntentDriftSignal_EmptyInputs(t *testing.T) {
-	t.Parallel()
-	assert.False(t, hasIntentDriftSignal(nil, model.VerificationRecord{}))
-	assert.False(t, hasIntentDriftSignal([]model.ReasonCode{}, model.VerificationRecord{}))
-}
-
 func TestClassifyReviewGapsSeparatesArtifactAndCodeBlockers(t *testing.T) {
 	t.Parallel()
 
@@ -143,7 +96,6 @@ func TestReviewRejectsHydrateWithJSONWithoutMutatingState(t *testing.T) {
 		after, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.StateS2Implement, after.CurrentState, "invalid hydrate/json request must not advance review state")
-		assert.Zero(t, after.ReviewIntentDriftFailures, "invalid hydrate/json request must not mutate review counters")
 	})
 }
 

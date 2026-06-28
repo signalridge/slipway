@@ -1,10 +1,7 @@
 package artifact
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/stringutil"
@@ -33,34 +30,29 @@ type TasksContractResult struct {
 // verification objective") is the mechanical scaffold the authoring skill must
 // replace (issue #91). The engine owns structure; the skill owns substance.
 func EvaluateTasksContract(bundleDir string) (TasksContractResult, error) {
-	sourcePath := ResolveArtifactPath(bundleDir, "tasks.md")
-	if _, err := os.Stat(sourcePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return TasksContractResult{
-				Status:  TasksContractStatusMissing,
-				Source:  sourcePath,
-				Message: "tasks.md is missing",
-			}, nil
-		}
-		return TasksContractResult{}, err
-	}
-
-	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	source, ok, err := readArtifactContractSource(bundleDir, "tasks.md")
 	if err != nil {
 		return TasksContractResult{}, err
 	}
+	if !ok {
+		return TasksContractResult{
+			Status:  TasksContractStatusMissing,
+			Source:  source.Path,
+			Message: "tasks.md is missing",
+		}, nil
+	}
 
-	if blockers := TaskSubstanceBlockers(string(raw)); len(blockers) > 0 {
+	if blockers := TaskSubstanceBlockers(source.Content); len(blockers) > 0 {
 		return TasksContractResult{
 			Status:  TasksContractStatusInvalid,
-			Source:  sourcePath,
+			Source:  source.Path,
 			Message: fmt.Sprintf("tasks.md is not substantive: %s", strings.Join(blockers, "; ")),
 		}, nil
 	}
 
 	return TasksContractResult{
 		Status:  TasksContractStatusValid,
-		Source:  sourcePath,
+		Source:  source.Path,
 		Message: "tasks.md validated",
 	}, nil
 }

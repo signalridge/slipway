@@ -627,11 +627,8 @@ func ResolveChangeSchemaDiagnostics(change model.Change) ChangeSchemaResolution 
 }
 
 // ComputeVerificationReadiness computes whether the single terminal
-// ship-verification skill exists with a pass verdict. The merged ship gate
-// retires the separate goal-verification/final-closeout pair, so the
-// closeoutRequired argument is accepted for caller-signature stability but no
-// longer selects a second skill: ship-verification is always required at S3.
-func ComputeVerificationReadiness(passingSkills map[string]model.VerificationRecord, _ bool) bool {
+// ship-verification skill exists with a pass verdict.
+func ComputeVerificationReadiness(passingSkills map[string]model.VerificationRecord) bool {
 	record, ok := passingSkills[SkillShipVerification]
 	if !ok {
 		return false

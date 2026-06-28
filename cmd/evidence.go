@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -2297,16 +2296,11 @@ func currentPassingEvidenceSkillsWithReviewSelection(
 	runVersion int,
 	reviewSelection skill.ReviewSkillSelection,
 ) (map[string]model.VerificationRecord, error) {
-	policy, err := governance.ResolvePresetPolicy(root, change)
-	if err != nil {
-		return nil, err
-	}
 	passing, _, err := progression.EvaluateRequiredSkillsForChangeWithReviewSelection(
 		root,
 		change,
 		workflowState,
 		runVersion,
-		progression.FinalCloseoutEvidenceRequired(policy),
 		reviewSelection,
 	)
 	return passing, err

@@ -343,7 +343,7 @@ func TestBuildMultiChangeSummaryView(t *testing.T) {
 	changes, err := state.ListChanges(root)
 	require.NoError(t, err)
 
-	view := buildMultiChangeSummaryView(changes)
+	view := buildMultiChangeSummaryViewWithRoute(changes, nil)
 	require.Len(t, view.ActiveChanges, len(changes))
 
 	found := false

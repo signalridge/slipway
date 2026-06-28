@@ -58,6 +58,7 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 
 	// Pattern: `slipway <cmd> --<flag>` or `slipway <cmd> ... --<flag>`
 	re := regexp.MustCompile("`slipway ([a-z][a-z-]*)(?:\\s[^`]*?)\\s--([a-z][a-z-]*)`")
+	standaloneFlagRe := regexp.MustCompile("`--([a-z][a-z-]*)`")
 
 	// Walk all generated skill files.
 	skillsDir := filepath.Join(root, ".claude", "skills")
@@ -80,6 +81,16 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 			assert.True(t, flags[flagName],
 				"template %s references `slipway %s --%s` but flag --%s is not registered on the %s command",
 				relPath, cmdName, flagName, flagName, cmdName)
+		}
+		commandName := generatedSkillCommandName(path)
+		if flags, ok := cmdFlags[commandName]; ok {
+			for _, m := range standaloneFlagRe.FindAllStringSubmatch(flagsSection(string(content)), -1) {
+				flagName := m[1]
+				relPath, _ := filepath.Rel(root, path)
+				assert.True(t, flags[flagName],
+					"command entry %s references standalone flag --%s but that flag is not registered on the %s command",
+					relPath, flagName, commandName)
+			}
 		}
 		return nil
 	})
@@ -107,9 +118,37 @@ func TestTemplateFlagsMatchCobraCommands(t *testing.T) {
 				"command entry %s references `slipway %s --%s` but flag --%s is not registered",
 				relPath, cmdName, flagName, flagName, cmdName)
 		}
+		commandName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		if flags, ok := cmdFlags[commandName]; ok {
+			for _, m := range standaloneFlagRe.FindAllStringSubmatch(flagsSection(string(content)), -1) {
+				flagName := m[1]
+				relPath, _ := filepath.Rel(root, path)
+				assert.True(t, flags[flagName],
+					"command entry %s references standalone flag --%s but that flag is not registered on the %s command",
+					relPath, flagName, commandName)
+			}
+		}
 		return nil
 	})
 	require.NoError(t, err)
+}
+
+func generatedSkillCommandName(path string) string {
+	dirName := filepath.Base(filepath.Dir(path))
+	return strings.TrimPrefix(dirName, "slipway-")
+}
+
+func flagsSection(content string) string {
+	const heading = "## Flags"
+	start := strings.Index(content, heading)
+	if start < 0 {
+		return ""
+	}
+	section := content[start+len(heading):]
+	if next := strings.Index(section, "\n## "); next >= 0 {
+		section = section[:next]
+	}
+	return section
 }
 
 func collectCommandFlags(cmd *cobra.Command) map[string]bool {

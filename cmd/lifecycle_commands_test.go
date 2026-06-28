@@ -111,7 +111,7 @@ func TestDoneJSONReportsWorktreeArchivePathWhenRunFromWorktree(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView
@@ -165,7 +165,7 @@ func TestDoneJSONReportsExplicitBoundInvocationRoute(t *testing.T) {
 
 		var out bytes.Buffer
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
-		doneCmd.SetArgs([]string{"--json", "--change", slug})
+		doneCmd.SetArgs([]string{"--change", slug})
 		doneCmd.SetOut(&out)
 		require.NoError(t, doneCmd.Execute())
 
@@ -203,7 +203,7 @@ func TestDoneFromRootReportsBoundElsewhereWithoutArchiving(t *testing.T) {
 
 		var out bytes.Buffer
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		doneCmd.SetOut(&out)
 		cliErr := asCLIError(doneCmd.Execute())
 		require.NotNil(t, cliErr)
@@ -229,7 +229,7 @@ func TestDoneFailsClosedWithoutActiveChange(t *testing.T) {
 	initTestWorkspace(t, root)
 
 	doneCmd := commandForRoot(t, root, makeDoneCmd())
-	doneCmd.SetArgs([]string{"--json"})
+	doneCmd.SetArgs([]string{})
 	cliErr := asCLIError(doneCmd.Execute())
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "no_active_change", cliErr.ErrorCode)
@@ -252,7 +252,7 @@ func TestDoneChangeFlagRejectsArchivedTarget(t *testing.T) {
 	require.NoError(t, err)
 
 	doneCmd := commandForRoot(t, root, makeDoneCmd())
-	doneCmd.SetArgs([]string{"--json", "--change", slug})
+	doneCmd.SetArgs([]string{"--change", slug})
 	cliErr := asCLIError(doneCmd.Execute())
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
@@ -299,7 +299,7 @@ func TestDoneJSONWarnsButArchivesWhenWorktreeChangesAreUncommitted(t *testing.T)
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		// Dirty source no longer blocks: `done` archives and surfaces a
@@ -351,7 +351,7 @@ func TestDoneJSONAllowsUncommittedGovernedBundleArchive(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView
@@ -407,7 +407,7 @@ func TestDoneJSONWarnsDirtyNonActiveChangeArtifact(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView
@@ -484,7 +484,7 @@ func TestDoneJSONOmitsArchiveCommitRequiredForRepoScopedChange(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := makeDoneCmd()
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView
@@ -525,7 +525,7 @@ func TestDoneReportsAndPersistsRemediationSources(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView
@@ -574,7 +574,7 @@ func TestDoneRemediationSourceScanDoesNotFollowBundleSymlink(t *testing.T) {
 		var out bytes.Buffer
 		doneCmd := commandForRoot(t, root, makeDoneCmd())
 		doneCmd.SetOut(&out)
-		doneCmd.SetArgs([]string{"--json"})
+		doneCmd.SetArgs([]string{})
 		require.NoError(t, doneCmd.Execute())
 
 		var view doneView

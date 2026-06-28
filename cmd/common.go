@@ -475,11 +475,6 @@ func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
 	cmd.Flags().StringVar(target, "change", "", usage)
 }
 
-// resolveExplicitChange loads a change by slug and verifies it is active.
-func resolveExplicitChange(root string, slug string) (changeRef, error) {
-	return resolveExplicitChangeWithReadContext(newStateReadContext(root), slug)
-}
-
 func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string) (changeRef, error) {
 	root := readCtx.root
 	slug = strings.TrimSpace(slug)

@@ -49,7 +49,6 @@ func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *tes
 		nil,
 		readiness.PassingSkills,
 		nil,
-		false,
 		assembleSkillViewOptions{},
 	)
 	require.NoError(t, err)
@@ -257,7 +256,7 @@ func TestStalePlanningReviewAlignmentActionContractStaysConsistentAcrossSurfaces
 	)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())
@@ -1027,8 +1026,10 @@ func TestReviewRequiredTokensUseArtifactScopedSpecLayers(t *testing.T) {
 			nil,
 			nil,
 			projection,
-			false,
-			handoffSkillViewOptions,
+			assembleSkillViewOptions{
+				IncludeReviewContext: true,
+				IncludeContextBudget: true,
+			},
 		)
 		require.NoError(t, err)
 		require.NotNil(t, view.NextSkill)
@@ -1274,7 +1275,7 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Equal(t, "review_batch", nextDiag.CurrentActionKind)
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
-		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		validateCmd.SetArgs([]string{"--change", slug})
 		var validateOut bytes.Buffer
 		validateCmd.SetOut(&validateOut)
 		require.NoError(t, validateCmd.Execute())
@@ -1394,7 +1395,7 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.Equal(t, "blocked", handoff.OverallReadinessFreshness)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())
@@ -1499,7 +1500,7 @@ func TestReviewBatchHostCapabilityAvailableDoesNotBlockCommandSurfaces(t *testin
 	assert.Equal(t, "review_batch", nextOutputView.ConfirmationRequirement.Reason)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())
@@ -1636,7 +1637,7 @@ func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.
 		assert.ElementsMatch(t, pendingReviewSkills, reviewBatchSkillNames(nextDiag.ReviewBatch))
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
-		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		validateCmd.SetArgs([]string{"--change", slug})
 		var validateOut bytes.Buffer
 		validateCmd.SetOut(&validateOut)
 		require.NoError(t, validateCmd.Execute())
@@ -1687,8 +1688,10 @@ func TestRunJSONRoutesToShipVerificationAfterReviewSetWithoutDisplayPromotion(t 
 		nil,
 		passingSelectedReviewEvidenceForNextSkillTests(1),
 		nil,
-		true,
-		handoffSkillViewOptions,
+		assembleSkillViewOptions{
+			IncludeReviewContext: true,
+			IncludeContextBudget: true,
+		},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, view.NextSkill)
@@ -1727,7 +1730,7 @@ func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T)
 		assert.True(t, strings.HasSuffix(runtimePath, "/.git/slipway/runtime/changes/"+slug), runtimePath)
 
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
-		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		validateCmd.SetArgs([]string{"--change", slug})
 		var validateOut bytes.Buffer
 		validateCmd.SetOut(&validateOut)
 		require.NoError(t, validateCmd.Execute())
@@ -2395,6 +2398,70 @@ func TestNextDiagnosticsSkillEvidenceRoutesToShipVerificationAfterReviewSet(t *t
 	})
 }
 
+func TestCommandDiagnosticsSkillEvidenceRespectsAutoSkipEvidence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "command diagnostics skill evidence boundary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.QualityMode = model.QualityModeStandard
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+		writeShipReadyGovernedBundle(t, root, change)
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		writePassingReviewEvidencePack(t, root, slug, 1)
+
+		nextCmd := commandForRoot(t, root, makeNextCmd())
+		nextCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var nextOut bytes.Buffer
+		nextCmd.SetOut(&nextOut)
+		require.NoError(t, nextCmd.Execute())
+
+		var nextRaw map[string]any
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextRaw))
+		assert.Contains(t, nextRaw, "skill_evidence")
+
+		var nextDiagnostics nextView
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextDiagnostics))
+		assert.NotEmpty(t, nextDiagnostics.SkillEvidence)
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		require.NoError(t, runCmd.Execute())
+
+		var runRaw map[string]any
+		require.NoError(t, json.Unmarshal(runOut.Bytes(), &runRaw))
+		assert.NotContains(t, runRaw, "skill_evidence")
+
+		stageSlug, _ := createEvidenceTaskFixture(t, root)
+		implementCmd := commandForRoot(t, root, makeImplementCmd())
+		implementCmd.SetArgs([]string{"--json", "--diagnostics", "--change", stageSlug})
+		var implementOut bytes.Buffer
+		implementCmd.SetOut(&implementOut)
+		require.NoError(t, implementCmd.Execute())
+
+		var implementRaw map[string]any
+		require.NoError(t, json.Unmarshal(implementOut.Bytes(), &implementRaw))
+		assert.NotContains(t, implementRaw, "skill_evidence")
+
+		var implementView nextView
+		require.NoError(t, json.Unmarshal(implementOut.Bytes(), &implementView))
+		require.NotNil(t, implementView.NextSkill)
+		assert.Equal(t, progression.SkillWaveOrchestration, implementView.NextSkill.Name)
+	})
+}
+
 func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T) {
 	t.Parallel()
 
@@ -2687,20 +2754,20 @@ func TestNoSkillRequiredDiagnosticsUseAdvanceCommandBoundary(t *testing.T) {
 	})
 }
 
-// TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock is the
+// TestNextDiagnosticsReadyS2ImplementSurfacesAdvanceNotGovernanceBlock is the
 // REQ-003 end-to-end command contract: a governed change sitting at a ready
-// S2_EXECUTE with passing fresh wave-orchestration evidence (no skill required)
+// S2_IMPLEMENT with passing fresh wave-orchestration evidence (no skill required)
 // must surface an advance handoff through the real `next --json --diagnostics`
 // surface, never the misleading blocked_by_governance dead-end. It exercises the
 // full command rather than the deriveConfirmationRequirement helper directly.
-func TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock(t *testing.T) {
+func TestNextDiagnosticsReadyS2ImplementSurfacesAdvanceNotGovernanceBlock(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		// Reach a genuinely-ready S2_EXECUTE: a materialized single-task wave plan,
+		// Reach a genuinely-ready S2 implement state: a materialized single-task wave plan,
 		// runtime task evidence, and a passing wave-orchestration verification
 		// recorded through the public `slipway evidence skill` surface.
 		slug, _ := createEvidenceTaskFixture(t, root)
@@ -2709,7 +2776,7 @@ func TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock(t *testi
 			"task_kind":     "verification",
 			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
 			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
-			"evidence_ref":  "go test ./cmd -run TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock",
+			"evidence_ref":  "go test ./cmd -run TestNextDiagnosticsReadyS2ImplementSurfacesAdvanceNotGovernanceBlock",
 			"captured_at":   capturedAt.Format(time.RFC3339Nano),
 		})
 		evidenceCmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -2733,7 +2800,7 @@ func TestNextDiagnosticsReadyS2ExecuteSurfacesAdvanceNotGovernanceBlock(t *testi
 		cmd.SetOut(&buf)
 		require.NoError(t, cmd.Execute())
 
-		// The query-first surface stays read-only at a ready S2_EXECUTE.
+		// The query-first surface stays read-only at a ready S2 implement boundary.
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		assert.Equal(t, model.StateS2Implement, reloaded.CurrentState, "next --json --diagnostics must stay read-only")
@@ -4119,7 +4186,7 @@ func TestReadOnlyS2DiagnosticsKeepSingleRunSummaryMissingForAbsentTaskEvidence(t
 	assertSingleRunSummaryMissingTaskEvidenceBlocker(t, "next", nextDiag.Blockers, slug)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())
@@ -4187,7 +4254,7 @@ func TestReadOnlyS2DiagnosticsUseTaskEvidenceDriftInsteadOfRunSummaryMissing(t *
 	assertReadOnlyS2TaskEvidenceDriftBlockers(t, "next", nextDiag.Blockers)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
-	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
 	validateCmd.SetOut(&validateOut)
 	require.NoError(t, validateCmd.Execute())

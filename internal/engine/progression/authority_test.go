@@ -556,7 +556,6 @@ func TestReviewAuthoritySelectedPassingSkillsIgnoreUnselectedSecurityEvidenceOnD
 		change,
 		model.StateS3Review,
 		1,
-		false,
 		engineskill.ReviewSkillSelection{},
 	)
 	require.NoError(t, err)

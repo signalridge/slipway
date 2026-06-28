@@ -39,11 +39,11 @@ func TestParseBlockerSegments(t *testing.T) {
 		},
 		{
 			name:    "bare token",
-			spec:    "plan_audit_failed",
-			code:    "plan_audit_failed",
+			spec:    "plan_audit_budget_exhausted",
+			code:    "plan_audit_budget_exhausted",
 			subject: "",
 			detail:  "",
-			raw:     "plan_audit_failed",
+			raw:     "plan_audit_budget_exhausted",
 		},
 	}
 	for _, tc := range cases {
@@ -236,8 +236,6 @@ func recoveryRelevantCanonicalCodes() []string {
 		"missing_discovery_evidence":                      true,
 		"missing_required_artifact":                       true,
 		"missing_task_evidence_for_run_summary":           true,
-		"missing_worktree_branch":                         true,
-		"missing_worktree_path":                           true,
 		"non_pass_task":                                   true,
 		"not_done_ready":                                  true,
 		"preset_confirmation_required":                    true,

@@ -54,43 +54,23 @@ plan_substep: bundle
 	require.NoError(t, change.Validate())
 }
 
-func TestChangeNormalizeCanonicalizesRetiredWorkflowStates(t *testing.T) {
+func TestChangeValidateRejectsUnknownWorkflowState(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name string
-		raw  string
-		want WorkflowState
-	}{
-		{
-			name: "s2 execute",
-			raw:  "S2_EXECUTE",
-			want: StateS2Implement,
-		},
-		{
-			name: "s4 verify",
-			raw:  "S4_VERIFY",
-			want: StateS3Review,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var change Change
-			require.NoError(t, yaml.Unmarshal([]byte(`
+	const rawState = "UNKNOWN_WORKFLOW_STATE"
+	var change Change
+	require.NoError(t, yaml.Unmarshal([]byte(`
 version: 1
-slug: retired-state-change
+slug: unknown-state-change
 status: active
-current_state: `+tc.raw+`
+current_state: `+rawState+`
 `), &change))
-			change.Normalize()
+	change.Normalize()
 
-			assert.Equal(t, tc.want, change.CurrentState)
-			require.NoError(t, change.Validate())
-		})
-	}
+	assert.Equal(t, WorkflowState(rawState), change.CurrentState)
+	err := change.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid current_state")
 }
 
 func TestChangeValidateRejectsInvalidWorkflowProfile(t *testing.T) {

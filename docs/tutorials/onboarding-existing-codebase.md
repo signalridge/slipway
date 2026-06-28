@@ -123,7 +123,7 @@ one task can verify whether the map improved planning.
 After each handoff:
 
 ```bash
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -152,7 +152,7 @@ After implementation:
 
 ```bash
 git diff --stat
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -170,13 +170,13 @@ If the pilot revealed a durable convention, update the matching
 Run a final read-only check:
 
 ```bash
-slipway validate --json
+slipway validate
 ```
 
 When done-ready:
 
 ```bash
-slipway done --json
+slipway done
 ```
 
 Commit the pilot diff and archived governed record together.

@@ -172,7 +172,7 @@ func buildActiveDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan, e
 		if !fileExists(filepath.Join(bundleDir, "change.yaml")) {
 			plan.Mode = DeleteModeOrphan
 		}
-		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetGovernedBundle, bundleDir, DeleteActionDelete, ""))
+		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetGovernedBundle, bundleDir))
 	} else {
 		plan.Targets = append(plan.Targets, DeleteTarget{Kind: DeleteTargetGovernedBundle, Path: DisplayPath(root, filepath.Join(ActiveBundlesDir(root), slug)), Action: DeleteActionSkip, Reason: "no governed bundle directory found"})
 	}
@@ -180,7 +180,7 @@ func buildActiveDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan, e
 	// Per-change runtime state / binding.
 	runtimeDir := ChangeDir(root, slug)
 	if dirExists(runtimeDir) {
-		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetRuntimeBinding, runtimeDir, DeleteActionDelete, ""))
+		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetRuntimeBinding, runtimeDir))
 	} else {
 		plan.Targets = append(plan.Targets, DeleteTarget{Kind: DeleteTargetRuntimeBinding, Path: DisplayPath(root, runtimeDir), Action: DeleteActionSkip, Reason: "no runtime binding present"})
 	}
@@ -198,7 +198,7 @@ func buildArchivedDeletePlan(root, slug string, opts DeleteOptions) (DeletePlan,
 	}
 	plan := DeletePlan{Slug: slug, Mode: DeleteModeArchived}
 	if archivedDir != "" {
-		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetArchivedBundle, archivedDir, DeleteActionDelete, ""))
+		plan.Targets = append(plan.Targets, deleteTarget(root, DeleteTargetArchivedBundle, archivedDir))
 	} else {
 		plan.Targets = append(plan.Targets, DeleteTarget{Kind: DeleteTargetArchivedBundle, Path: DisplayPath(root, filepath.Join(ArchivedBundlesDir(root), slug)), Action: DeleteActionSkip, Reason: "no archived record found"})
 	}
@@ -238,7 +238,7 @@ func planWorktreeTargetWithResolver(root, slug string, opts DeleteOptions, resol
 		}
 		return DeleteTarget{Kind: DeleteTargetWorktree, Path: "", Action: DeleteActionSkip, Reason: reason}
 	}
-	target := deleteTarget(root, DeleteTargetWorktree, worktreePath, DeleteActionDelete, "")
+	target := deleteTarget(root, DeleteTargetWorktree, worktreePath)
 	if !opts.RemoveWorktree {
 		target.Action = DeleteActionSkip
 		target.Reason = "preserved (pass --worktree to remove)"
@@ -592,12 +592,11 @@ func locateBundleDir(dirFn func(string) string, root, slug string) (string, erro
 	return "", nil
 }
 
-func deleteTarget(root string, kind DeleteTargetKind, absPath string, action DeleteAction, reason string) DeleteTarget {
+func deleteTarget(root string, kind DeleteTargetKind, absPath string) DeleteTarget {
 	return DeleteTarget{
 		Kind:    kind,
 		Path:    DisplayPath(root, absPath),
-		Action:  action,
-		Reason:  reason,
+		Action:  DeleteActionDelete,
 		absPath: absPath,
 	}
 }

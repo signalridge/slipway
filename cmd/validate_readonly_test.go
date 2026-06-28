@@ -59,7 +59,7 @@ func TestValidateNoActiveDiagnosticIsZeroWrite(t *testing.T) {
 	before := snapshotNonGitTree(t, root)
 
 	cmd := commandForRoot(t, root, makeValidateCmd())
-	cmd.SetArgs([]string{"--json"})
+	cmd.SetArgs([]string{})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	require.NoError(t, cmd.Execute())
@@ -84,7 +84,7 @@ func TestValidateArchivedExplicitSlugIsZeroWrite(t *testing.T) {
 	before := snapshotNonGitTree(t, root)
 
 	cmd := commandForRoot(t, root, makeValidateCmd())
-	cmd.SetArgs([]string{"--json", "--change", slug})
+	cmd.SetArgs([]string{"--change", slug})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	err = cmd.Execute()
@@ -109,7 +109,7 @@ func TestValidateOrphanActiveBundleIsZeroWrite(t *testing.T) {
 	before := snapshotNonGitTree(t, root)
 
 	cmd := commandForRoot(t, root, makeValidateCmd())
-	cmd.SetArgs([]string{"--json"})
+	cmd.SetArgs([]string{})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	_ = cmd.Execute()
@@ -133,7 +133,7 @@ func TestValidateMalformedVerificationExplainsEngineOwnedRecovery(t *testing.T) 
 		before := snapshotNonGitTree(t, root)
 
 		cmd := commandForRoot(t, root, makeValidateCmd())
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 

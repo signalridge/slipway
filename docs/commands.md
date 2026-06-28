@@ -1,9 +1,10 @@
 # Command Reference
 
-Most routed commands support `--json` when structured output is useful. Two
-exceptions: `slipway init` is setup-only (`--tools`/`--refresh`, no `--json`), and
-`slipway validate` emits JSON only (its `--format` flag shapes `--list-focuses`
-output, not the main report).
+Most routed commands support `--json` when structured output is useful. The
+exceptions are `slipway init`, which is setup-only (`--tools`/`--refresh`, no
+`--json`), and `slipway validate` / `slipway done`, which emit JSON without a
+separate `--json` flag. `validate --format` shapes `--list-focuses` output, not
+the main report.
 
 Generated host command surfaces cover registered commands that opt into host
 prompts. Public CLI-only helper namespaces, such as `slipway tool` and
@@ -224,7 +225,7 @@ slipway fix --json
 slipway next --json --diagnostics
 slipway run --json --diagnostics
 slipway status --json
-slipway validate --json
+slipway validate
 slipway handoff show --json
 slipway config list --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
@@ -240,7 +241,7 @@ Stable manifest tokens for JSON contract coverage:
 | codebase-map JSON | `slipway codebase-map --json` |
 | config JSON | `slipway config list --json` |
 | delete JSON | `slipway delete --change <slug> --json` |
-| done JSON | `slipway done --json` |
+| done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
@@ -257,7 +258,7 @@ Stable manifest tokens for JSON contract coverage:
 | review JSON | `slipway review --json` |
 | run JSON | `slipway run --json` |
 | status JSON | `slipway status --json` |
-| validate JSON | `slipway validate --json` |
+| validate JSON | `slipway validate` |
 
 `next --json` includes `next_skill.name` for AI-tool handoff. The host tool derives the local `SKILL.md` path from its own adapter conventions.
 
@@ -274,7 +275,7 @@ Config-level `execution.auto` also applies to `intake`, `plan`, and
 pure-pacing boundaries. `security-review` boundaries, sensitive/guardrail
 confirmations, the intake Approved Summary, and evidence gates remain stops.
 
-`validate --json` is the active-readiness authority: it answers whether the
+`validate` is the active-readiness authority: it answers whether the
 current governed state can advance now and mirrors actionable review handoff
 through `actionable_next_skill`, including `required_tokens` for the exact layer
 references the actionable skill must supply. `run --json` is the mutating
@@ -294,8 +295,8 @@ an archived terminal change, the command fails with
 active-readiness contract: `validate` proves the currently active governed state
 before `done`; it is not a post-archive audit surface for frozen bundles.
 If the explicit slug does not name an active or archived change, `validate
---change <slug> --json` fails closed with exit code 3 and
-`error_code=change_not_found`. By contrast, unscoped `validate --json` with no
+--change <slug>` fails closed with exit code 3 and
+`error_code=change_not_found`. By contrast, unscoped `validate` with no
 active change is a diagnostics view: it exits 0 and reports
 `invocation_route.kind=no_active` with `next_command=slipway new`.
 
@@ -306,7 +307,7 @@ and `scope_contract.status` stays `pass` — a refreshed codebase map alone does
 not trip scope-contract drift. To keep that filtering visible rather than
 inferred from a `git diff` disagreement, the exempted files are disclosed
 explicitly in the `scope_contract.exempt_context_files` field, surfaced by
-`slipway validate --json`, `slipway status --json`, and `slipway review --json`.
+`slipway validate`, `slipway status --json`, and `slipway review --json`.
 
 `slipway evidence task` writes the flat runtime task JSON under
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration
@@ -362,7 +363,7 @@ runs and records the suite itself as part of its single terminal evidence pass.
 
 `repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task --result-file <path> --json`, and the compact result schema: `task_id,verdict,evidence_ref,changed_files,blockers,session_id`; repeat `--result-file` for atomic batch import. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
-`done --json` archives done-ready worktree-bound changes even when source files
+`done` archives done-ready worktree-bound changes even when source files
 or non-active governance artifacts are still uncommitted, returning a
 non-blocking `worktree_dirty_warning` with `worktree_dirty_files` so operators
 commit those files together with the archived bundle. `done` never removes the

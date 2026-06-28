@@ -61,11 +61,10 @@
     },
     {
       "id": "bound-validate-json",
-      "description": "bound worktree: slipway validate --json",
+      "description": "bound worktree: slipway validate",
       "cwd": "/var/folders/k4/9ckhh39j3vv7d666qp4w7m880000gn/T/slipway-state-read-fixture-502104490/.worktrees/perf-bound-change",
       "args": [
-        "validate",
-        "--json"
+        "validate"
       ],
       "real_ms": 94.032,
       "user_ms": 35.992,

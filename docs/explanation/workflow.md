@@ -26,7 +26,7 @@ Use read-only commands to understand the current state:
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -50,7 +50,7 @@ without fresh proof, or teaches an agent to bypass review.
 ## Done-Ready Is Not Done
 
 Done-ready means gates have passed and the change can be finalized. `slipway
-done --json` archives the terminal state. If `done` reports a dirty-worktree
+done` archives the terminal state. If `done` reports a dirty-worktree
 warning, commit the intended implementation diff together with the archived
 Slipway record before removing the worktree.
 

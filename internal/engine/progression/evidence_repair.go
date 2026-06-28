@@ -173,7 +173,7 @@ func staleEvidenceRepairFromReasonCodes(change model.Change, blockers []model.Re
 		return EvidenceRepairTarget{}
 	}
 	for _, blocker := range model.NormalizeReasonCodes(blockers) {
-		if strings.TrimSpace(blocker.Code) != state.StalePlanningEvidenceBlockerToken {
+		if !state.StalePlanningEvidenceBlocker(blocker) {
 			continue
 		}
 		return EvidenceRepairTarget{
@@ -202,14 +202,9 @@ func staleEvidenceAuthorities(root string, change model.Change, requiredOnly boo
 	if err != nil {
 		return nil, err
 	}
-	closeoutRequired := true
 	reviewSelection := skill.ReviewSkillSelection{}
 	if requiredOnly {
-		policy, err := governance.ResolvePresetPolicy(root, change)
-		if err != nil {
-			return nil, err
-		}
-		closeoutRequired = FinalCloseoutEvidenceRequired(policy)
+		var err error
 		reviewSelection, err = reviewSkillSelectionForRepair(root, change)
 		if err != nil {
 			return nil, err
@@ -217,7 +212,7 @@ func staleEvidenceAuthorities(root string, change model.Change, requiredOnly boo
 	}
 	authorities := make([]staleEvidenceAuthority, 0, len(registry))
 	for _, def := range registry {
-		if requiredOnly && !staleEvidenceDefinitionApplies(change, def, closeoutRequired, reviewSelection) {
+		if requiredOnly && !staleEvidenceDefinitionApplies(change, def, reviewSelection) {
 			continue
 		}
 		position, ok := staleEvidencePositionForDefinition(def)
@@ -250,13 +245,9 @@ func reviewSkillSelectionForRepair(root string, change model.Change) (skill.Revi
 func staleEvidenceDefinitionApplies(
 	change model.Change,
 	def skill.Definition,
-	closeoutRequired bool,
 	reviewSelection skill.ReviewSkillSelection,
 ) bool {
 	if def.DiscoveryOnly && !change.NeedsDiscovery {
-		return false
-	}
-	if def.CloseoutConditional && !closeoutRequired {
 		return false
 	}
 	if def.State == model.StateS3Review && skill.IsReviewSkill(def.Name) && !skill.ReviewSkillSelected(def.Name, reviewSelection) {

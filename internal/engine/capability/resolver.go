@@ -48,11 +48,10 @@ type HostCapabilityRequirement struct {
 
 // Signals carries the context inputs for capability resolution.
 type Signals struct {
-	Command      string
-	Host         string
-	Blockers     []string
-	ChangedFiles []string
-	Paths        []string
+	Command  string
+	Host     string
+	Blockers []string
+	Paths    []string
 	// HostCapabilities names capabilities the current host explicitly reports,
 	// e.g. "subagent". The token "none" means the host explicitly reports no
 	// delegated-execution capability. Empty means unknown, not unavailable.

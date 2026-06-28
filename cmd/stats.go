@@ -69,14 +69,11 @@ func buildStatsView(root string, now time.Time) (statsView, error) {
 			view.MissingReviewEvidence = append(view.MissingReviewEvidence, change.Slug)
 		}
 		// The merged ship-verification gate (G_ship) is required at S3 on every
-		// preset: it carries no CloseoutConditional, so the required-skill filter
-		// never drops it, and ComputeVerificationReadiness demands the ship record
-		// regardless of preset. Auto-pass only clears the gate once it is already
-		// Approved (its evidence exists) — it never synthesizes a ship record — so a
-		// reviews-passing but ship-missing change still fails closed on every preset,
-		// plain light included. Gate the freshness summary on S3 membership alone; a
-		// preset-derived predicate (CloseoutRefreshRequired or
-		// FinalCloseoutEvidenceRequired) would silently drop the light preset.
+		// preset. Auto-pass only clears the gate once it is already Approved (its
+		// evidence exists) — it never synthesizes a ship record — so a
+		// reviews-passing but ship-missing change still fails closed on every
+		// preset, plain light included. Gate the freshness summary on S3 membership
+		// alone; a preset-derived predicate would silently drop the light preset.
 		if change.CurrentState != model.StateS3Review {
 			continue
 		}

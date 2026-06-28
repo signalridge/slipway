@@ -246,10 +246,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Bulk finalization could not record a lifecycle event",
 	},
-	"legacy_runtime_handoff": {
-		Severity: ReasonSeverityWarning,
-		Message:  "A legacy repo-level runtime handoff file exists and requires manual migration",
-	},
 	"list_changes_failed": {
 		Severity: ReasonSeverityError,
 		Message:  "Bulk finalization could not list active changes",
@@ -273,14 +269,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"missing_run_summary": {
 		Severity: ReasonSeverityError,
 		Message:  "The execution run summary is missing",
-	},
-	"missing_worktree_branch": {
-		Severity: ReasonSeverityError,
-		Message:  "The change is missing a bound worktree branch",
-	},
-	"missing_worktree_path": {
-		Severity: ReasonSeverityError,
-		Message:  "The change is missing a bound worktree path",
 	},
 	"no_skill_required": {
 		Severity: ReasonSeverityInfo,
@@ -337,14 +325,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"plan_audit_budget_exhausted": {
 		Severity: ReasonSeverityError,
 		Message:  "Plan audit exhausted its checker iteration budget",
-	},
-	"plan_audit_evidence_missing": {
-		Severity: ReasonSeverityError,
-		Message:  "Plan audit evidence is missing",
-	},
-	"plan_audit_failed": {
-		Severity: ReasonSeverityError,
-		Message:  "Plan audit did not pass",
 	},
 	"plan_audit_iteration": {
 		Severity: ReasonSeverityError,
@@ -630,10 +610,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Task evidence was captured after the wave verification record; rerun wave-orchestration to refresh the wave record",
 	},
-	"wave_execution_blocked": {
-		Severity: ReasonSeverityError,
-		Message:  "Wave execution is blocked",
-	},
 	"wave_execution_unavailable": {
 		Severity: ReasonSeverityError,
 		Message:  "Wave execution is unavailable",
@@ -649,10 +625,6 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"wave_plan_missing": {
 		Severity: ReasonSeverityError,
 		Message:  "The derived wave plan is missing; rebuild wave-plan.yaml from tasks.md before wave execution",
-	},
-	"wave_plan_repair_blocked": {
-		Severity: ReasonSeverityError,
-		Message:  "Wave plan repair is blocked",
 	},
 	"wave_plan_unreadable": {
 		Severity: ReasonSeverityError,

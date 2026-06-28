@@ -100,7 +100,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		assert.Equal(t, "governed", createPayload["mode"])
 		assert.Equal(t, "S0_INTAKE", createPayload["current_state"])
 
-		stdout, stderr, err = runRootCommandIn(root, []string{"validate", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"validate"})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 		validatePayload := decodeJSONMap(t, stdout)
@@ -126,7 +126,7 @@ func TestCLIEndToEndGovernedLifecycleBlockersAndCancel(t *testing.T) {
 		reviewPayload := decodeJSONMap(t, stderr)
 		assert.Equal(t, "review_state_invalid", reviewPayload["error_code"])
 
-		stdout, stderr, err = runRootCommandIn(root, []string{"done", "--json"})
+		stdout, stderr, err = runRootCommandIn(root, []string{"done"})
 		require.Error(t, err)
 		assert.Empty(t, stdout)
 		donePayload := decodeJSONMap(t, stderr)
@@ -282,7 +282,7 @@ func TestCLIEndToEndValidateIncludesRequirementsContract(t *testing.T) {
 		tasksContent := "# Tasks\n\n## Task List\n\n- [ ] `t-01` Implement token-based authentication for protected routes\n  - target_files: [\"cmd/root.go\"]\n  - covers: [REQ-001]\n"
 		require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksContent), 0o644))
 
-		stdout, stderr, err := runRootCommandIn(root, []string{"validate", "--json", "--change", slug})
+		stdout, stderr, err := runRootCommandIn(root, []string{"validate", "--change", slug})
 		require.NoError(t, err)
 		assert.Empty(t, stderr)
 
@@ -368,7 +368,7 @@ func TestCLIEndToEndSuccessfulDoneArchive(t *testing.T) {
 		cmd := commandForRoot(t, root, makeDoneCmd())
 		cmd.SetOut(out)
 		cmd.SetErr(out)
-		cmd.SetArgs([]string{"--json"})
+		cmd.SetArgs(nil)
 		require.NoError(t, cmd.Execute())
 
 		var view doneView
@@ -421,7 +421,7 @@ func TestCLIEndToEndValidateRequirementsContractAfterRequestNext(t *testing.T) {
 		validateCmd := commandForRoot(t, root, makeValidateCmd())
 		validateCmd.SetOut(validateOut)
 		validateCmd.SetErr(validateOut)
-		validateCmd.SetArgs([]string{"--json", "--change", slug})
+		validateCmd.SetArgs([]string{"--change", slug})
 		require.NoError(t, validateCmd.Execute())
 
 		realView := validateView{}
@@ -441,9 +441,7 @@ func TestMachineReadableCommandsExposeJSONFlag(t *testing.T) {
 		name string
 		cmd  func() *cobra.Command
 	}{
-		{name: "validate", cmd: makeValidateCmd},
 		{name: "review", cmd: makeReviewCmd},
-		{name: "done", cmd: makeDoneCmd},
 		{name: "cancel", cmd: makeCancelCmd},
 		{name: "repair", cmd: makeRepairCmd},
 	} {

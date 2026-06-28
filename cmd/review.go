@@ -210,16 +210,6 @@ func buildReviewViewForSlug(root, slug string, reviewAll bool, effectiveMode str
 		verdict = "fail"
 	}
 
-	if verdict == "fail" && hasIntentDriftSignal(blockers, artifactReviewEvidence) {
-		change.ReviewIntentDriftFailures++
-	} else {
-		change.ReviewIntentDriftFailures = 0
-	}
-
-	if err := state.SaveChange(root, change); err != nil {
-		return reviewView{}, err
-	}
-
 	profile := buildChangeProfileView(change)
 	view := reviewView{
 		Slug:                 slug,
@@ -375,24 +365,6 @@ func evaluateReviewVerdict(execCtx executionContext, waveCtx *waveExecutionConte
 		return "fail", model.NormalizeReasonCodes(blockers), waveViews
 	}
 	return "pass", nil, waveViews
-}
-
-func hasIntentDriftSignal(blockers []model.ReasonCode, artifactReviewEvidence model.VerificationRecord) bool {
-	for _, blocker := range blockers {
-		normalizedCode := strings.ToLower(strings.TrimSpace(blocker.Code))
-		normalizedDetail := strings.ToLower(strings.TrimSpace(blocker.Detail))
-		if (normalizedCode == "new_change_required" && normalizedDetail == "intent_conflict") ||
-			normalizedCode == "intent_drift" {
-			return true
-		}
-	}
-	for _, ref := range artifactReviewEvidence.References {
-		raw := strings.TrimSpace(strings.ToLower(ref))
-		if raw == "intent_drift:true" || strings.HasPrefix(raw, "intent_drift:yes") {
-			return true
-		}
-	}
-	return false
 }
 
 // classifyReviewGaps splits blockers into bidirectional gap categories.

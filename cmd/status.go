@@ -148,9 +148,10 @@ type statusEvidencePointers struct {
 }
 
 type statusRoute struct {
-	change      *model.Change
-	multiChange bool
-	diagnostics *statusView
+	change          *model.Change
+	multiChange     bool
+	diagnostics     *statusView
+	invocationRoute *invocationRouteView
 }
 
 func makeStatusCmd() *cobra.Command {
@@ -314,16 +315,19 @@ func makeStatusCmd() *cobra.Command {
 				return err
 			}
 			if route.multiChange {
-				return printMultiChangeSummary(cmd, root, active, outputFormat)
+				return printMultiChangeSummaryWithRoute(cmd, active, outputFormat, route.invocationRoute)
 			}
 			if route.diagnostics != nil {
 				// Diagnostics mode is not a routed command context. When no
 				// active change exists, only preserve an explicit --focus value.
 				route.diagnostics.Mode = explicitFocus
-				route.diagnostics.InvocationRoute = buildNoActiveInvocationRouteView(
-					root,
-					invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx),
-				)
+				route.diagnostics.InvocationRoute = route.invocationRoute
+				if route.diagnostics.InvocationRoute == nil {
+					route.diagnostics.InvocationRoute = buildNoActiveInvocationRouteView(
+						root,
+						invocationWorkspaceRootFromCommandWithReadContext(cmd, readCtx),
+					)
+				}
 				if explicitFocus != "" {
 					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 					if hydrate {
@@ -375,6 +379,13 @@ func resolveStatusRoute(active []model.Change) statusRoute {
 
 func resolveStatusRouteForRootWithReadContext(readCtx *stateReadContext, active []model.Change) (statusRoute, error) {
 	route := resolveStatusRoute(active)
+	workspace := readCtx.invocationWorkspace()
+	if route.diagnostics != nil {
+		route.invocationRoute = buildNoActiveInvocationRouteView(readCtx.root, workspace)
+	}
+	if route.multiChange {
+		route.invocationRoute = buildMultiActiveInvocationRouteView(readCtx.root, workspace)
+	}
 	if route.change != nil {
 		readCtx.rememberChange(*route.change)
 		ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
@@ -571,10 +582,6 @@ func buildArchivedStatusView(root string, change model.Change) statusView {
 	}
 	view.Narrative = buildStatusNarrative(view)
 	return view
-}
-
-func loadStatusChangeBySlug(root, slug string) (model.Change, bool, error) {
-	return loadStatusChangeBySlugWithReadContext(newStateReadContext(root), slug)
 }
 
 func loadStatusChangeBySlugWithReadContext(readCtx *stateReadContext, slug string) (model.Change, bool, error) {

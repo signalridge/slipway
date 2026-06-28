@@ -28,6 +28,26 @@ type DecisionContractResult struct {
 	Message string
 }
 
+type artifactContractSource struct {
+	Path    string
+	Content string
+}
+
+func readArtifactContractSource(bundleDir, artifactName string) (artifactContractSource, bool, error) {
+	source := artifactContractSource{
+		Path: ResolveArtifactPath(bundleDir, artifactName),
+	}
+	raw, err := os.ReadFile(source.Path) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return source, false, nil
+		}
+		return artifactContractSource{}, false, err
+	}
+	source.Content = string(raw)
+	return source, true, nil
+}
+
 // ParsedDecisionContract is the machine-readable subset of decision.md used by
 // readiness checks and next-skill constraints.
 type ParsedDecisionContract struct {
@@ -63,34 +83,29 @@ var decisionStatusLabels = map[string]struct{}{
 // owns structure (the five required sections defined in schemas.yaml); the
 // authoring skill owns substance.
 func EvaluateDecisionContract(bundleDir string) (DecisionContractResult, error) {
-	sourcePath := ResolveArtifactPath(bundleDir, "decision.md")
-	if _, err := os.Stat(sourcePath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return DecisionContractResult{
-				Status:  DecisionContractStatusMissing,
-				Source:  sourcePath,
-				Message: "decision.md is missing",
-			}, nil
-		}
-		return DecisionContractResult{}, err
-	}
-
-	raw, err := os.ReadFile(sourcePath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
+	source, ok, err := readArtifactContractSource(bundleDir, "decision.md")
 	if err != nil {
 		return DecisionContractResult{}, err
 	}
+	if !ok {
+		return DecisionContractResult{
+			Status:  DecisionContractStatusMissing,
+			Source:  source.Path,
+			Message: "decision.md is missing",
+		}, nil
+	}
 
-	if blockers := DecisionSubstanceBlockers(string(raw)); len(blockers) > 0 {
+	if blockers := DecisionSubstanceBlockers(source.Content); len(blockers) > 0 {
 		return DecisionContractResult{
 			Status:  DecisionContractStatusInvalid,
-			Source:  sourcePath,
+			Source:  source.Path,
 			Message: fmt.Sprintf("decision.md is not substantive: %s", strings.Join(blockers, "; ")),
 		}, nil
 	}
 
 	return DecisionContractResult{
 		Status:  DecisionContractStatusValid,
-		Source:  sourcePath,
+		Source:  source.Path,
 		Message: "decision.md validated",
 	}, nil
 }

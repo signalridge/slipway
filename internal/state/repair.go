@@ -333,10 +333,8 @@ func isNotExist(err error) bool {
 
 // BundleConsistencyResult reports three-file partial write diagnostics.
 type BundleConsistencyResult struct {
-	Slug        string   `json:"slug"`
-	Errors      []string `json:"errors,omitempty"`
-	Warnings    []string `json:"warnings,omitempty"`
-	Diagnostics []string `json:"diagnostics,omitempty"`
+	Slug   string   `json:"slug"`
+	Errors []string `json:"errors,omitempty"`
 }
 
 // DiagnoseBundleConsistency checks the governed bundle for file consistency:

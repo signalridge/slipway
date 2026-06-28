@@ -162,7 +162,7 @@ func TestStatusJSONResponseDoesNotTreatNonGovernanceBlockersAsGovernanceSummary(
 		CurrentState:      model.StateS2Implement,
 		EvidenceFreshness: "fresh",
 		Blockers: []model.ReasonCode{
-			model.NewReasonCode("wave_execution_blocked", "task-01 failed"),
+			model.NewReasonCode("non_pass_task", "task-01"),
 		},
 		ActiveControls: []governanceControlView{
 			{ControlID: "domain-review", Mode: "blocking", Scope: "change"},

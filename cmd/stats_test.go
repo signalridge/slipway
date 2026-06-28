@@ -65,8 +65,6 @@ func TestStatsReportsMissingShipVerificationForPlainStandardS3(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, policy.CloseoutRefreshRequired,
 		"precondition: plain standard must NOT set CloseoutRefreshRequired — the retired guard skipped enforcement here")
-	require.True(t, progression.FinalCloseoutEvidenceRequired(policy),
-		"precondition: ship-verification evidence is still required on plain standard S3")
 
 	// Selected reviews all pass; only the terminal ship-verification record is absent.
 	writePassingExecutionSummary(t, root, slug, 1, "t-01")
@@ -84,12 +82,9 @@ func TestStatsReportsMissingShipVerificationForPlainStandardS3(t *testing.T) {
 
 // TestStatsReportsMissingShipVerificationForPlainLightS3 closes the residual gap
 // the plain-standard regression alone did not cover: on plain light,
-// FinalCloseoutEvidenceRequired is false (EffectivePreset==light and
-// !CloseoutRefreshRequired), so gating the freshness summary on that predicate —
-// as both the retired CloseoutRefreshRequired guard and its
-// FinalCloseoutEvidenceRequired successor did — silently drops light changes. But
-// the merged ship-verification gate is required on every preset: light enables
-// verify auto-pass, yet auto-pass only clears an already-Approved gate and never
+// a preset-derived closeout predicate would silently drop light changes. But the
+// merged ship-verification gate is required on every preset: light enables verify
+// auto-pass, yet auto-pass only clears an already-Approved gate and never
 // synthesizes the ship record, so a reviews-passing but ship-missing light change
 // still fails closed and must be reported under ship_verification_freshness.missing.
 func TestStatsReportsMissingShipVerificationForPlainLightS3(t *testing.T) {
@@ -111,8 +106,6 @@ func TestStatsReportsMissingShipVerificationForPlainLightS3(t *testing.T) {
 	require.Equal(t, model.WorkflowPresetLight, policy.EffectivePreset, "precondition: plain light preset")
 	require.False(t, policy.CloseoutRefreshRequired,
 		"precondition: plain light must NOT set CloseoutRefreshRequired")
-	require.Falsef(t, progression.FinalCloseoutEvidenceRequired(policy),
-		"precondition: this is the exact case the preset-derived guard skipped — FinalCloseoutEvidenceRequired is false on plain light")
 	require.True(t, policy.VerifyAutoPassEnabled,
 		"precondition: light enables verify auto-pass, yet auto-pass cannot synthesize the missing ship record")
 

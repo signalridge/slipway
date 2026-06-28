@@ -6,10 +6,10 @@
 アンカーしておくためのものです。
 
 ルーティングされるコマンドのほとんどは、構造化された出力が必要なときに `--json` を
-サポートします。`slipway validate` はメインのレポートを JSON で出力し、
-`slipway init` はセットアップ専用です。`slipway config`、`slipway tool`、
-`slipway hook` は公開 CLI 専用サーフェスであり、アダプターのプロンプト
-ラッパーは生成されません。
+サポートします。`slipway validate` と `slipway done` は別個の `--json`
+フラグなしで JSON を出力し、`slipway init` はセットアップ専用です。
+`slipway config`、`slipway tool`、`slipway hook` は公開 CLI 専用
+サーフェスであり、アダプターのプロンプトラッパーは生成されません。
 
 ## コマンド一覧
 
@@ -57,8 +57,8 @@ slipway next --json
 slipway run --json
 slipway status --json
 slipway handoff show --json
-slipway validate --json
-slipway done --json
+slipway validate
+slipway done
 slipway codebase-map --json
 slipway preset <level> --json
 slipway abort --json
@@ -94,7 +94,7 @@ slipway config list --json
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -110,7 +110,7 @@ slipway plan --json
 slipway implement --json
 slipway review --json
 slipway fix --json
-slipway done --json
+slipway done
 slipway run --json --diagnostics
 ```
 

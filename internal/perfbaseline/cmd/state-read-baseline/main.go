@@ -266,9 +266,9 @@ func measure(opts options) (perfbaseline.Baseline, func(), error) {
 		},
 		{
 			ID:          "bound-validate-json",
-			Description: "bound worktree: slipway validate --json",
+			Description: "bound worktree: slipway validate",
 			CWD:         fixture.boundWorktree,
-			Args:        []string{"validate", "--json"},
+			Args:        []string{"validate"},
 		},
 		{
 			ID:          "explicit-change-status-json",
@@ -381,22 +381,22 @@ func prepareFixture(root, binary string, opts options) error {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("stat fixture git dir: %w", err)
 		}
-		if err := runCommand(root, "git", "init"); err != nil {
+		if err := runGitCommand(root, "init"); err != nil {
 			return err
 		}
-		if err := runCommand(root, "git", "config", "user.email", "fixture@example.invalid"); err != nil {
+		if err := runGitCommand(root, "config", "user.email", "fixture@example.invalid"); err != nil {
 			return err
 		}
-		if err := runCommand(root, "git", "config", "user.name", "Slipway Fixture"); err != nil {
+		if err := runGitCommand(root, "config", "user.name", "Slipway Fixture"); err != nil {
 			return err
 		}
 		if err := os.WriteFile(filepath.Join(root, "README.md"), []byte("state-read fixture\n"), 0o600); err != nil {
 			return fmt.Errorf("write fixture README: %w", err)
 		}
-		if err := runCommand(root, "git", "add", "README.md"); err != nil {
+		if err := runGitCommand(root, "add", "README.md"); err != nil {
 			return err
 		}
-		if err := runCommand(root, "git", "commit", "-m", "fixture baseline"); err != nil {
+		if err := runGitCommand(root, "commit", "-m", "fixture baseline"); err != nil {
 			return err
 		}
 	}
@@ -433,7 +433,7 @@ func ensureWorktrees(root string, count int) error {
 			continue
 		}
 		branch := "perf/" + name
-		if err := runCommand(root, "git", "worktree", "add", "-b", branch, path, "HEAD"); err != nil {
+		if err := runGitCommand(root, "worktree", "add", "-b", branch, path, "HEAD"); err != nil {
 			return err
 		}
 	}
@@ -460,7 +460,7 @@ func ensureChanges(root string, opts options) ([]generatedChange, error) {
 		if slug == "perf-bound-change" {
 			change.WorktreePath = filepath.Join(root, ".worktrees", slug)
 			if _, err := os.Stat(change.WorktreePath); os.IsNotExist(err) {
-				if err := runCommand(root, "git", "worktree", "add", "-b", "feat/"+slug, change.WorktreePath, "HEAD"); err != nil {
+				if err := runGitCommand(root, "worktree", "add", "-b", "feat/"+slug, change.WorktreePath, "HEAD"); err != nil {
 					return nil, err
 				}
 			}
@@ -554,13 +554,13 @@ func runSingleMeasurement(binary string, measure perfbaseline.CommandMeasure) (p
 	return measure, nil
 }
 
-func runCommand(dir, name string, args ...string) error {
-	cmd := exec.Command(name, args...) // #nosec G204 -- caller supplies fixed git subcommands from this file's fixture builder.
+func runGitCommand(dir string, args ...string) error {
+	cmd := exec.Command("git", args...) // #nosec G204 -- caller supplies fixed git subcommands from this file's fixture builder.
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s %s failed: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return fmt.Errorf("git %s failed: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
 }

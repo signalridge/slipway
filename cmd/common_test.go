@@ -28,6 +28,14 @@ var (
 	stableTestWD     = initialTestWorkingDirectory()
 )
 
+func resolveExplicitChange(root string, slug string) (changeRef, error) {
+	return resolveExplicitChangeWithReadContext(newStateReadContext(root), slug)
+}
+
+func buildStatusViewFromChange(root string, change model.Change) (statusView, error) {
+	return buildStatusViewFromChangeWithReadContext(newStateReadContext(root), change)
+}
+
 func initialTestWorkingDirectory() string {
 	wd, err := os.Getwd()
 	if err == nil {
@@ -204,7 +212,7 @@ func TestValidateChangeFlagRejectsArchivedSlugWithConcreteDiagnostic(t *testing.
 	require.NoError(t, err)
 
 	cmd := commandForRoot(t, root, makeValidateCmd())
-	cmd.SetArgs([]string{"--json", "--change", slug})
+	cmd.SetArgs([]string{"--change", slug})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	err = cmd.Execute()
@@ -257,7 +265,7 @@ func TestExplicitChangeCommandsUseFastPathWhenOtherBundleIsOrphaned(t *testing.T
 
 	t.Run("validate", func(t *testing.T) {
 		cmd := commandForRoot(t, root, makeValidateCmd())
-		cmd.SetArgs([]string{"--json", "--change", slug})
+		cmd.SetArgs([]string{"--change", slug})
 		var out bytes.Buffer
 		cmd.SetOut(&out)
 

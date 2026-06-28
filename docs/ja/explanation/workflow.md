@@ -22,7 +22,7 @@ Slipway は、ガバナンス対象の作業をインテイク、計画、実装
 
 ```bash
 slipway status --json
-slipway validate --json
+slipway validate
 slipway next --json --diagnostics
 ```
 
@@ -42,7 +42,7 @@ slipway next --json --diagnostics
 
 ## done-ready は done ではない
 
-done-ready とは、ゲートがすべて通過し、変更を確定できる状態を指します。`slipway done --json` は終端状態をアーカイブします。`done` がワークトリーの汚れ（dirty-worktree）に関する警告を報告した場合は、意図した実装差分とアーカイブされた Slipway レコードをまとめてコミットしてから、ワークトリーを削除します。
+done-ready とは、ゲートがすべて通過し、変更を確定できる状態を指します。`slipway done` は終端状態をアーカイブします。`done` がワークトリーの汚れ（dirty-worktree）に関する警告を報告した場合は、意図した実装差分とアーカイブされた Slipway レコードをまとめてコミットしてから、ワークトリーを削除します。
 
 ## 関連項目
 

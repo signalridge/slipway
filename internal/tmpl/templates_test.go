@@ -603,6 +603,8 @@ func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 	t.Parallel()
 	templates := []string{
 		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
 		"skills/ship-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/tdd-governance/SKILL.md.tmpl",
@@ -625,6 +627,8 @@ func TestTemplatedGovernanceSkillFrontmatterIncludesDescription(t *testing.T) {
 	t.Parallel()
 	templates := []string{
 		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
 		"skills/ship-verification/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/tdd-governance/SKILL.md.tmpl",
@@ -1051,6 +1055,8 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 		"skills/wave-orchestration/SKILL.md.tmpl",
 		"skills/spec-compliance-review/SKILL.md.tmpl",
 		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
 		"skills/ship-verification/SKILL.md.tmpl",
 	}
 	for _, name := range templatedSkills {
@@ -1180,6 +1186,100 @@ func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 	assert.Contains(t, content, "opinions, not evidence", "banned-language partial content missing")
 	assert.Contains(t, content, "Treat stale or missing verification as a blocker",
 		"verification-doctrine partial should render into ship-verification")
+}
+
+func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:test",
+		"Description": "test",
+	}
+	tests := []struct {
+		name               string
+		templatePath       string
+		skillID            string
+		verificationRecord string
+		notesFile          string
+		requiredReferences []string
+	}{
+		{
+			name:               "code quality review",
+			templatePath:       "skills/code-quality-review/SKILL.md.tmpl",
+			skillID:            "code-quality-review",
+			verificationRecord: "verification/code-quality-review.yaml",
+			notesFile:          "artifacts/changes/{slug}/verification/code-quality-review-notes.md",
+			requiredReferences: []string{
+				`--reference "layer:IR1=pass"`,
+				`--reference "context_origin:stage=review=<handle>"`,
+			},
+		},
+		{
+			name:               "independent review",
+			templatePath:       "skills/independent-review/SKILL.md.tmpl",
+			skillID:            "independent-review",
+			verificationRecord: "verification/independent-review.yaml",
+			notesFile:          "artifacts/changes/{slug}/verification/independent-review-notes.md",
+			requiredReferences: []string{
+				`--reference "context_origin:stage=review=<handle>"`,
+			},
+		},
+		{
+			name:               "security review",
+			templatePath:       "skills/security-review/SKILL.md.tmpl",
+			skillID:            "security-review",
+			verificationRecord: "verification/security-review.yaml",
+			notesFile:          "artifacts/changes/{slug}/verification/security-review-notes.md",
+			requiredReferences: []string{
+				`--reference "context_origin:stage=review=<handle>"`,
+			},
+		},
+		{
+			name:               "spec compliance review",
+			templatePath:       "skills/spec-compliance-review/SKILL.md.tmpl",
+			skillID:            "spec-compliance-review",
+			verificationRecord: "verification/spec-compliance-review.yaml",
+			notesFile:          "artifacts/changes/{slug}/verification/spec-compliance-review-notes.md",
+			requiredReferences: []string{
+				`--reference "layer:R0=pass"`,
+				`--reference "scope_contract:pass"`,
+				`--reference "negative_path:pass"`,
+				`--reference "context_origin:stage=review=<handle>"`,
+			},
+		},
+	}
+
+	var diskHandoffContract string
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			content, err := Render(tt.templatePath, data)
+			require.NoError(t, err, "failed to render %s", tt.templatePath)
+			assert.Equal(t, 1, strings.Count(content, "## Disk-Handoff Contract"))
+			assert.Equal(t, 1, strings.Count(content, "## Record Verification"))
+
+			currentDiskHandoff := markdownSection(t, content, "## Disk-Handoff Contract")
+			if diskHandoffContract == "" {
+				diskHandoffContract = currentDiskHandoff
+			}
+			assert.Equal(t, diskHandoffContract, currentDiskHandoff,
+				"%s disk-handoff contract drifted from the S3 review peer contract",
+				tt.templatePath)
+
+			recordVerification := markdownSection(t, content, "## Record Verification")
+			assert.Contains(t, recordVerification,
+				"Write bulky review notes to disk, then record the verdict through the CLI so\nSlipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.")
+			assert.Contains(t, recordVerification, "Do not hand-edit `"+tt.verificationRecord+"`.")
+			assert.Contains(t, recordVerification, "slipway evidence skill")
+			assert.Contains(t, recordVerification, "--skill "+tt.skillID)
+			assert.Contains(t, recordVerification, "--verdict pass")
+			assert.Contains(t, recordVerification, "--notes-file "+tt.notesFile)
+			for _, requiredReference := range tt.requiredReferences {
+				assert.Contains(t, recordVerification, requiredReference)
+			}
+		})
+	}
 }
 
 func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
@@ -1745,6 +1845,20 @@ func assertNoManualTaskEvidenceFlags(t *testing.T, content, surface string) {
 			"%s must not teach manual evidence task flag %s",
 			surface, forbidden)
 	}
+}
+
+func markdownSection(t *testing.T, content, heading string) string {
+	t.Helper()
+
+	start := strings.Index(content, heading)
+	require.NotEqual(t, -1, start, "%s section missing", heading)
+
+	section := content[start:]
+	afterHeading := section[len(heading):]
+	if next := strings.Index(afterHeading, "\n## "); next >= 0 {
+		section = section[:len(heading)+next]
+	}
+	return strings.TrimSpace(section)
 }
 
 func promptSurfaceBodyTemplates(t *testing.T) []string {
