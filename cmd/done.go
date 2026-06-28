@@ -21,22 +21,27 @@ import (
 )
 
 type doneView struct {
-	Slug                    string                   `json:"slug"`
-	ExecutionMode           string                   `json:"execution_mode"`
-	QualityMode             string                   `json:"quality_mode,omitempty"`
-	WorkflowPreset          string                   `json:"workflow_preset,omitempty"`
-	EffectiveWorkflowPreset string                   `json:"effective_workflow_preset,omitempty"`
-	PresetUpgradeReasons    []string                 `json:"preset_upgrade_reasons,omitempty"`
-	NeedsDiscovery          bool                     `json:"needs_discovery,omitempty"`
-	InvocationRoute         *invocationRouteView     `json:"invocation_route,omitempty"`
-	Status                  string                   `json:"status"`
-	Archived                bool                     `json:"archived"`
-	ArchivePath             string                   `json:"archive_path,omitempty"`
-	ArchiveKind             string                   `json:"archive_kind,omitempty"`
-	ArchiveCommitRequired   bool                     `json:"archive_commit_required,omitempty"`
-	WorktreeDirtyWarning    string                   `json:"worktree_dirty_warning,omitempty"`
-	WorktreeDirtyFiles      []string                 `json:"worktree_dirty_files,omitempty"`
-	RemediationSources      []model.ArchiveReference `json:"remediation_sources,omitempty"`
+	Slug                        string                               `json:"slug"`
+	ExecutionMode               string                               `json:"execution_mode"`
+	QualityMode                 string                               `json:"quality_mode,omitempty"`
+	WorkflowPreset              string                               `json:"workflow_preset,omitempty"`
+	EffectiveWorkflowPreset     string                               `json:"effective_workflow_preset,omitempty"`
+	PresetUpgradeReasons        []string                             `json:"preset_upgrade_reasons,omitempty"`
+	NeedsDiscovery              bool                                 `json:"needs_discovery,omitempty"`
+	InvocationRoute             *invocationRouteView                 `json:"invocation_route,omitempty"`
+	EvidenceFreshness           string                               `json:"evidence_freshness,omitempty"`
+	ExecutionEvidenceFreshness  string                               `json:"execution_evidence_freshness,omitempty"`
+	GovernanceEvidenceFreshness string                               `json:"governance_evidence_freshness,omitempty"`
+	OverallReadinessFreshness   string                               `json:"overall_readiness_freshness,omitempty"`
+	FreshnessDiagnostics        *state.ExecutionFreshnessDiagnostics `json:"freshness_diagnostics,omitempty"`
+	Status                      string                               `json:"status"`
+	Archived                    bool                                 `json:"archived"`
+	ArchivePath                 string                               `json:"archive_path,omitempty"`
+	ArchiveKind                 string                               `json:"archive_kind,omitempty"`
+	ArchiveCommitRequired       bool                                 `json:"archive_commit_required,omitempty"`
+	WorktreeDirtyWarning        string                               `json:"worktree_dirty_warning,omitempty"`
+	WorktreeDirtyFiles          []string                             `json:"worktree_dirty_files,omitempty"`
+	RemediationSources          []model.ArchiveReference             `json:"remediation_sources,omitempty"`
 }
 
 type doneBulkItem struct {
@@ -309,6 +314,26 @@ func makeDoneCmd() *cobra.Command {
 				if shipBlocked {
 					return shipGateBlockedError(root, change, shipEval)
 				}
+				doneFreshnessChange := change
+				doneExecCtx, err := loadExecutionContext(root, change)
+				if err != nil {
+					return err
+				}
+				doneVerificationRecords, err := readCtx.verificationRecords(change)
+				if err != nil {
+					return wrapGovernanceReadinessError("evaluate done freshness", change.Slug, err)
+				}
+				doneReadiness, err := progression.EvaluateGovernanceReadiness(
+					root,
+					change,
+					progression.GovernanceReadinessOptions{
+						IncludeGateEvaluations: true,
+						VerificationRecords:    doneVerificationRecords,
+					},
+				)
+				if err != nil {
+					return wrapGovernanceReadinessError("evaluate done freshness", change.Slug, err)
+				}
 				beforeChange := change
 				markChangeDone(&change)
 				change.RemediationSources = mergeArchiveReferences(
@@ -363,6 +388,15 @@ func makeDoneCmd() *cobra.Command {
 					WorktreeDirtyFiles:      worktreeDirtyFiles,
 					RemediationSources:      archived.RemediationSources,
 				}
+				applyReadinessFreshnessToDone(
+					root,
+					&view,
+					doneFreshnessChange,
+					doneExecCtx.Summary,
+					doneReadiness,
+					doneReadiness.Blockers,
+				)
+				applyCommandInvocationWorkspacePath(cmd, root, view.FreshnessDiagnostics)
 
 				return encodeJSONResponse(cmd, view)
 			})

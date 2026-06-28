@@ -90,21 +90,34 @@ func Resolve(reg *Registry, sig Signals) Resolution {
 }
 
 func ResolveHostCapabilityRequirement(skillID string, sig Signals) *HostCapabilityRequirement {
+	return ResolveHostCapabilityRequirementFromRegistry(DefaultRegistry(), skillID, sig)
+}
+
+func ResolveHostCapabilityRequirementFromRegistry(
+	reg *Registry,
+	skillID string,
+	sig Signals,
+) *HostCapabilityRequirement {
 	skillID = strings.TrimSpace(skillID)
-	if skillID != "independent-review" {
+	if reg == nil || skillID == "" {
 		return nil
 	}
+	sk, ok := reg.Lookup(skillID)
+	if !ok || len(sk.HostCapabilities) == 0 {
+		return nil
+	}
+	contract := sk.HostCapabilities[0]
 	req := &HostCapabilityRequirement{
 		SkillID:             skillID,
-		Capability:          "subagent",
-		Required:            true,
-		Availability:        hostCapabilityAvailability(sig.HostCapabilities, "subagent"),
-		EvidenceRequirement: "record independent-review evidence from a fresh independent reviewer context",
-		Remediation:         "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review fallback and record fresh independent reviewer evidence.",
+		Capability:          strings.TrimSpace(contract.Capability),
+		Required:            contract.Required,
+		Availability:        hostCapabilityAvailability(sig.HostCapabilities, contract.Capability),
+		EvidenceRequirement: strings.TrimSpace(contract.EvidenceRequirement),
+		Remediation:         strings.TrimSpace(contract.Remediation),
 	}
-	if fallbackSelected(sig.Fallbacks, "manual_independent_review") {
+	if mode, ok := selectedFallbackMode(sig.Fallbacks, contract.FallbackModes); ok {
 		req.FallbackSelected = true
-		req.FallbackMode = "manual_independent_review"
+		req.FallbackMode = mode
 	}
 	return req
 }
@@ -124,7 +137,7 @@ func hostCapabilityAvailability(tokens []string, capabilityName string) string {
 			declared = true
 		default:
 			declared = true
-			if token == capabilityName || token == "delegation" {
+			if token == capabilityName || (capabilityName == "subagent" && token == "delegation") {
 				return "available"
 			}
 		}
@@ -135,17 +148,21 @@ func hostCapabilityAvailability(tokens []string, capabilityName string) string {
 	return "unknown"
 }
 
-func fallbackSelected(tokens []string, fallbackName string) bool {
-	fallbackName = strings.TrimSpace(fallbackName)
-	if fallbackName == "" {
-		return false
-	}
-	for _, token := range tokens {
-		if strings.TrimSpace(token) == fallbackName {
-			return true
+func selectedFallbackMode(tokens []string, fallbackModes []string) (string, bool) {
+	allowed := make(map[string]struct{}, len(fallbackModes))
+	for _, mode := range fallbackModes {
+		mode = strings.TrimSpace(mode)
+		if mode != "" {
+			allowed[mode] = struct{}{}
 		}
 	}
-	return false
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if _, ok := allowed[token]; ok {
+			return token, true
+		}
+	}
+	return "", false
 }
 
 // resolveRoute applies the surface-policy-based route contract. It returns

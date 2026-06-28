@@ -1236,6 +1236,9 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.False(t, unsetCapability.FallbackSelected)
 	assert.Contains(t, model.ReasonSpecs(unsetHandoff.Blockers), "host_capability_unavailable:independent-review:subagent")
 	assert.Equal(t, "blocked_by_governance", unsetHandoff.Confirmation.Reason)
+	assert.NotEmpty(t, unsetHandoff.ExecutionEvidenceFreshness)
+	assert.NotEmpty(t, unsetHandoff.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", unsetHandoff.OverallReadinessFreshness)
 
 	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
 	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
@@ -1253,6 +1256,9 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "host_capability_unavailable:independent-review:subagent")
 	assert.Equal(t, "blocked_by_governance", handoff.Confirmation.Reason)
 	assert.Equal(t, "blocker_resolution", handoff.Confirmation.NextActionKind)
+	assert.NotEmpty(t, handoff.ExecutionEvidenceFreshness)
+	assert.NotEmpty(t, handoff.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", handoff.OverallReadinessFreshness)
 
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
 	validateCmd.SetArgs([]string{"--json", "--change", slug})
@@ -1266,6 +1272,9 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.False(t, validateCapability.FallbackSelected)
 	assert.Contains(t, model.ReasonSpecs(validate.Blockers), "host_capability_unavailable:independent-review:subagent")
 	assert.False(t, validate.CanAdvance)
+	assert.NotEmpty(t, validate.ExecutionEvidenceFreshness)
+	assert.NotEmpty(t, validate.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", validate.OverallReadinessFreshness)
 
 	runCmd := commandForRoot(t, root, makeRunCmd())
 	runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -1279,6 +1288,9 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.False(t, runCapability.FallbackSelected)
 	assert.Contains(t, model.ReasonSpecs(runView.Blockers), "host_capability_unavailable:independent-review:subagent")
 	assert.Equal(t, "blocked_by_governance", runView.ConfirmationRequirement.Reason)
+	assert.NotEmpty(t, runView.ExecutionEvidenceFreshness)
+	assert.NotEmpty(t, runView.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", runView.OverallReadinessFreshness)
 
 	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
 

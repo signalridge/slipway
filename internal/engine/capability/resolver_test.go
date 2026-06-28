@@ -141,6 +141,16 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			wantFallback:     true,
 			wantFallbackMode: "manual_independent_review",
 		},
+		{
+			name: "same-context degraded fallback is explicit",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"same_context_degraded"},
+			},
+			wantAvailability: "unavailable",
+			wantFallback:     true,
+			wantFallbackMode: "same_context_degraded",
+		},
 	}
 
 	for _, tt := range tests {
@@ -160,6 +170,50 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			assert.NotEmpty(t, req.Remediation)
 		})
 	}
+}
+
+func TestResolveHostCapabilityRequirementUsesRegistryContract(t *testing.T) {
+	t.Parallel()
+
+	reg, err := NewRegistry(Skill{
+		ID:                "fresh-context-review",
+		Domain:            DomainReviewQuality,
+		Function:          "fresh context review",
+		Tier:              TierT1,
+		PrimaryAttachment: AttachmentProcedure,
+		Summary:           "Use when testing registry-owned host capabilities. Triggers on tests.",
+		Evidence:          EvidenceVerdict,
+		Bindings: []Binding{
+			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},
+		},
+		HostCapabilities: []HostCapabilityContract{
+			{
+				Capability:          "isolated_context",
+				Required:            true,
+				FallbackModes:       []string{"manual_review"},
+				EvidenceRequirement: "record review evidence from an isolated context",
+				Remediation:         "Run in a host with isolated_context, or select manual_review.",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	req := ResolveHostCapabilityRequirementFromRegistry(reg, "fresh-context-review", Signals{
+		HostCapabilities: []string{"none"},
+		Fallbacks:        []string{"manual_review"},
+	})
+	require.NotNil(t, req)
+	assert.Equal(t, "fresh-context-review", req.SkillID)
+	assert.Equal(t, "isolated_context", req.Capability)
+	assert.Equal(t, "unavailable", req.Availability)
+	assert.True(t, req.FallbackSelected)
+	assert.Equal(t, "manual_review", req.FallbackMode)
+
+	delegationOnly := ResolveHostCapabilityRequirementFromRegistry(reg, "fresh-context-review", Signals{
+		HostCapabilities: []string{"delegation"},
+	})
+	require.NotNil(t, delegationOnly)
+	assert.Equal(t, "unavailable", delegationOnly.Availability)
 }
 
 func TestResolveReviewHostDoesNotAttachPromotedReviewHosts(t *testing.T) {

@@ -313,12 +313,16 @@ func makeStatusCmd() *cobra.Command {
 				return err
 			}
 			if route.multiChange {
-				return printMultiChangeSummary(cmd, active, outputFormat)
+				return printMultiChangeSummary(cmd, root, active, outputFormat)
 			}
 			if route.diagnostics != nil {
 				// Diagnostics mode is not a routed command context. When no
 				// active change exists, only preserve an explicit --focus value.
 				route.diagnostics.Mode = explicitFocus
+				route.diagnostics.InvocationRoute = buildNoActiveInvocationRouteView(
+					root,
+					invocationWorkspaceRootFromCommand(cmd, root),
+				)
 				if explicitFocus != "" {
 					route.diagnostics.HydrateReferences = normalizeHydrateKeys(resolveEffectiveFocusHydrate("status", explicitFocus))
 					if hydrate {
@@ -407,7 +411,7 @@ func resolveStatusRouteForRootWithReadContext(readCtx *stateReadContext, active 
 func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, error) {
 	worktreePath, err := currentWorktreeRoot()
 	if err != nil {
-		return model.Change{}, false, wrapResolutionError(err)
+		return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 	}
 	if strings.TrimSpace(worktreePath) == "" {
 		return model.Change{}, false, nil
@@ -421,7 +425,7 @@ func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, er
 		state.IsMissingBundleAuthority(err) {
 		return model.Change{}, false, nil
 	}
-	return model.Change{}, false, wrapResolutionError(err)
+	return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 }
 
 // statusArchivedChangeForCurrentWorktree resolves the archived change whose
@@ -431,7 +435,7 @@ func statusChangeFromCurrentWorktreeBinding(root string) (model.Change, bool, er
 func statusArchivedChangeForCurrentWorktree(root string) (model.Change, bool, error) {
 	worktreePath, err := currentWorktreeRoot()
 	if err != nil {
-		return model.Change{}, false, wrapResolutionError(err)
+		return model.Change{}, false, wrapResolutionErrorForRoot(root, err)
 	}
 	if strings.TrimSpace(worktreePath) == "" {
 		return model.Change{}, false, nil
@@ -589,13 +593,15 @@ func loadStatusChangeBySlugWithReadContext(readCtx *stateReadContext, slug strin
 		if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
 			return model.Change{}, false, recoveryErr
 		}
-		return model.Change{}, false, newPreconditionError(
+		cliErr := newPreconditionError(
 			"change_not_found",
 			fmt.Sprintf("no change found for slug %q", slug),
 			"Check the slug with `slipway status`.",
 			slug,
 			nil,
 		)
+		cliErr.InvocationRoute = buildExplicitMissingInvocationRouteView(root, root, slug)
+		return model.Change{}, false, cliErr
 	}
 	if recoveryErr := deleteRecoveryError(root, slug); recoveryErr != nil {
 		return model.Change{}, false, recoveryErr
@@ -639,8 +645,9 @@ type multiChangeSummaryEntry struct {
 
 // multiChangeSummaryView is the top-level output for multi-active status display.
 type multiChangeSummaryView struct {
-	ExecutionMode string                    `json:"execution_mode"`
-	ActiveCount   int                       `json:"active_count"`
-	ActiveChanges []multiChangeSummaryEntry `json:"active_changes"`
-	Hint          string                    `json:"hint"`
+	ExecutionMode   string                    `json:"execution_mode"`
+	InvocationRoute *invocationRouteView      `json:"invocation_route,omitempty"`
+	ActiveCount     int                       `json:"active_count"`
+	ActiveChanges   []multiChangeSummaryEntry `json:"active_changes"`
+	Hint            string                    `json:"hint"`
 }
