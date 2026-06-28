@@ -225,6 +225,55 @@ func applyReadinessFreshnessToValidate(view *validateView, readiness progression
 	)
 }
 
+func applyReadinessFreshnessToNext(
+	root string,
+	view *nextView,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	readiness progression.GovernanceReadiness,
+) {
+	if view == nil {
+		return
+	}
+	view.EvidenceFreshness = projectFreshnessForExecMode(root, change, summary, view.Blockers)
+	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
+	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
+	refreshOverallReadinessFreshnessForNext(view)
+}
+
+func refreshOverallReadinessFreshnessForNext(view *nextView) {
+	if view == nil {
+		return
+	}
+	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
+		view.ExecutionEvidenceFreshness,
+		view.GovernanceEvidenceFreshness,
+		view.Blockers,
+	)
+}
+
+func applyReadinessFreshnessToDone(
+	root string,
+	view *doneView,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	readiness progression.GovernanceReadiness,
+	blockers []model.ReasonCode,
+) {
+	if view == nil {
+		return
+	}
+	view.EvidenceFreshness = projectFreshnessForExecMode(root, change, summary, blockers)
+	view.ExecutionEvidenceFreshness = view.EvidenceFreshness
+	view.GovernanceEvidenceFreshness = projectGovernanceEvidenceFreshness(readiness)
+	view.OverallReadinessFreshness = projectOverallReadinessFreshness(
+		view.ExecutionEvidenceFreshness,
+		view.GovernanceEvidenceFreshness,
+		blockers,
+	)
+	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+}
+
 func projectGovernanceEvidenceFreshness(readiness progression.GovernanceReadiness) string {
 	if len(readiness.SkillBlockers) > 0 {
 		return "stale"
@@ -506,6 +555,10 @@ func applyDoneReadyProjection(change model.Change, evaluations map[gate.GateID]g
 }
 
 func buildMultiChangeSummaryView(changes []model.Change) multiChangeSummaryView {
+	return buildMultiChangeSummaryViewWithRoute(changes, nil)
+}
+
+func buildMultiChangeSummaryViewWithRoute(changes []model.Change, route *invocationRouteView) multiChangeSummaryView {
 	entries := make([]multiChangeSummaryEntry, 0, len(changes))
 	for _, change := range changes {
 		entry := multiChangeSummaryEntry{
@@ -519,10 +572,11 @@ func buildMultiChangeSummaryView(changes []model.Change) multiChangeSummaryView 
 	}
 
 	return multiChangeSummaryView{
-		ExecutionMode: "multi_active",
-		ActiveCount:   len(entries),
-		ActiveChanges: entries,
-		Hint:          "Use `--change <slug>` to interact with a specific change.",
+		ExecutionMode:   "multi_active",
+		InvocationRoute: route,
+		ActiveCount:     len(entries),
+		ActiveChanges:   entries,
+		Hint:            "Use `--change <slug>` to interact with a specific change.",
 	}
 }
 

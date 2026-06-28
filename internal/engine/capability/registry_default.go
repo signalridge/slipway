@@ -44,5 +44,14 @@ func independentReview() Skill {
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentReportSchema},
 		},
+		HostCapabilities: []HostCapabilityContract{
+			{
+				Capability:          "subagent",
+				Required:            true,
+				FallbackModes:       []string{"manual_independent_review", "same_context_degraded"},
+				EvidenceRequirement: "record independent-review evidence from a fresh independent reviewer context",
+				Remediation:         "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence.",
+			},
+		},
 	}
 }

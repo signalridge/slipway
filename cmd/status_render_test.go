@@ -57,6 +57,27 @@ func TestRenderMultiChangeTextUsesPlaceholders(t *testing.T) {
 	assert.Contains(t, rendered, "Use --change")
 }
 
+func TestRenderStatusTextSplitsEvidenceFreshness(t *testing.T) {
+	t.Parallel()
+
+	rendered := renderStatusText(statusView{
+		ExecutionMode:               "governed",
+		Slug:                        "req-freshness",
+		Phase:                       model.PhaseReviewing,
+		LifecycleStatus:             "active",
+		CurrentState:                model.StateS3Review,
+		EvidenceFreshness:           "fresh",
+		ExecutionEvidenceFreshness:  "fresh",
+		GovernanceEvidenceFreshness: "stale",
+		OverallReadinessFreshness:   "blocked",
+	})
+	assert.Contains(t, rendered, "Evidence Freshness:")
+	assert.Contains(t, rendered, "Execution Evidence:   fresh")
+	assert.Contains(t, rendered, "Governance Evidence:  stale")
+	assert.Contains(t, rendered, "Overall Readiness:    blocked")
+	assert.NotContains(t, rendered, "Evidence Freshness: fresh")
+}
+
 func TestRenderStatusTextSortsGateOutput(t *testing.T) {
 	t.Parallel()
 

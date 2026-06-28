@@ -37,15 +37,16 @@ const (
 )
 
 type CLIError struct {
-	ErrorCode   string                 `json:"error_code"`
-	Category    FailureCategory        `json:"category"`
-	Message     string                 `json:"message"`
-	Remediation string                 `json:"remediation"`
-	ExitCode    int                    `json:"exit_code"`
-	Slug        string                 `json:"slug,omitempty"`
-	Details     map[string]any         `json:"details,omitempty"`
-	Reasons     []model.ReasonCode     `json:"reasons,omitempty"`
-	Recovery    *model.RecoverySummary `json:"recovery,omitempty"`
+	ErrorCode       string                 `json:"error_code"`
+	Category        FailureCategory        `json:"category"`
+	Message         string                 `json:"message"`
+	Remediation     string                 `json:"remediation"`
+	ExitCode        int                    `json:"exit_code"`
+	Slug            string                 `json:"slug,omitempty"`
+	InvocationRoute *invocationRouteView   `json:"invocation_route,omitempty"`
+	Details         map[string]any         `json:"details,omitempty"`
+	Reasons         []model.ReasonCode     `json:"reasons,omitempty"`
+	Recovery        *model.RecoverySummary `json:"recovery,omitempty"`
 }
 
 func (e *CLIError) Error() string {

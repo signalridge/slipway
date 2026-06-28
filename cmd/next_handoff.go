@@ -5,24 +5,28 @@ import (
 )
 
 type nextHandoffView struct {
-	Command          string                  `json:"command,omitempty"`
-	DelegatedTo      string                  `json:"delegated_to,omitempty"`
-	Slug             string                  `json:"slug"`
-	Phase            model.UserPhase         `json:"phase"`
-	ExecutionMode    string                  `json:"execution_mode,omitempty"`
-	CurrentState     model.WorkflowState     `json:"current_state"`
-	LifecycleStatus  string                  `json:"lifecycle_status,omitempty"`
-	InvocationRoute  *invocationRouteView    `json:"invocation_route,omitempty"`
-	HostCapabilities []hostCapabilityView    `json:"host_capabilities,omitempty"`
-	NextSkill        *nextSkillHandoff       `json:"next_skill"`
-	ReviewBatch      *reviewBatchView        `json:"review_batch,omitempty"`
-	ContextBudget    *contextBudgetHandoff   `json:"context_budget,omitempty"`
-	InputContext     nextHandoffContext      `json:"input_context"`
-	AutoPassEligible []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
-	Blockers         []model.ReasonCode      `json:"blockers"`
-	Recovery         *model.RecoverySummary  `json:"recovery,omitempty"`
-	Warnings         []string                `json:"warnings,omitempty"`
-	Confirmation     confirmationRequirement `json:"confirmation_requirement"`
+	Command                     string                  `json:"command,omitempty"`
+	DelegatedTo                 string                  `json:"delegated_to,omitempty"`
+	Slug                        string                  `json:"slug"`
+	Phase                       model.UserPhase         `json:"phase"`
+	ExecutionMode               string                  `json:"execution_mode,omitempty"`
+	CurrentState                model.WorkflowState     `json:"current_state"`
+	LifecycleStatus             string                  `json:"lifecycle_status,omitempty"`
+	InvocationRoute             *invocationRouteView    `json:"invocation_route,omitempty"`
+	HostCapabilities            []hostCapabilityView    `json:"host_capabilities,omitempty"`
+	NextSkill                   *nextSkillHandoff       `json:"next_skill"`
+	ReviewBatch                 *reviewBatchView        `json:"review_batch,omitempty"`
+	ContextBudget               *contextBudgetHandoff   `json:"context_budget,omitempty"`
+	InputContext                nextHandoffContext      `json:"input_context"`
+	AutoPassEligible            []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
+	EvidenceFreshness           string                  `json:"evidence_freshness,omitempty"`
+	ExecutionEvidenceFreshness  string                  `json:"execution_evidence_freshness,omitempty"`
+	GovernanceEvidenceFreshness string                  `json:"governance_evidence_freshness,omitempty"`
+	OverallReadinessFreshness   string                  `json:"overall_readiness_freshness,omitempty"`
+	Blockers                    []model.ReasonCode      `json:"blockers"`
+	Recovery                    *model.RecoverySummary  `json:"recovery,omitempty"`
+	Warnings                    []string                `json:"warnings,omitempty"`
+	Confirmation                confirmationRequirement `json:"confirmation_requirement"`
 }
 
 type nextSkillHandoff struct {
@@ -105,11 +109,15 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			WavePlan:             view.InputContext.WavePlan,
 			ExecutionResume:      view.InputContext.ExecutionResume,
 		},
-		AutoPassEligible: append([]model.AutoPassedState(nil), view.AutoPassEligible...),
-		Blockers:         view.Blockers,
-		Recovery:         model.BuildRecovery(view.Blockers),
-		Warnings:         view.Warnings,
-		Confirmation:     view.ConfirmationRequirement,
+		AutoPassEligible:            append([]model.AutoPassedState(nil), view.AutoPassEligible...),
+		EvidenceFreshness:           view.EvidenceFreshness,
+		ExecutionEvidenceFreshness:  view.ExecutionEvidenceFreshness,
+		GovernanceEvidenceFreshness: view.GovernanceEvidenceFreshness,
+		OverallReadinessFreshness:   view.OverallReadinessFreshness,
+		Blockers:                    view.Blockers,
+		Recovery:                    model.BuildRecovery(view.Blockers),
+		Warnings:                    view.Warnings,
+		Confirmation:                view.ConfirmationRequirement,
 	}
 }
 

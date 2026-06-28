@@ -2,6 +2,14 @@
 skill_id: independent-review
 name: slipway-independent-review
 description: "Use when a fresh-context S3 code review with an explicit verdict contract is needed. Triggers on the workflow-owned S3 review host or the `slipway review` command surface."
+host_capabilities:
+  - capability: subagent
+    required: true
+    fallback_modes:
+      - manual_independent_review
+      - same_context_degraded
+    evidence_requirement: "record independent-review evidence from a fresh independent reviewer context"
+    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence."
 ---
 
 # Independent Review

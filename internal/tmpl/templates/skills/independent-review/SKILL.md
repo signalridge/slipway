@@ -13,6 +13,14 @@ bindings:
   - type: command-auto
     target: review
     attachment: report-schema
+host_capabilities:
+  - capability: subagent
+    required: true
+    fallback_modes:
+      - manual_independent_review
+      - same_context_degraded
+    evidence_requirement: "record independent-review evidence from a fresh independent reviewer context"
+    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence."
 ---
 
 # Independent Review
