@@ -185,6 +185,135 @@ func TestNextStalePlanningEvidenceReportsReviewAlignmentHandoff(t *testing.T) {
 	assert.Equal(t, model.PlanSubStepNone, loaded.PlanSubStep)
 }
 
+func TestStalePlanningReviewAlignmentActionContractStaysConsistentAcrossSurfaces(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	slug, _ := prepareStalePlanningRecoveryFixture(t, root, model.StateS3Review)
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	tasksPath := filepath.Join(bundlePath, "tasks.md")
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` verify recovered planning chain
+  - depends_on: []
+  - target_files: ["cmd/done.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+	staleAt := time.Now().UTC().Add(2 * time.Second)
+	require.NoError(t, os.Chtimes(tasksPath, staleAt, staleAt))
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	_, err = state.MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+	summary, err := state.LoadExecutionSummary(root, slug)
+	require.NoError(t, err)
+	require.NotEmpty(t, summary.Tasks)
+	summary.Tasks[0].ChangedFiles = []string{"cmd/done.go"}
+	summary.Tasks[0].TargetFiles = []string{"cmd/done.go"}
+	writeExecutionSummary(t, root, slug, summary)
+
+	assertReviewAlignmentHandoff := func(t *testing.T, surface, skillName, actionKind, actionReason string, selected []string) {
+		t.Helper()
+		assert.NotEmpty(t, skillName, surface)
+		assert.NotEqual(t, progression.SkillPlanAudit, skillName, surface)
+		assert.Contains(t, selected, skillName, surface)
+		assert.Equal(t, "review_batch", actionKind, surface)
+		assert.Equal(t, "review_batch", actionReason, surface)
+	}
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+	var nextHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextHandoff))
+	require.NotNil(t, nextHandoff.NextSkill)
+	assertReviewAlignmentHandoff(
+		t,
+		"next handoff",
+		nextHandoff.NextSkill.Name,
+		nextHandoff.Confirmation.NextActionKind,
+		nextHandoff.Confirmation.Reason,
+		nextHandoff.NextSkill.SelectedReviewSkills,
+	)
+
+	nextDiagCmd := commandForRoot(t, root, makeNextCmd())
+	nextDiagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var nextDiagOut bytes.Buffer
+	nextDiagCmd.SetOut(&nextDiagOut)
+	require.NoError(t, nextDiagCmd.Execute())
+	var nextDiag nextView
+	require.NoError(t, json.Unmarshal(nextDiagOut.Bytes(), &nextDiag))
+	require.NotNil(t, nextDiag.NextSkill)
+	assertReviewAlignmentHandoff(
+		t,
+		"next diagnostics",
+		nextDiag.NextSkill.Name,
+		nextDiag.CurrentActionKind,
+		nextDiag.ConfirmationRequirement.Reason,
+		nextDiag.NextSkill.SelectedReviewSkills,
+	)
+
+	validateCmd := commandForRoot(t, root, makeValidateCmd())
+	validateCmd.SetArgs([]string{"--json", "--change", slug})
+	var validateOut bytes.Buffer
+	validateCmd.SetOut(&validateOut)
+	require.NoError(t, validateCmd.Execute())
+	var validate validateView
+	require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
+	require.NotNil(t, validate.ActionableNextSkill)
+	assertReviewAlignmentHandoff(
+		t,
+		"validate",
+		validate.ActionableNextSkill.Name,
+		validate.CurrentActionKind,
+		validate.CurrentActionKind,
+		validate.ActionableNextSkill.SelectedReviewSkills,
+	)
+
+	statusCmd := commandForRoot(t, root, makeStatusCmd())
+	statusCmd.SetArgs([]string{"--json", "--change", slug})
+	var statusOut bytes.Buffer
+	statusCmd.SetOut(&statusOut)
+	require.NoError(t, statusCmd.Execute())
+	var status statusView
+	require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+	require.NotNil(t, status.ActionableNextSkill)
+	assert.Equal(t, "review_batch", status.CurrentActionKind)
+	assert.Equal(t, "slipway run", status.CurrentActionCommand)
+	assertReviewAlignmentHandoff(
+		t,
+		"status",
+		status.ActionableNextSkill.Name,
+		status.CurrentActionKind,
+		status.CurrentActionKind,
+		status.ActionableNextSkill.SelectedReviewSkills,
+	)
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--json", "--change", slug})
+	var runOut bytes.Buffer
+	runCmd.SetOut(&runOut)
+	require.NoError(t, runCmd.Execute())
+	var runHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(runOut.Bytes(), &runHandoff))
+	require.NotNil(t, runHandoff.NextSkill)
+	assertReviewAlignmentHandoff(
+		t,
+		"run handoff",
+		runHandoff.NextSkill.Name,
+		runHandoff.Confirmation.NextActionKind,
+		runHandoff.Confirmation.Reason,
+		runHandoff.NextSkill.SelectedReviewSkills,
+	)
+	assert.Equal(t, nextDiag.NextSkill.Name, nextHandoff.NextSkill.Name)
+	assert.Equal(t, nextDiag.NextSkill.Name, status.ActionableNextSkill.Name)
+	assert.Equal(t, nextDiag.NextSkill.Name, validate.ActionableNextSkill.Name)
+	assert.Equal(t, nextDiag.NextSkill.Name, runHandoff.NextSkill.Name)
+}
+
 func TestNextS0ConfirmWithoutApprovedSummaryDoesNotReportRunGuidance(t *testing.T) {
 	t.Parallel()
 
@@ -1173,6 +1302,10 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		require.NoError(t, statusCmd.Execute())
 		var status statusView
 		require.NoError(t, json.Unmarshal(statusOut.Bytes(), &status))
+		require.NotNil(t, status.ActionableNextSkill)
+		assert.Equal(t, progression.SkillCodeQualityReview, status.ActionableNextSkill.Name)
+		assert.ElementsMatch(t, selectedReviewSkills, status.ActionableNextSkill.SelectedReviewSkills)
+		assert.Contains(t, status.ActionableNextSkill.RequiredTokens, "layer:IR1=pass")
 		assert.Equal(t, "review_batch", status.CurrentActionKind)
 		assert.Equal(t, "slipway run", status.CurrentActionCommand)
 		assert.Equal(t, "fresh", status.ExecutionEvidenceFreshness)
@@ -1291,6 +1424,30 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	assert.NotEmpty(t, runView.ExecutionEvidenceFreshness)
 	assert.NotEmpty(t, runView.GovernanceEvidenceFreshness)
 	assert.Equal(t, "blocked", runView.OverallReadinessFreshness)
+
+	compactRunCmd := commandForRoot(t, root, makeRunCmd())
+	compactRunCmd.SetArgs([]string{"--json", "--change", slug})
+	var compactRunOut bytes.Buffer
+	compactRunCmd.SetOut(&compactRunOut)
+	require.NoError(t, compactRunCmd.Execute())
+	var compactRun nextHandoffView
+	require.NoError(t, json.Unmarshal(compactRunOut.Bytes(), &compactRun))
+	compactRunCapability := requireIndependentReviewHostCapability(t, compactRun.HostCapabilities)
+	assert.Equal(t, "unknown", compactRunCapability.Availability)
+	assert.False(t, compactRunCapability.FallbackSelected)
+	assert.Contains(t, model.ReasonSpecs(compactRun.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "blocked_by_governance", compactRun.Confirmation.Reason)
+	assert.Equal(t, "blocker_resolution", compactRun.Confirmation.NextActionKind)
+	assert.NotEmpty(t, compactRun.ExecutionEvidenceFreshness)
+	assert.NotEmpty(t, compactRun.GovernanceEvidenceFreshness)
+	assert.Equal(t, "blocked", compactRun.OverallReadinessFreshness)
+	require.NotNil(t, compactRun.Recovery)
+	assert.NotEmpty(t, compactRun.Recovery.Steps)
+	assert.Equal(t, model.StateS3Review, compactRun.CurrentState)
+	reloadedAfterCompactRun, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	assert.Equal(t, model.StateS3Review, reloadedAfterCompactRun.CurrentState)
+	assert.Equal(t, model.PlanSubStepNone, reloadedAfterCompactRun.PlanSubStep)
 
 	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
 
