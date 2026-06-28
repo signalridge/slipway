@@ -13,8 +13,6 @@ import (
 
 type stateReadContext struct {
 	root                      string
-	gitCommonDir              string
-	gitCommonDirLoaded        bool
 	invocationWorkspaceRoot   string
 	invocationWorkspaceLoaded bool
 	currentWorktreeRoot       string
@@ -50,7 +48,6 @@ func (ctx *stateReadContext) loadChange(slug string) (model.Change, error) {
 	if change, ok := ctx.changes[slug]; ok {
 		return change, nil
 	}
-	_ = ctx.gitCommonDirPath()
 	change, err := state.LoadChangeFast(ctx.root, slug)
 	if err != nil {
 		return model.Change{}, err
@@ -70,7 +67,6 @@ func (ctx *stateReadContext) reloadChange(slug string) (model.Change, error) {
 	delete(ctx.execution, slug)
 	ctx.invalidateRouteCaches()
 
-	_ = ctx.gitCommonDirPath()
 	change, err := state.LoadChangeFast(ctx.root, slug)
 	if err != nil {
 		return model.Change{}, err
@@ -91,15 +87,6 @@ func (ctx *stateReadContext) invalidateRouteCaches() {
 	ctx.changesList = nil
 	ctx.changesListLoaded = false
 	ctx.activeRefs = make(map[string]activeChangeRefCacheEntry)
-}
-
-func (ctx *stateReadContext) gitCommonDirPath() string {
-	if ctx.gitCommonDirLoaded {
-		return ctx.gitCommonDir
-	}
-	ctx.gitCommonDir = state.GitCommonDir(ctx.root)
-	ctx.gitCommonDirLoaded = true
-	return ctx.gitCommonDir
 }
 
 func (ctx *stateReadContext) invocationWorkspace() string {
@@ -208,7 +195,6 @@ func (ctx *stateReadContext) listChanges() ([]model.Change, error) {
 	if ctx.changesListLoaded {
 		return slices.Clone(ctx.changesList), nil
 	}
-	_ = ctx.gitCommonDirPath()
 	changes, err := state.ListChanges(ctx.root)
 	if err != nil {
 		return nil, err
