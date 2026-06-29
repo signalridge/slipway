@@ -248,7 +248,9 @@ func recoveryRelevantCanonicalCodes() []string {
 		"ship_gate_blocked":                               true,
 		"ship_verification_assurance_attestation_missing": true,
 		"ship_verification_evidence_missing":              true,
+		"ship_verification_evidence_stale":                true,
 		"ship_verification_ordering_invalid":              true,
+		"s3_task_plan_drift_requires_reexecution":         true,
 		"ship_verification_reviewer_independence_missing": true,
 		"tasks_checklist_invalid_format":                  true,
 		"unknown_reason_code":                             true,
@@ -355,6 +357,8 @@ func sampleRecoveryDetail(code string) string {
 		return "index_0"
 	case "tasks_plan_changed_since_task_evidence":
 		return "t-03"
+	case "s3_task_plan_drift_requires_reexecution":
+		return "t-07"
 	case "worktree_validation_error":
 		return "missing branch"
 	case "worktree_metadata_persist_failed":
