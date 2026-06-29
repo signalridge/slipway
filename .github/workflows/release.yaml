@@ -237,6 +237,7 @@ jobs:
     with:
       base64-subjects: ${{ needs.release.outputs.hashes }}
       upload-assets: true
+      compile-generator: true
 
   verify-nix:
     name: Verify Nix
@@ -308,6 +309,7 @@ jobs:
       - name: Install via Homebrew
         run: |
           brew tap signalridge/tap
+          brew trust signalridge/tap
           brew install --cask slipway
       - name: Verify installation
         run: |
