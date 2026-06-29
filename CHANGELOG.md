@@ -5,6 +5,36 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0](https://github.com/signalridge/slipway/compare/v0.36.0...v0.37.0) (2026-06-28)
+
+
+### Features
+
+* **coverage:** add public surface gate ([45044f3](https://github.com/signalridge/slipway/commit/45044f374d86e9734798cd36d9e2f814191a4c8c))
+* **perf:** add state-read baseline ([#355](https://github.com/signalridge/slipway/issues/355)) ([7130762](https://github.com/signalridge/slipway/commit/7130762123ebbdfc77eadf95120fe0a3a39fa9f3))
+
+
+### Bug Fixes
+
+* align public command surfaces ([#337](https://github.com/signalridge/slipway/issues/337)) ([a1e135e](https://github.com/signalridge/slipway/commit/a1e135e23850d04cc62a8cf38289baae5c31fcb0))
+* **governance:** align lifecycle handoff surfaces ([#365](https://github.com/signalridge/slipway/issues/365)) ([a984a54](https://github.com/signalridge/slipway/commit/a984a54ceb04a91714b1233dd02c89a321ec2412))
+* **lifecycle:** cache route read context ([#367](https://github.com/signalridge/slipway/issues/367)) ([2b9305a](https://github.com/signalridge/slipway/commit/2b9305a1390673b5373e2ef0e6c375990b1ecbc8))
+* **lifecycle:** expose route on mutating surfaces ([c9e5ab9](https://github.com/signalridge/slipway/commit/c9e5ab953c47432c54160e28653c10127aa8411f))
+* **lifecycle:** repair public command contracts ([#348](https://github.com/signalridge/slipway/issues/348)) ([f21cc36](https://github.com/signalridge/slipway/commit/f21cc368c253533f1a29ada92dcac8a6b326cc68))
+* **lifecycle:** repair route freshness diagnostics ([#363](https://github.com/signalridge/slipway/issues/363)) ([086dc98](https://github.com/signalridge/slipway/commit/086dc98bc08ec9a2e94915ce8b4cb769e0dcb290))
+
+
+### Performance
+
+* **state:** complete state read fast paths ([#358](https://github.com/signalridge/slipway/issues/358)) ([bee6a5e](https://github.com/signalridge/slipway/commit/bee6a5e0e74409c1c297aa881542281356ed5e2f))
+* **state:** optimize governed read contexts ([#354](https://github.com/signalridge/slipway/issues/354)) ([b52a207](https://github.com/signalridge/slipway/commit/b52a20732df75e378dc7526a9487b125bbf70453))
+
+
+### Refactoring
+
+* clean stale code surfaces ([#370](https://github.com/signalridge/slipway/issues/370)) ([6fd0d69](https://github.com/signalridge/slipway/commit/6fd0d69a110bbd33068e3c433d7a084bb2da0fb9))
+* **state:** enforce engine boundary ([#351](https://github.com/signalridge/slipway/issues/351)) ([333d429](https://github.com/signalridge/slipway/commit/333d429e1ac8212404710c5bcfa6fbb07710a395))
+
 ## [0.36.0](https://github.com/signalridge/slipway/compare/v0.35.0...v0.36.0) (2026-06-25)
 
 
