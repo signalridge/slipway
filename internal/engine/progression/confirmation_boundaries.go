@@ -70,9 +70,20 @@ func IsShipVerificationHandoffBlockerCode(code string) bool {
 
 // HostHandoffBlockerCanRide reports blockers that are the reason for the host
 // handoff itself rather than a separate governance stop.
+//
+// subagent_dispatch_authorization_required rides here: it names the host
+// subagent-delegation prerequisite for the handoff skill itself (plan-audit at
+// S1, an intake-side handoff) when the host has not declared subagent capability
+// available. It stays continuable so the handoff next_action can carry the
+// prerequisite plus the named fallback, rather than escalating to a separate
+// blocked_by_governance stop. The first-class host_capability_unavailable
+// blocker (the host explicitly declared subagent unavailable) deliberately does
+// NOT ride.
 func HostHandoffBlockerCanRide(reason model.ReasonCode) bool {
 	code := strings.TrimSpace(reason.Code)
-	return IsRequiredSkillBlockerCode(code) || code == "review_alignment_required"
+	return IsRequiredSkillBlockerCode(code) ||
+		code == "review_alignment_required" ||
+		code == "subagent_dispatch_authorization_required"
 }
 
 // ReviewCompanionBlockerCanRide reports governance blockers that are satisfied
@@ -85,6 +96,7 @@ func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 		"ship_verification_evidence_missing",
 		"ship_verification_ordering_invalid",
 		"context_origin_handle_invalid",
+		"subagent_dispatch_authorization_required",
 		"high_risk_check_missing":
 		return true
 	default:

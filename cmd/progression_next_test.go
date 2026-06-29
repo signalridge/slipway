@@ -1337,7 +1337,17 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 	})
 }
 
-func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t *testing.T) {
+// TestReviewBatchHostSubagentDelegationSurfacedAcrossCapabilityStates pins the
+// host subagent-delegation contract for the S3 review batch across the three
+// capability states (#369). "available" is unchanged (see the sibling test).
+// "unknown" (the host declared nothing) stays continuable: it keeps the normal
+// review_batch handoff boundary instead of escalating to a governance dead-end,
+// but rides a subagent_dispatch_authorization_required prerequisite and an
+// enriched next_action that names delegation plus the named fallback. "unavailable"
+// (the host declared other capabilities but not subagent) fails closed as a
+// first-class host_capability_unavailable blocker until an explicit fallback is
+// selected. Either way the surface is actionable, never a silent dead-end.
+func TestReviewBatchHostSubagentDelegationSurfacedAcrossCapabilityStates(t *testing.T) {
 	root, slug := prepareReviewBatchHostCapabilityFixture(t)
 
 	originalCapabilities, hadCapabilities := os.LookupEnv("SLIPWAY_HOST_CAPABILITIES")
@@ -1355,45 +1365,36 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 		}
 	})
 
+	const subagentBlocker = "subagent_dispatch_authorization_required:independent-review:subagent"
+	const unavailableBlocker = "host_capability_unavailable:independent-review:subagent"
+
+	// --- unknown: host declared nothing -> continuable, riding prerequisite ---
 	require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITIES"))
 	require.NoError(t, os.Unsetenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS"))
 
-	unsetCmd := commandForRoot(t, root, makeNextCmd())
-	unsetCmd.SetArgs([]string{"--json", "--change", slug})
-	var unsetOut bytes.Buffer
-	unsetCmd.SetOut(&unsetOut)
-	require.NoError(t, unsetCmd.Execute())
-	var unsetHandoff nextHandoffView
-	require.NoError(t, json.Unmarshal(unsetOut.Bytes(), &unsetHandoff))
-	unsetCapability := requireIndependentReviewHostCapability(t, unsetHandoff.HostCapabilities)
-	assert.Equal(t, "unknown", unsetCapability.Availability)
-	assert.False(t, unsetCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(unsetHandoff.Blockers), "host_capability_unavailable:independent-review:subagent")
-	assert.Equal(t, "blocked_by_governance", unsetHandoff.Confirmation.Reason)
-	assert.NotEmpty(t, unsetHandoff.ExecutionEvidenceFreshness)
-	assert.NotEmpty(t, unsetHandoff.GovernanceEvidenceFreshness)
-	assert.Equal(t, "blocked", unsetHandoff.OverallReadinessFreshness)
+	unknownCmd := commandForRoot(t, root, makeNextCmd())
+	unknownCmd.SetArgs([]string{"--json", "--change", slug})
+	var unknownOut bytes.Buffer
+	unknownCmd.SetOut(&unknownOut)
+	require.NoError(t, unknownCmd.Execute())
+	var unknownHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(unknownOut.Bytes(), &unknownHandoff))
+	unknownCapability := requireIndependentReviewHostCapability(t, unknownHandoff.HostCapabilities)
+	assert.Equal(t, "unknown", unknownCapability.Availability)
+	assert.False(t, unknownCapability.FallbackSelected)
+	unknownSpecs := model.ReasonSpecs(unknownHandoff.Blockers)
+	assert.Contains(t, unknownSpecs, subagentBlocker)
+	assert.NotContains(t, unknownSpecs, unavailableBlocker)
+	// Continuable: stays the review_batch boundary, not a blocked_by_governance dead-end.
+	assert.Equal(t, "review_batch", unknownHandoff.Confirmation.Reason)
+	assert.Equal(t, "review_batch", unknownHandoff.Confirmation.NextActionKind)
+	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "Host subagent delegation is a prerequisite")
+	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "same_context_degraded")
+	assert.Equal(t, "blocked", unknownHandoff.OverallReadinessFreshness)
+	require.NotNil(t, unknownHandoff.Recovery)
+	assert.NotEmpty(t, unknownHandoff.Recovery.Steps)
 
-	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
-	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
-
-	nextCmd := commandForRoot(t, root, makeNextCmd())
-	nextCmd.SetArgs([]string{"--json", "--change", slug})
-	var nextOut bytes.Buffer
-	nextCmd.SetOut(&nextOut)
-	require.NoError(t, nextCmd.Execute())
-	var handoff nextHandoffView
-	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
-	nextCapability := requireIndependentReviewHostCapability(t, handoff.HostCapabilities)
-	assert.Equal(t, "unknown", nextCapability.Availability)
-	assert.False(t, nextCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "host_capability_unavailable:independent-review:subagent")
-	assert.Equal(t, "blocked_by_governance", handoff.Confirmation.Reason)
-	assert.Equal(t, "blocker_resolution", handoff.Confirmation.NextActionKind)
-	assert.NotEmpty(t, handoff.ExecutionEvidenceFreshness)
-	assert.NotEmpty(t, handoff.GovernanceEvidenceFreshness)
-	assert.Equal(t, "blocked", handoff.OverallReadinessFreshness)
-
+	// validate surfaces the same prerequisite and stays fail-closed (cannot advance).
 	validateCmd := commandForRoot(t, root, makeValidateCmd())
 	validateCmd.SetArgs([]string{"--change", slug})
 	var validateOut bytes.Buffer
@@ -1403,13 +1404,10 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	require.NoError(t, json.Unmarshal(validateOut.Bytes(), &validate))
 	validateCapability := requireIndependentReviewHostCapability(t, validate.HostCapabilities)
 	assert.Equal(t, "unknown", validateCapability.Availability)
-	assert.False(t, validateCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(validate.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Contains(t, model.ReasonSpecs(validate.Blockers), subagentBlocker)
 	assert.False(t, validate.CanAdvance)
-	assert.NotEmpty(t, validate.ExecutionEvidenceFreshness)
-	assert.NotEmpty(t, validate.GovernanceEvidenceFreshness)
-	assert.Equal(t, "blocked", validate.OverallReadinessFreshness)
 
+	// run shares the same view and never advances past S3.
 	runCmd := commandForRoot(t, root, makeRunCmd())
 	runCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
 	var runOut bytes.Buffer
@@ -1419,37 +1417,13 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	require.NoError(t, json.Unmarshal(runOut.Bytes(), &runView))
 	runCapability := requireIndependentReviewHostCapability(t, runView.HostCapabilities)
 	assert.Equal(t, "unknown", runCapability.Availability)
-	assert.False(t, runCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(runView.Blockers), "host_capability_unavailable:independent-review:subagent")
-	assert.Equal(t, "blocked_by_governance", runView.ConfirmationRequirement.Reason)
-	assert.NotEmpty(t, runView.ExecutionEvidenceFreshness)
-	assert.NotEmpty(t, runView.GovernanceEvidenceFreshness)
-	assert.Equal(t, "blocked", runView.OverallReadinessFreshness)
-
-	compactRunCmd := commandForRoot(t, root, makeRunCmd())
-	compactRunCmd.SetArgs([]string{"--json", "--change", slug})
-	var compactRunOut bytes.Buffer
-	compactRunCmd.SetOut(&compactRunOut)
-	require.NoError(t, compactRunCmd.Execute())
-	var compactRun nextHandoffView
-	require.NoError(t, json.Unmarshal(compactRunOut.Bytes(), &compactRun))
-	compactRunCapability := requireIndependentReviewHostCapability(t, compactRun.HostCapabilities)
-	assert.Equal(t, "unknown", compactRunCapability.Availability)
-	assert.False(t, compactRunCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(compactRun.Blockers), "host_capability_unavailable:independent-review:subagent")
-	assert.Equal(t, "blocked_by_governance", compactRun.Confirmation.Reason)
-	assert.Equal(t, "blocker_resolution", compactRun.Confirmation.NextActionKind)
-	assert.NotEmpty(t, compactRun.ExecutionEvidenceFreshness)
-	assert.NotEmpty(t, compactRun.GovernanceEvidenceFreshness)
-	assert.Equal(t, "blocked", compactRun.OverallReadinessFreshness)
-	require.NotNil(t, compactRun.Recovery)
-	assert.NotEmpty(t, compactRun.Recovery.Steps)
-	assert.Equal(t, model.StateS3Review, compactRun.CurrentState)
-	reloadedAfterCompactRun, err := state.LoadChange(root, slug)
+	assert.Contains(t, model.ReasonSpecs(runView.Blockers), subagentBlocker)
+	assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
+	reloadedAfterRun, err := state.LoadChange(root, slug)
 	require.NoError(t, err)
-	assert.Equal(t, model.StateS3Review, reloadedAfterCompactRun.CurrentState)
-	assert.Equal(t, model.PlanSubStepNone, reloadedAfterCompactRun.PlanSubStep)
+	assert.Equal(t, model.StateS3Review, reloadedAfterRun.CurrentState)
 
+	// --- unavailable: host declared other capabilities but not subagent ---
 	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
 
 	unavailableCmd := commandForRoot(t, root, makeNextCmd())
@@ -1462,9 +1436,14 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	unavailableCapability := requireIndependentReviewHostCapability(t, unavailableView.HostCapabilities)
 	assert.Equal(t, "unavailable", unavailableCapability.Availability)
 	assert.False(t, unavailableCapability.FallbackSelected)
-	assert.Contains(t, model.ReasonSpecs(unavailableView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	unavailableSpecs := model.ReasonSpecs(unavailableView.Blockers)
+	assert.Contains(t, unavailableSpecs, unavailableBlocker)
+	assert.NotContains(t, unavailableSpecs, subagentBlocker)
+	// First-class blocker: escalates to a governance hard stop.
+	assert.Equal(t, "blocked_by_governance", unavailableView.ConfirmationRequirement.Reason)
 
-	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "manual_independent_review")
+	// --- unavailable + generic same_context_degraded fallback clears the whole batch ---
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "same_context_degraded")
 
 	fallbackCmd := commandForRoot(t, root, makeNextCmd())
 	fallbackCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
@@ -1476,9 +1455,38 @@ func TestReviewBatchHostCapabilityUnavailableFailsClosedUnlessFallbackSelected(t
 	fallbackCapability := requireIndependentReviewHostCapability(t, fallbackView.HostCapabilities)
 	assert.Equal(t, "unavailable", fallbackCapability.Availability)
 	assert.True(t, fallbackCapability.FallbackSelected)
-	assert.Equal(t, "manual_independent_review", fallbackCapability.FallbackMode)
-	assert.NotContains(t, model.ReasonSpecs(fallbackView.Blockers), "host_capability_unavailable:independent-review:subagent")
+	assert.Equal(t, "same_context_degraded", fallbackCapability.FallbackMode)
+	fallbackSpecs := model.ReasonSpecs(fallbackView.Blockers)
+	assert.NotContains(t, fallbackSpecs, unavailableBlocker)
+	assert.NotContains(t, fallbackSpecs, subagentBlocker)
 	assert.Equal(t, "review_batch", fallbackView.ConfirmationRequirement.Reason)
+}
+
+// TestReviewBatchSurfacesSubagentDelegationForEveryPendingReviewer pins #369:
+// every pending S3 reviewer that REQUIRES a fresh subagent surfaces the
+// subagent-delegation prerequisite under the "unknown" host-capability state,
+// not just independent-review. spec-compliance-review already has evidence in
+// the fixture, so it is not pending and carries no requirement.
+func TestReviewBatchSurfacesSubagentDelegationForEveryPendingReviewer(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	view := runNextDiagnostics(t, root, slug)
+	specs := model.ReasonSpecs(view.Blockers)
+	for _, reviewer := range []string{
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillSecurityReview,
+	} {
+		capability := requireHostCapabilityForSkill(t, view.HostCapabilities, reviewer)
+		assert.Equal(t, "unknown", capability.Availability, reviewer)
+		assert.False(t, capability.FallbackSelected, reviewer)
+		assert.NotEmpty(t, capability.Remediation, reviewer)
+		assert.Contains(t, specs, "subagent_dispatch_authorization_required:"+reviewer+":subagent")
+	}
+	assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
+	assert.Contains(t, view.ConfirmationRequirement.NextAction, "Host subagent delegation is a prerequisite")
 }
 
 func TestReviewBatchHostCapabilityAvailableDoesNotBlockCommandSurfaces(t *testing.T) {

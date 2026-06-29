@@ -165,6 +165,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"stale_execution_evidence",
 		"stale_planning_evidence",
 		"stale_runtime_binding",
+		"subagent_dispatch_authorization_required",
 		"task",
 		"task_blocker",
 		"task_blockers",

@@ -1,6 +1,37 @@
 package progression
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/signalridge/slipway/internal/model"
+)
+
+// TestSubagentDispatchAuthorizationBlockerRides pins that the
+// subagent_dispatch_authorization_required blocker (emitted for the "unknown"
+// host-capability state of a subagent-dispatch skill) rides alongside both the
+// host-handoff confirmation (plan-audit / intake-side skill_handoff) and the S3
+// review-companion confirmation, so it stays continuable and does not escalate
+// to a separate blocked_by_governance hard stop. The "unavailable" first-class
+// blocker host_capability_unavailable must NOT ride. (#339 / #369)
+func TestSubagentDispatchAuthorizationBlockerRides(t *testing.T) {
+	t.Parallel()
+
+	riding := model.NewReasonCode("subagent_dispatch_authorization_required", "plan-audit:subagent")
+	if !HostHandoffBlockerCanRide(riding) {
+		t.Fatal("subagent_dispatch_authorization_required must ride the host handoff (plan-audit / intake-side skill_handoff)")
+	}
+	if !ReviewCompanionBlockerCanRide(riding) {
+		t.Fatal("subagent_dispatch_authorization_required must ride the S3 review-companion handoff")
+	}
+
+	unavailable := model.NewReasonCode("host_capability_unavailable", "independent-review:subagent")
+	if HostHandoffBlockerCanRide(unavailable) {
+		t.Fatal("host_capability_unavailable (unavailable) must stay a first-class blocker, not ride the host handoff")
+	}
+	if ReviewCompanionBlockerCanRide(unavailable) {
+		t.Fatal("host_capability_unavailable (unavailable) must stay a first-class blocker, not ride the review companion")
+	}
+}
 
 // TestSecurityReviewDivergesAcrossAutoBoundaries pins the deliberate divergence
 // between ReviewCompanionSkillCanCarryBlockers (lists security-review) and
