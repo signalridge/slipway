@@ -73,7 +73,7 @@ slipway config list --json
 
 ## 子命令与模式要点
 
-- `slipway handoff write` 写入咨询性的续作笔记；加 `--section <name>` 时，会从 stdin 替换指定小节。
+- `slipway handoff write` 从 stdin 写入咨询性的续作笔记；bare 形式需要 pipe 一段完整的 `## Current Position` 正文，加 `--section <name>` 时会从 stdin 替换指定小节。
 - `slipway handoff show --json` 以结构化形式输出当前变更的 handoff。
 - `slipway evidence task --result-file <path> --json` 导入紧凑的执行任务结果；重复 `--result-file` 可进行原子批量导入。
 - `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。

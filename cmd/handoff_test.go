@@ -14,13 +14,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// forceHandoffInteractive pins the handoff command's terminal probe so the
+// non-interactive/interactive branches are deterministic regardless of the test
+// runner's real stdin.
+func forceHandoffInteractive(t *testing.T, interactive bool) {
+	t.Helper()
+	prev := handoffCommandIsTerminal
+	handoffCommandIsTerminal = func(int) bool { return interactive }
+	t.Cleanup(func() { handoffCommandIsTerminal = prev })
+}
+
 func TestHandoffCommandBareWriteAndShowBrief(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff command")
+		forceHandoffInteractive(t, false)
 
 		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetIn(strings.NewReader("## Current Position\nDriving the headless-honesty fix.\n"))
 		var writeOut bytes.Buffer
 		writeCmd.SetOut(&writeOut)
 		require.NoError(t, writeCmd.Execute())
@@ -30,6 +42,7 @@ func TestHandoffCommandBareWriteAndShowBrief(t *testing.T) {
 		raw, err := os.ReadFile(path)
 		require.NoError(t, err)
 		assert.Contains(t, string(raw), "slipway:handoff-machine-header")
+		assert.Contains(t, string(raw), "Driving the headless-honesty fix.")
 		assert.NotContains(t, string(raw), "current_state")
 		assert.NotContains(t, string(raw), "next_skill")
 
@@ -49,14 +62,19 @@ func TestHandoffWriteSectionFromStdinPreservesOnRefresh(t *testing.T) {
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		createGovernedRequest(t, root, levelNonDiscovery, "handoff section")
+		forceHandoffInteractive(t, false)
 
 		cmd := commandForRoot(t, root, makeHandoffCmd())
 		cmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
 		cmd.SetIn(strings.NewReader("Finish hook wiring."))
 		require.NoError(t, cmd.Execute())
 
+		// A subsequent bare write with a piped body merges its sections over the
+		// existing narrative while preserving the previously recorded section, and
+		// bumps the generation.
 		refresh := commandForRoot(t, root, makeHandoffCmd())
 		refresh.SetArgs([]string{"write"})
+		refresh.SetIn(strings.NewReader("## Current Position\nRefining the fix.\n"))
 		require.NoError(t, refresh.Execute())
 
 		show := commandForRoot(t, root, makeHandoffCmd())
@@ -68,6 +86,7 @@ func TestHandoffWriteSectionFromStdinPreservesOnRefresh(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
 		assert.Equal(t, 2, view.Header.Generation)
 		assert.Contains(t, view.Narrative, "Finish hook wiring.")
+		assert.Contains(t, view.Narrative, "Refining the fix.")
 	})
 }
 
@@ -147,5 +166,226 @@ func TestHandoffNoopsWithoutActiveChange(t *testing.T) {
 		cmd.SetOut(&out)
 		require.NoError(t, cmd.Execute())
 		assert.Empty(t, out.String())
+	})
+}
+
+func TestHandoffBarePipedBodyPersistsAndReportsWritten(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff piped body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader("## Current Position\nWorking the headless fix.\n## Risks And Blockers\nNone yet.\n"))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+		assert.Contains(t, out.String(), "handoff_written:")
+
+		raw, err := os.ReadFile(state.ChangeHandoffPath(root, slug))
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), "Working the headless fix.")
+		assert.Contains(t, string(raw), "None yet.")
+	})
+}
+
+func TestHandoffBareFreeformBodyRoutesToDefaultSection(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff freeform body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader("No headers, just where we are.\n"))
+		require.NoError(t, cmd.Execute())
+
+		raw, err := os.ReadFile(state.ChangeHandoffPath(root, slug))
+		require.NoError(t, err)
+		// A free-form body with no recognizable section headers lands under the
+		// default Current Position section so piped narrative is never dropped.
+		assert.Contains(t, string(raw), "## Current Position")
+		assert.Contains(t, string(raw), "No headers, just where we are.")
+	})
+}
+
+func TestHandoffBarePipedBodyPreservesUnmatchedContentWithCanonicalSection(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff mixed body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader("NOTE: blocked on review.\n\n## Operator Notes\nimportant detail\n\n## Next Session Focus\nFinish merge.\n"))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+		assert.Contains(t, out.String(), "handoff_written:")
+
+		raw, err := os.ReadFile(state.ChangeHandoffPath(root, slug))
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), "NOTE: blocked on review.")
+		assert.Contains(t, string(raw), "## Operator Notes")
+		assert.Contains(t, string(raw), "important detail")
+		assert.Contains(t, string(raw), "Finish merge.")
+	})
+}
+
+func TestHandoffWriteNonInteractiveEmptyBodyFailsLoudly(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff empty body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader("   \n"))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "handoff_body_empty", cliErr.ErrorCode)
+		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+		assert.NotContains(t, out.String(), "handoff_written")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "loud empty failure must not write a scaffold")
+	})
+}
+
+func TestHandoffWriteNonInteractiveOversizedBodyFailsBeforeWrite(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff oversized body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader(strings.Repeat("x", handoffWriteMaxBodyBytes+1)))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "handoff_body_too_large", cliErr.ErrorCode)
+		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+		assert.Equal(t, handoffWriteMaxBodyBytes, cliErr.Details["max_body_bytes"])
+		assert.NotContains(t, out.String(), "handoff_written")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "oversized input must not be truncated into a written handoff")
+	})
+}
+
+func TestHandoffWriteSectionEmptyBodyFailsLoudly(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, levelNonDiscovery, "handoff section empty")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetArgs([]string{"write", "--section", "Risks And Blockers"})
+		cmd.SetIn(strings.NewReader(""))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "handoff_body_empty", cliErr.ErrorCode)
+		assert.Equal(t, "Risks And Blockers", cliErr.Details["section"])
+		assert.NotContains(t, out.String(), "handoff_written")
+	})
+}
+
+func TestHandoffWriteInteractiveSectionGuidesWithoutBlockingOrFalseSuccess(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff interactive section")
+		forceHandoffInteractive(t, true)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
+		var out, errOut bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		require.NoError(t, cmd.Execute())
+		assert.NotContains(t, out.String(), "handoff_written")
+		assert.Contains(t, errOut.String(), "section \"Next Session Focus\" needs a piped narrative")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "interactive guidance must not write a scaffold")
+	})
+}
+
+func TestHandoffWriteRejectsUnknownSection(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, levelNonDiscovery, "handoff unknown section")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetArgs([]string{"write", "--section", "Nonexistent Section"})
+		cmd.SetIn(strings.NewReader("some content"))
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "handoff_section_unknown", cliErr.ErrorCode)
+		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+		assert.Contains(t, cliErr.Remediation, "Current Position")
+	})
+}
+
+func TestHandoffWriteInteractiveEmptyBodyGuidesWithoutFalseSuccess(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff interactive empty")
+		forceHandoffInteractive(t, true)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		var out, errOut bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		require.NoError(t, cmd.Execute())
+		assert.NotContains(t, out.String(), "handoff_written")
+		assert.Contains(t, errOut.String(), "handoff not written")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "interactive guidance must not write a scaffold")
+	})
+}
+
+func TestHandoffShowEmptyHandoffPrintsNotice(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, levelNonDiscovery, "handoff show empty")
+
+		show := commandForRoot(t, root, makeHandoffCmd())
+		show.SetArgs([]string{"show"})
+		var out bytes.Buffer
+		show.SetOut(&out)
+		require.NoError(t, show.Execute())
+		assert.Contains(t, out.String(), "handoff is empty / all sections pending")
+	})
+}
+
+func TestHandoffShowEmptyHandoffJSONFlagsEmpty(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		createGovernedRequest(t, root, levelNonDiscovery, "handoff show empty json")
+
+		show := commandForRoot(t, root, makeHandoffCmd())
+		show.SetArgs([]string{"show", "--json"})
+		var out bytes.Buffer
+		show.SetOut(&out)
+		require.NoError(t, show.Execute())
+		var view handoffShowView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		assert.True(t, view.Empty)
+		assert.Contains(t, view.Notice, "pending")
 	})
 }

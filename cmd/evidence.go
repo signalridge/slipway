@@ -126,7 +126,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 			readCtx := newStateReadContext(root)
 			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
-				return err
+				return adaptArchivedEvidenceRemediation(err)
 			}
 
 			return withChangeStateLock(root, ref.Slug, "evidence skill", func() error {
@@ -395,7 +395,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 			readCtx := newStateReadContext(root)
 			ref, err := resolveActiveChangeRefWithReadContext(readCtx, changeSlug)
 			if err != nil {
-				return err
+				return adaptArchivedEvidenceRemediation(err)
 			}
 
 			return withChangeStateLock(root, ref.Slug, "evidence task", func() error {

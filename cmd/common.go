@@ -475,6 +475,37 @@ func addChangeSelectorFlags(cmd *cobra.Command, target *string, usage string) {
 	cmd.Flags().StringVar(target, "change", "", usage)
 }
 
+// adaptArchivedEvidenceRemediation rewrites the shared archived-change rejection
+// for the evidence-stamping path. Archived changes are immutable and terminal,
+// so governed evidence can never be stamped onto them; the generic "inspect or
+// choose another change" remediation does not acknowledge that a post-done
+// review may have produced real findings. This special-cases only the evidence
+// callers (skill/task) so validate/run/done keep their generic remediation, and
+// it stays fail-closed: error_code, category, and non-zero exit are preserved.
+// Errors that are not the archived rejection pass through unchanged (#368).
+func adaptArchivedEvidenceRemediation(err error) error {
+	if err == nil {
+		return nil
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) || cliErr.ErrorCode != "archived_change_not_validatable" {
+		return err
+	}
+	location := "the archived bundle"
+	if cliErr.Details != nil {
+		if archivePath, ok := cliErr.Details["archive_path"].(string); ok && strings.TrimSpace(archivePath) != "" {
+			location = "the archived bundle next to " + archivePath
+		}
+	}
+	adapted := *cliErr
+	adapted.Remediation = fmt.Sprintf(
+		"Archived changes are immutable and terminal, so governed evidence cannot be stamped onto change %q. Keep post-done review findings as ungoverned notes in %s; if those findings are real issues, open a new governed change with `slipway new` to address them under governance.",
+		cliErr.Slug,
+		location,
+	)
+	return &adapted
+}
+
 func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string) (changeRef, error) {
 	root := readCtx.root
 	slug = strings.TrimSpace(slug)
