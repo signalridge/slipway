@@ -946,6 +946,60 @@ func TestExplorationDoesNotBlockAtS1Plan(t *testing.T) {
 	assert.Empty(t, blockers, "exploration should surface at S1 but not hard-block before scope confirmation is even possible")
 }
 
+func TestStaleResearchOnlyDoesNotBlockPastS1Plan(t *testing.T) {
+	t.Parallel()
+
+	controls := []model.ControlActivation{
+		makeControl(model.ControlResearch, model.ControlModeBlocking, model.ControlScopeDiscovery),
+	}
+	for _, state := range []model.WorkflowState{model.StateS2Implement, model.StateS3Review} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+
+			change := model.Change{
+				CurrentState:   state,
+				NeedsDiscovery: true,
+			}
+			actions := ResolveRequiredActions(RequiredActionsInput{
+				ActiveControls:        controls,
+				CurrentState:          state,
+				IntentExists:          true,
+				ScopeConfirmed:        true,
+				ResearchStructureOK:   true,
+				ResearchEvidenceStale: true,
+			})
+			require.Len(t, actions, 1)
+			assert.False(t, actions[0].Satisfied, "stale research evidence must still be visible in required_actions")
+			assert.Empty(t, RequiredActionBlockers(change, actions),
+				"stale S1 research evidence past S1 must use stale-evidence/review recovery, not generic research required-action")
+		})
+	}
+}
+
+func TestResearchActionStillBlocksPastS1WhenNotOnlyStale(t *testing.T) {
+	t.Parallel()
+
+	controls := []model.ControlActivation{
+		makeControl(model.ControlResearch, model.ControlModeBlocking, model.ControlScopeDiscovery),
+	}
+	change := model.Change{
+		CurrentState:   model.StateS2Implement,
+		NeedsDiscovery: true,
+	}
+	actions := ResolveRequiredActions(RequiredActionsInput{
+		ActiveControls:        controls,
+		CurrentState:          model.StateS2Implement,
+		IntentExists:          true,
+		ScopeConfirmed:        true,
+		ResearchStructureOK:   false,
+		ResearchEvidenceStale: true,
+	})
+
+	require.Len(t, actions, 1)
+	assert.NotEmpty(t, RequiredActionBlockers(change, actions),
+		"only the stale-only research case is delegated away from required-action blockers")
+}
+
 func TestResolveRuntimeRequiredActionsUsesScopeConfirmationEvidenceAtS1Plan(t *testing.T) {
 	t.Parallel()
 

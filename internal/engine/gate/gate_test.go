@@ -43,11 +43,11 @@ Standard deployment environment.
 ## Canonical References
 Internal API docs, RFC-2024-auth.`
 
-	eval := EvaluateGScope(change, research, true, nil, false, false)
+	eval := EvaluateGScope(change, research, true, nil, DiscoveryEvidenceState{})
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 	assert.Empty(t, eval.ReasonCodes)
 
-	eval = EvaluateGScope(change, "", true, []model.ReasonCode{model.NewReasonCode("dedicated_worktree_branch_mismatch", "")}, false, false)
+	eval = EvaluateGScope(change, "", true, []model.ReasonCode{model.NewReasonCode("dedicated_worktree_branch_mismatch", "")}, DiscoveryEvidenceState{})
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "dedicated_worktree_branch_mismatch"))
 	require.NotEmpty(t, eval.ReasonCodes)
@@ -68,7 +68,7 @@ func TestEvaluateGScopePresentButStaleDiscoveryEvidence(t *testing.T) {
 	change := model.NewChange("slug")
 	change.NeedsDiscovery = true
 
-	eval := EvaluateGScope(change, "", false, nil, true, true)
+	eval := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{Present: true, Stale: true})
 	assert.False(t, hasGateReasonCode(eval.ReasonCodes, "missing_discovery_evidence"),
 		"a present-but-stale discovery record must not be reported as missing")
 }
@@ -85,12 +85,12 @@ func TestEvaluateGScopePresentButFailedDiscoveryEvidence(t *testing.T) {
 	change := model.NewChange("slug")
 	change.NeedsDiscovery = true
 
-	present := EvaluateGScope(change, "", false, nil, true, false)
+	present := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{Present: true})
 	assert.False(t, hasGateReasonCode(present.ReasonCodes, "missing_discovery_evidence"),
 		"a present-but-failed discovery record must not be reported as missing")
 
 	// Genuinely absent: no record present, not stale -> the _missing code is reserved.
-	absent := EvaluateGScope(change, "", false, nil, false, false)
+	absent := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{})
 	assert.True(t, hasGateReasonCode(absent.ReasonCodes, "missing_discovery_evidence"),
 		"a genuinely absent discovery record must still report missing_discovery_evidence")
 }

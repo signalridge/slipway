@@ -269,11 +269,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if snapErr != nil {
 		return AdvanceSummary{}, fmt.Errorf("recompute governance snapshot: %w", snapErr)
 	}
-	researchEvidenceStale, staleErr := researchOrchestrationEvidenceStale(root, change)
-	if staleErr != nil {
-		return AdvanceSummary{}, staleErr
-	}
-	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap, researchEvidenceStale)); len(blockers) > 0 {
+	// Advancement handles stale skill evidence above through the owning evidence
+	// repair path, which preserves state-valid recovery. Do not re-route stale
+	// S1 research evidence through generic required-action blockers here.
+	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap, false)); len(blockers) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
@@ -288,23 +287,33 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	nextSkillName, evidenceState := PrimaryNextSkillWithReviewSelection(change, reviewSelection)
 
 	var passingSkills map[string]model.VerificationRecord
+	researchDiscoveryEvidence := gate.DiscoveryEvidenceState{}
 	// worktree-preflight is not a governance skill; its gate is checked in
 	// step 5 (worktree validation). Skip governance skill evaluation when
 	// the resolved next skill is worktree-preflight so the worktree gate
 	// can surface the correct blocker.
 	if nextSkillName != "" && nextSkillName != SkillWorktreePreflight {
 		var skillBlockers []string
-		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChangeWithReviewSelection(
+		verificationRecords, err := state.ListVerificationsForChange(root, change)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		passingSkills, skillBlockers, err = evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 			root,
 			change,
 			model.WorkflowState(evidenceState),
 			executionSummaryCtx.LatestRunVersion,
 			reviewSelection,
+			verificationRecords,
 			change.PlanSubStep,
 		)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		researchDiscoveryEvidence = researchOrchestrationEvidenceStateFromSkillBlockers(
+			verificationRecords,
+			skillBlockers,
+		)
 		if len(skillBlockers) > 0 {
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(skillBlockers)), nil
 		}
@@ -379,7 +388,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// discovery changes could skip research validation entirely.
 	isResearchGate := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepResearch && change.NeedsDiscovery
 	if isResearchGate {
-		scopeResult, err := EvaluateScopeGate(root, change, passingSkills)
+		scopeResult, err := EvaluateScopeGate(root, change, passingSkills, researchDiscoveryEvidence)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -1364,7 +1373,12 @@ func EvaluateShipGate(root string, change model.Change) (gate.GateEvaluation, er
 	return shipAuthority.Result, nil
 }
 
-func EvaluateScopeGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord) (gate.GateEvaluation, error) {
+func EvaluateScopeGate(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	discoveryEvidence gate.DiscoveryEvidenceState,
+) (gate.GateEvaluation, error) {
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
 		return gate.GateEvaluation{}, err
@@ -1384,27 +1398,6 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 
 	_, discoveryOK := passingSkills[SkillResearchOrchestration]
 
-	// Discovery present/stale signals mirror the ship path (authority.go
-	// shipVerificationRecordPresent/Stale): a research-orchestration record that
-	// EXISTS but was excluded from the passing set because its certified inputs went
-	// stale must surface as required_skill_stale, not missing_discovery_evidence
-	// (#377). present = the record exists at all; stale = it exists, was passing, and
-	// its digest-freshness blockers fired. Computing present first guarantees present
-	// is true whenever stale is true.
-	verifications, err := state.ListVerificationsForChange(root, change)
-	if err != nil {
-		return gate.GateEvaluation{}, err
-	}
-	discoveryRecord, discoveryRecordPresent := verifications[SkillResearchOrchestration]
-	discoveryRecordStale := false
-	if discoveryRecordPresent && discoveryRecord.IsPassing() {
-		staleBlockers, staleErr := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
-		if staleErr != nil {
-			return gate.GateEvaluation{}, staleErr
-		}
-		discoveryRecordStale = len(staleBlockers) > 0
-	}
-
 	// Worktree validation is only meaningful when a worktree is already bound.
 	// G_scope runs at S1_PLAN/research (before worktree creation at S2_IMPLEMENT),
 	// so skip worktree validation when WorktreePath is empty.
@@ -1416,5 +1409,5 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 			return gate.GateEvaluation{}, wtErr
 		}
 	}
-	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, discoveryRecordPresent, discoveryRecordStale, researchArtifactReasons...), nil
+	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, discoveryEvidence, researchArtifactReasons...), nil
 }

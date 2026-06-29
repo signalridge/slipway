@@ -21,16 +21,25 @@ type GateEvaluation struct {
 	ReasonCodes []model.ReasonCode `json:"reason_codes,omitempty"`
 }
 
+// DiscoveryEvidenceState captures the non-passing discovery evidence taxonomy
+// without relying on adjacent bool parameters at EvaluateGScope call sites.
+type DiscoveryEvidenceState struct {
+	Present bool
+	Stale   bool
+}
+
 func EvaluateGScope(
 	change model.Change,
 	researchContent string,
 	discoveryEvidenceOK bool,
 	worktreeValidationReasons []model.ReasonCode,
-	discoveryRecordPresent bool,
-	discoveryRecordStale bool,
+	discoveryEvidence DiscoveryEvidenceState,
 	researchArtifactReasons ...model.ReasonCode,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
+	if discoveryEvidence.Stale {
+		discoveryEvidence.Present = true
+	}
 	if change.NeedsDiscovery {
 		if !discoveryEvidenceOK {
 			// Distinguish three present-state cases so the generic discovery reason
@@ -46,9 +55,9 @@ func EvaluateGScope(
 			//     here would misdirect recovery toward a first-time discovery run.
 			//   - genuinely absent: reserve the _missing code.
 			switch {
-			case discoveryRecordStale:
+			case discoveryEvidence.Stale:
 				// required_skill_stale carries it; emit no generic reason.
-			case discoveryRecordPresent:
+			case discoveryEvidence.Present:
 				// Present but not passing for its own reason; specific blocker carries it.
 			default:
 				reasonCodes = append(reasonCodes, model.NewReasonCode("missing_discovery_evidence", ""))

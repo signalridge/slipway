@@ -182,6 +182,15 @@ func actionBlocksCurrentState(change model.Change, action RequiredAction) bool {
 		// discovery and non-discovery paths before research is possible.
 		return false
 	}
+	if action.ControlID == model.ControlResearch &&
+		action.unsatisfiedOnlyByStaleEvidence &&
+		(change.CurrentState == model.StateS2Implement || change.CurrentState == model.StateS3Review) {
+		// Once the change has moved past S1, stale research evidence is no longer
+		// recertified by the generic research required-action. The progression
+		// stale-evidence path defers upstream S1 drift to S3 review alignment, so
+		// re-blocking here would route recovery to a backward S1 action.
+		return false
+	}
 
 	switch action.Scope {
 	case model.ControlScopeDiscovery:

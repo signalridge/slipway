@@ -206,11 +206,16 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 	readiness.SignalSummary = cloneSignalSummary(snap.Summary)
 	readiness.ActiveControls = cloneControlActivations(snap.ActiveControls)
-	researchEvidenceStale, err := researchOrchestrationEvidenceStale(root, evaluationChange)
+	verificationRecords, err := governanceReadinessVerificationRecords(root, evaluationChange, opts)
 	if err != nil {
 		return GovernanceReadiness{}, err
 	}
-	readiness.RequiredActions = governance.ResolveRuntimeRequiredActions(root, evaluationChange, snap, researchEvidenceStale)
+	readiness.verificationRecords = cloneVerificationRecords(verificationRecords)
+	researchEvidenceState, err := researchOrchestrationEvidenceState(root, evaluationChange, verificationRecords)
+	if err != nil {
+		return GovernanceReadiness{}, err
+	}
+	readiness.RequiredActions = governance.ResolveRuntimeRequiredActions(root, evaluationChange, snap, researchEvidenceState.Stale)
 	readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(governance.RequiredActionBlockers(evaluationChange, readiness.RequiredActions))...)
 	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
 
@@ -227,11 +232,6 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	if artifactProjectionReader == nil {
 		artifactProjectionReader = contextualArtifactProjectionReader{ctx: artifactCtx}
 	}
-	verificationRecords, err := governanceReadinessVerificationRecords(root, evaluationChange, opts)
-	if err != nil {
-		return GovernanceReadiness{}, err
-	}
-	readiness.verificationRecords = cloneVerificationRecords(verificationRecords)
 	planningSubSteps := activePlanningSubStepsForState(evaluationChange, effectiveState)
 	passingSkills, skillBlockers, err := evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 		root,
@@ -559,7 +559,11 @@ func evaluateGateReadiness(
 				if err != nil {
 					return nil, nil, err
 				}
-				scopeEval, err := EvaluateScopeGate(root, change, scopeSkills)
+				discoveryEvidence := researchOrchestrationEvidenceStateFromSkillBlockers(
+					verificationRecords,
+					scopeSkillBlockers,
+				)
+				scopeEval, err := EvaluateScopeGate(root, change, scopeSkills, discoveryEvidence)
 				if err != nil {
 					return nil, nil, err
 				}

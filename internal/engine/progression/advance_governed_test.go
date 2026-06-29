@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -637,6 +638,66 @@ func TestAdvanceGoverned_S2StaleWaveEvidenceRecommendsRunnableCommand(t *testing
 	if reloaded.CurrentState != model.StateS2Implement {
 		t.Fatalf("expected change held at S2_IMPLEMENT by the stale-evidence gate, got %s", reloaded.CurrentState)
 	}
+}
+
+func TestAdvanceGoverned_S2StaleResearchEvidenceDoesNotReblockRequiredAction(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s2-stale-research-required-action")
+	change.CurrentState = model.StateS2Implement
+	change.NeedsDiscovery = true
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+	if err := os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte(validResearchForRequiredActionTest()), 0o644); err != nil {
+		t.Fatalf("write research.md: %v", err)
+	}
+
+	record := model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Date(2026, 6, 20, 1, 0, 0, 0, time.UTC),
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillResearchOrchestration, record)
+	if err := StampEvidenceDigestForSkill(root, change, SkillResearchOrchestration, record, nil); err != nil {
+		t.Fatalf("stamp research-orchestration digest: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte(validResearchForRequiredActionTest()+"\nAdditional current finding.\n"), 0o644); err != nil {
+		t.Fatalf("stale research.md: %v", err)
+	}
+
+	summary, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	blockerText := strings.Join(model.ReasonSpecs(summary.Blockers), "\n")
+	if strings.Contains(blockerText, "governance_action_required:research") {
+		t.Fatalf("stale S1 research at S2 must not route to generic research required-action; got blockers %v", summary.Blockers)
+	}
+}
+
+func validResearchForRequiredActionTest() string {
+	return `# Research
+
+## Alternatives Considered
+Option A keeps the existing recovery route. Option B replays S1 from S2. Option A is selected.
+
+## Unknowns
+None remaining.
+
+## Assumptions
+The existing stale-evidence repair path owns upstream freshness recovery after S1.
+
+## Canonical References
+Local test fixture.
+`
 }
 
 // TestAdvanceGoverned_S1StaleIntakeAuthorityRecommendsRunnableCommand is the #376

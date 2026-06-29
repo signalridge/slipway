@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
 	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/model"
@@ -982,7 +983,12 @@ func TestEvaluateScopeGateStaleDiscoveryEvidenceReportsStaleNotMissing(t *testin
 
 	// G_scope (evaluated with the stale record excluded from the passing set) must
 	// not contradict it with missing_discovery_evidence.
-	eval, err := EvaluateScopeGate(root, change, map[string]model.VerificationRecord{})
+	eval, err := EvaluateScopeGate(
+		root,
+		change,
+		map[string]model.VerificationRecord{},
+		gate.DiscoveryEvidenceState{Present: true, Stale: true},
+	)
 	require.NoError(t, err)
 	assert.NotContains(t, model.ReasonSpecs(eval.ReasonCodes), "missing_discovery_evidence",
 		"a present-but-stale discovery record must not surface as missing_discovery_evidence")

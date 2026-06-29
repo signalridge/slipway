@@ -12,6 +12,8 @@ type RequiredAction struct {
 	Description string             `json:"description"`
 	Satisfied   bool               `json:"satisfied"`
 	SatisfiedBy []SatisfiedBy      `json:"satisfied_by,omitempty"`
+
+	unsatisfiedOnlyByStaleEvidence bool
 }
 
 // SatisfiedBy names the evidence source that satisfied a governance action.
@@ -49,7 +51,9 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 
 		case model.ControlResearch:
 			action.Description = researchActionDescription(input.CurrentState)
-			action.Satisfied = input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK && !input.ResearchEvidenceStale
+			researchReadyExceptFreshness := input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK
+			action.Satisfied = researchReadyExceptFreshness && !input.ResearchEvidenceStale
+			action.unsatisfiedOnlyByStaleEvidence = researchReadyExceptFreshness && input.ResearchEvidenceStale
 
 		case model.ControlDomainReview:
 			action.Description = "run domain-aware review via the spec-compliance-review skill and record it with `slipway evidence skill --skill spec-compliance-review`"
