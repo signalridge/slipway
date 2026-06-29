@@ -85,7 +85,8 @@ func instructionsGuidance(name string) string {
 			"the substance gate and cannot reach done."
 	case "tasks":
 		return "Author each task as a checklist line (- [ ] t-NN <objective>) with depends_on, " +
-			"target_files, task_kind, and covers metadata. Every task names concrete target_files " +
+			"target_files, task_kind (one of: code, test, doc, ops, verification, investigation, other — " +
+			"a documentation-only task uses `doc`, not `docs`), and covers metadata. Every task names concrete target_files " +
 			"that bound the files or evidence targets it changes or verifies. Do not author a `wave:` " +
 			"line — the engine rejects it and assigns waves from depends_on and target_files, " +
 			"dispatching multi-task waves in parallel. Declare only real execution-order dependencies " +

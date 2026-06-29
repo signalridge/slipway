@@ -52,7 +52,7 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 			action.Satisfied = input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK
 
 		case model.ControlDomainReview:
-			action.Description = "run domain-aware compliance review and attach review evidence"
+			action.Description = "run domain-aware review via the spec-compliance-review skill and record it with `slipway evidence skill --skill spec-compliance-review`"
 			action.Satisfied = input.DomainReviewDone
 			if action.Satisfied {
 				action.SatisfiedBy = append(action.SatisfiedBy, input.DomainReviewSatisfiedBy...)

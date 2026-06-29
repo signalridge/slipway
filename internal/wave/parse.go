@@ -287,7 +287,7 @@ func (b *taskNodeBuilder) build() (TaskNode, error) {
 		// default resume behavior.
 		kind = model.TaskKindOther
 	default:
-		return TaskNode{}, fmt.Errorf("task %q has unknown task_kind %q", b.taskID, b.taskKind)
+		return TaskNode{}, fmt.Errorf("task %q has unknown task_kind %q (allowed: code, test, doc, ops, verification, investigation, other)", b.taskID, b.taskKind)
 	}
 
 	return TaskNode{
