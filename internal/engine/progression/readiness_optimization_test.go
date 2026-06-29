@@ -749,6 +749,7 @@ func TestEvaluateGovernanceReadinessRoutesArtifactStateThroughReaderContracts(t 
 func initGitWorkspaceForReadinessOptimizationTests(t *testing.T, root string) {
 	t.Helper()
 
+	cleanupGitWorkspaceBeforeTempDir(t, root)
 	for _, args := range [][]string{
 		{"init", "-b", "main"},
 		{"config", "user.email", "test@example.com"},
@@ -758,6 +759,22 @@ func initGitWorkspaceForReadinessOptimizationTests(t *testing.T, root string) {
 		out, err := cmd.CombinedOutput()
 		require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 	}
+}
+
+func cleanupGitWorkspaceBeforeTempDir(t *testing.T, root string) {
+	t.Helper()
+
+	t.Cleanup(func() {
+		var err error
+		for attempt := 0; attempt < 5; attempt++ {
+			err = os.RemoveAll(root)
+			if err == nil {
+				return
+			}
+			time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+		}
+		require.NoError(t, err)
+	})
 }
 
 func gitForReadinessOptimizationTests(t *testing.T, root string, args ...string) {
