@@ -170,7 +170,17 @@ func assembleSkillViewWithOptions(
 			blockersForResolution = append(blockersForResolution, reviewAlignmentBlockers...)
 		}
 	}
-	if len(selectedReviewSkills) > 0 {
+	if len(selectedReviewSkills) > 0 && hasS3TaskPlanDriftReexecutionRoot(blockersForResolution) {
+		// The S3 added-task drift root's only valid next action is reopening execution
+		// (recovery names `slipway fix --start-reexecution`); no selected review/ship
+		// skill applies. firstPendingSelectedReviewSkill would otherwise pick the first
+		// stale review peer and loop the agent back through a review of the stale plan.
+		// Leaving next_skill empty makes assembleSkillView return before any review/ship
+		// handoff or review-batch is built, so the whole next payload stays consistent
+		// with the reexecution recovery and blockers it already surfaces.
+		nextSkillName = ""
+		displaySkillName = ""
+	} else if len(selectedReviewSkills) > 0 {
 		nextSkillName = firstPendingSelectedReviewSkill(selectedReviewSkills, evidenceMap, blockersForResolution)
 		displaySkillName = nextSkillName
 		resolutionReason = ""
@@ -660,10 +670,27 @@ func pendingReviewBatchSkills(
 	return pending
 }
 
+// hasS3TaskPlanDriftReexecutionRoot reports the S3 added-task drift root whose only
+// valid next action is reopening execution (recovery names `slipway fix
+// --start-reexecution`). When present, no review/ship skill handoff must be offered:
+// rerunning a review re-certifies against the stale plan and loops — the dead end
+// reexecution exists to break.
+func hasS3TaskPlanDriftReexecutionRoot(blockers []model.ReasonCode) bool {
+	for _, b := range blockers {
+		if strings.TrimSpace(b.Code) == "s3_task_plan_drift_requires_reexecution" {
+			return true
+		}
+	}
+	return false
+}
+
 func nextS3ShipAuthoritySkill(
 	evidenceMap map[string]model.VerificationRecord,
 	blockers []model.ReasonCode,
 ) string {
+	if hasS3TaskPlanDriftReexecutionRoot(blockers) {
+		return ""
+	}
 	if hasRequiredSkillBlockerFor(blockers, progression.SkillShipVerification) ||
 		!skillHasPassingEvidence(evidenceMap, progression.SkillShipVerification) ||
 		hasShipVerificationHandoffBlocker(blockers) {
@@ -686,6 +713,9 @@ func hasShipVerificationHandoffBlocker(blockers []model.ReasonCode) bool {
 }
 
 func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []model.ReasonCode) string {
+	if hasS3TaskPlanDriftReexecutionRoot(blockers) {
+		return ""
+	}
 	for _, blocker := range blockers {
 		switch strings.TrimSpace(blocker.Code) {
 		case "review_alignment_required":
