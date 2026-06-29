@@ -82,6 +82,7 @@ func EvaluateGShip(
 	unresolvedBlockers []model.ReasonCode,
 	highRiskChecks map[string]bool,
 	shipRecordPresent bool,
+	shipRecordStale bool,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
 	if change.CurrentState != model.StateS3Review {
@@ -94,14 +95,24 @@ func EvaluateGShip(
 		reasonCodes = append(reasonCodes, model.NewReasonCode("artifact_not_ready", ""))
 	}
 	if !verificationReady {
-		// A ship-verification record that EXISTS but is no longer fresh/passing
-		// (typically because upstream execution/review evidence went stale) must not
-		// be reported as missing: that contradicts the same response's
-		// skills_ready.ship-verification surface and hides the real, present-but-stale
-		// state. Reserve the _missing code for a genuinely absent record.
-		if shipRecordPresent {
+		// Distinguish three present-state cases so the generic reason never
+		// contradicts the specific one in the same response:
+		//   - stale: the record EXISTS, was passing, and upstream execution/review
+		//     evidence went stale. Report _stale ("refresh upstream, do not restamp"),
+		//     never _missing — _missing would hide the present-but-stale state and
+		//     contradict skills_ready.ship-verification.
+		//   - present but failed on its OWN merits (fail verdict / recorded blockers):
+		//     the specific required_skill_not_passed / required_skill_blockers_present
+		//     blocker already explains it. Adding _stale here would misdirect recovery
+		//     toward an upstream refresh when the ship record itself failed, so emit no
+		//     generic reason and let the specific blocker stand.
+		//   - genuinely absent: reserve the _missing code.
+		switch {
+		case shipRecordStale:
 			reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_stale", ""))
-		} else {
+		case shipRecordPresent:
+			// Present but not passing for its own reason; specific blocker carries it.
+		default:
 			reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_missing", ""))
 		}
 	}

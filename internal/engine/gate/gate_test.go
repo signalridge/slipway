@@ -70,10 +70,10 @@ func TestEvaluateGShip(t *testing.T) {
 	change := model.NewChange("slug")
 	change.CurrentState = model.StateS3Review
 
-	eval := EvaluateGShip(change, true, true, true, nil, nil, false)
+	eval := EvaluateGShip(change, true, true, true, nil, nil, false, false)
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 
-	eval = EvaluateGShip(change, false, true, true, nil, nil, false)
+	eval = EvaluateGShip(change, false, true, true, nil, nil, false, false)
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "artifact_not_ready"))
 	require.NotEmpty(t, eval.ReasonCodes)
@@ -84,7 +84,7 @@ func TestEvaluateGShipMissingVerificationEvidenceRoutesS4Recovery(t *testing.T) 
 	t.Parallel()
 
 	// No ship-verification record present -> the genuinely-absent code.
-	eval := EvaluateGShip(model.NewChange("slug"), true, false, true, nil, nil, false)
+	eval := EvaluateGShip(model.NewChange("slug"), true, false, true, nil, nil, false, false)
 	require.NotEmpty(t, eval.ReasonCodes)
 	reason := findGateReasonCode(t, eval.ReasonCodes, "ship_verification_evidence_missing")
 	assert.Equal(t, model.ReasonSeverityError, reason.Severity)
@@ -106,12 +106,35 @@ func TestEvaluateGShipPresentButStaleVerificationEvidence(t *testing.T) {
 	change := model.NewChange("slug")
 	change.CurrentState = model.StateS3Review
 
-	eval := EvaluateGShip(change, true, false, true, nil, nil, true)
+	eval := EvaluateGShip(change, true, false, true, nil, nil, true, true)
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	stale := findGateReasonCode(t, eval.ReasonCodes, "ship_verification_evidence_stale")
 	assert.Equal(t, model.ReasonSeverityError, stale.Severity)
 	assert.False(t, hasGateReasonCode(eval.ReasonCodes, "ship_verification_evidence_missing"),
 		"a present-but-stale ship record must not be reported as missing")
+}
+
+// A ship-verification record that is PRESENT but failed on its own merits (not
+// stale) must NOT be relabeled stale or missing; the specific required-skill
+// blocker carries the block. Guards against the generic reason contradicting the
+// specific one in the same response.
+func TestEvaluateGShipPresentButFailedVerificationEvidence(t *testing.T) {
+	t.Parallel()
+	change := model.NewChange("slug")
+	change.CurrentState = model.StateS3Review
+	// The present-but-failed record's specific blocker travels via unresolvedBlockers
+	// (the channel the authority routes required_skill_not_passed through); the gate
+	// stays blocked on it while the present-but-failed switch arm adds no generic
+	// reason, so neither _stale nor _missing can contradict it.
+	specific := []model.ReasonCode{model.NewReasonCode("required_skill_not_passed", "ship-verification")}
+	eval := EvaluateGShip(change, true, false, true, specific, nil, true, false)
+	assert.Equal(t, model.GateStatusBlocked, eval.Status)
+	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "required_skill_not_passed"),
+		"the specific failed-skill blocker must carry the block")
+	assert.False(t, hasGateReasonCode(eval.ReasonCodes, "ship_verification_evidence_stale"),
+		"a present-but-failed ship record must not be reported as stale")
+	assert.False(t, hasGateReasonCode(eval.ReasonCodes, "ship_verification_evidence_missing"),
+		"a present-but-failed ship record must not be reported as missing")
 }
 
 func TestGuardrailHighRiskChecks(t *testing.T) {
@@ -138,19 +161,19 @@ func TestEvaluateGShipHighRiskChecks(t *testing.T) {
 
 	// Missing baseline -> fail closed; every other ship input is ready so the
 	// high-risk reason is the sole blocker.
-	missing := EvaluateGShip(change, true, true, true, nil, nil, false)
+	missing := EvaluateGShip(change, true, true, true, nil, nil, false, false)
 	assert.Equal(t, model.GateStatusBlocked, missing.Status)
 	reason := findGateReasonCode(t, missing.ReasonCodes, "high_risk_check_missing")
 	assert.Equal(t, baseline, reason.Detail)
 
 	// Recorded explicit failure -> fail closed with the failed code.
-	failed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: false}, false)
+	failed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: false}, false, false)
 	assert.Equal(t, model.GateStatusBlocked, failed.Status)
 	reason = findGateReasonCode(t, failed.ReasonCodes, "high_risk_check_failed")
 	assert.Equal(t, baseline, reason.Detail)
 
 	// Recorded pass -> the gate clears (no high-risk reason remains).
-	passed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: true}, false)
+	passed := EvaluateGShip(change, true, true, true, nil, map[string]bool{baseline: true}, false, false)
 	assert.Equal(t, model.GateStatusApproved, passed.Status)
 	assert.False(t, hasGateReasonCode(passed.ReasonCodes, "high_risk_check_missing"))
 	assert.False(t, hasGateReasonCode(passed.ReasonCodes, "high_risk_check_failed"))

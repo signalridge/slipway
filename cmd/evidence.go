@@ -452,7 +452,17 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				}
 				planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
 				if !ok {
-					if addedAtReview, _ := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID); addedAtReview {
+					addedAtReview, addedErr := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID)
+					if addedErr != nil {
+						return newStateIntegrityError(
+							"evidence_task_wave_plan_unavailable",
+							fmt.Sprintf("cannot classify task %q against the current tasks.md projection: %v", taskID, addedErr),
+							"Fix tasks.md so Slipway can derive the current tasks projection, then retry recording task evidence.",
+							change.Slug,
+							map[string]any{"task_id": taskID},
+						)
+					}
+					if addedAtReview {
 						// tasks.md names this task but the materialized wave projection does
 						// not: it was added at S3_REVIEW after S2 execution. Its evidence
 						// cannot be recorded in place and `slipway run` will not
@@ -876,7 +886,17 @@ func prepareEvidenceTaskResultFiles(
 		sessionID := strings.TrimSpace(result.SessionID)
 		planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
 		if !ok {
-			if addedAtReview, _ := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID); addedAtReview {
+			addedAtReview, addedErr := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID)
+			if addedErr != nil {
+				return nil, newStateIntegrityError(
+					"evidence_task_wave_plan_unavailable",
+					fmt.Sprintf("cannot classify task %q against the current tasks.md projection: %v", taskID, addedErr),
+					"Fix tasks.md so Slipway can derive the current tasks projection, then retry recording task evidence.",
+					change.Slug,
+					map[string]any{"task_id": taskID},
+				)
+			}
+			if addedAtReview {
 				// tasks.md names this task but the materialized wave projection does
 				// not: it was added at S3_REVIEW after S2 execution, so its evidence
 				// cannot be recorded in place and `slipway run` will not re-materialize

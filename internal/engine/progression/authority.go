@@ -379,6 +379,7 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	// engine's has_evidence surface is exactly "a ship-verification record exists",
 	// regardless of its freshness/verdict.
 	shipRecordPresent := shipVerificationRecordPresent(readiness, verifyPassingSkills)
+	shipRecordStale := shipVerificationRecordStale(readiness, verifyPassingSkills)
 
 	return ShipAuthority{
 		ReviewAuthority:     reviewAuthority,
@@ -393,6 +394,7 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 			unresolved,
 			highRiskChecks,
 			shipRecordPresent,
+			shipRecordStale,
 		),
 	}, nil
 }
@@ -413,6 +415,26 @@ func shipVerificationRecordPresent(readiness GovernanceReadiness, verifyPassingS
 		}
 	}
 	return false
+}
+
+// shipVerificationRecordStale reports whether a present ship-verification record
+// is excluded from the passing set despite claiming a pass verdict — i.e. it was
+// passing and a later plan/evidence edit invalidated its freshness. A record with
+// a fail verdict (or recorded blockers) is NOT stale; its specific
+// required_skill_not_passed / required_skill_blockers_present blocker already
+// explains the block, so G_ship must not relabel it as stale.
+func shipVerificationRecordStale(readiness GovernanceReadiness, verifyPassingSkills map[string]model.VerificationRecord) bool {
+	if _, ok := verifyPassingSkills[SkillShipVerification]; ok {
+		return false
+	}
+	if readiness.verificationRecords == nil {
+		return false
+	}
+	rec, ok := readiness.verificationRecords[SkillShipVerification]
+	if !ok {
+		return false
+	}
+	return rec.IsPassing()
 }
 
 // staleReviewOrShipSkillCascade reports whether any blocker is a required_skill_stale
@@ -436,6 +458,36 @@ func staleReviewOrShipSkillCascade(blockerSets ...[]model.ReasonCode) bool {
 	return false
 }
 
+// s3AddedTaskPlanDriftTaskIDs returns tasks.md task IDs absent from the
+// materialized wave plan at S3_REVIEW — tasks added after S2 execution that
+// cannot be evidenced in place. Empty outside S3_REVIEW or when no wave plan is
+// materialized. Single detector for the added-task dead end: the reexecution root
+// (authority) and the amendment-diagnostic suppression (readiness) both key off it.
+func s3AddedTaskPlanDriftTaskIDs(root string, change model.Change) ([]string, error) {
+	if change.CurrentState != model.StateS3Review {
+		return nil, nil
+	}
+	plan, err := state.LoadOptionalWavePlanForChange(root, change)
+	if err != nil || plan == nil {
+		return nil, err
+	}
+	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
+	if err != nil {
+		return nil, err
+	}
+	inPlan := make(map[string]struct{})
+	for _, id := range plan.TaskIDs() {
+		inPlan[strings.TrimSpace(id)] = struct{}{}
+	}
+	var added []string
+	for _, id := range planned {
+		if _, ok := inPlan[strings.TrimSpace(id)]; !ok {
+			added = append(added, strings.TrimSpace(id))
+		}
+	}
+	return added, nil
+}
+
 // s3TaskPlanDriftReexecutionBlockers emits the ROOT reexecution blocker, one per
 // added-task subject, when at S3_REVIEW tasks.md names a task the materialized
 // wave plan does not contain AND the stale review/ship cascade is present. Such a
@@ -447,24 +499,12 @@ func s3TaskPlanDriftReexecutionBlockers(root string, change model.Change, staleC
 	if change.CurrentState != model.StateS3Review || !staleCascade {
 		return nil, nil
 	}
-	plan, err := state.LoadOptionalWavePlanForChange(root, change)
-	if err != nil || plan == nil {
-		return nil, err
-	}
-	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
+	added, err := s3AddedTaskPlanDriftTaskIDs(root, change)
 	if err != nil {
 		return nil, err
 	}
-	planTaskIDs := plan.TaskIDs()
-	inPlan := make(map[string]struct{}, len(planTaskIDs))
-	for _, id := range planTaskIDs {
-		inPlan[strings.TrimSpace(id)] = struct{}{}
-	}
 	var blockers []model.ReasonCode
-	for _, id := range planned {
-		if _, ok := inPlan[id]; ok {
-			continue
-		}
+	for _, id := range added {
 		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", id))
 	}
 	return model.NormalizeReasonCodes(blockers), nil
