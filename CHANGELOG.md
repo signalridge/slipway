@@ -5,6 +5,23 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.1](https://github.com/signalridge/slipway/compare/v0.37.0...v0.37.1) (2026-06-29)
+
+
+### Bug Fixes
+
+* **cli:** make headless handoff write and archived evidence honest ([#364](https://github.com/signalridge/slipway/issues/364), [#368](https://github.com/signalridge/slipway/issues/368)) ([#378](https://github.com/signalridge/slipway/issues/378)) ([c7f15e2](https://github.com/signalridge/slipway/commit/c7f15e28665e3877b3581e72c5a525f08827687e))
+* **lifecycle:** honest S1_PLAN read-only surfaces — next/validate/recovery consistency ([#382](https://github.com/signalridge/slipway/issues/382), [#377](https://github.com/signalridge/slipway/issues/377), [#376](https://github.com/signalridge/slipway/issues/376)) ([#383](https://github.com/signalridge/slipway/issues/383)) ([45b6a46](https://github.com/signalridge/slipway/commit/45b6a462589161db35099016352f6f35874ef575))
+* **lifecycle:** surface host subagent-delegation authorization as an actionable next action ([#339](https://github.com/signalridge/slipway/issues/339), [#369](https://github.com/signalridge/slipway/issues/369), [#357](https://github.com/signalridge/slipway/issues/357)) ([#375](https://github.com/signalridge/slipway/issues/375)) ([82d4864](https://github.com/signalridge/slipway/commit/82d4864d5124e507f088010bce958f56472bc9a6))
+* **recovery:** make blocker recoveries name a state-valid next action ([#372](https://github.com/signalridge/slipway/issues/372)) ([fe17a6f](https://github.com/signalridge/slipway/commit/fe17a6f4181725785f5691c3fe9ca6f084005e7c)), closes [#341](https://github.com/signalridge/slipway/issues/341) [#343](https://github.com/signalridge/slipway/issues/343) [#346](https://github.com/signalridge/slipway/issues/346) [#347](https://github.com/signalridge/slipway/issues/347) [#356](https://github.com/signalridge/slipway/issues/356)
+* **recovery:** route S3 task-plan drift to reexecution + honest ship evidence wording ([#344](https://github.com/signalridge/slipway/issues/344), [#352](https://github.com/signalridge/slipway/issues/352)) ([#379](https://github.com/signalridge/slipway/issues/379)) ([35baa3d](https://github.com/signalridge/slipway/commit/35baa3dd4ca5ee327b9c7b6055f97a4c5e46bc06))
+
+
+### Dependencies
+
+* **actions:** bump the actions group with 3 updates ([#381](https://github.com/signalridge/slipway/issues/381)) ([8059ff0](https://github.com/signalridge/slipway/commit/8059ff086ff94f84c2158cc3901924d74b679d5b))
+* **go:** bump golang.org/x/tools from 0.46.0 to 0.47.0 in the go-minor group ([#380](https://github.com/signalridge/slipway/issues/380)) ([58f1014](https://github.com/signalridge/slipway/commit/58f10142c3c8e03f4016c73ea807651931e600c2))
+
 ## [0.37.0](https://github.com/signalridge/slipway/compare/v0.36.0...v0.37.0) (2026-06-28)
 
 
