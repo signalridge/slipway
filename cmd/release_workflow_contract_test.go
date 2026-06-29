@@ -42,7 +42,7 @@ func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
 
 	releaseJob := workflowMap(t, jobs, "release")
 	assertWorkflowNeeds(t, releaseJob, "validate-tag", "test")
-	assert.Equal(t, "release-publish", workflowString(t, releaseJob, "environment"))
+	assert.NotContains(t, releaseJob, "environment", "release publishing must not require manual environment approval")
 	releasePerms := workflowMap(t, releaseJob, "permissions")
 	assert.Equal(t, "write", workflowString(t, releasePerms, "contents"))
 	assert.Equal(t, "write", workflowString(t, releasePerms, "packages"))
@@ -129,6 +129,28 @@ func TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest(t *testing.T) {
 	strategy := workflowMap(t, verifyBinary, "strategy")
 	matrix := workflowMap(t, strategy, "matrix")
 	assert.Equal(t, "${{ fromJSON(needs.release.outputs.binary_matrix) }}", workflowString(t, matrix, "include"))
+}
+
+func TestGoReleaserUsesCosignBundleSigning(t *testing.T) {
+	config := readWorkflowYAML(t, ".goreleaser.yaml")
+	signs, ok := config["signs"].([]any)
+	require.True(t, ok, "expected signs list")
+	require.Len(t, signs, 1)
+
+	sign, ok := signs[0].(map[string]any)
+	require.True(t, ok, "expected sign entry")
+	assert.Equal(t, "cosign", sign["cmd"])
+	assert.Equal(t, "${artifact}.sigstore.json", sign["signature"])
+	assert.NotContains(t, sign, "certificate")
+
+	args, ok := sign["args"].([]any)
+	require.True(t, ok, "expected sign args")
+	argSet := workflowStringSet(args)
+	assert.Contains(t, argSet, "--bundle=${signature}")
+	assert.Contains(t, argSet, "sign-blob")
+	assert.Contains(t, argSet, "${artifact}")
+	assert.NotContains(t, argSet, "--output-certificate=${certificate}")
+	assert.NotContains(t, argSet, "--output-signature=${signature}")
 }
 
 func TestCIWorkflowEnforcesKernelAndPublicSurfaceCoverageGates(t *testing.T) {

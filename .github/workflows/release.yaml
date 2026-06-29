@@ -82,7 +82,6 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     needs: [validate-tag, test]
-    environment: release-publish
     permissions:
       actions: read
       attestations: write
