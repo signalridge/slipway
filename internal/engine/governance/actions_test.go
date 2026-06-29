@@ -211,6 +211,19 @@ func TestExplorationControlSatisfaction(t *testing.T) {
 		ResearchStructureOK: true,
 	})
 	assert.Empty(t, UnsatisfiedBlockingActions(actions))
+
+	// #377: present-but-stale research evidence un-satisfies the control even when
+	// intent, scope, and structure are all in place — effective freshness, not mere
+	// structural presence, drives satisfaction.
+	actions = ResolveRequiredActions(RequiredActionsInput{
+		ActiveControls:        controls,
+		IntentExists:          true,
+		ScopeConfirmed:        true,
+		ResearchStructureOK:   true,
+		ResearchEvidenceStale: true,
+	})
+	assert.NotEmpty(t, UnsatisfiedBlockingActions(actions),
+		"stale research-orchestration evidence must un-satisfy the research control")
 }
 
 func TestClarificationControlSatisfaction(t *testing.T) {

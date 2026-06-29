@@ -429,6 +429,23 @@ func TestBuildRecoveryWorktreeBranchMismatchRoutesToRun(t *testing.T) {
 	assert.Contains(t, got.PrimaryAction, "slipway run")
 }
 
+func TestBuildRecoveryStaleDiscoveryEvidenceRecertifiesNotProvideDiscovery(t *testing.T) {
+	t.Parallel()
+
+	// #377: when a present research-orchestration record is stale (its certified
+	// discovery inputs changed after the verdict), the only honest blocker is
+	// required_skill_stale — never missing_discovery_evidence. The recovery primary
+	// must re-certify the stale skill via `slipway evidence skill`, not advertise
+	// "Provide discovery ... before planning" as if the evidence were absent.
+	got := BuildRecovery([]ReasonCode{
+		NewReasonCode("required_skill_stale", "research-orchestration:research.md"),
+	})
+	require.NotNil(t, got)
+	assert.Equal(t, "slipway evidence skill --skill research-orchestration --verdict pass", got.PrimaryCommand)
+	assert.Equal(t, RecoveryClassRerunSkill, got.RecoveryClass)
+	assert.NotContains(t, got.PrimaryAction, "Provide discovery")
+}
+
 func TestBuildRecoveryOrphanedChangeBundleRoutesToDelete(t *testing.T) {
 	t.Parallel()
 

@@ -125,7 +125,7 @@ Pending.
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -183,7 +183,7 @@ func TestResolveRuntimeRequiredActionsExplainsDomainReviewSatisfiedBySpecComplia
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	action := actions[0]
 	require.True(t, action.Satisfied)
@@ -237,7 +237,7 @@ func TestResolveRuntimeRequiredActionsDoesNotUseCodeQualityForIndependentReview(
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.False(t, actions[0].Satisfied, "code-quality-review evidence must not satisfy independent-review")
 	assert.Empty(t, actions[0].SatisfiedBy)
@@ -287,7 +287,7 @@ func TestResolveRuntimeRequiredActionsExplainsSecurityReviewSatisfiedBySecurityR
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	action := actions[0]
 	require.True(t, action.Satisfied)
@@ -366,7 +366,7 @@ Pending.
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.False(t, actions[0].Satisfied, "template placeholder headings must not satisfy rollback-required")
 }
@@ -440,7 +440,7 @@ Pending.
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.False(t, actions[0].Satisfied, "seeded rollback draft text must not satisfy rollback-required until the decision section is explicitly confirmed")
 }
@@ -469,7 +469,7 @@ func TestResolveRuntimeRequiredActionsRequiresBoundWorktreeMetadata(t *testing.T
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.False(t, actions[0].Satisfied, "worktree-isolation should remain unsatisfied until the change is bound to a dedicated worktree")
 }
@@ -497,7 +497,7 @@ func TestResolveRuntimeRequiredActionsHandlesMissingVerification(t *testing.T) {
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.False(t, actions[0].Satisfied, "no verification records should leave domain-review unsatisfied")
 }
@@ -539,7 +539,7 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenRunSummaryIsMissing(t *test
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -594,7 +594,7 @@ func TestResolveRuntimeRequiredActionsRejectsExecutionSummaryLevelBlockers(t *te
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -666,7 +666,7 @@ func TestResolveRuntimeRequiredActionsAbsorbsS3TaskPlanDriftAfterReviewEvidence(
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -732,7 +732,7 @@ func TestResolveRuntimeRequiredActionsDoesNotAbsorbStaleExecutionEvidence(t *tes
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -828,7 +828,7 @@ func TestResolveRuntimeRequiredActionsUsesAuthoritativeChangeVerificationsForHid
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -884,7 +884,7 @@ func TestResolveRuntimeRequiredActionsFailsClosedWhenExecutionSummaryIsInvalid(t
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	byID := map[model.ControlID]RequiredAction{}
 	for _, action := range actions {
 		byID[action.ControlID] = action
@@ -992,7 +992,7 @@ Internal docs.
 		ComputedAt: time.Now().UTC(),
 	}
 
-	actions := ResolveRuntimeRequiredActions(root, change, snap)
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
 	require.Len(t, actions, 1)
 	assert.True(t, actions[0].Satisfied, "intake + scope + research.md structure should satisfy the research control")
 	assert.Empty(t, RequiredActionBlockers(change, actions), "satisfied research action must not block S1_PLAN")

@@ -22,7 +22,13 @@ const (
 	assuranceRollbackTemplateText = "Summarize rollback constraints, prerequisites, and verification status when rollback planning is required."
 )
 
-func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.GovernanceSnapshot) []RequiredAction {
+// ResolveRuntimeRequiredActions resolves the runtime governance action queue.
+// researchEvidenceStale is supplied by the progression caller (digest-freshness
+// state lives in progression, which imports governance and never the reverse) and
+// reports whether a present research-orchestration record is certified stale, so
+// the research action reflects effective freshness rather than mere structural
+// presence (#377).
+func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.GovernanceSnapshot, researchEvidenceStale bool) []RequiredAction {
 	verifications := loadRuntimeVerificationState(root, change)
 	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
 	if err != nil {
@@ -96,6 +102,7 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		IntentExists:                 artifactExistsInBundle(root, change, "intent.md"),
 		ScopeConfirmed:               changeScopeConfirmed(change, intakeConfirmed),
 		ResearchStructureOK:          researchOK,
+		ResearchEvidenceStale:        researchEvidenceStale,
 		DomainReviewDone:             domainReviewDone,
 		DomainReviewSatisfiedBy:      domainSatisfiedBy,
 		IndependentReviewDone:        independentReviewDone,

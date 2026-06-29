@@ -49,7 +49,7 @@ func ResolveRequiredActions(input RequiredActionsInput) []RequiredAction {
 
 		case model.ControlResearch:
 			action.Description = researchActionDescription(input.CurrentState)
-			action.Satisfied = input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK
+			action.Satisfied = input.IntentExists && input.ScopeConfirmed && input.ResearchStructureOK && !input.ResearchEvidenceStale
 
 		case model.ControlDomainReview:
 			action.Description = "run domain-aware review via the spec-compliance-review skill and record it with `slipway evidence skill --skill spec-compliance-review`"
@@ -100,6 +100,7 @@ type RequiredActionsInput struct {
 	IntentExists                 bool
 	ScopeConfirmed               bool
 	ResearchStructureOK          bool // research.md has all required sections (always true for non-discovery)
+	ResearchEvidenceStale        bool // research-orchestration evidence is present but certified stale (its inputs changed after the verdict)
 	DomainReviewDone             bool
 	DomainReviewSatisfiedBy      []SatisfiedBy
 	IndependentReviewDone        bool

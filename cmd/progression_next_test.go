@@ -2093,9 +2093,10 @@ func TestNextReadOnlyReportsRunGuidanceAfterPassingPlanAudit(t *testing.T) {
 	require.NoError(t, state.SaveChange(root, change))
 	writeShipReadyGovernedBundle(t, root, change)
 	writeSkillVerification(t, root, slug, "plan-audit", model.VerificationRecord{
-		Verdict:   model.VerificationVerdictPass,
-		Blockers:  []model.ReasonCode{},
-		Timestamp: time.Now().UTC(),
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		References: planAuditOriginReferences(),
 	})
 
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, AutoSkipEvidence: true, Command: "run"})

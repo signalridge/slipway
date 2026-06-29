@@ -638,3 +638,88 @@ func TestAdvanceGoverned_S2StaleWaveEvidenceRecommendsRunnableCommand(t *testing
 		t.Fatalf("expected change held at S2_IMPLEMENT by the stale-evidence gate, got %s", reloaded.CurrentState)
 	}
 }
+
+// TestAdvanceGoverned_S1StaleIntakeAuthorityRecommendsRunnableCommand is the #376
+// regression at S1_PLAN. When a change is IN S1_PLAN with stale-but-passing
+// intake-clarification authority, the early stale-evidence repair path must surface
+// the owning-stage blockers via blockedAdvanceSummary, NOT the review-alignment path
+// that maps to the S3-only `slipway fix` command (fix_state_invalid at S1). The
+// recommended recovery must be RUNNABLE at S1, asserted through the public recovery
+// projection (model.BuildRecovery) rather than the stale reason-code spelling.
+func TestAdvanceGoverned_S1StaleIntakeAuthorityRecommendsRunnableCommand(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := model.SaveConfig(state.ConfigPath(root), model.DefaultConfig()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	change := model.NewChange("s1-stale-intake-recovery")
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepAudit
+	change.WorkflowPreset = model.WorkflowPresetStandard
+	if err := state.SaveChange(root, change); err != nil {
+		t.Fatalf("save change: %v", err)
+	}
+
+	bundleDir := filepath.Join(root, "artifacts", "changes", change.Slug)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir bundle: %v", err)
+	}
+	intentPath := filepath.Join(bundleDir, "intent.md")
+	if err := os.WriteFile(intentPath, []byte("# Intent\n\n## Summary\nOriginal clarified intent.\n"), 0o644); err != nil {
+		t.Fatalf("write intent.md: %v", err)
+	}
+
+	// intake-clarification passed and its digest was stamped from the original
+	// intent.md content — a genuine passing intake authority.
+	verdictAt := time.Date(2026, 6, 6, 1, 0, 0, 0, time.UTC)
+	record := model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Timestamp:  verdictAt,
+		RunVersion: 1,
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillIntakeClarification, record)
+	if err := StampEvidenceDigestForSkill(root, change, SkillIntakeClarification, record, nil); err != nil {
+		t.Fatalf("stamp intake-clarification digest: %v", err)
+	}
+
+	// intent.md changes after the accepted verdict → intake-clarification is now stale.
+	if err := os.WriteFile(intentPath, []byte("# Intent\n\n## Summary\nIntent changed after clarification.\n"), 0o644); err != nil {
+		t.Fatalf("stale intent.md: %v", err)
+	}
+
+	summaryOut, err := AdvanceGoverned(root, change.Slug)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if summaryOut.Action != "blocked" {
+		t.Fatalf("expected the stale intake-clarification authority to block at S1, got %+v", summaryOut)
+	}
+
+	recovery := model.BuildRecovery(summaryOut.Blockers)
+	if recovery == nil {
+		t.Fatalf("expected a recovery projection for the stale S1 intake blockers, got nil (blockers %v)", summaryOut.Blockers)
+	}
+	if recovery.PrimaryCommand == "slipway fix" {
+		t.Fatalf("S1 stale intake-clarification recovery must not recommend the S3-only `slipway fix` "+
+			"(fix_state_invalid at S1); got primary_command=%q for blockers %v",
+			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
+	}
+	// The recommended command must be runnable at S1: either advance the lifecycle
+	// (`slipway run`) or re-record the owning skill's evidence with `slipway evidence skill`.
+	if recovery.PrimaryCommand != "slipway run" &&
+		recovery.PrimaryCommand != "slipway evidence skill --skill intake-clarification --verdict pass" {
+		t.Fatalf("expected a state-valid S1 recovery command, got primary_command=%q for blockers %v",
+			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
+	}
+
+	// The change must stay at S1_PLAN: the fix corrects only the recommended command,
+	// never the fail-closed stale-evidence gate.
+	reloaded, err := state.LoadChange(root, change.Slug)
+	if err != nil {
+		t.Fatalf("reload change: %v", err)
+	}
+	if reloaded.CurrentState != model.StateS1Plan {
+		t.Fatalf("expected change held at S1_PLAN by the stale-evidence gate, got %s", reloaded.CurrentState)
+	}
+}

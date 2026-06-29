@@ -206,7 +206,11 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 	readiness.SignalSummary = cloneSignalSummary(snap.Summary)
 	readiness.ActiveControls = cloneControlActivations(snap.ActiveControls)
-	readiness.RequiredActions = governance.ResolveRuntimeRequiredActions(root, evaluationChange, snap)
+	researchEvidenceStale, err := researchOrchestrationEvidenceStale(root, evaluationChange)
+	if err != nil {
+		return GovernanceReadiness{}, err
+	}
+	readiness.RequiredActions = governance.ResolveRuntimeRequiredActions(root, evaluationChange, snap, researchEvidenceStale)
 	readiness.Blockers = append(readiness.Blockers, model.ReasonCodesFromSpecs(governance.RequiredActionBlockers(evaluationChange, readiness.RequiredActions))...)
 	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
 

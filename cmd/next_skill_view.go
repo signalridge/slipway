@@ -244,6 +244,15 @@ func assembleSkillViewWithOptions(
 		if advanced.Action == "blocked" {
 			blockers = append(blockers, advanced.Blockers...)
 		}
+		// A genuine dead-end on the gate that owns advancement out of this
+		// (state, plan substep) must keep the no-skill step from advertising
+		// ready to advance. Folding the captured dead-end codes into the blocker
+		// set here makes the readiness guard below skip the no_skill_required /
+		// run_slipway_run_to_advance advertisement and surfaces the dead-end so
+		// confirmation and recovery read governance-blocked (#382). Pacing blocks
+		// were already filtered out at capture time, so they keep riding the
+		// normal handoff/run guidance instead of surfacing here.
+		blockers = append(blockers, view.ownedAdvanceGateDeadEndBlockers...)
 		if len(blockers) == 0 {
 			if governedChange != nil {
 				canAdvance, advanceBlockers := noSkillStateAdvanceReadiness(root, *governedChange)

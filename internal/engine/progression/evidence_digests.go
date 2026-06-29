@@ -152,6 +152,24 @@ func pruneEvidenceDigestForSkill(root string, change model.Change, skillName str
 	return state.SaveEvidenceDigests(root, change.Slug, *digests)
 }
 
+// researchOrchestrationEvidenceStale reports whether a discovery change carries a
+// present-but-stale research-orchestration record (its certified discovery inputs
+// changed after the verdict). Non-discovery changes have no research-orchestration
+// obligation and always report false. The boolean feeds
+// governance.ResolveRuntimeRequiredActions so the research required-action reflects
+// effective freshness, not just structural presence (#377): progression owns digest
+// freshness and passes the result into governance, never the reverse.
+func researchOrchestrationEvidenceStale(root string, change model.Change) (bool, error) {
+	if !change.NeedsDiscovery {
+		return false, nil
+	}
+	blockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
+	if err != nil {
+		return false, err
+	}
+	return len(blockers) > 0, nil
+}
+
 func skillDigestFreshnessBlockers(
 	root string,
 	change model.Change,

@@ -84,14 +84,16 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			// S2 owns implementation evidence. Upstream intake/planning drift is
 			// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
 			// evidence replay here creates an impossible forward-only dead end.
-		} else if fromState == model.StateS2Implement {
-			// In S2 the owning stage still holds this evidence (e.g. a stale
+		} else if fromState != model.StateS3Review {
+			// Pre-S3 (S0_INTAKE / S1_PLAN / S2_IMPLEMENT) the owning stage still
+			// holds this evidence (e.g. a stale intake-clarification or
 			// wave-orchestration authority). Surface its blockers directly — whose
-			// remediation is the state-valid `slipway run` — instead of the
-			// review-alignment path, which maps to the S3-only `slipway fix` and
-			// would yield fix_state_invalid here. This only changes the recommended
-			// command; the stale-evidence gate stays fail-closed and S3 keeps the
-			// forward-only review-alignment path below (issue #324).
+			// remediation is the state-valid `slipway run` / `slipway evidence
+			// skill` — instead of the review-alignment path, which maps to the
+			// S3-only `slipway fix` and would yield fix_state_invalid here. This
+			// only changes the recommended command; the stale-evidence gate stays
+			// fail-closed. Only S3, where review owns plan/code/evidence alignment,
+			// keeps the forward-only review-alignment path below (issues #324, #376).
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
 		} else {
 			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
@@ -267,7 +269,11 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if snapErr != nil {
 		return AdvanceSummary{}, fmt.Errorf("recompute governance snapshot: %w", snapErr)
 	}
-	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap)); len(blockers) > 0 {
+	researchEvidenceStale, staleErr := researchOrchestrationEvidenceStale(root, change)
+	if staleErr != nil {
+		return AdvanceSummary{}, staleErr
+	}
+	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap, researchEvidenceStale)); len(blockers) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
@@ -1013,12 +1019,23 @@ func advanceGateID(before model.Change, summary AdvanceSummary) string {
 	if summary.Action != "blocked" && summary.Action != "done_ready" {
 		return ""
 	}
-	switch before.CurrentState {
+	substep := before.PlanSubStep
+	if summary.FromSubStep != "" {
+		substep = model.PlanSubStep(summary.FromSubStep)
+	}
+	return OwningAdvanceGateID(before.CurrentState, substep)
+}
+
+// OwningAdvanceGateID reports the gate that owns advancement out of the given
+// (state, plan substep), or "" when no gate owns advancement there. S0_INTAKE
+// and S2_IMPLEMENT advance on run/evidence pacing rather than on a gate that
+// can dead-end, so they own no advance gate. It is the pure (state, substep)
+// projection of advanceGateID's ownership switch, exported so surfaces like
+// `next` can ask which gate — if blocked by a genuine dead-end — must override a
+// "ready to advance" posture without duplicating the ownership map.
+func OwningAdvanceGateID(state model.WorkflowState, substep model.PlanSubStep) string {
+	switch state {
 	case model.StateS1Plan:
-		substep := before.PlanSubStep
-		if summary.FromSubStep != "" {
-			substep = model.PlanSubStep(summary.FromSubStep)
-		}
 		switch substep {
 		case model.PlanSubStepResearch:
 			return string(gate.GateScope)
@@ -1367,6 +1384,27 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 
 	_, discoveryOK := passingSkills[SkillResearchOrchestration]
 
+	// Discovery present/stale signals mirror the ship path (authority.go
+	// shipVerificationRecordPresent/Stale): a research-orchestration record that
+	// EXISTS but was excluded from the passing set because its certified inputs went
+	// stale must surface as required_skill_stale, not missing_discovery_evidence
+	// (#377). present = the record exists at all; stale = it exists, was passing, and
+	// its digest-freshness blockers fired. Computing present first guarantees present
+	// is true whenever stale is true.
+	verifications, err := state.ListVerificationsForChange(root, change)
+	if err != nil {
+		return gate.GateEvaluation{}, err
+	}
+	discoveryRecord, discoveryRecordPresent := verifications[SkillResearchOrchestration]
+	discoveryRecordStale := false
+	if discoveryRecordPresent && discoveryRecord.IsPassing() {
+		staleBlockers, staleErr := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
+		if staleErr != nil {
+			return gate.GateEvaluation{}, staleErr
+		}
+		discoveryRecordStale = len(staleBlockers) > 0
+	}
+
 	// Worktree validation is only meaningful when a worktree is already bound.
 	// G_scope runs at S1_PLAN/research (before worktree creation at S2_IMPLEMENT),
 	// so skip worktree validation when WorktreePath is empty.
@@ -1378,5 +1416,5 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 			return gate.GateEvaluation{}, wtErr
 		}
 	}
-	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, researchArtifactReasons...), nil
+	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, discoveryRecordPresent, discoveryRecordStale, researchArtifactReasons...), nil
 }
