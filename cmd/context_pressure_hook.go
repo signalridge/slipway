@@ -180,7 +180,7 @@ func runCodexPromptHandoffNudge(w io.Writer) error {
 	output := map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     "UserPromptSubmit",
-			"additionalContext": "HANDOFF NUDGE: the active change handoff is missing or stale; run `slipway handoff write` before stopping or splitting context. `slipway status` and `slipway next` remain authoritative.",
+			"additionalContext": "HANDOFF NUDGE: the active change handoff is missing or stale; pipe a narrative into `slipway handoff write` (e.g. `printf '## Current Position\\n...' | slipway handoff write`) before stopping or splitting context. `slipway status` and `slipway next` remain authoritative.",
 		},
 	}
 	encoded, err := json.Marshal(output)
@@ -493,11 +493,13 @@ func contextPressureMessage(result contextPressureResult) string {
 	case contextPressureCritical:
 		return fmt.Sprintf(
 			"CONTEXT CRITICAL: usage is approximately %d%% (>= 70%%). Author the per-change "+
-				"handoff NOW, before your next action, so the next session can continue: run "+
-				"`slipway handoff write --section \"Current Position\"`, "+
-				"`slipway handoff write --section \"Next Session Focus\"`, and "+
-				"`slipway handoff write --section \"Risks And Blockers\"` to capture your "+
-				"current judgment in those sections. "+
+				"handoff NOW, before your next action, so the next session can continue. "+
+				"Pipe each section body on stdin (the command reads stdin and fails loudly if "+
+				"nothing is piped): "+
+				"`printf '...' | slipway handoff write --section \"Current Position\"`, "+
+				"`printf '...' | slipway handoff write --section \"Next Session Focus\"`, and "+
+				"`printf '...' | slipway handoff write --section \"Risks And Blockers\"` to "+
+				"capture your current judgment in those sections. "+
 				"The handoff is advisory; the next session still runs `slipway status --json` "+
 				"and `slipway next --json` before acting.",
 			result.Percent,
@@ -505,8 +507,9 @@ func contextPressureMessage(result contextPressureResult) string {
 	default:
 		return fmt.Sprintf(
 			"CONTEXT WARNING: usage is approximately %d%%. Avoid starting new complex work; "+
-				"run `slipway handoff write` to refresh the per-change advisory handoff "+
-				"before continuing.",
+				"pipe a narrative into `slipway handoff write` (e.g. "+
+				"`printf '## Current Position\\n...' | slipway handoff write`) to refresh the "+
+				"per-change advisory handoff before continuing.",
 			result.Percent,
 		)
 	}

@@ -19,6 +19,12 @@ const (
 	handoffHeaderOpen  = "<!-- slipway:handoff-machine-header"
 	handoffHeaderClose = "slipway:handoff-machine-header -->"
 	handoffTimeFormat  = time.RFC3339Nano
+	// handoffPendingMarker is the placeholder body written for any advisory
+	// section that has no agent-authored narrative yet.
+	handoffPendingMarker = "_Agent-authored narrative pending._"
+	// handoffDefaultSection receives a free-form handoff body that does not carry
+	// any recognizable `## Section` headers, so piped narrative is never dropped.
+	handoffDefaultSection = "Current Position"
 )
 
 var handoffSectionNames = []string{
@@ -55,6 +61,11 @@ type HandoffWriteOptions struct {
 	SessionOwner string
 	Section      string
 	SectionBody  string
+	// Body is a full advisory narrative (typically piped on stdin for the bare
+	// `slipway handoff write` form). Sections recognized inside the body are
+	// merged over the existing narrative; a body with no recognizable section
+	// headers is routed into handoffDefaultSection so nothing is dropped.
+	Body string
 }
 
 func WriteHandoff(root string, change model.Change, opts HandoffWriteOptions) (HandoffDocument, error) {
@@ -71,6 +82,9 @@ func WriteHandoff(root string, change model.Change, opts HandoffWriteOptions) (H
 	path := ChangeHandoffPath(root, change.Slug)
 	existing, _ := ReadHandoffFile(path)
 	narrative := ensureHandoffNarrativeSkeleton(existing.Narrative)
+	if body := strings.TrimSpace(opts.Body); body != "" {
+		narrative = mergeHandoffBody(narrative, body)
+	}
 	if section := strings.TrimSpace(opts.Section); section != "" && strings.TrimSpace(opts.SectionBody) != "" {
 		narrative = replaceHandoffSection(narrative, section, strings.TrimSpace(opts.SectionBody))
 	}
@@ -227,7 +241,7 @@ func ensureHandoffNarrativeSkeleton(raw string) string {
 	for _, section := range handoffSectionNames {
 		body := extractHandoffSection(raw, section)
 		if strings.TrimSpace(body) == "" {
-			body = "_Agent-authored narrative pending._"
+			body = handoffPendingMarker
 		}
 		b.WriteString("\n## ")
 		b.WriteString(section)
@@ -281,6 +295,64 @@ func canonicalHandoffSection(section string) string {
 		}
 	}
 	return ""
+}
+
+// HandoffSectionNames returns the canonical advisory handoff section names in
+// document order. Command surfaces use it to validate `--section` input and to
+// list valid sections in guidance.
+func HandoffSectionNames() []string {
+	return slices.Clone(handoffSectionNames)
+}
+
+// CanonicalHandoffSection resolves a user-supplied section name to its canonical
+// form. ok is false when the name does not match a known advisory section, so
+// callers can fail loudly instead of writing a non-canonical section.
+func CanonicalHandoffSection(name string) (string, bool) {
+	canonical := canonicalHandoffSection(name)
+	if canonical == "" {
+		return "", false
+	}
+	return canonical, true
+}
+
+// HandoffIsEmpty reports whether every advisory section is still the pending
+// placeholder, i.e. no agent narrative has been recorded yet. Read surfaces use
+// it to emit a clear "empty / all sections pending" notice instead of rendering
+// a content-free scaffold as if it were a real handoff.
+func HandoffIsEmpty(doc HandoffDocument) bool {
+	narrative := ensureHandoffNarrativeSkeleton(doc.Narrative)
+	for _, section := range handoffSectionNames {
+		body := strings.TrimSpace(extractHandoffSection(narrative, section))
+		if body != "" && body != handoffPendingMarker {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeHandoffBody overlays a full advisory narrative onto the existing one.
+// Sections recognized inside body replace their counterparts; a body with no
+// recognizable `## Section` headers is routed into handoffDefaultSection so a
+// piped narrative is never silently dropped.
+func mergeHandoffBody(existing, body string) string {
+	merged := ensureHandoffNarrativeSkeleton(existing)
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return merged
+	}
+	matched := false
+	for _, section := range handoffSectionNames {
+		sectionBody := strings.TrimSpace(extractHandoffSection(body, section))
+		if sectionBody == "" {
+			continue
+		}
+		merged = replaceHandoffSection(merged, section, sectionBody)
+		matched = true
+	}
+	if !matched {
+		merged = replaceHandoffSection(merged, handoffDefaultSection, body)
+	}
+	return merged
 }
 
 func normalizeSectionName(section string) string {

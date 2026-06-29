@@ -224,6 +224,10 @@ func TestValidateChangeFlagRejectsArchivedSlugWithConcreteDiagnostic(t *testing.
 	assert.Equal(t, slug, cliErr.Slug)
 	assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
 	assert.NotContains(t, out.String(), "no active change or ambiguous")
+	// Non-evidence callers keep the generic remediation; the evidence-specific
+	// post-done-review guidance must not leak into validate (#368).
+	assert.Contains(t, cliErr.Remediation, "choose an active change with `slipway status`")
+	assert.NotContains(t, cliErr.Remediation, "slipway new")
 }
 
 func TestExplicitChangeCommandsUseFastPathWhenOtherBundleIsOrphaned(t *testing.T) {
