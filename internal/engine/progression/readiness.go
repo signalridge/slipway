@@ -182,7 +182,18 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.EvidenceFreshness = state.ProjectExecutionFreshnessForState(effectiveState, execCtx.Diagnostics)
 	}
 	if state.ExecutionFreshnessIsS3TaskPlanAmendment(effectiveState, execCtx.Diagnostics) {
-		readiness.Diagnostics = append(readiness.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
+		// For an ADDED task (in tasks.md, absent from the wave plan) the "continue
+		// without rerunning S2" guidance is wrong — that task can only be evidenced by
+		// reopening execution, which the s3_task_plan_drift_requires_reexecution root
+		// and its recovery already direct. Only surface the amendment diagnostic for the
+		// edited-existing-task case, where the in-place review path is valid.
+		addedDrift, err := s3AddedTaskPlanDriftTaskIDs(root, evaluationChange)
+		if err != nil {
+			return GovernanceReadiness{}, err
+		}
+		if len(addedDrift) == 0 {
+			readiness.Diagnostics = append(readiness.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
+		}
 	}
 
 	paths, err := state.ResolveChangePaths(root, evaluationChange)
