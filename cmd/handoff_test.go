@@ -255,6 +255,29 @@ func TestHandoffWriteNonInteractiveEmptyBodyFailsLoudly(t *testing.T) {
 	})
 }
 
+func TestHandoffWriteNonInteractiveOversizedBodyFailsBeforeWrite(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff oversized body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader(strings.Repeat("x", handoffWriteMaxBodyBytes+1)))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "handoff_body_too_large", cliErr.ErrorCode)
+		assert.Equal(t, categoryInvalidUsage, cliErr.Category)
+		assert.Equal(t, handoffWriteMaxBodyBytes, cliErr.Details["max_body_bytes"])
+		assert.NotContains(t, out.String(), "handoff_written")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "oversized input must not be truncated into a written handoff")
+	})
+}
+
 func TestHandoffWriteSectionEmptyBodyFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {

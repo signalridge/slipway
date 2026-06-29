@@ -134,9 +134,12 @@ func runHandoffWrite(cmd *cobra.Command, changeSlug, section string) error {
 	interactive := handoffCommandIsTerminal(int(handoffCommandStdin.Fd()))
 	body := ""
 	if !interactive {
-		raw, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), handoffWriteMaxBodyBytes))
+		raw, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), handoffWriteMaxBodyBytes+1))
 		if err != nil {
 			return err
+		}
+		if len(raw) > handoffWriteMaxBodyBytes {
+			return oversizedHandoffBodyError(section)
 		}
 		body = string(raw)
 	}
@@ -195,6 +198,27 @@ func emptyHandoffBodyError(section string) error {
 		"no handoff narrative was supplied on stdin",
 		fmt.Sprintf("Pipe the narrative on stdin, e.g. %s, or update one section with `slipway handoff write --section \"<name>\"`. Valid sections: %s.", handoffFullBodyExample, handoffValidSectionsText()),
 		map[string]any{"non_interactive": true},
+	)
+}
+
+// oversizedHandoffBodyError fails a non-interactive write before persisting a
+// truncated handoff body.
+func oversizedHandoffBodyError(section string) error {
+	details := map[string]any{"max_body_bytes": handoffWriteMaxBodyBytes, "non_interactive": true}
+	if section != "" {
+		details["section"] = section
+		return newInvalidUsageError(
+			"handoff_body_too_large",
+			fmt.Sprintf("handoff narrative on stdin exceeds %d bytes for section %q", handoffWriteMaxBodyBytes, section),
+			fmt.Sprintf("Pipe a narrative of %d bytes or fewer for section %q.", handoffWriteMaxBodyBytes, section),
+			details,
+		)
+	}
+	return newInvalidUsageError(
+		"handoff_body_too_large",
+		fmt.Sprintf("handoff narrative on stdin exceeds %d bytes", handoffWriteMaxBodyBytes),
+		fmt.Sprintf("Pipe a handoff narrative of %d bytes or fewer.", handoffWriteMaxBodyBytes),
+		details,
 	)
 }
 

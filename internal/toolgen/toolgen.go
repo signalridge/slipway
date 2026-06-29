@@ -294,9 +294,12 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
 	{ID: "handoff", Class: CommandClassMutation, Description: "Write or show per-change advisory session handoff notes", Tier: "situational", HasPromptSurface: true,
-		Arguments: "[write [--change <slug>] [--section <name>] | show [--change <slug>] [--json] [--brief]]",
+		Arguments: "[write [--change <slug>] [--section <canonical-name>] < stdin | show [--change <slug>] [--json] [--brief]]",
 		Notes: []string{
 			"`slipway handoff` without a subcommand behaves as `slipway handoff write`.",
+			"`write` reads the handoff narrative from stdin; pipe a full section-headed body or use `--section <canonical-name>` to update one canonical section.",
+			"Non-interactive `write` with empty stdin fails with `handoff_body_empty`; oversized stdin fails with `handoff_body_too_large` before any handoff is written.",
+			"`--section` accepts only canonical advisory sections; unknown sections fail with `handoff_section_unknown` instead of creating non-canonical headings.",
 			"Write at meaningful moments: task completion, before stopping, before a review split, or when a context-pressure nudge asks for continuity.",
 			"Read on resume with `slipway handoff show`; use `show --brief` for a bounded descriptor.",
 			"This generated surface is hook-agnostic: run write/show yourself and never assume SessionStart, PreCompact, or any host hook fired.",
