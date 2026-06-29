@@ -22,7 +22,13 @@ const (
 	assuranceRollbackTemplateText = "Summarize rollback constraints, prerequisites, and verification status when rollback planning is required."
 )
 
-func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.GovernanceSnapshot) []RequiredAction {
+// ResolveRuntimeRequiredActions resolves the runtime governance action queue.
+// researchEvidenceStale is supplied by the progression caller (digest-freshness
+// state lives in progression, which imports governance and never the reverse) and
+// reports whether a present research-orchestration record is certified stale, so
+// the research action reflects effective freshness rather than mere structural
+// presence (#377).
+func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.GovernanceSnapshot, researchEvidenceStale bool) []RequiredAction {
 	verifications := loadRuntimeVerificationState(root, change)
 	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
 	if err != nil {
@@ -96,6 +102,7 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		IntentExists:                 artifactExistsInBundle(root, change, "intent.md"),
 		ScopeConfirmed:               changeScopeConfirmed(change, intakeConfirmed),
 		ResearchStructureOK:          researchOK,
+		ResearchEvidenceStale:        researchEvidenceStale,
 		DomainReviewDone:             domainReviewDone,
 		DomainReviewSatisfiedBy:      domainSatisfiedBy,
 		IndependentReviewDone:        independentReviewDone,
@@ -173,6 +180,15 @@ func actionBlocksCurrentState(change model.Change, action RequiredAction) bool {
 	if action.ControlID == model.ControlResearch && change.CurrentState == model.StateS1Plan {
 		// Research is actionable at S1_PLAN, but hard-blocking here deadlocks both
 		// discovery and non-discovery paths before research is possible.
+		return false
+	}
+	if action.ControlID == model.ControlResearch &&
+		action.unsatisfiedOnlyByStaleEvidence &&
+		(change.CurrentState == model.StateS2Implement || change.CurrentState == model.StateS3Review) {
+		// Once the change has moved past S1, stale research evidence is no longer
+		// recertified by the generic research required-action. The progression
+		// stale-evidence path defers upstream S1 drift to S3 review alignment, so
+		// re-blocking here would route recovery to a backward S1 action.
 		return false
 	}
 

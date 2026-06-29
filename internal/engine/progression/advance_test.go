@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/stretchr/testify/assert"
@@ -1635,13 +1636,18 @@ func TestEvaluateScopeGateReportsMissingResearchArtifact(t *testing.T) {
 		}
 	}
 
-	evaluation, err := EvaluateScopeGate(root, change, map[string]model.VerificationRecord{
-		SkillResearchOrchestration: {
-			Verdict:    model.VerificationVerdictPass,
-			Timestamp:  change.CreatedAt,
-			RunVersion: 0,
+	evaluation, err := EvaluateScopeGate(
+		root,
+		change,
+		map[string]model.VerificationRecord{
+			SkillResearchOrchestration: {
+				Verdict:    model.VerificationVerdictPass,
+				Timestamp:  change.CreatedAt,
+				RunVersion: 0,
+			},
 		},
-	})
+		gate.DiscoveryEvidenceState{Present: true},
+	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

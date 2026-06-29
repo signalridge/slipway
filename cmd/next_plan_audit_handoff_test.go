@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
@@ -124,6 +125,56 @@ func TestNextS1PlanAuditSurfacesSubagentDelegationAcrossCapabilityStates(t *test
 		assert.NotContains(t, fallbackSpecs, "host_capability_unavailable:plan-audit:subagent")
 		assert.NotContains(t, fallbackSpecs, "subagent_dispatch_authorization_required:plan-audit:subagent")
 		assert.Equal(t, "skill_handoff:plan-audit", fallback.ConfirmationRequirement.Reason)
+	})
+}
+
+// TestNextS1PlanAuditOriginBlockedIsNotReadyToAdvance is the #382 regression for the
+// S1 plan-audit surface. When the plan-audit record self-audits (identical
+// plan_origin and audit_origin handles), the G_plan gate blocks with
+// plan_audit_origin_invalid. `slipway next` must surface that blocked-gate reason
+// code on its blockers and project a non-advance recovery — not advertise the step
+// as ready to advance (no_skill_required / run_slipway_run_to_advance) while G_plan
+// is blocked.
+func TestNextS1PlanAuditOriginBlockedIsNotReadyToAdvance(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelDiscovery, "plan-audit self-audit blocked")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.PlanSubStep = model.PlanSubStepAudit
+		require.NoError(t, state.SaveChange(root, change))
+
+		// A passing plan-audit record whose plan_origin and audit_origin handles are
+		// identical is a self-audit: the plan author also audited their own bundle.
+		writeSkillVerification(t, root, slug, progression.SkillPlanAudit, model.VerificationRecord{
+			Verdict:   model.VerificationVerdictPass,
+			Blockers:  []model.ReasonCode{},
+			Timestamp: time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
+			References: []string{
+				model.PlanOriginReferencePrefix + "same-ctx",
+				model.AuditOriginReferencePrefix + "same-ctx",
+			},
+		})
+
+		view := runNextDiagnostics(t, root, slug)
+
+		assert.True(t, hasReasonCode(view.Blockers, "plan_audit_origin_invalid"),
+			"the blocked G_plan self-audit reason code must surface on next's blockers (#382)")
+		assert.False(t, hasReasonCode(view.Blockers, "no_skill_required"),
+			"a blocked plan-audit gate must not advertise no_skill_required")
+		assert.False(t, hasReasonCode(view.Blockers, "run_slipway_run_to_advance"),
+			"a blocked plan-audit gate must not advertise the step as ready to advance")
+
+		require.NotNil(t, view.Recovery)
+		assert.NotEqual(t, model.RecoveryClassAdvance, view.Recovery.RecoveryClass,
+			"a blocked gate must not project an advance-class recovery")
+		assert.False(t, view.ConfirmationRequirement.PriorAuthorizationSufficient,
+			"a blocked plan-audit gate must require fresh confirmation, not standing prior authorization")
+		assert.Equal(t, "blocked", view.InputContext.GateStatus["G_plan"],
+			"the G_plan gate status must read blocked on next's input_context")
 	})
 }
 

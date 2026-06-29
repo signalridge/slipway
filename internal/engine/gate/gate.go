@@ -21,17 +21,47 @@ type GateEvaluation struct {
 	ReasonCodes []model.ReasonCode `json:"reason_codes,omitempty"`
 }
 
+// DiscoveryEvidenceState captures the non-passing discovery evidence taxonomy
+// without relying on adjacent bool parameters at EvaluateGScope call sites.
+type DiscoveryEvidenceState struct {
+	Present bool
+	Stale   bool
+}
+
 func EvaluateGScope(
 	change model.Change,
 	researchContent string,
 	discoveryEvidenceOK bool,
 	worktreeValidationReasons []model.ReasonCode,
+	discoveryEvidence DiscoveryEvidenceState,
 	researchArtifactReasons ...model.ReasonCode,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
+	if discoveryEvidence.Stale {
+		discoveryEvidence.Present = true
+	}
 	if change.NeedsDiscovery {
 		if !discoveryEvidenceOK {
-			reasonCodes = append(reasonCodes, model.NewReasonCode("missing_discovery_evidence", ""))
+			// Distinguish three present-state cases so the generic discovery reason
+			// never contradicts the specific one in the same response (mirrors the
+			// EvaluateGShip ship-evidence taxonomy):
+			//   - stale: a research-orchestration record EXISTS, was passing, and its
+			//     certified discovery inputs changed after the verdict. Report _stale
+			//     via the merged required_skill_stale blocker, never _missing — _missing
+			//     would hide the present-but-stale state and contradict required_actions.
+			//   - present but failed on its OWN merits (fail verdict / recorded
+			//     blockers): the specific required_skill_* blocker already explains it,
+			//     so emit no generic reason and let the specific blocker stand; a _missing
+			//     here would misdirect recovery toward a first-time discovery run.
+			//   - genuinely absent: reserve the _missing code.
+			switch {
+			case discoveryEvidence.Stale:
+				// required_skill_stale carries it; emit no generic reason.
+			case discoveryEvidence.Present:
+				// Present but not passing for its own reason; specific blocker carries it.
+			default:
+				reasonCodes = append(reasonCodes, model.NewReasonCode("missing_discovery_evidence", ""))
+			}
 		}
 
 		if len(researchArtifactReasons) > 0 {

@@ -157,7 +157,13 @@ func TestStaleIntakeRepairBlocksWithoutRewritingMachineOnlySubsteps(t *testing.T
 			summary, err := AdvanceGoverned(root, change.Slug)
 			require.NoError(t, err)
 			assert.Equal(t, "blocked", summary.Action)
-			assert.Equal(t, "stale_evidence_requires_review_alignment", summary.Reason)
+			// #376: pre-S3 stale evidence now surfaces the owning-stage blockers via
+			// blockedAdvanceSummary (no review-alignment Reason), so the recommended
+			// recovery is state-valid here and never the S3-only `slipway fix`.
+			recovery := model.BuildRecovery(summary.Blockers)
+			require.NotNil(t, recovery)
+			assert.NotEqual(t, "slipway fix", recovery.PrimaryCommand,
+				"pre-S3 stale intake evidence must recommend a state-valid command, not the S3-only `slipway fix`")
 			assert.Empty(t, summary.ToState)
 			assert.Empty(t, summary.ToSubStep)
 			assert.False(t, summary.RecoveryOnly)
