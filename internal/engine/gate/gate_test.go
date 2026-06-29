@@ -43,16 +43,56 @@ Standard deployment environment.
 ## Canonical References
 Internal API docs, RFC-2024-auth.`
 
-	eval := EvaluateGScope(change, research, true, nil)
+	eval := EvaluateGScope(change, research, true, nil, DiscoveryEvidenceState{})
 	assert.Equal(t, model.GateStatusApproved, eval.Status)
 	assert.Empty(t, eval.ReasonCodes)
 
-	eval = EvaluateGScope(change, "", true, []model.ReasonCode{model.NewReasonCode("dedicated_worktree_branch_mismatch", "")})
+	eval = EvaluateGScope(change, "", true, []model.ReasonCode{model.NewReasonCode("dedicated_worktree_branch_mismatch", "")}, DiscoveryEvidenceState{})
 	assert.Equal(t, model.GateStatusBlocked, eval.Status)
 	assert.True(t, hasGateReasonCode(eval.ReasonCodes, "dedicated_worktree_branch_mismatch"))
 	require.NotEmpty(t, eval.ReasonCodes)
 	assert.Equal(t, "dedicated_worktree_branch_mismatch", eval.ReasonCodes[0].Code)
 	assert.Equal(t, model.ReasonSeverityError, eval.ReasonCodes[0].Severity)
+}
+
+// TestEvaluateGScopePresentButStaleDiscoveryEvidence pins the honest-wording
+// distinction (#377), mirroring the EvaluateGShip stale taxonomy: when a
+// research-orchestration record EXISTS but its certified discovery inputs went
+// stale after the verdict (discoveryRecordPresent=true, discoveryRecordStale=true,
+// discoveryEvidenceOK=false), G_scope must NOT report the misleading
+// missing_discovery_evidence — the merged required_skill_stale carries the
+// present-but-stale state instead.
+func TestEvaluateGScopePresentButStaleDiscoveryEvidence(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("slug")
+	change.NeedsDiscovery = true
+
+	eval := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{Present: true, Stale: true})
+	assert.False(t, hasGateReasonCode(eval.ReasonCodes, "missing_discovery_evidence"),
+		"a present-but-stale discovery record must not be reported as missing")
+}
+
+// TestEvaluateGScopePresentButFailedDiscoveryEvidence proves a research-orchestration
+// record that is PRESENT but failed on its own merits (not stale,
+// discoveryRecordPresent=true, discoveryRecordStale=false) is not relabeled missing:
+// the specific required-skill blocker carries the block. It also pins the
+// genuinely-absent case (present=false, stale=false) which STILL reserves the
+// missing_discovery_evidence code, so the three arms stay distinct (#377).
+func TestEvaluateGScopePresentButFailedDiscoveryEvidence(t *testing.T) {
+	t.Parallel()
+
+	change := model.NewChange("slug")
+	change.NeedsDiscovery = true
+
+	present := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{Present: true})
+	assert.False(t, hasGateReasonCode(present.ReasonCodes, "missing_discovery_evidence"),
+		"a present-but-failed discovery record must not be reported as missing")
+
+	// Genuinely absent: no record present, not stale -> the _missing code is reserved.
+	absent := EvaluateGScope(change, "", false, nil, DiscoveryEvidenceState{})
+	assert.True(t, hasGateReasonCode(absent.ReasonCodes, "missing_discovery_evidence"),
+		"a genuinely absent discovery record must still report missing_discovery_evidence")
 }
 
 func TestEvaluateGPlan(t *testing.T) {

@@ -144,7 +144,7 @@ func TestEvaluateGovernanceReadinessRetainsRequiredActionBlockersWhenSnapshotCac
 	require.NoError(t, err)
 	snap, err := governance.PreviewGovernanceSnapshot(root, change, bundleDir)
 	require.NoError(t, err)
-	expectedBlockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap))
+	expectedBlockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap, false))
 	require.NotEmpty(t, expectedBlockers, "test setup must exercise required-action blockers")
 
 	snapshotDir := filepath.Dir(state.GovernanceSnapshotCachePath(root, change.Slug))

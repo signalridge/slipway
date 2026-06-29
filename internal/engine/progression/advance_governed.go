@@ -84,14 +84,16 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			// S2 owns implementation evidence. Upstream intake/planning drift is
 			// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
 			// evidence replay here creates an impossible forward-only dead end.
-		} else if fromState == model.StateS2Implement {
-			// In S2 the owning stage still holds this evidence (e.g. a stale
+		} else if fromState != model.StateS3Review {
+			// Pre-S3 (S0_INTAKE / S1_PLAN / S2_IMPLEMENT) the owning stage still
+			// holds this evidence (e.g. a stale intake-clarification or
 			// wave-orchestration authority). Surface its blockers directly — whose
-			// remediation is the state-valid `slipway run` — instead of the
-			// review-alignment path, which maps to the S3-only `slipway fix` and
-			// would yield fix_state_invalid here. This only changes the recommended
-			// command; the stale-evidence gate stays fail-closed and S3 keeps the
-			// forward-only review-alignment path below (issue #324).
+			// remediation is the state-valid `slipway run` / `slipway evidence
+			// skill` — instead of the review-alignment path, which maps to the
+			// S3-only `slipway fix` and would yield fix_state_invalid here. This
+			// only changes the recommended command; the stale-evidence gate stays
+			// fail-closed. Only S3, where review owns plan/code/evidence alignment,
+			// keeps the forward-only review-alignment path below (issues #324, #376).
 			return blockedAdvanceSummary(fromState, target.Blockers), nil
 		} else {
 			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
@@ -267,7 +269,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	if snapErr != nil {
 		return AdvanceSummary{}, fmt.Errorf("recompute governance snapshot: %w", snapErr)
 	}
-	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap)); len(blockers) > 0 {
+	// Advancement handles stale skill evidence above through the owning evidence
+	// repair path, which preserves state-valid recovery. Do not re-route stale
+	// S1 research evidence through generic required-action blockers here.
+	if blockers := governance.RequiredActionBlockers(change, governance.ResolveRuntimeRequiredActions(root, change, snap, false)); len(blockers) > 0 {
 		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
 	}
 	reviewSelection := ReviewSkillSelectionFromControls(snap.ActiveControls)
@@ -282,23 +287,33 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	nextSkillName, evidenceState := PrimaryNextSkillWithReviewSelection(change, reviewSelection)
 
 	var passingSkills map[string]model.VerificationRecord
+	researchDiscoveryEvidence := gate.DiscoveryEvidenceState{}
 	// worktree-preflight is not a governance skill; its gate is checked in
 	// step 5 (worktree validation). Skip governance skill evaluation when
 	// the resolved next skill is worktree-preflight so the worktree gate
 	// can surface the correct blocker.
 	if nextSkillName != "" && nextSkillName != SkillWorktreePreflight {
 		var skillBlockers []string
-		passingSkills, skillBlockers, err = EvaluateRequiredSkillsForChangeWithReviewSelection(
+		verificationRecords, err := state.ListVerificationsForChange(root, change)
+		if err != nil {
+			return AdvanceSummary{}, err
+		}
+		passingSkills, skillBlockers, err = evaluateRequiredSkillsForChangeWithReviewSelectionWithRecords(
 			root,
 			change,
 			model.WorkflowState(evidenceState),
 			executionSummaryCtx.LatestRunVersion,
 			reviewSelection,
+			verificationRecords,
 			change.PlanSubStep,
 		)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
+		researchDiscoveryEvidence = researchOrchestrationEvidenceStateFromSkillBlockers(
+			verificationRecords,
+			skillBlockers,
+		)
 		if len(skillBlockers) > 0 {
 			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(skillBlockers)), nil
 		}
@@ -373,7 +388,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// discovery changes could skip research validation entirely.
 	isResearchGate := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepResearch && change.NeedsDiscovery
 	if isResearchGate {
-		scopeResult, err := EvaluateScopeGate(root, change, passingSkills)
+		scopeResult, err := EvaluateScopeGate(root, change, passingSkills, researchDiscoveryEvidence)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -1013,12 +1028,23 @@ func advanceGateID(before model.Change, summary AdvanceSummary) string {
 	if summary.Action != "blocked" && summary.Action != "done_ready" {
 		return ""
 	}
-	switch before.CurrentState {
+	substep := before.PlanSubStep
+	if summary.FromSubStep != "" {
+		substep = model.PlanSubStep(summary.FromSubStep)
+	}
+	return OwningAdvanceGateID(before.CurrentState, substep)
+}
+
+// OwningAdvanceGateID reports the gate that owns advancement out of the given
+// (state, plan substep), or "" when no gate owns advancement there. S0_INTAKE
+// and S2_IMPLEMENT advance on run/evidence pacing rather than on a gate that
+// can dead-end, so they own no advance gate. It is the pure (state, substep)
+// projection of advanceGateID's ownership switch, exported so surfaces like
+// `next` can ask which gate — if blocked by a genuine dead-end — must override a
+// "ready to advance" posture without duplicating the ownership map.
+func OwningAdvanceGateID(state model.WorkflowState, substep model.PlanSubStep) string {
+	switch state {
 	case model.StateS1Plan:
-		substep := before.PlanSubStep
-		if summary.FromSubStep != "" {
-			substep = model.PlanSubStep(summary.FromSubStep)
-		}
 		switch substep {
 		case model.PlanSubStepResearch:
 			return string(gate.GateScope)
@@ -1347,7 +1373,12 @@ func EvaluateShipGate(root string, change model.Change) (gate.GateEvaluation, er
 	return shipAuthority.Result, nil
 }
 
-func EvaluateScopeGate(root string, change model.Change, passingSkills map[string]model.VerificationRecord) (gate.GateEvaluation, error) {
+func EvaluateScopeGate(
+	root string,
+	change model.Change,
+	passingSkills map[string]model.VerificationRecord,
+	discoveryEvidence gate.DiscoveryEvidenceState,
+) (gate.GateEvaluation, error) {
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
 		return gate.GateEvaluation{}, err
@@ -1378,5 +1409,5 @@ func EvaluateScopeGate(root string, change model.Change, passingSkills map[strin
 			return gate.GateEvaluation{}, wtErr
 		}
 	}
-	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, researchArtifactReasons...), nil
+	return gate.EvaluateGScope(change, researchContent, discoveryOK, worktreeReasons, discoveryEvidence, researchArtifactReasons...), nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -150,6 +151,58 @@ func pruneEvidenceDigestForSkill(root string, change model.Change, skillName str
 	}
 	delete(digests.Skills, skillName)
 	return state.SaveEvidenceDigests(root, change.Slug, *digests)
+}
+
+func researchOrchestrationEvidenceState(
+	root string,
+	change model.Change,
+	verificationRecords map[string]model.VerificationRecord,
+) (gate.DiscoveryEvidenceState, error) {
+	if !change.NeedsDiscovery {
+		return gate.DiscoveryEvidenceState{}, nil
+	}
+	if verificationRecords == nil {
+		var err error
+		verificationRecords, err = state.ListVerificationsForChange(root, change)
+		if err != nil {
+			return gate.DiscoveryEvidenceState{}, err
+		}
+	}
+	record, present := verificationRecords[SkillResearchOrchestration]
+	discoveryEvidence := gate.DiscoveryEvidenceState{Present: present}
+	if !present || !record.IsPassing() {
+		return discoveryEvidence, nil
+	}
+	blockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
+	if err != nil {
+		return gate.DiscoveryEvidenceState{}, err
+	}
+	discoveryEvidence.Stale = len(blockers) > 0
+	return discoveryEvidence, nil
+}
+
+func researchOrchestrationEvidenceStateFromSkillBlockers(
+	verificationRecords map[string]model.VerificationRecord,
+	skillBlockers []string,
+) gate.DiscoveryEvidenceState {
+	_, present := verificationRecords[SkillResearchOrchestration]
+	discoveryEvidence := gate.DiscoveryEvidenceState{
+		Present: present,
+		Stale:   hasSkillBlockerPrefix(skillBlockers, "required_skill_stale:"+SkillResearchOrchestration+":"),
+	}
+	if discoveryEvidence.Stale {
+		discoveryEvidence.Present = true
+	}
+	return discoveryEvidence
+}
+
+func hasSkillBlockerPrefix(blockers []string, prefix string) bool {
+	for _, blocker := range blockers {
+		if strings.HasPrefix(strings.TrimSpace(blocker), prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func skillDigestFreshnessBlockers(

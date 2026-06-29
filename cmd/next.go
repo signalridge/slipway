@@ -7,6 +7,7 @@ import (
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
 	"github.com/signalridge/slipway/internal/engine/capability"
+	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -66,6 +67,13 @@ type nextView struct {
 	// It is unexported (never serialized) and drives whether a parsed decision.md
 	// selection is reported as a locked or pending skill_constraint (issue #140).
 	planLocked bool
+	// ownedAdvanceGateDeadEndBlockers holds the genuine dead-end reason codes of the
+	// gate that OWNS advancement out of the current (state, plan substep), captured
+	// only when that gate is blocked. It is unexported (never serialized) and is
+	// applied to Blockers in the no-skill ready/run-to-advance posture so a
+	// dead-end (e.g. plan_audit_origin_invalid) overrides "ready to advance" while
+	// pacing blocks keep riding the normal handoff/run guidance (#382).
+	ownedAdvanceGateDeadEndBlockers []model.ReasonCode
 	// auto records whether auto-advance execution is in effect for this view. It is
 	// unexported (never serialized) and only softens pure-pacing confirmation
 	// boundaries in deriveConfirmationRequirement for non-guardrail changes; it
@@ -539,6 +547,25 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		}
 		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
 		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
+		// Capture the genuine dead-end reason codes of the gate that OWNS
+		// advancement out of the current (state, plan substep) when that gate is
+		// blocked. They are applied later in applyReadyAdvanceDiagnostics, bounded
+		// to the no-skill ready/run-to-advance posture, so a dead-end (e.g.
+		// plan_audit_origin_invalid) stops `next` advertising the step ready to
+		// advance while the gate that owns advancement is blocked (#382). PACING
+		// blocks (required-skill handoffs and other host-handoff ride-along codes)
+		// are filtered out here so they keep riding the normal handoff/run guidance;
+		// surfacing every blocked visible gate over-surfaced that pacing work and
+		// erased the no_skill_required / run_slipway_run_to_advance guidance.
+		if owning := progression.OwningAdvanceGateID(view.CurrentState, governedChange.PlanSubStep); owning != "" {
+			if eval, ok := readiness.GateEvaluations[gate.GateID(owning)]; ok && eval.Status == model.GateStatusBlocked {
+				for _, rc := range eval.ReasonCodes {
+					if !progression.HostHandoffBlockerCanRide(rc) {
+						view.ownedAdvanceGateDeadEndBlockers = append(view.ownedAdvanceGateDeadEndBlockers, rc)
+					}
+				}
+			}
+		}
 		view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
 		var summary *model.ExecutionSummary
 		if execCtx != nil {

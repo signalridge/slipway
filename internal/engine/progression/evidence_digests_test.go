@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/gate"
+	"github.com/signalridge/slipway/internal/engine/governance"
 	freshnesspkg "github.com/signalridge/slipway/internal/freshness"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -941,6 +943,82 @@ func TestResearchOrchestrationInputDigestIncludesResearchArtifact(t *testing.T) 
 	blockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
 	require.NoError(t, err)
 	assert.Contains(t, blockers, "required_skill_stale:research-orchestration:research.md")
+}
+
+// TestEvaluateScopeGateStaleDiscoveryEvidenceReportsStaleNotMissing is the #377
+// integration regression. A research-orchestration record that is present, passing,
+// and digest-stamped, then whose research.md input changes, is present-but-stale —
+// not missing. The G_scope evaluation must NOT emit the misleading
+// missing_discovery_evidence (the honest signal is the merged required_skill_stale
+// produced by the separate digest-freshness path), and the resolved research
+// required-action must read satisfied=false so the surface stops advertising
+// "provide discovery evidence" while the record is merely stale.
+func TestEvaluateScopeGateStaleDiscoveryEvidenceReportsStaleNotMissing(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("scope-gate-stale-discovery")
+	change.NeedsDiscovery = true
+	change.CurrentState = model.StateS1Plan
+	change.PlanSubStep = model.PlanSubStepResearch
+	require.NoError(t, state.SaveChange(root, change))
+	bundleDir := writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+	record := model.VerificationRecord{
+		Verdict:   model.VerificationVerdictPass,
+		Blockers:  []model.ReasonCode{},
+		Timestamp: time.Date(2026, 6, 4, 1, 0, 0, 0, time.UTC),
+	}
+	writeVerificationForTest(t, root, change.Slug, SkillResearchOrchestration, record)
+	require.NoError(t, StampEvidenceDigestForSkill(root, change, SkillResearchOrchestration, record, nil))
+
+	// research.md changes after the stamped verdict -> present-but-stale, not missing.
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte("# Research\nchanged after research verdict\n"), 0o644))
+
+	// The digest-freshness path (the separate path the readiness surface merges into
+	// G_scope) carries the honest required_skill_stale blocker.
+	staleBlockers, err := skillDigestFreshnessBlockers(root, change, SkillResearchOrchestration)
+	require.NoError(t, err)
+	assert.Contains(t, staleBlockers, "required_skill_stale:research-orchestration:research.md")
+
+	// G_scope (evaluated with the stale record excluded from the passing set) must
+	// not contradict it with missing_discovery_evidence.
+	eval, err := EvaluateScopeGate(
+		root,
+		change,
+		map[string]model.VerificationRecord{},
+		gate.DiscoveryEvidenceState{Present: true, Stale: true},
+	)
+	require.NoError(t, err)
+	assert.NotContains(t, model.ReasonSpecs(eval.ReasonCodes), "missing_discovery_evidence",
+		"a present-but-stale discovery record must not surface as missing_discovery_evidence")
+
+	// The resolved research required-action reflects effective freshness: a stale
+	// record is not "satisfied".
+	snap := model.GovernanceSnapshot{
+		Version:      model.GovernanceSnapshotVersion,
+		Traceability: model.TraceabilitySummary{Status: model.TraceabilityStatusOK},
+		ActiveControls: []model.ControlActivation{{
+			ControlID:    model.ControlResearch,
+			Mode:         model.ControlModeBlocking,
+			Scope:        model.ControlScopeDiscovery,
+			Active:       true,
+			PolicySource: model.BuiltinPolicySource,
+		}},
+		ComputedAt: time.Now().UTC(),
+	}
+	actions := governance.ResolveRuntimeRequiredActions(root, change, snap, len(staleBlockers) > 0)
+	var researchAction governance.RequiredAction
+	found := false
+	for _, action := range actions {
+		if action.ControlID == model.ControlResearch {
+			researchAction = action
+			found = true
+		}
+	}
+	require.True(t, found, "research required-action must resolve for a discovery change with the research control active")
+	assert.False(t, researchAction.Satisfied,
+		"present-but-stale research-orchestration evidence must not satisfy the research required-action")
 }
 
 func TestStoredShipVerificationDigestStalesWhenInputContentChanges(t *testing.T) {
