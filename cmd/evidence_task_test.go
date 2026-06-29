@@ -16,6 +16,88 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestS3AddedTaskDriftRoutesShipRecoveryToReexecution is the end-to-end guard for
+// #344/#352: when a task is added to tasks.md at a ship-ready S3_REVIEW, the
+// materialized wave plan cannot contain it, so its evidence cannot be recorded in
+// place and the selected reviewers + ship-verification go stale. The recovery must
+// (ASK 1) name `slipway fix --start-reexecution` as the PRIMARY action via the
+// dedicated reexecution root, (ASK 2) report the present-but-stale ship record as
+// ship_verification_evidence_stale rather than the misleading _missing, and (ASK 4)
+// route `evidence task` for the added task to reexecution instead of a dead end.
+func TestS3AddedTaskDriftRoutesShipRecoveryToReexecution(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "s3 added task drift reexec")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		markChangeReadyForDone(t, root, &change)
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		ch, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		base, err := progression.EvaluateShipAuthority(root, ch)
+		require.NoError(t, err)
+		require.Equal(t, model.GateStatusApproved, base.Result.Status,
+			"baseline ship authority must be clean before the tasks.md edit")
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` verify ship readiness parity
+  - depends_on: []
+  - target_files: ["cmd/done.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+
+- [ ] `+"`t-07`"+` review-driven repair
+  - depends_on: []
+  - target_files: ["cmd/validate.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+
+		ch, err = state.LoadChange(root, slug)
+		require.NoError(t, err)
+		ship, err := progression.EvaluateShipAuthority(root, ch)
+		require.NoError(t, err)
+		specs := model.ReasonSpecs(ship.Result.ReasonCodes)
+		assert.Equal(t, model.GateStatusBlocked, ship.Result.Status)
+		assert.Contains(t, specs, "s3_task_plan_drift_requires_reexecution:t-07",
+			"the added-task drift root must be named for the reexecution route")
+		assert.Contains(t, specs, "ship_verification_evidence_stale",
+			"a present-but-stale ship record must be honest, not reported missing")
+		assert.NotContains(t, specs, "ship_verification_evidence_missing")
+
+		recovery := model.BuildRecovery(ship.Result.ReasonCodes)
+		require.NotNil(t, recovery)
+		assert.Equal(t, "slipway fix --start-reexecution", recovery.PrimaryCommand,
+			"reexecution must be the primary recovery step over the stale-skill symptoms")
+
+		raw, err := json.Marshal(map[string]any{
+			"task_id":       "t-07",
+			"verdict":       "pass",
+			"evidence_ref":  "test:t-07",
+			"changed_files": []string{"cmd/validate.go"},
+		})
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "t07.json"), raw, 0o644))
+		ec := commandForRoot(t, root, makeEvidenceCmd())
+		ec.SetArgs([]string{"task", "--json", "--result-file", "t07.json", "--change", slug})
+		var eb bytes.Buffer
+		ec.SetOut(&eb)
+		ec.SetErr(&eb)
+		execErr := ec.Execute()
+		require.Error(t, execErr)
+		cliErr := asCLIError(execErr)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_unknown", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "slipway fix --start-reexecution",
+			"the added-task evidence dead end must name the reexecution route")
+	})
+}
+
 func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.T) {
 	t.Parallel()
 
