@@ -471,6 +471,22 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
+	"s3_task_plan_drift_requires_reexecution": {
+		// ROOT recovery for a task added to tasks.md at S3_REVIEW that the
+		// materialized wave plan does not contain: its task evidence cannot be
+		// recorded in place (evidence task rejects it as not in the wave projection)
+		// and `slipway run` will not re-materialize a settled review, so the S3
+		// review and ship-verification evidence go stale with no in-place exit. The
+		// only public refresh is to reopen execution, which re-materializes the wave
+		// plan WITH the added task and lets its evidence be re-recorded. Ranked as a
+		// ReviewAlignment root so it outranks the stale-review/ship symptoms it
+		// causes and is selected as the primary recovery step.
+		Remediation:     "tasks.md adds task {subject}, which the materialized wave plan does not contain, so its task evidence cannot be recorded in place and the S3 review + ship-verification evidence went stale. Reopen execution to re-materialize the wave plan with the added task, re-record its task evidence, then re-run S3 review and ship-verification. If the work belongs on an existing task instead, remove the added task from tasks.md.",
+		CommandTemplate: "slipway fix --start-reexecution",
+		Class:           RecoveryClassReviewAlignment,
+		Priority:        5,
+		SplitDetail:     true,
+	},
 	"stale_planning_evidence": {
 		Remediation:     "Planning artifacts changed after execution evidence; repair plan/code alignment, then refresh affected S2+ execution evidence in order.",
 		CommandTemplate: "slipway run",
@@ -508,6 +524,12 @@ var blockerRemediations = map[string]blockerRemediation{
 	},
 	"ship_verification_evidence_missing": {
 		Remediation:     "Required ship-verification evidence is missing; re-run ship-verification before done.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRerunSkill,
+		Priority:        10,
+	},
+	"ship_verification_evidence_stale": {
+		Remediation:     "Ship-verification evidence exists but is invalidated by stale execution or review evidence; refresh the stale upstream evidence (re-run the stale reviewers and execution evidence), then re-run ship-verification before done. Do not restamp the stale ship-verification record.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 		Priority:        10,

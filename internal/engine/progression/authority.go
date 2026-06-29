@@ -356,7 +356,29 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	unresolved = append(unresolved, attestationBlockers...)
 	unresolved = append(unresolved, independencePresenceBlockers...)
 	unresolved = append(unresolved, orderingBlockers...)
+	// ROOT-cause naming for an S3 task-plan-drift dead end (#344/#352): a task
+	// added to tasks.md at review that the materialized wave plan does not contain
+	// cannot be evidenced in place, and a settled `slipway run` will not
+	// re-materialize it, so the selected reviewers and ship-verification go stale
+	// with no in-place exit. The stale-skill / ship-missing symptoms above are the
+	// downstream effects; emitting the dedicated reexecution root here, gated on the
+	// stale cascade actually being present (so an UNSETTLED review — whose tasks
+	// `slipway run` still folds in place — is not pushed to the heavier reopen),
+	// lets recovery name `slipway fix --start-reexecution` as the primary step.
+	staleCascade := staleReviewOrShipSkillCascade(reviewAuthority.Blockers, verifySkillBlockers)
+	reexecutionBlockers, err := s3TaskPlanDriftReexecutionBlockers(root, change, staleCascade)
+	if err != nil {
+		return ShipAuthority{}, err
+	}
+	unresolved = append(unresolved, reexecutionBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
+
+	// Distinguish a present-but-stale ship-verification record from a genuinely
+	// absent one so EvaluateGShip can report ship_verification_evidence_stale
+	// instead of the misleading ship_verification_evidence_missing (#344). The
+	// engine's has_evidence surface is exactly "a ship-verification record exists",
+	// regardless of its freshness/verdict.
+	shipRecordPresent := shipVerificationRecordPresent(readiness, verifyPassingSkills)
 
 	return ShipAuthority{
 		ReviewAuthority:     reviewAuthority,
@@ -370,8 +392,82 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 			manifestOK,
 			unresolved,
 			highRiskChecks,
+			shipRecordPresent,
 		),
 	}, nil
+}
+
+// shipVerificationRecordPresent reports whether a ship-verification verification
+// record exists at all (passing/fresh or stale), which is the has_evidence
+// signal G_ship uses to choose ship_verification_evidence_stale over _missing. A
+// passing record already lives in verifyPassingSkills; a present-but-stale record
+// was filtered out of it, so the readiness-loaded record set is the authority for
+// mere presence.
+func shipVerificationRecordPresent(readiness GovernanceReadiness, verifyPassingSkills map[string]model.VerificationRecord) bool {
+	if _, ok := verifyPassingSkills[SkillShipVerification]; ok {
+		return true
+	}
+	if readiness.verificationRecords != nil {
+		if _, ok := readiness.verificationRecords[SkillShipVerification]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// staleReviewOrShipSkillCascade reports whether any blocker is a required_skill_stale
+// for a selected review skill or for ship-verification — the signal that the S3
+// review was completed and then invalidated by a plan/evidence edit (as opposed to
+// an unsettled review whose reviewers are merely missing). It scopes the
+// reexecution root to the genuinely stuck case.
+func staleReviewOrShipSkillCascade(blockerSets ...[]model.ReasonCode) bool {
+	for _, set := range blockerSets {
+		for _, blocker := range set {
+			if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
+				continue
+			}
+			subject, _, _ := strings.Cut(strings.TrimSpace(blocker.Detail), ":")
+			subject = strings.TrimSpace(subject)
+			if subject == SkillShipVerification || isS3ReviewSetSkill(subject) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// s3TaskPlanDriftReexecutionBlockers emits the ROOT reexecution blocker, one per
+// added-task subject, when at S3_REVIEW tasks.md names a task the materialized
+// wave plan does not contain AND the stale review/ship cascade is present. Such a
+// task cannot be evidenced in place (evidence task rejects it as outside the wave
+// projection) and a settled `slipway run` will not re-materialize it, so reopening
+// execution is the only public refresh. Empty outside S3_REVIEW, when no wave plan
+// is materialized yet, or when every planned task is already in the plan.
+func s3TaskPlanDriftReexecutionBlockers(root string, change model.Change, staleCascade bool) ([]model.ReasonCode, error) {
+	if change.CurrentState != model.StateS3Review || !staleCascade {
+		return nil, nil
+	}
+	plan, err := state.LoadOptionalWavePlanForChange(root, change)
+	if err != nil || plan == nil {
+		return nil, err
+	}
+	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
+	if err != nil {
+		return nil, err
+	}
+	planTaskIDs := plan.TaskIDs()
+	inPlan := make(map[string]struct{}, len(planTaskIDs))
+	for _, id := range planTaskIDs {
+		inPlan[strings.TrimSpace(id)] = struct{}{}
+	}
+	var blockers []model.ReasonCode
+	for _, id := range planned {
+		if _, ok := inPlan[id]; ok {
+			continue
+		}
+		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", id))
+	}
+	return model.NormalizeReasonCodes(blockers), nil
 }
 
 // shipAssuranceCompleteReference is the AI-driven ship attestation: the host's

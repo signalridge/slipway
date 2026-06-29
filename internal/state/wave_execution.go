@@ -256,6 +256,27 @@ func CurrentTasksPlanScopeState(root string, change model.Change) (string, error
 	return hashes.Scope, err
 }
 
+// CurrentTasksPlanTaskIDs returns the task IDs declared by the current tasks.md,
+// in dependency-projected order. It is the authority for "what tasks does the
+// plan name now", independent of the last-materialized wave-plan.yaml cache, so
+// callers can detect a task added at S3_REVIEW that the cached wave projection
+// does not yet contain.
+func CurrentTasksPlanTaskIDs(root string, change model.Change) ([]string, error) {
+	_, nodes, err := currentTaskPlanHashesAndNodes(root, change)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		id := strings.TrimSpace(node.TaskID)
+		if id == "" {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 func currentTaskPlanNodes(root string, change model.Change) (string, []wave.Node, error) {
 	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
 	return hashes.Semantic, nodes, err

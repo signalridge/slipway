@@ -81,6 +81,7 @@ func EvaluateGShip(
 	manifestR0Valid bool,
 	unresolvedBlockers []model.ReasonCode,
 	highRiskChecks map[string]bool,
+	shipRecordPresent bool,
 ) GateEvaluation {
 	reasonCodes := []model.ReasonCode{}
 	if change.CurrentState != model.StateS3Review {
@@ -93,7 +94,16 @@ func EvaluateGShip(
 		reasonCodes = append(reasonCodes, model.NewReasonCode("artifact_not_ready", ""))
 	}
 	if !verificationReady {
-		reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_missing", ""))
+		// A ship-verification record that EXISTS but is no longer fresh/passing
+		// (typically because upstream execution/review evidence went stale) must not
+		// be reported as missing: that contradicts the same response's
+		// skills_ready.ship-verification surface and hides the real, present-but-stale
+		// state. Reserve the _missing code for a genuinely absent record.
+		if shipRecordPresent {
+			reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_stale", ""))
+		} else {
+			reasonCodes = append(reasonCodes, model.NewReasonCode("ship_verification_evidence_missing", ""))
+		}
 	}
 	if !manifestR0Valid {
 		reasonCodes = append(reasonCodes, model.NewReasonCode("manifest_r0_invalid", ""))

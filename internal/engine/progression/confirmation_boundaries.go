@@ -60,6 +60,7 @@ func IsShipVerificationHandoffBlockerCode(code string) bool {
 	case "ship_verification_assurance_attestation_missing",
 		"ship_verification_reviewer_independence_missing",
 		"ship_verification_evidence_missing",
+		"ship_verification_evidence_stale",
 		"ship_verification_ordering_invalid",
 		"high_risk_check_missing":
 		return true
@@ -83,6 +84,7 @@ func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 		"ship_verification_assurance_attestation_missing",
 		"ship_verification_reviewer_independence_missing",
 		"ship_verification_evidence_missing",
+		"ship_verification_evidence_stale",
 		"ship_verification_ordering_invalid",
 		"context_origin_handle_invalid",
 		"high_risk_check_missing":

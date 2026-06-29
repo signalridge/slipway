@@ -452,6 +452,24 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				}
 				planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
 				if !ok {
+					if addedAtReview, _ := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID); addedAtReview {
+						// tasks.md names this task but the materialized wave projection does
+						// not: it was added at S3_REVIEW after S2 execution. Its evidence
+						// cannot be recorded in place and `slipway run` will not
+						// re-materialize a settled review, so the scope contract that demands
+						// it and this command contradict each other (#352). Reopening
+						// execution re-materializes the wave plan WITH the added task and
+						// makes its evidence recordable.
+						return newInvalidUsageError(
+							"evidence_task_unknown",
+							fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it was added after S2 execution", taskID),
+							"This task was added to tasks.md after S2 execution, so the current wave projection does not contain it and its evidence cannot be recorded in place. Reopen execution to re-materialize the wave plan with the added task, then record its evidence: `slipway fix --start-reexecution`. If the work belongs on an existing task, remove the added task from tasks.md.",
+							map[string]any{
+								"task_id":                  taskID,
+								"remediation_command_hint": "slipway fix --start-reexecution",
+							},
+						)
+					}
 					return newInvalidUsageError(
 						"evidence_task_unknown",
 						fmt.Sprintf("task %q is not present in the current wave plan", taskID),
@@ -858,6 +876,23 @@ func prepareEvidenceTaskResultFiles(
 		sessionID := strings.TrimSpace(result.SessionID)
 		planTask, ok := findEvidenceWavePlanTask(wavePlan, taskID)
 		if !ok {
+			if addedAtReview, _ := taskPlannedButNotInWavePlan(root, change, wavePlan, taskID); addedAtReview {
+				// tasks.md names this task but the materialized wave projection does
+				// not: it was added at S3_REVIEW after S2 execution, so its evidence
+				// cannot be recorded in place and `slipway run` will not re-materialize
+				// a settled review. Reopening execution re-materializes the wave plan
+				// WITH the added task and makes its evidence recordable (#352).
+				return nil, newInvalidUsageError(
+					"evidence_task_unknown",
+					fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it was added after S2 execution", taskID),
+					"This task was added to tasks.md after S2 execution, so the current wave projection does not contain it and its evidence cannot be recorded in place. Reopen execution to re-materialize the wave plan with the added task, then record its evidence: `slipway fix --start-reexecution`. If the work belongs on an existing task, remove the added task from tasks.md.",
+					map[string]any{
+						"task_id":                  taskID,
+						"result_file":              resultFile,
+						"remediation_command_hint": "slipway fix --start-reexecution",
+					},
+				)
+			}
 			return nil, newInvalidUsageError(
 				"evidence_task_unknown",
 				fmt.Sprintf("task %q is not present in the current wave plan", taskID),
@@ -1547,7 +1582,7 @@ func evidenceSkillWrongStateRemediation(root string, change model.Change, def sk
 func postReviewReplacementEvidenceRemediation(root string, change model.Change, surface string) string {
 	reviewSkills := selectedReviewSkillsForRemediation(root, change)
 	return fmt.Sprintf(
-		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof for %s evidence, then rerun %s.",
+		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof for %s evidence, then rerun %s. If the work needs a fresh execution run (for example a task added to tasks.md at review that the wave projection does not contain), reopen execution with `slipway fix --start-reexecution`.",
 		surface,
 		strings.Join(reviewSkills, ", "),
 		progression.SkillShipVerification,
@@ -2059,6 +2094,32 @@ func findEvidenceWavePlanTask(plan model.WavePlan, taskID string) (model.WavePla
 		}
 	}
 	return model.WavePlanTask{}, false
+}
+
+// taskPlannedButNotInWavePlan reports whether taskID is declared by the current
+// tasks.md but absent from the materialized wave projection — i.e. it was added at
+// S3_REVIEW after S2 execution. Such a task cannot be evidenced in place, so the
+// public refresh is to reopen execution (`slipway fix --start-reexecution`). It is
+// restricted to S3_REVIEW, where the added task is the genuine dead end and the
+// reexecution route is valid.
+func taskPlannedButNotInWavePlan(root string, change model.Change, wavePlan model.WavePlan, taskID string) (bool, error) {
+	if change.CurrentState != model.StateS3Review {
+		return false, nil
+	}
+	if _, ok := findEvidenceWavePlanTask(wavePlan, taskID); ok {
+		return false, nil
+	}
+	plannedIDs, err := state.CurrentTasksPlanTaskIDs(root, change)
+	if err != nil {
+		return false, err
+	}
+	taskID = strings.TrimSpace(taskID)
+	for _, id := range plannedIDs {
+		if strings.TrimSpace(id) == taskID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func normalizeEvidencePaths(paths []string) ([]string, error) {
