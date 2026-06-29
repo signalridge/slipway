@@ -131,6 +131,27 @@ func TestReleaseWorkflowSmokeInputsComeFromGeneratedManifest(t *testing.T) {
 	assert.Equal(t, "${{ fromJSON(needs.release.outputs.binary_matrix) }}", workflowString(t, matrix, "include"))
 }
 
+func TestReleaseWorkflowPostPublishChecksHandleRunnerPolicyDrift(t *testing.T) {
+	workflow := readWorkflowYAML(t, ".github/workflows/release.yaml")
+	jobs := workflowMap(t, workflow, "jobs")
+
+	provenance := workflowMap(t, jobs, "provenance")
+	with := workflowMap(t, provenance, "with")
+	assert.Equal(t, true, with["upload-assets"])
+	assert.Equal(t, true, with["compile-generator"])
+	assert.Contains(t, workflowString(t, with, "base64-subjects"), "needs.release.outputs.hashes")
+
+	homebrewRun := firstStepRun(t, workflowMap(t, jobs, "verify-homebrew"), "Install via Homebrew")
+	tapIndex := strings.Index(homebrewRun, "brew tap signalridge/tap")
+	trustIndex := strings.Index(homebrewRun, "brew trust signalridge/tap")
+	installIndex := strings.Index(homebrewRun, "brew install --cask slipway")
+	require.NotEqual(t, -1, tapIndex, "Homebrew verification must tap signalridge/tap")
+	require.NotEqual(t, -1, trustIndex, "Homebrew verification must trust the cask tap before install")
+	require.NotEqual(t, -1, installIndex, "Homebrew verification must install the slipway cask")
+	assert.Less(t, tapIndex, trustIndex)
+	assert.Less(t, trustIndex, installIndex)
+}
+
 func TestGoReleaserUsesCosignBundleSigning(t *testing.T) {
 	config := readWorkflowYAML(t, ".goreleaser.yaml")
 	signs, ok := config["signs"].([]any)
