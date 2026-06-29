@@ -770,18 +770,18 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 		return confirmationGovernanceBlocked()
 	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
 		if autoSoftens {
-			return autoStandingAuthorization("review_batch")
+			return withSubagentDelegationPrerequisite(autoStandingAuthorization("review_batch"), view)
 		}
-		return confirmationHardStop("review_batch")
+		return withSubagentDelegationPrerequisite(confirmationHardStop("review_batch"), view)
 	case view.NextSkill != nil:
 		reason := "skill_handoff"
 		if name := nextSkillHandoffName(view.NextSkill); name != "" {
 			reason = "skill_handoff:" + name
 		}
 		if autoSoftens {
-			return autoStandingAuthorization(reason)
+			return withSubagentDelegationPrerequisite(autoStandingAuthorization(reason), view)
 		}
-		return confirmationHardStop(reason)
+		return withSubagentDelegationPrerequisite(confirmationHardStop(reason), view)
 	case hasReasonCode(view.Blockers, "no_skill_required") && !hasNonPacingBlocker(view):
 		return confirmationCommandRequired("run_slipway_run_to_advance")
 	case len(view.Blockers) > 0:
@@ -879,10 +879,10 @@ func applyHostCapabilityContractToNext(view *nextView) {
 	}
 	view.HostCapabilities = hostCapabilityViewsForSkills(selectedHostCapabilitySkillNamesForNext(*view))
 	for _, req := range view.HostCapabilities {
-		if hostCapabilityBlocks(req) {
+		if code := hostCapabilityBlockerCode(req); code != "" {
 			view.Blockers = appendReasonCodes(
 				view.Blockers,
-				[]model.ReasonCode{model.NewReasonCode("host_capability_unavailable", req.SkillName+":"+req.Capability)},
+				[]model.ReasonCode{model.NewReasonCode(code, req.SkillName+":"+req.Capability)},
 			)
 		}
 	}
@@ -894,18 +894,38 @@ func applyHostCapabilityContractToValidate(view *validateView, skills []string) 
 	}
 	view.HostCapabilities = hostCapabilityViewsForSkills(skills)
 	for _, req := range view.HostCapabilities {
-		if hostCapabilityBlocks(req) {
+		if code := hostCapabilityBlockerCode(req); code != "" {
 			view.Blockers = model.NormalizeReasonCodes(append(
 				view.Blockers,
-				model.NewReasonCode("host_capability_unavailable", req.SkillName+":"+req.Capability),
+				model.NewReasonCode(code, req.SkillName+":"+req.Capability),
 			))
 		}
 	}
 	view.CanAdvance = len(view.Blockers) == 0
 }
 
-func hostCapabilityBlocks(req hostCapabilityView) bool {
-	return req.Required && req.Availability != "available" && !req.FallbackSelected
+// hostCapabilityBlockerCode reports which blocker, if any, a required
+// host-capability state emits. An available capability or an explicitly selected
+// fallback emits nothing (the available path is unchanged). When the host has
+// not affirmatively declared the capability available, the code distinguishes:
+//   - "unavailable" (the host declared other capabilities but not this one) is a
+//     first-class host_capability_unavailable blocker that fails closed.
+//   - "unknown" (the host declared nothing) emits the continuable
+//     subagent_dispatch_authorization_required blocker, which rides the handoff
+//     so the next_action can name the delegation prerequisite plus the named
+//     fallback without a silent dead-end or a silent bypass.
+func hostCapabilityBlockerCode(req hostCapabilityView) string {
+	if !req.Required || req.FallbackSelected {
+		return ""
+	}
+	switch req.Availability {
+	case "unavailable":
+		return "host_capability_unavailable"
+	case "unknown":
+		return "subagent_dispatch_authorization_required"
+	default: // "available"
+		return ""
+	}
 }
 
 func selectedHostCapabilitySkillNamesForNext(view nextView) []string {
@@ -929,6 +949,16 @@ func selectedHostCapabilitySkillNamesForValidate(
 	if change.CurrentState == model.StateS3Review {
 		if pending := pendingSelectedReviewSkills(change, readiness); len(pending) > 0 {
 			return pending
+		}
+		// The selected review peers have converged, but the terminal
+		// ship-verification gate may still owe fresh evidence. next/run already
+		// resolve ship-verification as the S3 ship authority via
+		// nextS3ShipAuthoritySkill once the peers pass; validate must surface the
+		// same skill so its host-capability contract (the subagent-delegation
+		// prerequisite or a fail-closed unavailable stop) is named for the terminal
+		// gate too, rather than dead-ending after the peers pass.
+		if shipSkill := nextS3ShipAuthoritySkill(readiness.PassingSkills, readiness.Blockers); shipSkill != "" {
+			return []string{shipSkill}
 		}
 	}
 	if actionable == nil {
@@ -1082,9 +1112,37 @@ func confirmationNoBoundary(reason string) confirmationRequirement {
 	}
 }
 
+// withSubagentDelegationPrerequisite enriches a review_batch or skill_handoff
+// confirmation next_action when a subagent_dispatch_authorization_required
+// blocker is riding it (the "unknown" host-capability state). It names the host
+// subagent-delegation prerequisite and the explicit named-fallback path so the
+// host is never left to silently infer stop / ask / violate, and never silently
+// bypasses the gate. Hosts that declare subagent available carry no such blocker
+// and are left unchanged.
+func withSubagentDelegationPrerequisite(req confirmationRequirement, view nextView) confirmationRequirement {
+	if !hasReasonCode(view.Blockers, "subagent_dispatch_authorization_required") {
+		return req
+	}
+	req.NextAction = strings.TrimRight(strings.TrimSpace(req.NextAction), ".") +
+		". Host subagent delegation is a prerequisite the host has not declared available: authorize subagent dispatch, " +
+		"or explicitly select a named degraded fallback (e.g. same_context_degraded) and record fresh evidence for each listed skill " +
+		"(see host_capabilities[] and recovery for the per-skill fallback names)"
+	return req
+}
+
 func hardStopNextAction(reason string) string {
 	if skillName, ok := strings.CutPrefix(reason, "skill_handoff:"); ok && strings.TrimSpace(skillName) != "" {
-		return "run governance skill " + strings.TrimSpace(skillName) + " and record evidence"
+		skillName = strings.TrimSpace(skillName)
+		if skillName == progression.SkillIntakeClarification {
+			// #357: the intake approved-summary is a fresh hard gate by design.
+			// A prior broad "continue" authorization does not substitute for
+			// explicit approval of this intent summary, so the next_action must
+			// state that policy rather than reading as an ordinary skill rerun.
+			return "review and approve the intake Approved Summary, then run governance skill " +
+				skillName + " and record evidence — the intake approved-summary is a FRESH HARD GATE BY DESIGN; " +
+				"a prior broad \"continue\" authorization does not substitute for explicit approval of this intent summary"
+		}
+		return "run governance skill " + skillName + " and record evidence"
 	}
 	switch reason {
 	case "preset_confirmation_required":

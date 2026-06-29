@@ -101,11 +101,10 @@ func ResolveHostCapabilityRequirementFromRegistry(
 	if reg == nil || skillID == "" {
 		return nil
 	}
-	sk, ok := reg.Lookup(skillID)
-	if !ok || len(sk.HostCapabilities) == 0 {
+	contract, ok := resolveHostCapabilityContract(reg, skillID)
+	if !ok {
 		return nil
 	}
-	contract := sk.HostCapabilities[0]
 	req := &HostCapabilityRequirement{
 		SkillID:             skillID,
 		Capability:          strings.TrimSpace(contract.Capability),
@@ -119,6 +118,60 @@ func ResolveHostCapabilityRequirementFromRegistry(
 		req.FallbackMode = mode
 	}
 	return req
+}
+
+// resolveHostCapabilityContract returns the host-capability contract for a
+// skill. A catalog-registered skill's own HostCapabilities[0] wins; otherwise
+// the built-in subagent-dispatch lever supplies a contract for the governance
+// skills that REQUIRE a fresh subagent but are intentionally NOT registered in
+// the capability catalog. Registering those governance skills would drag them
+// into the catalog's surface-manifest, install-profile, and host-skill
+// generation machinery (and the frozen DefaultRegistry ID snapshot); the lever
+// keeps the engine signal without that surface drag. (#339 / #369)
+func resolveHostCapabilityContract(reg *Registry, skillID string) (HostCapabilityContract, bool) {
+	if reg != nil {
+		if sk, ok := reg.Lookup(skillID); ok && len(sk.HostCapabilities) > 0 {
+			return sk.HostCapabilities[0], true
+		}
+	}
+	contract, ok := builtinSubagentDispatchContracts[skillID]
+	return contract, ok
+}
+
+// builtinSubagentDispatchContracts carries the subagent-dispatch host-capability
+// contract for the governance skills that mandate a fresh subagent yet are not
+// catalog-registered. Every contract names a generic `same_context_degraded`
+// fallback so a single fallback selection can satisfy a whole S3 review batch,
+// plus a skill-specific manual fallback for explicit single-skill degradation.
+var builtinSubagentDispatchContracts = map[string]HostCapabilityContract{
+	"plan-audit": {
+		Capability:          "subagent",
+		Required:            true,
+		FallbackModes:       []string{"manual_plan_audit", "same_context_degraded"},
+		EvidenceRequirement: "record plan-audit evidence from a fresh auditor context whose audit_origin handle is distinct from the plan author",
+		Remediation:         "Run plan-audit in a host with subagent capability, or explicitly select manual_plan_audit / same_context_degraded fallback and record fresh auditor evidence with a distinct audit_origin handle.",
+	},
+	"spec-compliance-review": {
+		Capability:          "subagent",
+		Required:            true,
+		FallbackModes:       []string{"manual_spec_compliance_review", "same_context_degraded"},
+		EvidenceRequirement: "record spec-compliance-review evidence from a fresh independent reviewer context",
+		Remediation:         "Run spec-compliance-review in a host with subagent capability, or explicitly select manual_spec_compliance_review / same_context_degraded fallback and record fresh reviewer evidence.",
+	},
+	"code-quality-review": {
+		Capability:          "subagent",
+		Required:            true,
+		FallbackModes:       []string{"manual_code_quality_review", "same_context_degraded"},
+		EvidenceRequirement: "record code-quality-review evidence from a fresh independent reviewer context",
+		Remediation:         "Run code-quality-review in a host with subagent capability, or explicitly select manual_code_quality_review / same_context_degraded fallback and record fresh reviewer evidence.",
+	},
+	"ship-verification": {
+		Capability:          "subagent",
+		Required:            true,
+		FallbackModes:       []string{"manual_ship_verification", "same_context_degraded"},
+		EvidenceRequirement: "record ship-verification evidence from a fresh verifier context",
+		Remediation:         "Run ship-verification in a host with subagent capability, or explicitly select manual_ship_verification / same_context_degraded fallback and record fresh ship-verification evidence.",
+	},
 }
 
 func hostCapabilityAvailability(tokens []string, capabilityName string) string {
