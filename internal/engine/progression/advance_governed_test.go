@@ -618,11 +618,14 @@ func TestAdvanceGoverned_S2StaleWaveEvidenceRecommendsRunnableCommand(t *testing
 			"(fix_state_invalid in S2); got primary_command=%q for blockers %v",
 			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
 	}
-	// The recommended command must be runnable in S2: the state-valid driver for a
-	// stale owning-stage authority is `slipway run`.
-	if recovery.PrimaryCommand != "slipway run" {
-		t.Fatalf("expected an S2-runnable recovery command (`slipway run`), got primary_command=%q for blockers %v",
-			recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
+	// The recommended command must be runnable in S2 AND actually clear the stale
+	// authority. `slipway run` only loops on a stale required-skill blocker — it
+	// never re-certifies it (#347); the working recovery is to re-run the owning
+	// skill and re-record its evidence, which `slipway evidence skill` does.
+	wantCmd := "slipway evidence skill --skill wave-orchestration --verdict pass"
+	if recovery.PrimaryCommand != wantCmd {
+		t.Fatalf("expected the stale-authority recovery to re-record evidence (%q), got primary_command=%q for blockers %v",
+			wantCmd, recovery.PrimaryCommand, model.ReasonSpecs(summaryOut.Blockers))
 	}
 
 	// The change must stay at S2_IMPLEMENT: the fix corrects only the recommended

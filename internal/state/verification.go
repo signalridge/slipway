@@ -333,8 +333,45 @@ func decodeVerificationStrict(raw []byte, rec *model.VerificationRecord) error {
 	return decodeYAMLKnownFields(raw, rec)
 }
 
+// governanceEvidenceSkills mirrors the registered governance skills that
+// `slipway evidence skill` accepts (engine/skill.defaultGovernanceRegistry). It
+// is duplicated here as a literal set because internal/state cannot import
+// internal/engine/skill: that package imports internal/toolgen, which imports
+// internal/state, so the dependency would cycle. Keep this list in sync with the
+// registry — a skill added there but omitted here would regress #343 (its
+// recovery would dead-end at an unknown-skill evidence command).
+var governanceEvidenceSkills = map[string]struct{}{
+	"intake-clarification":   {},
+	"research-orchestration": {},
+	"plan-audit":             {},
+	"wave-orchestration":     {},
+	"spec-compliance-review": {},
+	"code-quality-review":    {},
+	"independent-review":     {},
+	"security-review":        {},
+	"ship-verification":      {},
+}
+
+func isGovernanceEvidenceSkill(name string) bool {
+	_, ok := governanceEvidenceSkills[strings.TrimSpace(name)]
+	return ok
+}
+
 func verificationRecordRecoveryGuidance(skillName string) string {
 	recordPath := filepath.ToSlash(filepath.Join("verification", skillName+".yaml"))
+	if !isGovernanceEvidenceSkill(skillName) {
+		// A name that is not a registered governance evidence skill (e.g.
+		// coverage-analysis, a ship-verification host-embedded sub-technique) is
+		// not recordable through `slipway evidence skill`; pointing there is a
+		// dead-end because the command rejects the unknown skill (#343). Such a
+		// file is not engine-owned evidence, so the recovery is to remove the
+		// stray file and let the owning host gate record its VerificationRecord.
+		return fmt.Sprintf(
+			"%s is not a registered governance evidence skill, so `slipway evidence skill --skill %s` cannot record it; remove this stray file and let its owning host gate produce the verification (for example, ship-verification owns coverage analysis)",
+			recordPath,
+			skillName,
+		)
+	}
 	notesPath := filepath.ToSlash(filepath.Join("verification", skillName+"-notes.md"))
 	return fmt.Sprintf(
 		"%s is an engine-owned VerificationRecord file; move free-form notes to %s and pass them through `slipway evidence skill --skill %s --notes-file %s`",

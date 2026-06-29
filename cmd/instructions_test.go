@@ -123,7 +123,8 @@ func TestInstructionsTasksGuidanceTeachesComputedWaves(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &view))
 
 	// Authored metadata no longer includes wave.
-	assert.Contains(t, view.Guidance, "with depends_on, target_files, task_kind, and covers metadata")
+	assert.Contains(t, view.Guidance, "with depends_on, target_files, task_kind (one of: code, test, doc, ops, verification, investigation, other")
+	assert.Contains(t, view.Guidance, "a documentation-only task uses `doc`, not `docs`")
 	assert.NotContains(t, view.Guidance, "with wave",
 		"wave must not be taught as authored task metadata")
 
