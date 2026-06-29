@@ -74,7 +74,7 @@ artifact-readiness detail, transition traces, or context-budget diagnostics.
 
 ## Subcommand And Mode Highlights
 
-- `slipway handoff write` writes advisory continuation notes; pass `--section <name>` to replace one named section from stdin.
+- `slipway handoff write` writes advisory continuation notes from stdin; pipe a full `## Current Position` narrative to the bare form, or pass `--section <name>` to replace one named section from stdin.
 - `slipway handoff show --json` emits the current per-change handoff in structured form.
 - `slipway evidence task --result-file <path> --json` imports compact executor task results; repeat `--result-file` for an atomic batch.
 - `slipway evidence skill --skill <name> --verdict pass --json` records governed skill evidence at the stage that owns that skill.

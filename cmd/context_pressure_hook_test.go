@@ -283,7 +283,9 @@ func TestCodexUserPromptSubmitNudgesOnlyWhenHandoffMissingOrStale(t *testing.T) 
 		assert.Contains(t, stdout, "slipway handoff write")
 		assert.Contains(t, stdout, "UserPromptSubmit")
 
+		forceHandoffInteractive(t, false)
 		writeCmd := commandForRoot(t, root, makeHandoffCmd())
+		writeCmd.SetIn(strings.NewReader("## Current Position\nNudge handoff recorded.\n"))
 		require.NoError(t, writeCmd.Execute())
 
 		stdout, stderr, err = runRootCommandWithInput([]string{"hook", "context-pressure", "--tool", "codex"}, payload)

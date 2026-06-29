@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -15,10 +14,17 @@ import (
 )
 
 const (
-	handoffTitle       = "# Slipway Runtime Session Handoff"
-	handoffHeaderOpen  = "<!-- slipway:handoff-machine-header"
-	handoffHeaderClose = "slipway:handoff-machine-header -->"
-	handoffTimeFormat  = time.RFC3339Nano
+	handoffTitle         = "# Slipway Runtime Session Handoff"
+	handoffHeaderOpen    = "<!-- slipway:handoff-machine-header"
+	handoffHeaderClose   = "slipway:handoff-machine-header -->"
+	handoffTimeFormat    = time.RFC3339Nano
+	handoffAdvisoryIntro = "This handoff is advisory only. Run `slipway status --json` and `slipway next --json` for lifecycle authority before acting."
+	// handoffPendingMarker is the placeholder body written for any advisory
+	// section that has no agent-authored narrative yet.
+	handoffPendingMarker = "_Agent-authored narrative pending._"
+	// handoffDefaultSection receives a free-form handoff body that does not carry
+	// any recognizable `## Section` headers, so piped narrative is never dropped.
+	handoffDefaultSection = "Current Position"
 )
 
 var handoffSectionNames = []string{
@@ -29,6 +35,11 @@ var handoffSectionNames = []string{
 	"Suggested Next Skills",
 	"Risks And Blockers",
 	"Redaction Check",
+}
+
+type handoffNarrativeParts struct {
+	sections map[string]string
+	preamble string
 }
 
 // HandoffHeader is the engine-owned machine descriptor for a per-change
@@ -55,6 +66,11 @@ type HandoffWriteOptions struct {
 	SessionOwner string
 	Section      string
 	SectionBody  string
+	// Body is a full advisory narrative (typically piped on stdin for the bare
+	// `slipway handoff write` form). Sections recognized inside the body are
+	// merged over the existing narrative; a body with no recognizable section
+	// headers is routed into handoffDefaultSection so nothing is dropped.
+	Body string
 }
 
 func WriteHandoff(root string, change model.Change, opts HandoffWriteOptions) (HandoffDocument, error) {
@@ -71,6 +87,9 @@ func WriteHandoff(root string, change model.Change, opts HandoffWriteOptions) (H
 	path := ChangeHandoffPath(root, change.Slug)
 	existing, _ := ReadHandoffFile(path)
 	narrative := ensureHandoffNarrativeSkeleton(existing.Narrative)
+	if body := strings.TrimSpace(opts.Body); body != "" {
+		narrative = mergeHandoffBody(narrative, body)
+	}
 	if section := strings.TrimSpace(opts.Section); section != "" && strings.TrimSpace(opts.SectionBody) != "" {
 		narrative = replaceHandoffSection(narrative, section, strings.TrimSpace(opts.SectionBody))
 	}
@@ -221,13 +240,21 @@ func defaultHandoffSessionOwner() string {
 }
 
 func ensureHandoffNarrativeSkeleton(raw string) string {
-	raw = strings.TrimSpace(removeHandoffTitle(raw))
+	parts := parseHandoffNarrative(raw)
+	if parts.preamble != "" {
+		parts.sections[handoffDefaultSection] = joinHandoffBodies(parts.preamble, parts.sections[handoffDefaultSection])
+	}
+	return renderHandoffNarrative(parts.sections)
+}
+
+func renderHandoffNarrative(sections map[string]string) string {
 	var b strings.Builder
-	b.WriteString("This handoff is advisory only. Run `slipway status --json` and `slipway next --json` for lifecycle authority before acting.\n")
+	b.WriteString(handoffAdvisoryIntro)
+	b.WriteByte('\n')
 	for _, section := range handoffSectionNames {
-		body := extractHandoffSection(raw, section)
+		body := sections[section]
 		if strings.TrimSpace(body) == "" {
-			body = "_Agent-authored narrative pending._"
+			body = handoffPendingMarker
 		}
 		b.WriteString("\n## ")
 		b.WriteString(section)
@@ -244,33 +271,82 @@ func removeHandoffTitle(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
+func removeHandoffAdvisoryIntro(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, handoffAdvisoryIntro)
+	return strings.TrimSpace(raw)
+}
+
+func parseHandoffNarrative(raw string) handoffNarrativeParts {
+	raw = removeHandoffAdvisoryIntro(removeHandoffTitle(raw))
+	parts := handoffNarrativeParts{sections: map[string]string{}}
+	if raw == "" {
+		return parts
+	}
+
+	currentSection := ""
+	var current []string
+	flush := func() {
+		body := strings.TrimSpace(strings.Join(current, "\n"))
+		if currentSection == "" {
+			parts.preamble = joinHandoffBodies(parts.preamble, body)
+		} else if body != "" {
+			parts.sections[currentSection] = joinHandoffBodies(parts.sections[currentSection], body)
+		} else if _, ok := parts.sections[currentSection]; !ok {
+			parts.sections[currentSection] = ""
+		}
+		current = nil
+	}
+
+	for _, line := range strings.Split(raw, "\n") {
+		if section, ok := handoffHeadingSection(line); ok {
+			flush()
+			currentSection = section
+			continue
+		}
+		current = append(current, line)
+	}
+	flush()
+	return parts
+}
+
+func handoffHeadingSection(line string) (string, bool) {
+	heading := strings.TrimSpace(line)
+	if !strings.HasPrefix(heading, "## ") {
+		return "", false
+	}
+	name := strings.TrimSpace(strings.TrimPrefix(heading, "## "))
+	for _, section := range handoffSectionNames {
+		if name == section {
+			return section, true
+		}
+	}
+	return "", false
+}
+
 func extractHandoffSection(raw, section string) string {
-	re := regexp.MustCompile(`(?ms)^## ` + regexp.QuoteMeta(section) + `\s*\n(.*?)(?:\n## |\z)`)
-	match := re.FindStringSubmatch(raw)
-	if len(match) < 2 {
+	canonical := canonicalHandoffSection(section)
+	if canonical == "" {
 		return ""
 	}
-	return strings.TrimSpace(match[1])
+	return strings.TrimSpace(parseHandoffNarrative(raw).sections[canonical])
 }
 
 func replaceHandoffSection(raw, section, body string) string {
 	canonical := canonicalHandoffSection(section)
 	if canonical == "" {
-		canonical = section
+		unknownBody := strings.TrimSpace(body)
+		if unknownBody == "" {
+			return ensureHandoffNarrativeSkeleton(raw)
+		}
+		return mergeHandoffBody(raw, "## "+strings.TrimSpace(section)+"\n"+unknownBody)
 	}
-	raw = ensureHandoffNarrativeSkeleton(raw)
-	heading := "## " + canonical + "\n"
-	start := strings.Index(raw, heading)
-	replacement := heading + strings.TrimSpace(body)
-	if start < 0 {
-		return strings.TrimSpace(raw) + "\n\n" + replacement
+	parts := parseHandoffNarrative(raw)
+	if parts.preamble != "" {
+		parts.sections[handoffDefaultSection] = joinHandoffBodies(parts.preamble, parts.sections[handoffDefaultSection])
 	}
-	bodyStart := start + len(heading)
-	end := len(raw)
-	if next := strings.Index(raw[bodyStart:], "\n## "); next >= 0 {
-		end = bodyStart + next
-	}
-	return strings.TrimSpace(raw[:bodyStart]) + "\n" + strings.TrimSpace(body) + "\n" + strings.TrimLeft(raw[end:], "\n")
+	parts.sections[canonical] = strings.TrimSpace(body)
+	return renderHandoffNarrative(parts.sections)
 }
 
 func canonicalHandoffSection(section string) string {
@@ -281,6 +357,83 @@ func canonicalHandoffSection(section string) string {
 		}
 	}
 	return ""
+}
+
+// HandoffSectionNames returns the canonical advisory handoff section names in
+// document order. Command surfaces use it to validate `--section` input and to
+// list valid sections in guidance.
+func HandoffSectionNames() []string {
+	return slices.Clone(handoffSectionNames)
+}
+
+// CanonicalHandoffSection resolves a user-supplied section name to its canonical
+// form. ok is false when the name does not match a known advisory section, so
+// callers can fail loudly instead of writing a non-canonical section.
+func CanonicalHandoffSection(name string) (string, bool) {
+	canonical := canonicalHandoffSection(name)
+	if canonical == "" {
+		return "", false
+	}
+	return canonical, true
+}
+
+// HandoffIsEmpty reports whether every advisory section is still the pending
+// placeholder, i.e. no agent narrative has been recorded yet. Read surfaces use
+// it to emit a clear "empty / all sections pending" notice instead of rendering
+// a content-free scaffold as if it were a real handoff.
+func HandoffIsEmpty(doc HandoffDocument) bool {
+	narrative := ensureHandoffNarrativeSkeleton(doc.Narrative)
+	for _, section := range handoffSectionNames {
+		body := strings.TrimSpace(extractHandoffSection(narrative, section))
+		if body != "" && body != handoffPendingMarker {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeHandoffBody overlays a full advisory narrative onto the existing one.
+// Sections recognized inside body replace their counterparts; a body with no
+// recognizable `## Section` headers is routed into handoffDefaultSection so a
+// piped narrative is never silently dropped.
+func mergeHandoffBody(existing, body string) string {
+	merged := parseHandoffNarrative(existing)
+	if merged.preamble != "" {
+		merged.sections[handoffDefaultSection] = joinHandoffBodies(merged.preamble, merged.sections[handoffDefaultSection])
+		merged.preamble = ""
+	}
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return renderHandoffNarrative(merged.sections)
+	}
+	incoming := parseHandoffNarrative(body)
+	if incoming.preamble != "" {
+		if _, hasDefault := incoming.sections[handoffDefaultSection]; hasDefault {
+			incoming.sections[handoffDefaultSection] = joinHandoffBodies(incoming.preamble, incoming.sections[handoffDefaultSection])
+		} else if len(incoming.sections) == 0 {
+			merged.sections[handoffDefaultSection] = incoming.preamble
+		} else {
+			merged.sections[handoffDefaultSection] = joinHandoffBodies(merged.sections[handoffDefaultSection], incoming.preamble)
+		}
+	}
+	for _, section := range handoffSectionNames {
+		if sectionBody, ok := incoming.sections[section]; ok && strings.TrimSpace(sectionBody) != "" {
+			merged.sections[section] = strings.TrimSpace(sectionBody)
+		}
+	}
+	return renderHandoffNarrative(merged.sections)
+}
+
+func joinHandoffBodies(first, second string) string {
+	first = strings.TrimSpace(first)
+	second = strings.TrimSpace(second)
+	if first == "" || first == handoffPendingMarker {
+		return second
+	}
+	if second == "" || second == handoffPendingMarker {
+		return first
+	}
+	return first + "\n\n" + second
 }
 
 func normalizeSectionName(section string) string {
