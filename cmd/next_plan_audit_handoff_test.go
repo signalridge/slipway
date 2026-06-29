@@ -69,6 +69,75 @@ func TestNextBundleHandoffDoesNotAdvertiseEvidenceBeforeAudit(t *testing.T) {
 	})
 }
 
+// TestNextS1PlanAuditSurfacesSubagentDelegationAcrossCapabilityStates pins the
+// host subagent-delegation contract for the S1 plan-audit handoff (#339).
+// plan-audit REQUIRES dispatching an independent auditor subagent, but it is not
+// a catalog-registered skill, so the contract comes from the built-in
+// subagent-dispatch lever. "unknown" stays continuable on the skill_handoff
+// boundary while riding a subagent_dispatch_authorization_required prerequisite
+// with an enriched, named-fallback next_action; "unavailable" fails closed as a
+// first-class host_capability_unavailable blocker; an explicit fallback clears it.
+func TestNextS1PlanAuditSurfacesSubagentDelegationAcrossCapabilityStates(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelDiscovery, "plan-audit subagent delegation")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.PlanSubStep = model.PlanSubStepBundle
+		require.NoError(t, state.SaveChange(root, change))
+
+		t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+		// unknown: host declared nothing -> continuable skill_handoff with prerequisite.
+		t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
+		unknown := runNextDiagnostics(t, root, slug)
+		require.NotNil(t, unknown.NextSkill)
+		assert.Equal(t, progression.SkillPlanAudit, unknown.NextSkill.Name)
+		unknownCap := requireHostCapabilityForSkill(t, unknown.HostCapabilities, progression.SkillPlanAudit)
+		assert.Equal(t, "unknown", unknownCap.Availability)
+		assert.False(t, unknownCap.FallbackSelected)
+		unknownSpecs := model.ReasonSpecs(unknown.Blockers)
+		assert.Contains(t, unknownSpecs, "subagent_dispatch_authorization_required:plan-audit:subagent")
+		assert.NotContains(t, unknownSpecs, "host_capability_unavailable:plan-audit:subagent")
+		assert.Equal(t, "skill_handoff:plan-audit", unknown.ConfirmationRequirement.Reason)
+		assert.Contains(t, unknown.ConfirmationRequirement.NextAction, "Host subagent delegation is a prerequisite")
+		assert.Contains(t, unknown.ConfirmationRequirement.NextAction, "same_context_degraded")
+
+		// unavailable: host declared other capabilities but not subagent.
+		t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
+		unavailable := runNextDiagnostics(t, root, slug)
+		unavailableCap := requireHostCapabilityForSkill(t, unavailable.HostCapabilities, progression.SkillPlanAudit)
+		assert.Equal(t, "unavailable", unavailableCap.Availability)
+		unavailableSpecs := model.ReasonSpecs(unavailable.Blockers)
+		assert.Contains(t, unavailableSpecs, "host_capability_unavailable:plan-audit:subagent")
+		assert.NotContains(t, unavailableSpecs, "subagent_dispatch_authorization_required:plan-audit:subagent")
+		assert.Equal(t, "blocked_by_governance", unavailable.ConfirmationRequirement.Reason)
+
+		// unavailable + named fallback clears the blocker and restores the handoff.
+		t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "manual_plan_audit")
+		fallback := runNextDiagnostics(t, root, slug)
+		fallbackCap := requireHostCapabilityForSkill(t, fallback.HostCapabilities, progression.SkillPlanAudit)
+		assert.True(t, fallbackCap.FallbackSelected)
+		assert.Equal(t, "manual_plan_audit", fallbackCap.FallbackMode)
+		fallbackSpecs := model.ReasonSpecs(fallback.Blockers)
+		assert.NotContains(t, fallbackSpecs, "host_capability_unavailable:plan-audit:subagent")
+		assert.NotContains(t, fallbackSpecs, "subagent_dispatch_authorization_required:plan-audit:subagent")
+		assert.Equal(t, "skill_handoff:plan-audit", fallback.ConfirmationRequirement.Reason)
+	})
+}
+
+func requireHostCapabilityForSkill(t *testing.T, capabilities []hostCapabilityView, skillName string) hostCapabilityView {
+	t.Helper()
+	for _, capability := range capabilities {
+		if capability.SkillName == skillName {
+			return capability
+		}
+	}
+	t.Fatalf("host capability for %q not found in %+v", skillName, capabilities)
+	return hostCapabilityView{}
+}
+
 // TestNextAuditHandoffStillAdvertisesEvidence asserts the audit-substep behavior
 // is unchanged: at S1_PLAN/audit, where `slipway evidence skill --skill
 // plan-audit` is accepted, the handoff still advertises write_evidence and
