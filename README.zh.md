@@ -89,13 +89,13 @@ slipway next --json --diagnostics
 要在多会话之间保持连贯，使用由命令自持的咨询性交接：
 
 ```bash
-slipway handoff write
-printf '当前实现上下文...\n' | slipway handoff write --section "当前位点"
+printf '## Current Position\n当前实现上下文...\n' | slipway handoff write
+printf '下一步...\n' | slipway handoff write --section "Next Session Focus"
 slipway handoff show --brief
 slipway handoff show
 ```
 
-`slipway handoff write` 会刷新每项变更的运行时交接骨架和机器可读的头部。这个头部只携带身份和时效性字段，不会快照生命周期状态或下一步动作。新会话仍然要跑 `slipway status --json` 和 `slipway next --json` 来获取权威状态。
+`slipway handoff write` 会从 stdin 读取交接正文，并刷新每项变更的运行时交接骨架和机器可读的头部。这个头部只携带身份和时效性字段，不会快照生命周期状态或下一步动作。新会话仍然要跑 `slipway status --json` 和 `slipway next --json` 来获取权威状态。
 
 <details>
 <summary><strong>命令优先的生命周期</strong></summary>

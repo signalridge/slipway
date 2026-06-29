@@ -162,7 +162,16 @@ func TestEvidenceSkillChangeFlagRejectsArchivedTarget(t *testing.T) {
 	cliErr := asCLIError(cmd.Execute())
 	require.NotNil(t, cliErr)
 	assert.Equal(t, "archived_change_not_validatable", cliErr.ErrorCode)
+	assert.Equal(t, categoryPrecondition, cliErr.Category)
+	assert.Equal(t, exitCodePrecondition, cliErr.ExitCode)
 	assert.Equal(t, slug, cliErr.Slug)
+	// The evidence path acknowledges post-done review findings and routes to a
+	// new governed change instead of the generic inspect/choose remediation, but
+	// stays fail-closed (#368).
+	assert.Contains(t, cliErr.Remediation, "immutable and terminal")
+	assert.Contains(t, cliErr.Remediation, "ungoverned notes")
+	assert.Contains(t, cliErr.Remediation, "`slipway new`")
+	assert.NotContains(t, cliErr.Remediation, "choose an active change with `slipway status`")
 }
 
 func TestEvidenceSkillAllowsStaleResearchRestampFromAuditSubstep(t *testing.T) {
