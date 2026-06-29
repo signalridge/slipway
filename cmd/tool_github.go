@@ -17,22 +17,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/spf13/cobra"
 )
 
-const githubBackendEnvHelp = `Environment variables:
+const githubBackendEnvHelp = `Environment variables (env > file > default; see ` + "`slipway config list --env`" + `):
   SLIPWAY_GITHUB_API_URL  Override the GitHub REST/GraphQL API base URL used by
                           the --backend api / token-backed HTTP path (default
                           https://api.github.com). Overrides must be HTTPS and
-                          listed in SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS.
+                          allowlisted. Falls back to the github.api_url key in
+                          .slipway.yaml when unset.
   SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS
                           Comma/space/semicolon separated HTTPS API base URLs
-                          allowed for SLIPWAY_GITHUB_API_URL.
+                          allowed for an API URL override. Falls back to the
+                          github.api_allowed_base_urls key in .slipway.yaml when
+                          unset.
   SLIPWAY_GITHUB_API_TOKEN
                           Token used only for an allowed override URL. Ambient
                           GH_TOKEN/GITHUB_TOKEN are sent only to
-                          https://api.github.com. The gh backend ignores these
-                          HTTP-only settings.`
+                          https://api.github.com. Tokens are env-only and are
+                          never read from .slipway.yaml. The gh backend ignores
+                          these HTTP-only settings.`
 
 func makeFetchPRChecksCmd() *cobra.Command {
 	var backend string
@@ -161,14 +166,36 @@ func addGitHubBackendFlag(cmd *cobra.Command, target *string) {
 	cmd.Flags().StringVar(target, "backend", githubBackendAuto, "GitHub backend: auto, gh, or api")
 }
 
-func newGitHubBackend(ctx context.Context, mode string) (githubBackend, error) {
+// githubFileConfigFromCommand best-effort loads the repo-policy GitHub settings
+// from .slipway.yaml for the command's project root. It is intentionally
+// non-fatal: `slipway tool ...` GitHub helpers may run outside a governed
+// workspace, so a missing root or unreadable config resolves to the zero
+// ConfigGitHub (env-only behavior, unchanged from before this surface existed)
+// rather than failing the GitHub call.
+func githubFileConfigFromCommand(cmd *cobra.Command) model.ConfigGitHub {
+	root, err := projectRootFromCommand(cmd)
+	if err != nil {
+		return model.ConfigGitHub{}
+	}
+	cfg, err := loadConfigAtRootWithStderr(root, cmd.ErrOrStderr())
+	if err != nil {
+		return model.ConfigGitHub{}
+	}
+	return cfg.GitHub
+}
+
+// newGitHubBackend builds the GitHub backend for mode. fileCfg carries the
+// repo-policy GitHub settings loaded from .slipway.yaml (zero value when none /
+// not in a workspace); the env vars still override these file values at
+// resolution time (env > file > default).
+func newGitHubBackend(ctx context.Context, mode string, fileCfg model.ConfigGitHub) (githubBackend, error) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", githubBackendAuto:
 		if path, err := githubLookPath("gh"); err == nil && strings.TrimSpace(path) != "" {
-			return &autoGitHubBackend{cli: githubCLIClient{ctx: ctx, path: path}}, nil
+			return &autoGitHubBackend{cli: githubCLIClient{ctx: ctx, path: path}, fileCfg: fileCfg}, nil
 		}
 		if githubTokenAvailable() {
-			return newGitHubHTTPClient()
+			return newGitHubHTTPClient(fileCfg)
 		}
 		return nil, newPreconditionError(
 			"github_auth_unavailable",
@@ -190,7 +217,7 @@ func newGitHubBackend(ctx context.Context, mode string) (githubBackend, error) {
 		}
 		return githubCLIClient{ctx: ctx, path: path}, nil
 	case githubBackendAPI:
-		return newGitHubHTTPClient()
+		return newGitHubHTTPClient(fileCfg)
 	default:
 		return nil, newInvalidUsageError(
 			"github_backend_invalid",
@@ -223,6 +250,7 @@ func githubTokenAvailable() bool {
 // lazily-built HTTP client needs no synchronization.
 type autoGitHubBackend struct {
 	cli          githubBackend
+	fileCfg      model.ConfigGitHub
 	httpBE       githubBackend
 	httpErr      error
 	built        bool
@@ -245,7 +273,7 @@ func (a *autoGitHubBackend) fallbackFor(err error) (githubBackend, bool) {
 		return nil, false
 	}
 	if !a.built {
-		a.httpBE, a.httpErr = newGitHubHTTPClient()
+		a.httpBE, a.httpErr = newGitHubHTTPClient(a.fileCfg)
 		a.built = true
 	}
 	if a.httpErr != nil {
@@ -317,8 +345,8 @@ type githubHTTPClient struct {
 
 func (c githubHTTPClient) backendName() string { return githubBackendAPI }
 
-func newGitHubHTTPClient() (githubHTTPClient, error) {
-	cfg, err := resolveGitHubAPIConfigFromEnv()
+func newGitHubHTTPClient(fileCfg model.ConfigGitHub) (githubHTTPClient, error) {
+	cfg, err := resolveGitHubAPIConfig(fileCfg)
 	if err != nil {
 		return githubHTTPClient{}, err
 	}
@@ -334,17 +362,24 @@ type githubAPIConfig struct {
 	token   string
 }
 
-func resolveGitHubAPIConfigFromEnv() (githubAPIConfig, error) {
-	baseURL, err := normalizeGitHubAPIBaseURL(firstNonEmpty(os.Getenv(githubAPIURLEnv), githubDefaultAPIBaseURL))
+// resolveGitHubAPIConfig resolves the effective GitHub API base URL and token
+// with env > file > default precedence: the base URL is the env override
+// (SLIPWAY_GITHUB_API_URL) when set, else the file value (github.api_url), else
+// https://api.github.com. An override host must be allowlisted by the env list
+// (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set, else the file allowlist
+// (github.api_allowed_base_urls). The token stays env-only (secrets are never
+// read from .slipway.yaml).
+func resolveGitHubAPIConfig(fileCfg model.ConfigGitHub) (githubAPIConfig, error) {
+	baseURL, err := normalizeGitHubAPIBaseURL(firstNonEmpty(os.Getenv(githubAPIURLEnv), fileCfg.APIURL, githubDefaultAPIBaseURL))
 	if err != nil {
 		return githubAPIConfig{}, err
 	}
 	override := baseURL != githubDefaultAPIBaseURL
-	if override && !githubAPIBaseURLAllowed(baseURL) {
+	if override && !githubAPIBaseURLAllowed(baseURL, fileCfg) {
 		return githubAPIConfig{}, newPreconditionError(
 			"github_api_url_not_allowed",
 			fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL),
-			"Set SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS to the exact HTTPS API base URL before using SLIPWAY_GITHUB_API_URL.",
+			"Allowlist the exact HTTPS API base URL via SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS or github.api_allowed_base_urls before using a github.api_url override.",
 			"",
 			map[string]any{"base_url": baseURL},
 		)
@@ -355,7 +390,7 @@ func resolveGitHubAPIConfigFromEnv() (githubAPIConfig, error) {
 			return githubAPIConfig{}, newPreconditionError(
 				"github_api_override_token_missing",
 				"GitHub API override token missing; ambient GH_TOKEN/GITHUB_TOKEN are not sent to override hosts",
-				"Set SLIPWAY_GITHUB_API_TOKEN for the allowed override host, or remove SLIPWAY_GITHUB_API_URL to use https://api.github.com.",
+				"Set SLIPWAY_GITHUB_API_TOKEN for the allowed override host, or clear the SLIPWAY_GITHUB_API_URL / github.api_url override to use https://api.github.com.",
 				"",
 				map[string]any{"base_url": baseURL},
 			)
@@ -419,8 +454,18 @@ func newInvalidGitHubAPIURLError(value, reason string) error {
 	)
 }
 
-func githubAPIBaseURLAllowed(baseURL string) bool {
-	entries, invalid := parseGitHubAPIAllowedBaseURLs(os.Getenv(githubAPIAllowedBaseURLsEnv))
+// githubAPIBaseURLAllowed reports whether baseURL is allowlisted, preferring the
+// env list (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set and otherwise falling
+// back to the file list (github.api_allowed_base_urls). Both lists are
+// normalized through the same URL rules as the override itself before matching.
+func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) bool {
+	raw := strings.TrimSpace(os.Getenv(githubAPIAllowedBaseURLsEnv))
+	if raw == "" {
+		// File fallback: join the list with newlines (a recognized separator) so
+		// the same parser/normalizer covers both surfaces.
+		raw = strings.Join(fileCfg.APIAllowedBaseURLs, "\n")
+	}
+	entries, invalid := parseGitHubAPIAllowedBaseURLs(raw)
 	if invalid != "" {
 		return false
 	}
@@ -1103,7 +1148,7 @@ func runFetchPRChecks(cmd *cobra.Command, repo string, pr int, backend string) e
 	if err != nil {
 		return err
 	}
-	client, err := newGitHubBackend(cmd.Context(), backend)
+	client, err := newGitHubBackend(cmd.Context(), backend, githubFileConfigFromCommand(cmd))
 	if err != nil {
 		return err
 	}
@@ -1454,7 +1499,7 @@ func runFetchPRFeedback(cmd *cobra.Command, repo string, pr int, backend string)
 	if err != nil {
 		return err
 	}
-	client, err := newGitHubBackend(cmd.Context(), backend)
+	client, err := newGitHubBackend(cmd.Context(), backend, githubFileConfigFromCommand(cmd))
 	if err != nil {
 		return err
 	}
@@ -1698,7 +1743,7 @@ func runFetchReviewRequests(cmd *cobra.Command, org, teams, backend string) erro
 	if org == "" {
 		return newInvalidUsageError("fetch_review_requests_org_required", "--org is required", "Pass --org with the GitHub organization that owns the requested teams.", nil)
 	}
-	client, err := newGitHubBackend(cmd.Context(), backend)
+	client, err := newGitHubBackend(cmd.Context(), backend, githubFileConfigFromCommand(cmd))
 	if err != nil {
 		return err
 	}
@@ -1879,7 +1924,7 @@ func runReplyToThread(cmd *cobra.Command, args []string, confirm bool, backend s
 	fmt.Fprintln(cmd.OutOrStdout(), "BEGIN REQUEST")
 	_ = encodeJSONResponse(cmd, map[string]any{"query": replyThreadMutation, "requests": requests})
 
-	client, err := newGitHubBackend(cmd.Context(), backend)
+	client, err := newGitHubBackend(cmd.Context(), backend, githubFileConfigFromCommand(cmd))
 	if err != nil {
 		return err
 	}

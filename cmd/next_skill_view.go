@@ -354,6 +354,18 @@ func assembleSkillViewWithOptions(
 		ns.SkillConstraints = buildSkillConstraints(root, def, governedChange, view.planLocked)
 	}
 
+	// Surface the advisory subagent directive for review/verify dispatch. When
+	// `.slipway.yaml` configures a non-empty profile for this skill's stage, the
+	// host should honor model/allowed_skills/allowed_mcp_servers when it spawns the
+	// fresh-context subagent. Slipway only emits this contract; it does not spawn or
+	// enforce the subagent. An unconfigured project resolves to a zero profile and
+	// emits no directive. A missing workspace must not break `next`, so a config
+	// load error is treated as the zero config.
+	if stage, ok := subagentStageForSkill(nextSkillName); ok {
+		cfg, _ := loadConfigAtRoot(root)
+		ns.Subagent = subagentDirectiveFromProfile(cfg.Subagents.Resolve(stage))
+	}
+
 	view.NextSkill = ns
 	if governedChange != nil && governedChange.CurrentState == model.StateS3Review && len(selectedReviewSkills) > 0 {
 		view.ReviewBatch = buildReviewBatchView(reviewBatchBuildInput{

@@ -35,9 +35,11 @@ func configEffectiveDefaults() map[string]string {
 
 // ConfigCatalogEntry describes one user-facing `.slipway.yaml` key as a flat,
 // dotted leaf. The catalog is the single discoverable source of truth for the
-// `slipway config` command surface; it is derived from the Config struct via
-// reflection over yaml tags so it cannot drift from what strict decoding
-// accepts.
+// FILE config surface (.slipway.yaml) exposed by the `slipway config` command;
+// it is derived from the Config struct via reflection over yaml tags so it
+// cannot drift from what strict decoding accepts. Runtime/host environment
+// variables are NOT file config and are catalogued separately via EnvCatalog()
+// and surfaced by `slipway config list --env`.
 type ConfigCatalogEntry struct {
 	// Name is the dotted key, e.g. "execution.auto" or
 	// "governance.thresholds.independent_review_blast_radius".
@@ -101,6 +103,20 @@ func configDescriptions() map[string]string {
 		"governance.thresholds.independent_review_blast_radius": "Minimum blast radius that triggers the independent-review control.",
 		"governance.thresholds.security_review_blast_radius":    "Minimum blast radius that triggers the security-review control.",
 		"governance.thresholds.worktree_blast_radius":           "Minimum blast radius that triggers the worktree-isolation control.",
+		"github.api_url":                                        "GitHub REST/GraphQL API base URL (env SLIPWAY_GITHUB_API_URL overrides; default https://api.github.com).",
+		"github.api_allowed_base_urls":                          "HTTPS API base URLs allowed for a github.api_url override (env SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS overrides).",
+		"subagents.default.model":                               "Default model a host should use when spawning any governed subagent (advisory; empty inherits host default).",
+		"subagents.default.allowed_skills":                      "Default skills a spawned subagent may load (advisory; empty inherits host default).",
+		"subagents.default.allowed_mcp_servers":                 "Default MCP servers a spawned subagent may reach (advisory; empty inherits host default).",
+		"subagents.review.model":                                "Model override for S3 review-peer subagents (falls back to subagents.default.model).",
+		"subagents.review.allowed_skills":                       "Skill allowlist override for S3 review-peer subagents (falls back to subagents.default).",
+		"subagents.review.allowed_mcp_servers":                  "MCP-server allowlist override for S3 review-peer subagents (falls back to subagents.default).",
+		"subagents.fix.model":                                   "Model override for the S3 review-finding repair subagent (falls back to subagents.default.model).",
+		"subagents.fix.allowed_skills":                          "Skill allowlist override for the S3 repair subagent (falls back to subagents.default).",
+		"subagents.fix.allowed_mcp_servers":                     "MCP-server allowlist override for the S3 repair subagent (falls back to subagents.default).",
+		"subagents.verify.model":                                "Model override for the terminal ship-verification subagent (falls back to subagents.default.model).",
+		"subagents.verify.allowed_skills":                       "Skill allowlist override for the ship-verification subagent (falls back to subagents.default).",
+		"subagents.verify.allowed_mcp_servers":                  "MCP-server allowlist override for the ship-verification subagent (falls back to subagents.default).",
 		"context.tech_stack":                                    "Project tech stack injected into skill templates.",
 		"context.conventions":                                   "Project conventions injected into skill templates.",
 		"context.test_cmd":                                      "Project test command injected into skill templates.",

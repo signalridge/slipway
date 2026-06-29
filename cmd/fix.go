@@ -45,6 +45,12 @@ type fixRepairContract struct {
 	RecordEvidence                        []string `json:"record_evidence"`
 	AfterRepair                           []string `json:"after_repair"`
 	Prohibited                            []string `json:"prohibited"`
+	// Subagent is the advisory per-stage subagent directive (model / allowed
+	// skills / allowed MCP servers) the host should honor when it spawns the
+	// fresh-context fix subagent. It is set only when `.slipway.yaml` configures a
+	// non-empty resolved profile for the fix stage. Slipway emits this contract;
+	// the host owns spawning and honoring it.
+	Subagent *subagentDirective `json:"subagent,omitempty"`
 }
 
 func makeFixCmd() *cobra.Command {
@@ -144,6 +150,14 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 		}
 	}
 
+	// Resolve the advisory fix-stage subagent directive from `.slipway.yaml`. A
+	// missing workspace must not break `fix`, so a config load error is treated as
+	// the zero config; an unconfigured fix stage resolves to a zero profile and
+	// emits no directive. Slipway only surfaces this contract; the host spawns the
+	// fix subagent and is responsible for honoring it.
+	cfg, _ := loadConfigAtRoot(root)
+	sub := subagentDirectiveFromProfile(cfg.Subagents.Resolve(model.SubagentStageFix))
+
 	profile := buildChangeProfileView(change)
 	return fixView{
 		Slug:                 slug,
@@ -152,7 +166,7 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 		CurrentState:         string(change.CurrentState),
 		SelectedReviewSkills: selected,
 		RepairTargets:        targets,
-		Contract:             reviewFixContract(slug),
+		Contract:             reviewFixContract(slug, sub),
 		Blockers:             model.NormalizeReasonCodes(readiness.Blockers),
 	}, nil
 }
@@ -344,14 +358,14 @@ func compactFixRepairTargets(targets []fixRepairTarget) []fixRepairTarget {
 	return out
 }
 
-func reviewFixContract(slug string) fixRepairContract {
+func reviewFixContract(slug string, sub *subagentDirective) fixRepairContract {
 	batchID := "s3-review-repair:" + strings.TrimSpace(slug)
 	return fixRepairContract{
 		RepairBatchID:                         batchID,
 		CollectAllSelectedReviewFindingsFirst: true,
 		RequiresFreshContext:                  true,
 		FindingCollection:                     "Collect all selected S3 reviewer findings first, then consolidate by root cause before dispatching repair.",
-		Dispatch:                              "Spawn a fresh-context repair subagent with the consolidated repair brief; pass paths and blocker facts, not the host conversation.",
+		Dispatch:                              "Spawn a fresh-context repair subagent with the consolidated repair brief; pass paths and blocker facts, not the host conversation. When this contract carries a subagent directive (subagent.model / subagent.allowed_skills / subagent.allowed_mcp_servers), the host MUST honor those dimensions when it spawns the fix subagent, and an empty dimension means inherit the host default — Slipway only signals the contract, it does not spawn or enforce the subagent.",
 		RepairBrief:                           "One repair brief covers the open finding set for this repair_batch_id. Do not repair one reviewer finding while the selected review batch is still collecting findings.",
 		ContextReference:                      model.ContextOriginReferencePrefix + model.StageContextFix + "=<repair-subagent-handle>",
 		RecordEvidence: []string{
@@ -369,6 +383,7 @@ func reviewFixContract(slug string) fixRepairContract {
 			"Do not use `slipway repair` for review findings; repair is local integrity only.",
 			"Do not hand-edit verification YAML.",
 		},
+		Subagent: sub,
 	}
 }
 
@@ -413,6 +428,18 @@ func writeFixText(w io.Writer, view fixView) error {
 	writer.Writef("Contract:\n")
 	writer.Writef("- %s\n", view.Contract.FindingCollection)
 	writer.Writef("- %s\n", view.Contract.Dispatch)
+	if sub := view.Contract.Subagent; sub != nil {
+		// Advisory only: the host honors these when spawning the fix subagent.
+		if sub.Model != "" {
+			writer.Writef("- subagent model: %s\n", sub.Model)
+		}
+		if len(sub.AllowedSkills) > 0 {
+			writer.Writef("- subagent allowed skills: %s\n", strings.Join(sub.AllowedSkills, ", "))
+		}
+		if len(sub.AllowedMCPServers) > 0 {
+			writer.Writef("- subagent allowed MCP servers: %s\n", strings.Join(sub.AllowedMCPServers, ", "))
+		}
+	}
 	writer.Writef("- %s\n", view.Contract.RepairBrief)
 	writer.Writef("- record reference: %s\n", view.Contract.ContextReference)
 	for _, step := range view.Contract.AfterRepair {

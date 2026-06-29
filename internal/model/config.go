@@ -3,6 +3,7 @@ package model
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,8 @@ type Config struct {
 	Defaults        ConfigDefaults        `yaml:"defaults" json:"defaults"`
 	Execution       ConfigExecution       `yaml:"execution" json:"execution"`
 	Governance      ConfigGovernance      `yaml:"governance,omitempty" json:"governance,omitempty"`
+	GitHub          ConfigGitHub          `yaml:"github,omitempty" json:"github,omitempty"`
+	Subagents       ConfigSubagents       `yaml:"subagents,omitempty" json:"subagents,omitempty"`
 	Context         ProjectContext        `yaml:"context,omitempty" json:"context,omitempty"`
 	CustomArtifacts []ArtifactDefinition  `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	UnknownTopLevel map[string]*yaml.Node `yaml:"-" json:"-"`
@@ -98,6 +101,143 @@ func (t ConfigGovernanceThresholds) Validate() error {
 		return fmt.Errorf("governance.thresholds.worktree_blast_radius: invalid signal level %q", t.WorktreeBlastRadius)
 	}
 	return nil
+}
+
+// ConfigGitHub holds the repo-policy GitHub API settings that may live in
+// .slipway.yaml. These mirror the SLIPWAY_GITHUB_API_URL and
+// SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variables so a project can
+// pin a GitHub Enterprise host in version control instead of relying on ambient
+// environment alone. The matching environment variables still override these
+// file values (env > file > default), and the override token
+// (SLIPWAY_GITHUB_API_TOKEN) is intentionally NOT representable here: secrets
+// stay environment-only.
+type ConfigGitHub struct {
+	// APIURL pins the GitHub REST/GraphQL API base URL used by the token-backed
+	// HTTP backend. Empty means the default https://api.github.com unless the
+	// SLIPWAY_GITHUB_API_URL environment variable overrides it.
+	APIURL string `yaml:"api_url,omitempty" json:"api_url,omitempty"`
+	// APIAllowedBaseURLs lists the HTTPS API base URLs allowed for an APIURL
+	// override. The SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variable, when
+	// set, overrides this list wholesale.
+	APIAllowedBaseURLs []string `yaml:"api_allowed_base_urls,omitempty" json:"api_allowed_base_urls,omitempty"`
+}
+
+func (g ConfigGitHub) IsZero() bool {
+	return g.APIURL == "" && len(g.APIAllowedBaseURLs) == 0
+}
+
+// Validate checks that a configured github.api_url is an absolute https URL with
+// a host. An empty api_url is valid: the env/default precedence applies at the
+// call site. The allowed-base-URL list is normalized and allowlisted at the
+// github call site (against the same URL rules the env path uses), so it is not
+// re-validated here. The override token stays env-only and is never on this
+// struct.
+func (g ConfigGitHub) Validate() error {
+	trimmed := strings.TrimSpace(g.APIURL)
+	if trimmed == "" {
+		return nil
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return fmt.Errorf("github.api_url: invalid URL %q: %w", g.APIURL, err)
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return fmt.Errorf("github.api_url: must be an absolute https URL, got %q", g.APIURL)
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("github.api_url: must include a host, got %q", g.APIURL)
+	}
+	return nil
+}
+
+// SubagentStage identifies the governed subagent dispatch surface a profile
+// applies to. The host honors the resolved profile when it spawns the
+// corresponding subagent; Slipway only emits the directive (it does not spawn
+// or enforce model/skill/MCP selection itself).
+type SubagentStage string
+
+const (
+	// SubagentStageReview covers the fresh-context S3 review peers
+	// (spec-compliance / code-quality / independent / security review).
+	SubagentStageReview SubagentStage = "review"
+	// SubagentStageFix covers the fresh-context S3 review-finding repair subagent
+	// dispatched by `slipway fix`.
+	SubagentStageFix SubagentStage = "fix"
+	// SubagentStageVerify covers the terminal ship-verification subagent.
+	SubagentStageVerify SubagentStage = "verify"
+)
+
+// SubagentProfile is an advisory directive describing the model, allowed skills,
+// and allowed MCP servers a host should apply when it spawns a governed
+// subagent. Every field is optional; an empty field means "inherit the host
+// default" for that dimension. This is a contract the host honors when spawning
+// subagents, not an enforcement surface — Slipway emits it via the `slipway
+// next --json` and `slipway fix --json` envelopes and the generated dispatch
+// skills, but the host owns spawning.
+type SubagentProfile struct {
+	// Model names the model the host should run the subagent on (e.g. a faster or
+	// cheaper model for mechanical review). Empty inherits the host default.
+	Model string `yaml:"model,omitempty" json:"model,omitempty"`
+	// AllowedSkills restricts the skills the spawned subagent may load. Empty (nil)
+	// inherits the host default skill set.
+	AllowedSkills []string `yaml:"allowed_skills,omitempty" json:"allowed_skills,omitempty"`
+	// AllowedMCPServers restricts the MCP servers the spawned subagent may reach.
+	// Empty (nil) inherits the host default MCP set.
+	AllowedMCPServers []string `yaml:"allowed_mcp_servers,omitempty" json:"allowed_mcp_servers,omitempty"`
+}
+
+func (p SubagentProfile) IsZero() bool {
+	return p.Model == "" && len(p.AllowedSkills) == 0 && len(p.AllowedMCPServers) == 0
+}
+
+// ConfigSubagents carries optional per-stage subagent directives. The Default
+// profile supplies the fallback for any dimension a stage profile leaves unset,
+// so a project can set one model/skill/MCP policy once and override only the
+// stages that differ. The Default profile also applies to wave executors, whose
+// dispatch reference instructs the host to honor it.
+type ConfigSubagents struct {
+	// Default supplies the fallback profile for every stage and for wave
+	// executors.
+	Default SubagentProfile `yaml:"default,omitempty" json:"default,omitempty"`
+	// Review overrides the Default for the S3 review peers.
+	Review SubagentProfile `yaml:"review,omitempty" json:"review,omitempty"`
+	// Fix overrides the Default for the S3 review-finding repair subagent.
+	Fix SubagentProfile `yaml:"fix,omitempty" json:"fix,omitempty"`
+	// Verify overrides the Default for the terminal ship-verification subagent.
+	Verify SubagentProfile `yaml:"verify,omitempty" json:"verify,omitempty"`
+}
+
+func (s ConfigSubagents) IsZero() bool {
+	return s.Default.IsZero() && s.Review.IsZero() && s.Fix.IsZero() && s.Verify.IsZero()
+}
+
+// Resolve returns the effective profile for stage, merging each dimension over
+// the Default profile: a stage value wins when set, otherwise the Default
+// value applies, otherwise the dimension is empty (host inherits). An unknown
+// stage resolves to the Default profile.
+func (s ConfigSubagents) Resolve(stage SubagentStage) SubagentProfile {
+	var override SubagentProfile
+	switch stage {
+	case SubagentStageReview:
+		override = s.Review
+	case SubagentStageFix:
+		override = s.Fix
+	case SubagentStageVerify:
+		override = s.Verify
+	default:
+		override = SubagentProfile{}
+	}
+	resolved := s.Default
+	if override.Model != "" {
+		resolved.Model = override.Model
+	}
+	if override.AllowedSkills != nil {
+		resolved.AllowedSkills = override.AllowedSkills
+	}
+	if override.AllowedMCPServers != nil {
+		resolved.AllowedMCPServers = override.AllowedMCPServers
+	}
+	return resolved
 }
 
 // ProjectContext provides project-specific context injected into skill templates.
@@ -265,6 +405,9 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("execution.parallelization must be unset or one of: forced, off")
 	}
+	if err := c.GitHub.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -298,6 +441,14 @@ func ParseConfigYAML(data []byte) (Config, error) {
 		case "governance":
 			if err := decodeNodeStrict(value, &cfg.Governance); err != nil {
 				return Config{}, fmt.Errorf("decode governance: %w", err)
+			}
+		case "github":
+			if err := decodeNodeStrict(value, &cfg.GitHub); err != nil {
+				return Config{}, fmt.Errorf("decode github: %w", err)
+			}
+		case "subagents":
+			if err := decodeNodeStrict(value, &cfg.Subagents); err != nil {
+				return Config{}, fmt.Errorf("decode subagents: %w", err)
 			}
 		case "agents":
 			return Config{}, fmt.Errorf("top-level agents configuration has been removed; governed handoff is skill-based via next_skill.name and slipway-{name}/SKILL.md host skill surfaces")
@@ -346,6 +497,27 @@ func (c Config) ToYAML() ([]byte, error) {
 			return nil, err
 		}
 		appendMappingEntry(root, "governance", governanceNode)
+	}
+
+	// Emit the github section only when a repo-policy GitHub setting is present.
+	// Reuse IsZero() as the single empty-section predicate so the section never
+	// round-trips into UnknownTopLevel as an empty mapping.
+	if !cfg.GitHub.IsZero() {
+		githubNode, err := encodeYAMLNode(cfg.GitHub)
+		if err != nil {
+			return nil, err
+		}
+		appendMappingEntry(root, "github", githubNode)
+	}
+
+	// Emit the subagents section only when at least one profile dimension is set,
+	// gated on the same IsZero() authority used for decode/round-trip parity.
+	if !cfg.Subagents.IsZero() {
+		subagentsNode, err := encodeYAMLNode(cfg.Subagents)
+		if err != nil {
+			return nil, err
+		}
+		appendMappingEntry(root, "subagents", subagentsNode)
 	}
 
 	// Emit the context section whenever any context leaf is set. Reuse IsZero()

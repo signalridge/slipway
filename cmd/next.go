@@ -153,6 +153,54 @@ type nextSkillView struct {
 	SkillConstraints     *skillConstraints  `json:"skill_constraints,omitempty"`
 	ReviewContext        *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
+	// Subagent is the advisory per-stage subagent directive (model / allowed
+	// skills / allowed MCP servers) the host should honor when it spawns the
+	// fresh-context subagent for this skill (review or verify stages). It is set
+	// only when `.slipway.yaml` configures a non-empty resolved profile for the
+	// stage. Slipway emits this contract; the host owns spawning and honoring it.
+	Subagent *subagentDirective `json:"subagent,omitempty"`
+}
+
+// subagentDirective is the JSON projection of a resolved model.SubagentProfile
+// carried in the `slipway next --json` and `slipway fix --json` envelopes. Empty
+// fields mean "inherit the host default" for that dimension.
+type subagentDirective struct {
+	Model             string   `json:"model,omitempty"`
+	AllowedSkills     []string `json:"allowed_skills,omitempty"`
+	AllowedMCPServers []string `json:"allowed_mcp_servers,omitempty"`
+}
+
+// subagentDirectiveFromProfile projects a resolved profile into the envelope
+// shape, returning nil for a zero profile so an unconfigured project emits no
+// subagent key at all.
+func subagentDirectiveFromProfile(profile model.SubagentProfile) *subagentDirective {
+	if profile.IsZero() {
+		return nil
+	}
+	return &subagentDirective{
+		Model:             profile.Model,
+		AllowedSkills:     profile.AllowedSkills,
+		AllowedMCPServers: profile.AllowedMCPServers,
+	}
+}
+
+// subagentStageForSkill maps a next/review skill name to the governed subagent
+// stage whose profile the host should apply when spawning that skill's
+// fresh-context subagent. It returns ok=false for skills that are not dispatched
+// as governed subagents (e.g. planning/implementation skills run in the host
+// context), so no directive is emitted for them.
+func subagentStageForSkill(skillName string) (model.SubagentStage, bool) {
+	switch skillName {
+	case progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillSecurityReview:
+		return model.SubagentStageReview, true
+	case progression.SkillShipVerification, "goal-verification": // goal-verification is a retired alias of ship-verification
+		return model.SubagentStageVerify, true
+	default:
+		return "", false
+	}
 }
 
 type reviewBatchView struct {
@@ -1321,6 +1369,20 @@ func writeNextHuman(w io.Writer, view nextView) error {
 			}
 			if len(view.NextSkill.ReviewContext.RequiredImplementationLayers) > 0 {
 				writer.Writef("  Required Implementation Layers: %s\n", strings.Join(view.NextSkill.ReviewContext.RequiredImplementationLayers, ", "))
+			}
+		}
+		if sub := view.NextSkill.Subagent; sub != nil {
+			// Advisory only: Slipway emits this subagent contract; the host spawns
+			// the subagent and is responsible for honoring it. An empty dimension
+			// means the host inherits its default.
+			if sub.Model != "" {
+				writer.Writef("  Subagent Model: %s\n", sub.Model)
+			}
+			if len(sub.AllowedSkills) > 0 {
+				writer.Writef("  Subagent Allowed Skills: %s\n", strings.Join(sub.AllowedSkills, ", "))
+			}
+			if len(sub.AllowedMCPServers) > 0 {
+				writer.Writef("  Subagent Allowed MCP Servers: %s\n", strings.Join(sub.AllowedMCPServers, ", "))
 			}
 		}
 		if view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0 {

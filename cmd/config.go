@@ -21,6 +21,7 @@ type configGetView struct {
 // discoverable from `slipway --help`, not only `slipway help config`.
 func makeConfigCmd() *cobra.Command {
 	var listJSON bool
+	var listEnv bool
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: desc("config"),
@@ -30,24 +31,42 @@ func makeConfigCmd() *cobra.Command {
 		SilenceErrors: true,
 		Long: desc("config") + `
 
-Keys are the dotted leaves of .slipway.yaml (the same surface strict decoding
-accepts). With no subcommand, config lists every key; use list/get/set to read
-or update individual keys.
+Slipway has two configuration surfaces with distinct ownership:
+
+  Repo policy  -> .slipway.yaml, version-controlled. The file keys are the
+                 dotted leaves below; list/get/set operate on them.
+  Runtime/host -> environment variables the host injects per session (identity,
+                 context-window size, host capabilities). These are NOT file
+                 config; discover them with ` + "`config list --env`" + `.
+  Secrets      -> environment-only credentials (e.g. GitHub tokens). They are
+                 never written to .slipway.yaml.
+
+Some repo-policy settings are reachable from both surfaces (e.g.
+SLIPWAY_GITHUB_API_URL mirrors github.api_url); the environment value overrides
+the file value (env > file > default).
+
+File keys are the dotted leaves of .slipway.yaml (the same surface strict
+decoding accepts). With no subcommand, config lists every file key; use
+list/get/set to read or update individual keys.
 
 config set rewrites .slipway.yaml as deterministic YAML; comments and the
 original key ordering are not preserved.
 
-  config [list] [--json]   Enumerate every key (name, type, default,
+  config [list] [--json]   Enumerate every file key (name, type, default,
                            allowed-values, scope).
+  config list --env [--json]
+                           Enumerate the environment-variable surface (name,
+                           scope, default, file-config-key, description).
   config get <key> [--json]
-                           Print the resolved effective value for a key.
-  config set <key> <value> Validate and persist a key to .slipway.yaml.`,
+                           Print the resolved effective value for a file key.
+  config set <key> <value> Validate and persist a file key to .slipway.yaml.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigList(cmd, listJSON)
+			return runConfigList(cmd, listJSON, listEnv)
 		},
 	}
 	cmd.Flags().BoolVar(&listJSON, "json", false, "JSON output")
+	cmd.Flags().BoolVar(&listEnv, "env", false, "List the environment-variable surface instead of file keys")
 	cmd.AddCommand(makeConfigListCmd())
 	cmd.AddCommand(makeConfigGetCmd())
 	cmd.AddCommand(makeConfigSetCmd())
@@ -56,15 +75,24 @@ original key ordering are not preserved.
 
 func makeConfigListCmd() *cobra.Command {
 	var jsonFlag bool
+	var envFlag bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List every configuration key with its type, default, allowed values, and scope",
-		Args:  cobra.NoArgs,
+		Long: `List every .slipway.yaml file key with its type, default, allowed values, and scope.
+
+With --env, list the environment-variable surface instead: the SLIPWAY_* (and
+ambient GitHub token) variables Slipway reads, each with its scope (repo-policy,
+runtime-host, or secret), default, the .slipway.yaml key it overrides (for
+repo-policy variables), and a description. The environment value overrides the
+matching file value (env > file > default).`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigList(cmd, jsonFlag)
+			return runConfigList(cmd, jsonFlag, envFlag)
 		},
 	}
 	cmd.Flags().BoolVar(&jsonFlag, "json", false, "JSON output")
+	cmd.Flags().BoolVar(&envFlag, "env", false, "List the environment-variable surface instead of file keys")
 	return cmd
 }
 
@@ -110,12 +138,44 @@ func loadConfigForCommand(cmd *cobra.Command) (string, model.Config, error) {
 	return root, cfg, nil
 }
 
-func runConfigList(cmd *cobra.Command, jsonFlag bool) error {
+func runConfigList(cmd *cobra.Command, jsonFlag, envFlag bool) error {
+	if envFlag {
+		entries := model.EnvCatalog()
+		if jsonFlag {
+			return encodeJSONResponse(cmd, entries)
+		}
+		return writeEnvCatalogText(cmd, entries)
+	}
 	catalog := model.ConfigCatalog()
 	if jsonFlag {
 		return encodeJSONResponse(cmd, catalog)
 	}
 	return writeConfigCatalogText(cmd, catalog)
+}
+
+func writeEnvCatalogText(cmd *cobra.Command, entries []model.EnvCatalogEntry) error {
+	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
+	if _, err := fmt.Fprintln(tw, "NAME\tSCOPE\tDEFAULT\tFILE-CONFIG-KEY\tDESCRIPTION"); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		def := entry.Default
+		if def == "" {
+			def = "-"
+		}
+		fileKey := entry.FileConfigKey
+		if fileKey == "" {
+			fileKey = "-"
+		}
+		description := entry.Description
+		if description == "" {
+			description = "-"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", entry.Name, entry.Scope, def, fileKey, description); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
 }
 
 func writeConfigCatalogText(cmd *cobra.Command, catalog []model.ConfigCatalogEntry) error {
