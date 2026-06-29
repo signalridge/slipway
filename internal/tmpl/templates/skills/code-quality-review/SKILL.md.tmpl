@@ -116,9 +116,12 @@ isolation). The selected reviews run in parallel as unordered peers: no reviewer
 waits for another reviewer's verdict. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn each review as a
 fresh-context subagent with a bounded review brief, pass it required-reading paths
-rather than artifact bodies, wait for the results, and record each handle. If a
-capable runtime cannot spawn, wait for, and close a subagent, stop and ask for
-operator direction rather than reviewing inline in the host context.
+rather than artifact bodies, wait for the results, and record each handle. If the
+host has not declared subagent capability available, `slipway next`/`run` surfaces
+a subagent-delegation prerequisite plus a named degraded fallback for this review:
+authorize subagent dispatch, or explicitly select the named fallback (for example
+`same_context_degraded`) and record fresh reviewer evidence for the degraded run —
+do not review inline without recording the selected fallback.
 
 Record this review's per-stage context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

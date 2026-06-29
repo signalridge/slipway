@@ -185,9 +185,13 @@ worktree (the same worktree that holds the governed bundle; there is no
 per-audit git worktree isolation). Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
 subagent with a bounded audit brief, pass it required-reading paths rather than
-artifact bodies, wait for its result, and record its handle. If a capable runtime
-cannot spawn, wait for, and close a subagent, stop and ask for operator direction
-rather than auditing inline in the host context.
+artifact bodies, wait for its result, and record its handle. If the host has not
+declared subagent capability available, `slipway next`/`run` surfaces a
+subagent-delegation prerequisite plus a named degraded fallback for plan-audit:
+authorize subagent dispatch, or explicitly select the named fallback (for example
+`manual_plan_audit` or `same_context_degraded`) and record fresh auditor evidence
+with a distinct `audit_origin` handle — do not audit inline without recording the
+selected fallback.
 
 Plan-audit records an author/auditor PAIR of context handles, NOT a
 `context_origin:stage=` token. Record both:

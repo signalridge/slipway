@@ -56,6 +56,15 @@ func securityReview() Skill {
 		Bindings: []Binding{
 			{Type: BindingCommandAuto, Target: "review", Attachment: AttachmentChecklist},
 		},
+		HostCapabilities: []HostCapabilityContract{
+			{
+				Capability:          "subagent",
+				Required:            true,
+				FallbackModes:       []string{"manual_security_review", "same_context_degraded"},
+				EvidenceRequirement: "record security-review evidence from a fresh independent reviewer context",
+				Remediation:         "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence.",
+			},
+		},
 		HydrateReferences: []HydrateReference{
 			{Name: "authentication.md", Reason: "Password storage / session / MFA / recovery secure-default rules"},
 			{Name: "authorization.md", Reason: "Resource-boundary re-check, IDOR, multi-tenant isolation"},
