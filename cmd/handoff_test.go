@@ -210,6 +210,29 @@ func TestHandoffBareFreeformBodyRoutesToDefaultSection(t *testing.T) {
 	})
 }
 
+func TestHandoffBarePipedBodyPreservesUnmatchedContentWithCanonicalSection(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff mixed body")
+		forceHandoffInteractive(t, false)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetIn(strings.NewReader("NOTE: blocked on review.\n\n## Operator Notes\nimportant detail\n\n## Next Session Focus\nFinish merge.\n"))
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+		assert.Contains(t, out.String(), "handoff_written:")
+
+		raw, err := os.ReadFile(state.ChangeHandoffPath(root, slug))
+		require.NoError(t, err)
+		assert.Contains(t, string(raw), "NOTE: blocked on review.")
+		assert.Contains(t, string(raw), "## Operator Notes")
+		assert.Contains(t, string(raw), "important detail")
+		assert.Contains(t, string(raw), "Finish merge.")
+	})
+}
+
 func TestHandoffWriteNonInteractiveEmptyBodyFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
@@ -250,6 +273,26 @@ func TestHandoffWriteSectionEmptyBodyFailsLoudly(t *testing.T) {
 		assert.Equal(t, "handoff_body_empty", cliErr.ErrorCode)
 		assert.Equal(t, "Risks And Blockers", cliErr.Details["section"])
 		assert.NotContains(t, out.String(), "handoff_written")
+	})
+}
+
+func TestHandoffWriteInteractiveSectionGuidesWithoutBlockingOrFalseSuccess(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "handoff interactive section")
+		forceHandoffInteractive(t, true)
+
+		cmd := commandForRoot(t, root, makeHandoffCmd())
+		cmd.SetArgs([]string{"write", "--section", "Next Session Focus"})
+		var out, errOut bytes.Buffer
+		cmd.SetOut(&out)
+		cmd.SetErr(&errOut)
+		require.NoError(t, cmd.Execute())
+		assert.NotContains(t, out.String(), "handoff_written")
+		assert.Contains(t, errOut.String(), "section \"Next Session Focus\" needs a piped narrative")
+		_, statErr := os.Stat(state.ChangeHandoffPath(root, slug))
+		assert.True(t, os.IsNotExist(statErr), "interactive guidance must not write a scaffold")
 	})
 }
 

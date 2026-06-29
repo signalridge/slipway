@@ -17,6 +17,11 @@ import (
 // runaway producer cannot exhaust memory through the handoff writer.
 const handoffWriteMaxBodyBytes = 1 << 20
 
+const (
+	handoffFullBodyExample    = "`printf '## Current Position\\n...' | slipway handoff write`"
+	handoffSectionBodyExample = "`printf '...' | slipway handoff write --section %q`"
+)
+
 // handoffCommandStdin and handoffCommandIsTerminal isolate the real process
 // stdin and its terminal probe so the non-interactive decision is made against
 // the actual os.Stdin fd while tests can drive narrative through the injected
@@ -124,12 +129,11 @@ func runHandoffWrite(cmd *cobra.Command, changeSlug, section string) error {
 
 	// The non-interactive decision is made against the real os.Stdin fd, but the
 	// narrative is read from the injected command reader so tests can exercise the
-	// piped-body path. A bare write on an interactive terminal must not block on
-	// stdin; a `--section` write always reads, because the section body is the
-	// explicit purpose of that invocation.
+	// piped-body path. Interactive writes must not block on stdin waiting for EOF;
+	// they guide instead unless the caller pipes content.
 	interactive := handoffCommandIsTerminal(int(handoffCommandStdin.Fd()))
 	body := ""
-	if section != "" || !interactive {
+	if !interactive {
 		raw, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), handoffWriteMaxBodyBytes))
 		if err != nil {
 			return err
@@ -167,11 +171,10 @@ func runHandoffWrite(cmd *cobra.Command, changeSlug, section string) error {
 // a canonical advisory section, listing the valid names instead of silently
 // writing a non-canonical section.
 func unknownHandoffSectionError(section string) error {
-	valid := strings.Join(state.HandoffSectionNames(), ", ")
 	return newInvalidUsageError(
 		"handoff_section_unknown",
 		fmt.Sprintf("unknown handoff section %q", section),
-		fmt.Sprintf("Pass one of the valid sections: %s.", valid),
+		fmt.Sprintf("Pass one of the valid sections: %s.", handoffValidSectionsText()),
 		map[string]any{"section": section, "valid_sections": state.HandoffSectionNames()},
 	)
 }
@@ -179,19 +182,18 @@ func unknownHandoffSectionError(section string) error {
 // emptyHandoffBodyError fails a non-interactive write that supplied no narrative,
 // telling the agent exactly how to provide content.
 func emptyHandoffBodyError(section string) error {
-	valid := strings.Join(state.HandoffSectionNames(), ", ")
 	if section != "" {
 		return newInvalidUsageError(
 			"handoff_body_empty",
 			fmt.Sprintf("no narrative was supplied on stdin for section %q", section),
-			fmt.Sprintf("Pipe the section body on stdin, e.g. `printf '...' | slipway handoff write --section %q`. Valid sections: %s.", section, valid),
+			fmt.Sprintf("Pipe the section body on stdin, e.g. %s. Valid sections: %s.", fmt.Sprintf(handoffSectionBodyExample, section), handoffValidSectionsText()),
 			map[string]any{"section": section, "non_interactive": true},
 		)
 	}
 	return newInvalidUsageError(
 		"handoff_body_empty",
 		"no handoff narrative was supplied on stdin",
-		fmt.Sprintf("Pipe the narrative on stdin, e.g. `printf '## Current Position\\n...' | slipway handoff write`, or update one section with `slipway handoff write --section \"<name>\"`. Valid sections: %s.", valid),
+		fmt.Sprintf("Pipe the narrative on stdin, e.g. %s, or update one section with `slipway handoff write --section \"<name>\"`. Valid sections: %s.", handoffFullBodyExample, handoffValidSectionsText()),
 		map[string]any{"non_interactive": true},
 	)
 }
@@ -202,14 +204,14 @@ func emitHandoffWriteGuidance(cmd *cobra.Command, section string) error {
 	if section != "" {
 		_, err := fmt.Fprintf(
 			cmd.ErrOrStderr(),
-			"handoff not written: section %q needs a narrative on stdin, e.g. `printf '...' | slipway handoff write --section %q`.\n",
-			section, section,
+			"handoff not written: section %q needs a piped narrative on stdin, e.g. %s.\n",
+			section, fmt.Sprintf(handoffSectionBodyExample, section),
 		)
 		return err
 	}
 	_, err := fmt.Fprintln(
 		cmd.ErrOrStderr(),
-		"handoff not written: pipe a narrative on stdin, e.g. `printf '## Current Position\\n...' | slipway handoff write`, or target a section with `slipway handoff write --section \"<name>\"`.",
+		"handoff not written: pipe a narrative on stdin, e.g. "+handoffFullBodyExample+", or target a section with `slipway handoff write --section \"<name>\"`.",
 	)
 	return err
 }
@@ -276,7 +278,7 @@ func runHandoffShow(cmd *cobra.Command, changeSlug string, jsonOut, brief bool) 
 // human callers receive a one-line notice plus how to record a narrative.
 func emitHandoffEmptyNotice(cmd *cobra.Command, doc state.HandoffDocument, hasChange, jsonOut bool) error {
 	notice := "handoff is empty / all sections pending"
-	guidance := notice + "; record one with `printf '## Current Position\\n...' | slipway handoff write`."
+	guidance := notice + "; record one with " + handoffFullBodyExample + "."
 	if !hasChange {
 		notice = "no active change in this context; nothing to show"
 		guidance = notice + "; run `slipway status` to choose an active change."
@@ -292,6 +294,10 @@ func emitHandoffEmptyNotice(cmd *cobra.Command, doc state.HandoffDocument, hasCh
 	}
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), guidance)
 	return err
+}
+
+func handoffValidSectionsText() string {
+	return strings.Join(state.HandoffSectionNames(), ", ")
 }
 
 func resolveHandoffChangeRef(root, changeSlug string) (changeRef, bool, error) {

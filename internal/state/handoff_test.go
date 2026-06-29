@@ -147,6 +147,67 @@ func TestWriteHandoffFreeformBodyRoutesToDefaultSection(t *testing.T) {
 	assert.Contains(t, position, "no markdown headers at all")
 }
 
+func TestWriteHandoffFreeformBodyPreservesUnknownMarkdownHeadings(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "first line\n\n## Operator Notes\nimportant detail",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	assert.Contains(t, position, "first line")
+	assert.Contains(t, position, "## Operator Notes")
+	assert.Contains(t, position, "important detail")
+}
+
+func TestWriteHandoffBodyPreservesPreambleWhenCanonicalSectionMatches(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "NOTE: blocked on review.\n\n## Next Session Focus\nFinish merge.",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	next := extractHandoffSection(doc.Narrative, "Next Session Focus")
+	assert.Contains(t, position, "NOTE: blocked on review.")
+	assert.Contains(t, next, "Finish merge.")
+}
+
+func TestWriteHandoffBodyEmptyCanonicalSectionDoesNotAbsorbNextSection(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "## Current Position\n\n## Next Session Focus\nFinish the merge.",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	next := extractHandoffSection(doc.Narrative, "Next Session Focus")
+	assert.NotContains(t, position, "## Next Session Focus")
+	assert.NotContains(t, position, "Finish the merge.")
+	assert.Contains(t, next, "Finish the merge.")
+}
+
+func TestWriteHandoffUnknownSectionOptionPreservesBodyInDefaultSection(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Section:     "Operator Notes",
+		SectionBody: "important detail",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	assert.Contains(t, position, "## Operator Notes")
+	assert.Contains(t, position, "important detail")
+}
+
 func TestHandoffIsEmptyDetectsPendingScaffold(t *testing.T) {
 	empty := HandoffDocument{Narrative: ensureHandoffNarrativeSkeleton("")}
 	assert.True(t, HandoffIsEmpty(empty))

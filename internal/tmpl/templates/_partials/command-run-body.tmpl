@@ -42,10 +42,11 @@ or `slipway next --json`:
 - `context_budget` appears only when `guard_action` is `warn` or `stop`; do not assume the field exists.
 - If `context_budget.guard_action` equals `warn`, trim non-essential context.
 - If `context_budget.guard_action` equals `stop`, stop execution, preserve the returned recovery paths, and resume in a fresh context.
-- When continuation context is needed for an active governed change, write the
-  per-change advisory handoff with `slipway handoff write`. Resolve `<slug>`
-  from fresh `slipway status --json` / `slipway next --json`, not from the
-  handoff body.
+- When continuation context is needed for an active governed change, pipe a
+  narrative into `slipway handoff write` (e.g.
+  `printf '## Current Position\n...' | slipway handoff write`). Resolve
+  `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from
+  the handoff body.
   The handoff is advisory only; it does not replace `slipway status --json`,
   `slipway next --json`, lifecycle gates, freshness, or evidence checks.
 

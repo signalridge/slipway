@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -15,10 +14,11 @@ import (
 )
 
 const (
-	handoffTitle       = "# Slipway Runtime Session Handoff"
-	handoffHeaderOpen  = "<!-- slipway:handoff-machine-header"
-	handoffHeaderClose = "slipway:handoff-machine-header -->"
-	handoffTimeFormat  = time.RFC3339Nano
+	handoffTitle         = "# Slipway Runtime Session Handoff"
+	handoffHeaderOpen    = "<!-- slipway:handoff-machine-header"
+	handoffHeaderClose   = "slipway:handoff-machine-header -->"
+	handoffTimeFormat    = time.RFC3339Nano
+	handoffAdvisoryIntro = "This handoff is advisory only. Run `slipway status --json` and `slipway next --json` for lifecycle authority before acting."
 	// handoffPendingMarker is the placeholder body written for any advisory
 	// section that has no agent-authored narrative yet.
 	handoffPendingMarker = "_Agent-authored narrative pending._"
@@ -35,6 +35,11 @@ var handoffSectionNames = []string{
 	"Suggested Next Skills",
 	"Risks And Blockers",
 	"Redaction Check",
+}
+
+type handoffNarrativeParts struct {
+	sections map[string]string
+	preamble string
 }
 
 // HandoffHeader is the engine-owned machine descriptor for a per-change
@@ -235,11 +240,19 @@ func defaultHandoffSessionOwner() string {
 }
 
 func ensureHandoffNarrativeSkeleton(raw string) string {
-	raw = strings.TrimSpace(removeHandoffTitle(raw))
+	parts := parseHandoffNarrative(raw)
+	if parts.preamble != "" {
+		parts.sections[handoffDefaultSection] = joinHandoffBodies(parts.preamble, parts.sections[handoffDefaultSection])
+	}
+	return renderHandoffNarrative(parts.sections)
+}
+
+func renderHandoffNarrative(sections map[string]string) string {
 	var b strings.Builder
-	b.WriteString("This handoff is advisory only. Run `slipway status --json` and `slipway next --json` for lifecycle authority before acting.\n")
+	b.WriteString(handoffAdvisoryIntro)
+	b.WriteByte('\n')
 	for _, section := range handoffSectionNames {
-		body := extractHandoffSection(raw, section)
+		body := sections[section]
 		if strings.TrimSpace(body) == "" {
 			body = handoffPendingMarker
 		}
@@ -258,33 +271,82 @@ func removeHandoffTitle(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
+func removeHandoffAdvisoryIntro(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, handoffAdvisoryIntro)
+	return strings.TrimSpace(raw)
+}
+
+func parseHandoffNarrative(raw string) handoffNarrativeParts {
+	raw = removeHandoffAdvisoryIntro(removeHandoffTitle(raw))
+	parts := handoffNarrativeParts{sections: map[string]string{}}
+	if raw == "" {
+		return parts
+	}
+
+	currentSection := ""
+	var current []string
+	flush := func() {
+		body := strings.TrimSpace(strings.Join(current, "\n"))
+		if currentSection == "" {
+			parts.preamble = joinHandoffBodies(parts.preamble, body)
+		} else if body != "" {
+			parts.sections[currentSection] = joinHandoffBodies(parts.sections[currentSection], body)
+		} else if _, ok := parts.sections[currentSection]; !ok {
+			parts.sections[currentSection] = ""
+		}
+		current = nil
+	}
+
+	for _, line := range strings.Split(raw, "\n") {
+		if section, ok := handoffHeadingSection(line); ok {
+			flush()
+			currentSection = section
+			continue
+		}
+		current = append(current, line)
+	}
+	flush()
+	return parts
+}
+
+func handoffHeadingSection(line string) (string, bool) {
+	heading := strings.TrimSpace(line)
+	if !strings.HasPrefix(heading, "## ") {
+		return "", false
+	}
+	name := strings.TrimSpace(strings.TrimPrefix(heading, "## "))
+	for _, section := range handoffSectionNames {
+		if name == section {
+			return section, true
+		}
+	}
+	return "", false
+}
+
 func extractHandoffSection(raw, section string) string {
-	re := regexp.MustCompile(`(?ms)^## ` + regexp.QuoteMeta(section) + `\s*\n(.*?)(?:\n## |\z)`)
-	match := re.FindStringSubmatch(raw)
-	if len(match) < 2 {
+	canonical := canonicalHandoffSection(section)
+	if canonical == "" {
 		return ""
 	}
-	return strings.TrimSpace(match[1])
+	return strings.TrimSpace(parseHandoffNarrative(raw).sections[canonical])
 }
 
 func replaceHandoffSection(raw, section, body string) string {
 	canonical := canonicalHandoffSection(section)
 	if canonical == "" {
-		canonical = section
+		unknownBody := strings.TrimSpace(body)
+		if unknownBody == "" {
+			return ensureHandoffNarrativeSkeleton(raw)
+		}
+		return mergeHandoffBody(raw, "## "+strings.TrimSpace(section)+"\n"+unknownBody)
 	}
-	raw = ensureHandoffNarrativeSkeleton(raw)
-	heading := "## " + canonical + "\n"
-	start := strings.Index(raw, heading)
-	replacement := heading + strings.TrimSpace(body)
-	if start < 0 {
-		return strings.TrimSpace(raw) + "\n\n" + replacement
+	parts := parseHandoffNarrative(raw)
+	if parts.preamble != "" {
+		parts.sections[handoffDefaultSection] = joinHandoffBodies(parts.preamble, parts.sections[handoffDefaultSection])
 	}
-	bodyStart := start + len(heading)
-	end := len(raw)
-	if next := strings.Index(raw[bodyStart:], "\n## "); next >= 0 {
-		end = bodyStart + next
-	}
-	return strings.TrimSpace(raw[:bodyStart]) + "\n" + strings.TrimSpace(body) + "\n" + strings.TrimLeft(raw[end:], "\n")
+	parts.sections[canonical] = strings.TrimSpace(body)
+	return renderHandoffNarrative(parts.sections)
 }
 
 func canonicalHandoffSection(section string) string {
@@ -335,24 +397,43 @@ func HandoffIsEmpty(doc HandoffDocument) bool {
 // recognizable `## Section` headers is routed into handoffDefaultSection so a
 // piped narrative is never silently dropped.
 func mergeHandoffBody(existing, body string) string {
-	merged := ensureHandoffNarrativeSkeleton(existing)
+	merged := parseHandoffNarrative(existing)
+	if merged.preamble != "" {
+		merged.sections[handoffDefaultSection] = joinHandoffBodies(merged.preamble, merged.sections[handoffDefaultSection])
+		merged.preamble = ""
+	}
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return merged
+		return renderHandoffNarrative(merged.sections)
 	}
-	matched := false
-	for _, section := range handoffSectionNames {
-		sectionBody := strings.TrimSpace(extractHandoffSection(body, section))
-		if sectionBody == "" {
-			continue
+	incoming := parseHandoffNarrative(body)
+	if incoming.preamble != "" {
+		if _, hasDefault := incoming.sections[handoffDefaultSection]; hasDefault {
+			incoming.sections[handoffDefaultSection] = joinHandoffBodies(incoming.preamble, incoming.sections[handoffDefaultSection])
+		} else if len(incoming.sections) == 0 {
+			merged.sections[handoffDefaultSection] = incoming.preamble
+		} else {
+			merged.sections[handoffDefaultSection] = joinHandoffBodies(merged.sections[handoffDefaultSection], incoming.preamble)
 		}
-		merged = replaceHandoffSection(merged, section, sectionBody)
-		matched = true
 	}
-	if !matched {
-		merged = replaceHandoffSection(merged, handoffDefaultSection, body)
+	for _, section := range handoffSectionNames {
+		if sectionBody, ok := incoming.sections[section]; ok && strings.TrimSpace(sectionBody) != "" {
+			merged.sections[section] = strings.TrimSpace(sectionBody)
+		}
 	}
-	return merged
+	return renderHandoffNarrative(merged.sections)
+}
+
+func joinHandoffBodies(first, second string) string {
+	first = strings.TrimSpace(first)
+	second = strings.TrimSpace(second)
+	if first == "" || first == handoffPendingMarker {
+		return second
+	}
+	if second == "" || second == handoffPendingMarker {
+		return first
+	}
+	return first + "\n\n" + second
 }
 
 func normalizeSectionName(section string) string {
