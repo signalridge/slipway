@@ -669,6 +669,96 @@ func TestNextDoesNotReturnDoneReadyWithoutGoalVerification(t *testing.T) {
 	})
 }
 
+// TestNextS3ShipVerificationSurfacesSubagentDelegationAcrossCapabilityStates
+// pins the host subagent-delegation contract for the terminal ship-verification
+// gate once the S3 review batch has cleared (#369). ship-verification is the
+// single always-required terminal S3 gate; it REQUIRES dispatching a fresh
+// verifier subagent but is not a catalog-registered skill, so the contract comes
+// from the built-in subagent-dispatch lever. Without this, a host that cleared
+// the four-reviewer batch via the named fallback hit the SAME dead-end one step
+// later at ship-verification. "unknown" (host declared nothing) stays continuable
+// on the skill_handoff boundary while riding a
+// subagent_dispatch_authorization_required prerequisite with an enriched,
+// named-fallback next_action; "unavailable" (host declared other capabilities but
+// not subagent) fails closed as a first-class host_capability_unavailable blocker;
+// "available" is unchanged; an explicit fallback clears the blocker without a
+// bypass. This test exercises the public next path with ship-verification as the
+// selected terminal skill so the prerequisite genuinely reaches the surface.
+func TestNextS3ShipVerificationSurfacesSubagentDelegationAcrossCapabilityStates(t *testing.T) {
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification subagent delegation")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	const subagentBlocker = "subagent_dispatch_authorization_required:ship-verification:subagent"
+	const unavailableBlocker = "host_capability_unavailable:ship-verification:subagent"
+
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	// unknown: host declared nothing -> continuable skill_handoff riding the prerequisite.
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "")
+	unknown, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+	require.NotNil(t, unknown.NextSkill)
+	assert.Equal(t, progression.SkillShipVerification, unknown.NextSkill.Name)
+	unknownCap := requireHostCapabilityForSkill(t, unknown.HostCapabilities, progression.SkillShipVerification)
+	assert.Equal(t, "unknown", unknownCap.Availability)
+	assert.False(t, unknownCap.FallbackSelected)
+	unknownSpecs := model.ReasonSpecs(unknown.Blockers)
+	assert.Contains(t, unknownSpecs, subagentBlocker)
+	assert.NotContains(t, unknownSpecs, unavailableBlocker)
+	// Continuable: stays the ship-verification skill_handoff boundary, not a dead-end.
+	assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, unknown.ConfirmationRequirement.Reason)
+	assert.Contains(t, unknown.ConfirmationRequirement.NextAction, "Host subagent delegation is a prerequisite")
+	assert.Contains(t, unknown.ConfirmationRequirement.NextAction, "same_context_degraded")
+
+	// unavailable: host declared other capabilities but not subagent -> fails closed.
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
+	unavailable, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+	unavailableCap := requireHostCapabilityForSkill(t, unavailable.HostCapabilities, progression.SkillShipVerification)
+	assert.Equal(t, "unavailable", unavailableCap.Availability)
+	unavailableSpecs := model.ReasonSpecs(unavailable.Blockers)
+	assert.Contains(t, unavailableSpecs, unavailableBlocker)
+	assert.NotContains(t, unavailableSpecs, subagentBlocker)
+	assert.Equal(t, "blocked_by_governance", unavailable.ConfirmationRequirement.Reason)
+
+	// available: declared subagent -> no new blocker, identical to baseline.
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "subagent")
+	available, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+	availableCap := requireHostCapabilityForSkill(t, available.HostCapabilities, progression.SkillShipVerification)
+	assert.Equal(t, "available", availableCap.Availability)
+	availableSpecs := model.ReasonSpecs(available.Blockers)
+	assert.NotContains(t, availableSpecs, unavailableBlocker)
+	assert.NotContains(t, availableSpecs, subagentBlocker)
+	assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, available.ConfirmationRequirement.Reason)
+
+	// unavailable + named fallback clears the blocker and restores the handoff,
+	// without bypassing the gate (fresh ship-verification evidence is still owed).
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "none")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "manual_ship_verification")
+	fallback, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+	fallbackCap := requireHostCapabilityForSkill(t, fallback.HostCapabilities, progression.SkillShipVerification)
+	assert.True(t, fallbackCap.FallbackSelected)
+	assert.Equal(t, "manual_ship_verification", fallbackCap.FallbackMode)
+	fallbackSpecs := model.ReasonSpecs(fallback.Blockers)
+	assert.NotContains(t, fallbackSpecs, unavailableBlocker)
+	assert.NotContains(t, fallbackSpecs, subagentBlocker)
+	assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, fallback.ConfirmationRequirement.Reason)
+}
+
 func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	t.Parallel()
 

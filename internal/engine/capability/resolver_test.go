@@ -178,14 +178,15 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 // subagent-dispatch contract that surfaces a host-delegation prerequisite for
 // the governance skills that REQUIRE a fresh subagent but are not registered in
 // the capability catalog (plan-audit at S1; spec-compliance-review and
-// code-quality-review at S3). Registering them in the catalog would drag in the
-// surface-manifest / install-profile / generation machinery, so the contract is
-// a targeted lever consulted when the registry carries no host-capability
-// contract for the skill. (#339 / #369)
+// code-quality-review at S3; and the terminal ship-verification gate at S3).
+// Registering them in the catalog would drag in the surface-manifest /
+// install-profile / generation machinery, so the contract is a targeted lever
+// consulted when the registry carries no host-capability contract for the skill.
+// (#339 / #369)
 func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 	t.Parallel()
 
-	leverSkills := []string{"plan-audit", "spec-compliance-review", "code-quality-review"}
+	leverSkills := []string{"plan-audit", "spec-compliance-review", "code-quality-review", "ship-verification"}
 	for _, skillID := range leverSkills {
 		skillID := skillID
 		t.Run(skillID+"/unknown surfaces continuable prerequisite", func(t *testing.T) {

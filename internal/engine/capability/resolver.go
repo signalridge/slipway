@@ -165,6 +165,13 @@ var builtinSubagentDispatchContracts = map[string]HostCapabilityContract{
 		EvidenceRequirement: "record code-quality-review evidence from a fresh independent reviewer context",
 		Remediation:         "Run code-quality-review in a host with subagent capability, or explicitly select manual_code_quality_review / same_context_degraded fallback and record fresh reviewer evidence.",
 	},
+	"ship-verification": {
+		Capability:          "subagent",
+		Required:            true,
+		FallbackModes:       []string{"manual_ship_verification", "same_context_degraded"},
+		EvidenceRequirement: "record ship-verification evidence from a fresh verifier context",
+		Remediation:         "Run ship-verification in a host with subagent capability, or explicitly select manual_ship_verification / same_context_degraded fallback and record fresh ship-verification evidence.",
+	},
 }
 
 func hostCapabilityAvailability(tokens []string, capabilityName string) string {
