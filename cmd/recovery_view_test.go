@@ -93,8 +93,10 @@ func TestValidateRecoveryIncludesGateDetailBlockers(t *testing.T) {
 	}
 	require.NotNil(t, step, "plan-audit gate_details blocker must render a recovery step")
 	assert.Equal(t, []string{"requirements.md", "tasks.md"}, step.Details)
-	assert.Equal(t, "slipway run", step.Command)
-	assert.NotContains(t, step.Command, "--skill")
+	// A stale required skill is recovered by re-running the owning skill and
+	// re-recording its evidence; `slipway run` only loops on the blocker (#347).
+	assert.Equal(t, "slipway evidence skill --skill plan-audit --verdict pass", step.Command)
+	assert.Contains(t, step.Command, "--skill plan-audit")
 	assert.NotEmpty(t, step.Remediation)
 }
 

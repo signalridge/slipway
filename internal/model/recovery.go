@@ -452,8 +452,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"required_skill_stale": {
-		Remediation:     "Inputs certified by {subject} changed; repair the owning lifecycle evidence and rerun the current alignment gate.",
-		CommandTemplate: "slipway run",
+		Remediation:     "Inputs {subject} certified changed after its verdict; re-run the {subject} skill against the current inputs and record the fresh result with `slipway evidence skill` — do not restamp the stale verdict.",
+		CommandTemplate: "slipway evidence skill --skill {subject} --verdict pass",
 		Class:           RecoveryClassRerunSkill,
 	},
 	"research_structure_invalid": {
@@ -576,8 +576,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        90,
 	},
 	"scope_contract_drift": {
-		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If it is legitimate same-intent work, run `slipway fix`, dispatch a fresh-context repair subagent, update the owning task `target_files` in `tasks.md`, refresh affected evidence, and rerun `slipway review`. If the objective changed, open a new governed change.",
-		CommandTemplate: "slipway fix",
+		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If it is legitimate same-intent work, update the owning task `target_files` in `tasks.md` to cover them, refresh affected evidence, and re-run the current stage with `slipway run`. If the objective changed, open a new governed change.",
+		CommandTemplate: "slipway run",
 		Class:           RecoveryClassReviewAlignment,
 	},
 	"scope_contract_missing": {

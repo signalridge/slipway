@@ -384,7 +384,7 @@ func TestRecoveryStepFillsSubjectIntoCommand(t *testing.T) {
 	rc := ReasonCodeFromSpec("required_skill_stale:plan-audit:assurance.md")
 	step, ok := recoveryStepFor(rc)
 	require.True(t, ok)
-	assert.Equal(t, "slipway run", step.Command)
+	assert.Equal(t, "slipway evidence skill --skill plan-audit --verdict pass", step.Command)
 	assert.NotContains(t, step.Remediation, "{subject}")
 	assert.NotContains(t, step.Remediation, "{detail}")
 }
@@ -800,7 +800,7 @@ func TestBuildRecoveryGroupsBlockersByCodeAndSubject(t *testing.T) {
 	require.NotNil(t, cqr, "the code-quality-review group must be one step")
 	assert.Equal(t, []string{"CLAUDE.md", "README.md", "cmd/next.go"}, cqr.Details,
 		"details are de-duplicated and sorted")
-	assert.Equal(t, "slipway run", cqr.Command)
+	assert.Equal(t, "slipway evidence skill --skill code-quality-review --verdict pass", cqr.Command)
 	assert.NotContains(t, cqr.Remediation, "{", "remediation must not embed a per-detail placeholder")
 }
 
