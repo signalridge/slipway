@@ -132,10 +132,18 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 // security review must hard-stop under auto, so it must never appear here even
 // though ReviewCompanionSkillCanCarryBlockers does list it. This divergence is
 // pinned by TestSecurityReviewDivergesAcrossAutoBoundaries.
+//
+// SkillIntakeClarification is likewise deliberately omitted: the intake
+// approved-summary is a fresh hard gate by design (#357). A prior broad
+// "continue" authorization must not substitute for explicit approval of the
+// interpreted intent, so the intake handoff must hard-stop even under
+// execution.auto. Softening it would emit PriorAuthorizationSufficient=true while
+// the next_action still declares the gate fresh and non-delegable — a
+// self-contradiction. This divergence is pinned by
+// TestDeriveConfirmationRequirementAutoKeepsIntakeClarificationHardStop.
 func SkillIsPurePacingAutoSafe(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
-	case SkillIntakeClarification,
-		SkillResearchOrchestration,
+	case SkillResearchOrchestration,
 		SkillPlanAudit,
 		SkillWaveOrchestration,
 		SkillSpecComplianceReview,

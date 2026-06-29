@@ -77,7 +77,6 @@ func TestPurePacingAutoSafeAllowlistMembership(t *testing.T) {
 	t.Parallel()
 
 	autoSafe := []string{
-		SkillIntakeClarification,
 		SkillResearchOrchestration,
 		SkillPlanAudit,
 		SkillWaveOrchestration,
@@ -92,9 +91,13 @@ func TestPurePacingAutoSafeAllowlistMembership(t *testing.T) {
 		}
 	}
 
+	// intake-clarification (the fresh approved-summary hard gate, #357) and
+	// security-review must hard-stop even under execution.auto, so neither may be
+	// pure-pacing auto-safe.
 	mustHardStop := []string{
 		SkillWorktreePreflight,
 		SkillSecurityReview,
+		SkillIntakeClarification,
 	}
 	for _, name := range mustHardStop {
 		if SkillIsPurePacingAutoSafe(name) {

@@ -950,6 +950,16 @@ func selectedHostCapabilitySkillNamesForValidate(
 		if pending := pendingSelectedReviewSkills(change, readiness); len(pending) > 0 {
 			return pending
 		}
+		// The selected review peers have converged, but the terminal
+		// ship-verification gate may still owe fresh evidence. next/run already
+		// resolve ship-verification as the S3 ship authority via
+		// nextS3ShipAuthoritySkill once the peers pass; validate must surface the
+		// same skill so its host-capability contract (the subagent-delegation
+		// prerequisite or a fail-closed unavailable stop) is named for the terminal
+		// gate too, rather than dead-ending after the peers pass.
+		if shipSkill := nextS3ShipAuthoritySkill(readiness.PassingSkills, readiness.Blockers); shipSkill != "" {
+			return []string{shipSkill}
+		}
 	}
 	if actionable == nil {
 		return nil
