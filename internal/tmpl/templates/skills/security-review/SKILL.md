@@ -16,6 +16,14 @@ scope_hints:
   - changed_files_include: ["**/auth/*", "**/crypto/*", "**/session*"]
     reason: "Security-sensitive paths expand review scope after selection; they do not select this skill by themselves"
 evidence_contract: verdict
+host_capabilities:
+  - capability: subagent
+    required: true
+    fallback_modes:
+      - manual_security_review
+      - same_context_degraded
+    evidence_requirement: "record security-review evidence from a fresh independent reviewer context"
+    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence."
 hydrate_references:
   - name: authentication.md
     reason: "Password storage / session / MFA / recovery secure-default rules"

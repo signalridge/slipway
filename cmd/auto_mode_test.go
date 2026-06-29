@@ -212,7 +212,6 @@ func TestDeriveConfirmationRequirementAutoSoftensOnlyPurePacingAllowlist(t *test
 	t.Parallel()
 
 	for _, skillName := range []string{
-		progression.SkillIntakeClarification,
 		progression.SkillResearchOrchestration,
 		progression.SkillPlanAudit,
 		progression.SkillWaveOrchestration,
@@ -240,6 +239,7 @@ func TestDeriveConfirmationRequirementAutoSoftensOnlyPurePacingAllowlist(t *test
 
 	for _, skillName := range []string{
 		progression.SkillWorktreePreflight,
+		progression.SkillIntakeClarification,
 		"future-sensitive-review",
 	} {
 		skillName := skillName
@@ -676,42 +676,48 @@ func approvedSummarySection(intent string) string {
 }
 
 // (finding #5) Config-level execution.auto must reach the real command entry
-// points, not just the helper layer. This drives `slipway intake` through the
-// root cobra command with auto set only via .slipway.yaml. At S0 intake the next
-// skill is intake-clarification (a skill_handoff), so non-guardrail auto softens
-// the boundary to evidence_continuation while a guardrail domain — and auto off —
-// keep the hard_stop. The guardrail-vs-non-guardrail pair proves both that auto
-// was read from config and threaded, and that the guardrail exclusion still fails
-// closed through this entry.
+// points, not just the helper layer. This drives `slipway next` through the root
+// cobra command with auto set only via .slipway.yaml. The vehicle is an
+// S2_IMPLEMENT change whose pending skill is wave-orchestration (a genuinely
+// pure-pacing skill_handoff), so non-guardrail auto softens the boundary to
+// evidence_continuation while a guardrail domain — and auto off — keep the
+// hard_stop. The guardrail-vs-non-guardrail pair proves both that auto was read
+// from config and threaded, and that the guardrail exclusion still fails closed
+// through this entry.
 //
-// The SessionStart hook is intentionally not exercised here: it no longer injects
-// the auto-softened `next --json` change-state view (REQ-004 retired that
-// auto-injection); it emits only the slipway_entry_skill routing pointer. The
-// stage command remains the real entry that threads execution.auto.
+// intake-clarification is deliberately NOT used as the vehicle: the intake
+// approved-summary is a fresh hard gate by design (#357) and must hard-stop even
+// under auto, so it can no longer demonstrate the softened path (see
+// TestDeriveConfirmationRequirementAutoKeepsIntakeClarificationHardStop). `next`
+// is a real command entry that threads execution.auto via resolveEffectiveAuto
+// and is preview-only, so it carries no execution side effects.
 func TestConfigAutoReachesStageAndHookEntries(t *testing.T) {
-	setup := func(t *testing.T, auto bool, guardrail string) string {
+	setup := func(t *testing.T, auto bool, guardrail string) (string, string) {
 		t.Helper()
 		root := t.TempDir()
 		ensureTestGitRepo(t, root)
 		initTestWorkspace(t, root)
 		writeAutoConfig(t, root, auto)
-		slug := createIntakeChangeFixture(t, root, "config auto reaches entries")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "config auto reaches entries")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS2Implement
+		change.PlanSubStep = model.PlanSubStepNone
 		if guardrail != "" {
-			change, err := state.LoadChange(root, slug)
-			require.NoError(t, err)
 			change.GuardrailDomain = guardrail
-			require.NoError(t, state.SaveChange(root, change))
 		}
-		return root
+		require.NoError(t, state.SaveChange(root, change))
+		writeShipReadyGovernedBundle(t, root, change)
+		return root, slug
 	}
 
-	t.Run("stage_command_intake", func(t *testing.T) {
-		stageJSON := func(t *testing.T, root string) string {
+	t.Run("next_command_s2_wave", func(t *testing.T) {
+		nextJSON := func(t *testing.T, root, slug string) string {
 			t.Helper()
 			var out string
 			withWorkspace(t, root, func() {
 				cmd := newRootCmd()
-				cmd.SetArgs([]string{"intake", "--json"})
+				cmd.SetArgs([]string{"next", "--json", "--change", slug})
 				var buf bytes.Buffer
 				cmd.SetOut(&buf)
 				require.NoError(t, cmd.Execute())
@@ -720,16 +726,20 @@ func TestConfigAutoReachesStageAndHookEntries(t *testing.T) {
 			return out
 		}
 
-		soft := stageJSON(t, setup(t, true, ""))
+		softRoot, softSlug := setup(t, true, "")
+		soft := nextJSON(t, softRoot, softSlug)
+		assert.Contains(t, soft, "wave-orchestration")
 		assert.Contains(t, soft, "evidence_continuation",
-			"config auto must soften the non-guardrail intake skill_handoff through the stage command")
+			"config auto must soften the non-guardrail wave-orchestration skill_handoff through the command entry")
 		assert.NotContains(t, soft, "hard_stop")
 
-		guard := stageJSON(t, setup(t, true, string(model.GuardrailDomainAuthAuthZ)))
+		guardRoot, guardSlug := setup(t, true, string(model.GuardrailDomainAuthAuthZ))
+		guard := nextJSON(t, guardRoot, guardSlug)
 		assert.Contains(t, guard, "hard_stop",
-			"guardrail domain must keep the stage entry hard-stop under auto")
+			"guardrail domain must keep the command entry hard-stop under auto")
 
-		off := stageJSON(t, setup(t, false, ""))
+		offRoot, offSlug := setup(t, false, "")
+		off := nextJSON(t, offRoot, offSlug)
 		assert.Contains(t, off, "hard_stop", "auto off must keep the legacy hard_stop")
 	})
 }

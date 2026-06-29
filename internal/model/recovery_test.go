@@ -157,6 +157,8 @@ func inScopeProducedRecoverySpecs() []string {
 		"cross_stage_context_not_distinct:spec-compliance-review|code-quality-review",
 		"plan_audit_origin_invalid",
 		"degraded_dispatch_justification_missing",
+		"subagent_dispatch_authorization_required:plan-audit:subagent",
+		"host_capability_unavailable:independent-review:subagent",
 	}
 }
 

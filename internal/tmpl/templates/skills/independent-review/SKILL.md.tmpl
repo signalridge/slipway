@@ -99,9 +99,12 @@ Dispatch this review in a native subagent from the S3 review host on the SHARED 
 (the same worktree the implementation edited; there is no
 per-review git worktree isolation). Spawn a fresh-context subagent with a
 bounded review brief, pass it required-reading paths rather than artifact
-bodies, wait for the result, and record the handle. If a capable runtime cannot
-spawn, wait for, and close a subagent, stop and ask for operator direction
-rather than reviewing inline in the host context.
+bodies, wait for the result, and record the handle. If the host has not declared
+subagent capability available, `slipway next`/`run` surfaces a subagent-delegation
+prerequisite plus a named degraded fallback for this review: authorize subagent
+dispatch, or explicitly select the named fallback (for example
+`same_context_degraded`) and record fresh reviewer evidence for the degraded run —
+do not review inline without recording the selected fallback.
 
 Record this review's context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

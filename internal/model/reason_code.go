@@ -538,6 +538,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Governance skill registry is invalid",
 	},
+	"subagent_dispatch_authorization_required": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governance skill needs host subagent-dispatch authorization the host has not declared available",
+	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,
 		Message:  "Execution evidence is stale; rerun wave-orchestration for affected tasks",

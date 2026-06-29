@@ -259,6 +259,12 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassSatisfyControl,
 		SplitDetail:     true,
 	},
+	"subagent_dispatch_authorization_required": {
+		Remediation:     "The host has not declared {detail} dispatch available for {subject}: authorize host {detail} delegation, or explicitly select a named degraded fallback for {subject} and record fresh evidence. Do not review or audit inline in the host context without recording the chosen fallback.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassSatisfyControl,
+		SplitDetail:     true,
+	},
 	"incomplete_execution_task": {
 		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or update tasks.md if the task no longer belongs, then continue wave-orchestration.",
 		CommandTemplate: "slipway run",
