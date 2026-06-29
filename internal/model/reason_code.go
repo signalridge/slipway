@@ -490,6 +490,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract is missing required target files",
 	},
+	"s3_task_plan_drift_requires_reexecution": {
+		Severity: ReasonSeverityError,
+		Message:  "tasks.md adds a task the materialized wave plan does not contain; its task evidence cannot be recorded in place and S3 review/ship-verification went stale. Reopen execution to re-materialize the wave plan with the added task",
+	},
 	"session_isolation_warning": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Session isolation warning detected in task evidence",
@@ -510,6 +514,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Required ship-verification evidence is missing; rerun ship-verification before done",
 	},
+	"ship_verification_evidence_stale": {
+		Severity: ReasonSeverityError,
+		Message:  "Ship-verification evidence exists but is invalidated by stale execution or review evidence; refresh the stale evidence, then rerun ship-verification",
+	},
 	"ship_verification_ordering_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Ship-verification is stamped before a selected S3 review peer; rerun ship-verification after the peer",
@@ -529,6 +537,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	"skill_registry_invalid": {
 		Severity: ReasonSeverityError,
 		Message:  "Governance skill registry is invalid",
+	},
+	"subagent_dispatch_authorization_required": {
+		Severity: ReasonSeverityError,
+		Message:  "A required governance skill needs host subagent-dispatch authorization the host has not declared available",
 	},
 	"stale_execution_evidence": {
 		Severity: ReasonSeverityError,

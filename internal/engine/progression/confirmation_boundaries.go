@@ -60,6 +60,7 @@ func IsShipVerificationHandoffBlockerCode(code string) bool {
 	case "ship_verification_assurance_attestation_missing",
 		"ship_verification_reviewer_independence_missing",
 		"ship_verification_evidence_missing",
+		"ship_verification_evidence_stale",
 		"ship_verification_ordering_invalid",
 		"high_risk_check_missing":
 		return true
@@ -70,9 +71,20 @@ func IsShipVerificationHandoffBlockerCode(code string) bool {
 
 // HostHandoffBlockerCanRide reports blockers that are the reason for the host
 // handoff itself rather than a separate governance stop.
+//
+// subagent_dispatch_authorization_required rides here: it names the host
+// subagent-delegation prerequisite for the handoff skill itself (plan-audit at
+// S1, an intake-side handoff) when the host has not declared subagent capability
+// available. It stays continuable so the handoff next_action can carry the
+// prerequisite plus the named fallback, rather than escalating to a separate
+// blocked_by_governance stop. The first-class host_capability_unavailable
+// blocker (the host explicitly declared subagent unavailable) deliberately does
+// NOT ride.
 func HostHandoffBlockerCanRide(reason model.ReasonCode) bool {
 	code := strings.TrimSpace(reason.Code)
-	return IsRequiredSkillBlockerCode(code) || code == "review_alignment_required"
+	return IsRequiredSkillBlockerCode(code) ||
+		code == "review_alignment_required" ||
+		code == "subagent_dispatch_authorization_required"
 }
 
 // ReviewCompanionBlockerCanRide reports governance blockers that are satisfied
@@ -83,8 +95,10 @@ func ReviewCompanionBlockerCanRide(reason model.ReasonCode) bool {
 		"ship_verification_assurance_attestation_missing",
 		"ship_verification_reviewer_independence_missing",
 		"ship_verification_evidence_missing",
+		"ship_verification_evidence_stale",
 		"ship_verification_ordering_invalid",
 		"context_origin_handle_invalid",
+		"subagent_dispatch_authorization_required",
 		"high_risk_check_missing":
 		return true
 	default:
@@ -120,10 +134,18 @@ func ReviewCompanionSkillCanCarryBlockers(skillName string) bool {
 // security review must hard-stop under auto, so it must never appear here even
 // though ReviewCompanionSkillCanCarryBlockers does list it. This divergence is
 // pinned by TestSecurityReviewDivergesAcrossAutoBoundaries.
+//
+// SkillIntakeClarification is likewise deliberately omitted: the intake
+// approved-summary is a fresh hard gate by design (#357). A prior broad
+// "continue" authorization must not substitute for explicit approval of the
+// interpreted intent, so the intake handoff must hard-stop even under
+// execution.auto. Softening it would emit PriorAuthorizationSufficient=true while
+// the next_action still declares the gate fresh and non-delegable — a
+// self-contradiction. This divergence is pinned by
+// TestDeriveConfirmationRequirementAutoKeepsIntakeClarificationHardStop.
 func SkillIsPurePacingAutoSafe(skillName string) bool {
 	switch strings.TrimSpace(skillName) {
-	case SkillIntakeClarification,
-		SkillResearchOrchestration,
+	case SkillResearchOrchestration,
 		SkillPlanAudit,
 		SkillWaveOrchestration,
 		SkillSpecComplianceReview,

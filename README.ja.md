@@ -108,17 +108,17 @@ slipway next --json --diagnostics
 セッションをまたいだ継続には、コマンドが所有するアドバイザリーなハンドオフを使います。
 
 ```bash
-slipway handoff write
-printf '現在の実装コンテキスト...\n' | slipway handoff write --section "現在位置"
+printf '## Current Position\n現在の実装コンテキスト...\n' | slipway handoff write
+printf '次に進めること...\n' | slipway handoff write --section "Next Session Focus"
 slipway handoff show --brief
 slipway handoff show
 ```
 
-`slipway handoff write` は、変更ごとのランタイムハンドオフのスケルトンとマシン
-ヘッダーを更新します。ヘッダーが持つのは識別情報と現在性を示すフィールドのみで、ライフ
-サイクル状態や次のアクションをスナップショットすることはありません。新しいセッション
-では、現在の状態を確認するために引き続き `slipway status --json` と
-`slipway next --json` を実行します。
+`slipway handoff write` は stdin からハンドオフ本文を読み取り、変更ごとの
+ランタイムハンドオフのスケルトンとマシンヘッダーを更新します。ヘッダーが持つのは
+識別情報と現在性を示すフィールドのみで、ライフサイクル状態や次のアクションを
+スナップショットすることはありません。新しいセッションでは、現在の状態を確認するために
+引き続き `slipway status --json` と `slipway next --json` を実行します。
 
 <details>
 <summary><strong>コマンド主導のライフサイクル</strong></summary>

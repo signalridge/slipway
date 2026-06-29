@@ -107,16 +107,17 @@ slipway next --json --diagnostics
 For cross-session continuity, use the command-owned advisory handoff:
 
 ```bash
-slipway handoff write
-printf 'Current implementation context...\n' | slipway handoff write --section "Current Position"
+printf '## Current Position\nCurrent implementation context...\n' | slipway handoff write
+printf 'Next steps...\n' | slipway handoff write --section "Next Session Focus"
 slipway handoff show --brief
 slipway handoff show
 ```
 
-`slipway handoff write` refreshes the per-change runtime handoff skeleton and
-machine header. The header carries identity and freshness fields only; it does
-not snapshot lifecycle state or the next action. Fresh sessions still run
-`slipway status --json` and `slipway next --json` for authority.
+`slipway handoff write` reads the handoff narrative from stdin and refreshes the
+per-change runtime handoff skeleton and machine header. The header carries
+identity and freshness fields only; it does not snapshot lifecycle state or the
+next action. Fresh sessions still run `slipway status --json` and
+`slipway next --json` for authority.
 
 <details>
 <summary><strong>Command-first lifecycle</strong></summary>

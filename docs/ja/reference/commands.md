@@ -78,7 +78,7 @@ slipway config list --json
 
 ## サブコマンドとモードの要点
 
-- `slipway handoff write` は参考用の継続メモを書き込みます。`--section <name>` を渡すと、stdin から指定セクションだけを置き換えます。
+- `slipway handoff write` は stdin から参考用の継続メモを書き込みます。bare 形式では完全な `## Current Position` 本文を pipe し、`--section <name>` を渡すと stdin から指定セクションだけを置き換えます。
 - `slipway handoff show --json` は現在の変更ごとの handoff を構造化して出力します。
 - `slipway evidence task --result-file <path> --json` はコンパクトな実行タスク結果を取り込みます。原子的なバッチにするには `--result-file` を繰り返します。
 - `slipway evidence skill --skill <name> --verdict pass --json` は、そのスキルを所有するステージで統制スキルのエビデンスを記録します。

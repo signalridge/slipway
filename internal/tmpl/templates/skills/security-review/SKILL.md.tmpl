@@ -2,6 +2,14 @@
 skill_id: security-review
 name: slipway-security-review
 description: "Use when running the S3 security review for auth/authz, injection, secrets, SSRF, and insecure defaults. Triggers on the workflow-owned S3 review host, the `slipway review` command, a security-classified guardrail, or security-review control selected by blast-radius policy."
+host_capabilities:
+  - capability: subagent
+    required: true
+    fallback_modes:
+      - manual_security_review
+      - same_context_degraded
+    evidence_requirement: "record security-review evidence from a fresh independent reviewer context"
+    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence."
 hydrate_references:
   - name: authentication.md
     reason: "Password storage / session / MFA / recovery secure-default rules"
@@ -99,9 +107,13 @@ Dispatch this review in a native subagent from the S3 review host on the SHARED 
 (the same worktree the implementation edited; there is no
 per-review git worktree isolation). Spawn a fresh-context subagent with a
 bounded review brief, pass it required-reading paths rather than artifact
-bodies, wait for the result, and record the handle. If a capable runtime cannot
-spawn, wait for, and close a subagent, stop and ask for operator direction
-rather than reviewing inline in the host context.
+bodies, wait for the result, and record the handle. If the host has not declared
+subagent capability available, `slipway next`/`run` surfaces a subagent-delegation
+prerequisite plus a named degraded fallback for this review: authorize subagent
+dispatch, or explicitly select the named fallback (for example
+`manual_security_review` or `same_context_degraded`) and record fresh reviewer
+evidence for the degraded run — do not review inline without recording the
+selected fallback.
 
 Record this review's context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

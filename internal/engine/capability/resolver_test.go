@@ -92,10 +92,12 @@ func TestResolveNoMatchReturnsEmpty(t *testing.T) {
 func TestResolveHostCapabilityRequirement(t *testing.T) {
 	t.Parallel()
 
-	t.Run("unknown skill has no host capability contract", func(t *testing.T) {
+	t.Run("skill without a host capability contract resolves nil", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, ResolveHostCapabilityRequirement("code-quality-review", Signals{}))
+		// context-assembly is registered but declares no host-capability contract
+		// and is not part of the subagent-dispatch lever, so it must resolve nil.
+		assert.Nil(t, ResolveHostCapabilityRequirement("context-assembly", Signals{}))
 	})
 
 	tests := []struct {
@@ -170,6 +172,74 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			assert.NotEmpty(t, req.Remediation)
 		})
 	}
+}
+
+// TestResolveHostCapabilitySubagentDispatchLever covers the built-in
+// subagent-dispatch contract that surfaces a host-delegation prerequisite for
+// the governance skills that REQUIRE a fresh subagent but are not registered in
+// the capability catalog (plan-audit at S1; spec-compliance-review and
+// code-quality-review at S3; and the terminal ship-verification gate at S3).
+// Registering them in the catalog would drag in the surface-manifest /
+// install-profile / generation machinery, so the contract is a targeted lever
+// consulted when the registry carries no host-capability contract for the skill.
+// (#339 / #369)
+func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
+	t.Parallel()
+
+	leverSkills := []string{"plan-audit", "spec-compliance-review", "code-quality-review", "ship-verification"}
+	for _, skillID := range leverSkills {
+		skillID := skillID
+		t.Run(skillID+"/unknown surfaces continuable prerequisite", func(t *testing.T) {
+			t.Parallel()
+			req := ResolveHostCapabilityRequirement(skillID, Signals{})
+			require.NotNil(t, req, "%s must resolve a built-in subagent-dispatch contract", skillID)
+			assert.Equal(t, skillID, req.SkillID)
+			assert.Equal(t, "subagent", req.Capability)
+			assert.True(t, req.Required)
+			assert.Equal(t, "unknown", req.Availability)
+			assert.False(t, req.FallbackSelected)
+			assert.NotEmpty(t, req.EvidenceRequirement)
+			assert.NotEmpty(t, req.Remediation)
+		})
+		t.Run(skillID+"/explicit none is unavailable", func(t *testing.T) {
+			t.Parallel()
+			req := ResolveHostCapabilityRequirement(skillID, Signals{HostCapabilities: []string{"none"}})
+			require.NotNil(t, req)
+			assert.Equal(t, "unavailable", req.Availability)
+			assert.False(t, req.FallbackSelected)
+		})
+		t.Run(skillID+"/declared subagent is available", func(t *testing.T) {
+			t.Parallel()
+			req := ResolveHostCapabilityRequirement(skillID, Signals{HostCapabilities: []string{"subagent"}})
+			require.NotNil(t, req)
+			assert.Equal(t, "available", req.Availability)
+		})
+		t.Run(skillID+"/generic same_context_degraded fallback is selectable", func(t *testing.T) {
+			t.Parallel()
+			req := ResolveHostCapabilityRequirement(skillID, Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"same_context_degraded"},
+			})
+			require.NotNil(t, req)
+			assert.Equal(t, "unavailable", req.Availability)
+			assert.True(t, req.FallbackSelected)
+			assert.Equal(t, "same_context_degraded", req.FallbackMode)
+		})
+	}
+
+	t.Run("registry contract still wins for registered security-review", func(t *testing.T) {
+		t.Parallel()
+		req := ResolveHostCapabilityRequirement("security-review", Signals{HostCapabilities: []string{"none"}})
+		require.NotNil(t, req, "security-review must carry a registry host-capability contract")
+		assert.Equal(t, "subagent", req.Capability)
+		assert.Equal(t, "unavailable", req.Availability)
+	})
+
+	t.Run("skills without any contract still resolve to nil", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, ResolveHostCapabilityRequirement("context-assembly", Signals{}))
+		assert.Nil(t, ResolveHostCapabilityRequirement("no-such-skill", Signals{}))
+	})
 }
 
 func TestResolveHostCapabilityRequirementUsesRegistryContract(t *testing.T) {

@@ -113,3 +113,116 @@ func TestHandoffHeaderKeysExcludeLifecycleAuthorityFields(t *testing.T) {
 	assert.NotContains(t, string(raw), "next_skill")
 	assert.NotContains(t, string(raw), "next_command")
 }
+
+func TestWriteHandoffBodyMergesSectionsAndPreservesOthers(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	_, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Section:     "Next Session Focus",
+		SectionBody: "Keep this focus.",
+	})
+	require.NoError(t, err)
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "## Current Position\nFresh position narrative.\n",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, doc.Narrative, "Fresh position narrative.")
+	assert.Contains(t, doc.Narrative, "Keep this focus.")
+	assert.False(t, HandoffIsEmpty(doc))
+}
+
+func TestWriteHandoffFreeformBodyRoutesToDefaultSection(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "no markdown headers at all",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	assert.Contains(t, position, "no markdown headers at all")
+}
+
+func TestWriteHandoffFreeformBodyPreservesUnknownMarkdownHeadings(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "first line\n\n## Operator Notes\nimportant detail",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	assert.Contains(t, position, "first line")
+	assert.Contains(t, position, "## Operator Notes")
+	assert.Contains(t, position, "important detail")
+}
+
+func TestWriteHandoffBodyPreservesPreambleWhenCanonicalSectionMatches(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "NOTE: blocked on review.\n\n## Next Session Focus\nFinish merge.",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	next := extractHandoffSection(doc.Narrative, "Next Session Focus")
+	assert.Contains(t, position, "NOTE: blocked on review.")
+	assert.Contains(t, next, "Finish merge.")
+}
+
+func TestWriteHandoffBodyEmptyCanonicalSectionDoesNotAbsorbNextSection(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Body: "## Current Position\n\n## Next Session Focus\nFinish the merge.",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	next := extractHandoffSection(doc.Narrative, "Next Session Focus")
+	assert.NotContains(t, position, "## Next Session Focus")
+	assert.NotContains(t, position, "Finish the merge.")
+	assert.Contains(t, next, "Finish the merge.")
+}
+
+func TestWriteHandoffUnknownSectionOptionPreservesBodyInDefaultSection(t *testing.T) {
+	root := t.TempDir()
+	change := model.NewChange("demo")
+	change.WorktreePath = root
+
+	doc, err := WriteHandoff(root, change, HandoffWriteOptions{
+		Section:     "Operator Notes",
+		SectionBody: "important detail",
+	})
+	require.NoError(t, err)
+	position := extractHandoffSection(doc.Narrative, handoffDefaultSection)
+	assert.Contains(t, position, "## Operator Notes")
+	assert.Contains(t, position, "important detail")
+}
+
+func TestHandoffIsEmptyDetectsPendingScaffold(t *testing.T) {
+	empty := HandoffDocument{Narrative: ensureHandoffNarrativeSkeleton("")}
+	assert.True(t, HandoffIsEmpty(empty))
+
+	filled := HandoffDocument{Narrative: "## Current Position\nWe are here.\n"}
+	assert.False(t, HandoffIsEmpty(filled))
+}
+
+func TestCanonicalHandoffSectionNormalizesAndRejectsUnknown(t *testing.T) {
+	canonical, ok := CanonicalHandoffSection("next-session-focus")
+	assert.True(t, ok)
+	assert.Equal(t, "Next Session Focus", canonical)
+
+	_, ok = CanonicalHandoffSection("totally unknown")
+	assert.False(t, ok)
+
+	assert.Equal(t, handoffSectionNames, HandoffSectionNames())
+}
