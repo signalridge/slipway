@@ -106,7 +106,7 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 			continue
 		}
 		if def.ID == "evidence" {
-			for _, id := range []string{"evidence-task-json", "evidence-skill-json"} {
+			for _, id := range []string{"evidence-task-json", "evidence-skill-json", "evidence-skill-refresh-current-json"} {
 				row, ok := rowsByKey["json-contract/"+id]
 				require.Truef(t, ok, "missing json contract row for %s", id)
 				assert.Equal(t, "cmd/evidence.go", row.Source)
@@ -131,6 +131,26 @@ func TestBuildSurfaceManifestDerivesRowsFromSlipwayAuthorities(t *testing.T) {
 		assert.Equal(t, path, row.Docs)
 		assert.Equal(t, path, row.Name)
 	}
+}
+
+func TestSurfaceManifestExposesEvidenceRefreshCurrentJSONContract(t *testing.T) {
+	t.Parallel()
+
+	manifest := BuildSurfaceManifest()
+	for _, row := range manifest.Rows {
+		if row.Kind != "json-contract" || row.Name != "evidence-skill-refresh-current-json" {
+			continue
+		}
+
+		assert.Equal(t, "cmd/evidence.go", row.Source)
+		assert.Equal(t, "docs/reference/commands.md", row.Docs)
+		assert.Equal(t,
+			"slipway evidence skill --skill <name> --verdict pass --refresh-current --json",
+			row.Token)
+		return
+	}
+
+	t.Fatal("surface manifest must expose the evidence skill refresh-current JSON contract")
 }
 
 func TestCommittedSurfaceManifestMatchesBuilder(t *testing.T) {

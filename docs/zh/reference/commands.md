@@ -63,6 +63,7 @@ slipway delete --change <slug> --json
 slipway repair --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway evidence skill --skill <name> --verdict pass --json
+slipway evidence skill --skill <name> --verdict pass --refresh-current --json
 slipway health --json
 slipway instructions <artifact> --json
 slipway config list --json
@@ -77,6 +78,7 @@ slipway config list --json
 - `slipway handoff show --json` 以结构化形式输出当前变更的 handoff。
 - `slipway evidence task --result-file <path> --json` 导入紧凑的执行任务结果；重复 `--result-file` 可进行原子批量导入。
 - `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。
+- `slipway evidence skill --skill <name> --verdict pass --refresh-current --json` 只用于把已选 S3 review skill 的当前 passing 证据作为一次明确重跑来替换；普通重复证据仍会被拒绝。
 - `slipway status --stats --json` 报告工作区诊断，不重新引入已退休的顶层 `stats` 命令。
 - `slipway health --doctor --json` 在 health 报告中加入面向修复的诊断。
 - `slipway tool <helper>` 由生成的 skill 直接调用，不生成适配器提示词接入面。

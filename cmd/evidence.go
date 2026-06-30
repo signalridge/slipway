@@ -104,14 +104,15 @@ func rejectRetiredEvidenceSubcommands(cmd *cobra.Command, args []string) error {
 
 func makeEvidenceSkillCmd() *cobra.Command {
 	var (
-		jsonOutput bool
-		changeSlug string
-		skillName  string
-		verdictRaw string
-		references []string
-		blockers   []string
-		notes      string
-		notesFile  string
+		jsonOutput     bool
+		changeSlug     string
+		skillName      string
+		verdictRaw     string
+		references     []string
+		blockers       []string
+		notes          string
+		notesFile      string
+		refreshCurrent bool
 	)
 
 	cmd := &cobra.Command{
@@ -197,7 +198,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				if err := validateEvidenceSkillActionable(root, change, def, runVersion); err != nil {
+				if err := validateEvidenceSkillActionable(root, change, def, runVersion, refreshCurrent); err != nil {
 					return err
 				}
 				references = stringutil.UniqueSorted(trimNonEmptyStrings(references))
@@ -362,6 +363,7 @@ func makeEvidenceSkillCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&blockers, "blocker", nil, "Verification blocker as code or code:detail; may be repeated")
 	cmd.Flags().StringVar(&notes, "notes", "", "Bounded verification notes")
 	cmd.Flags().StringVar(&notesFile, "notes-file", "", "Workspace-relative file containing verification notes")
+	cmd.Flags().BoolVar(&refreshCurrent, "refresh-current", false, "Intentionally replace already-current passing evidence for a selected S3 review skill")
 
 	return cmd
 }
@@ -2228,7 +2230,7 @@ func restoreVerificationSuffix(err error) string {
 	return fmt.Sprintf("; rollback failed: %v", err)
 }
 
-func validateEvidenceSkillActionable(root string, change model.Change, def skill.Definition, runVersion int) error {
+func validateEvidenceSkillActionable(root string, change model.Change, def skill.Definition, runVersion int, refreshCurrent bool) error {
 	if change.CurrentState == model.StateS3Review {
 		reviewSelection, selectedReviewSkills, err := selectedReviewSkillsForChange(root, change)
 		if err != nil {
@@ -2254,10 +2256,13 @@ func validateEvidenceSkillActionable(root string, change model.Change, def skill
 				if repairActive {
 					return nil
 				}
+				if refreshCurrent {
+					return nil
+				}
 				return newInvalidUsageError(
 					"evidence_skill_not_current",
 					fmt.Sprintf("skill %s already has passing evidence for the current review set", def.Name),
-					"Run `slipway next --json` and record evidence only for a selected review skill that is still missing or stale.",
+					"Run `slipway next --json` and record evidence only for a selected review skill that is still missing or stale. If an operator intentionally reran this selected review skill, rerun with `--refresh-current` to replace the current evidence.",
 					map[string]any{"skill": def.Name},
 				)
 			}

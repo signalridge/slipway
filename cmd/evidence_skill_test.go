@@ -605,6 +605,7 @@ func TestEvidenceSkillRejectsSelectedReviewerRestampWithValidContextOrigin(t *te
 		cliErr := asCLIError(cmd.Execute())
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_not_current", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "--refresh-current")
 
 		rec, err := state.LoadVerification(root, slug, progression.SkillSpecComplianceReview)
 		require.NoError(t, err)
@@ -613,6 +614,104 @@ func TestEvidenceSkillRejectsSelectedReviewerRestampWithValidContextOrigin(t *te
 		assert.Equal(t, testSpecContextHandle, handle.Handle)
 		assert.NotEqual(t, "Unexpected spec-compliance review overwrite.", rec.Notes)
 	})
+}
+
+func TestEvidenceSkillRefreshCurrentSelectedReviewerWithValidContextOrigin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		skillName   string
+		freshHandle string
+		references  []string
+	}{
+		{
+			name:        "spec compliance review",
+			skillName:   progression.SkillSpecComplianceReview,
+			freshHandle: "fresh-spec-compliance-review-context",
+			references: []string{
+				"layer:R0=pass",
+				"scope_contract:pass",
+				"negative_path:pass",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-spec-compliance-review-context",
+			},
+		},
+		{
+			name:        "code quality review",
+			skillName:   progression.SkillCodeQualityReview,
+			freshHandle: "fresh-code-quality-review-context",
+			references: []string{
+				"layer:IR1=pass",
+				"layer:IR3=pass",
+				"layer:QUALITY=pass",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-code-quality-review-context",
+			},
+		},
+		{
+			name:        "independent review",
+			skillName:   progression.SkillIndependentReview,
+			freshHandle: "fresh-independent-review-context",
+			references: []string{
+				"independent-review:pass",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-independent-review-context",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			withCommandWorkspace(t, root, func() {
+				initTestWorkspace(t, root)
+				slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill refreshes current reviewer")
+				setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+				writePassingExecutionSummary(t, root, slug, 1, "t-01")
+				writePassingReviewEvidencePack(t, root, slug, 1)
+
+				cmd := commandForRoot(t, root, makeEvidenceCmd())
+				args := []string{
+					"skill",
+					"--json",
+					"--change", slug,
+					"--skill", tt.skillName,
+					"--verdict", model.VerificationVerdictPass,
+					"--refresh-current",
+					"--notes", "Selected reviewer intentionally reran in fresh context.",
+				}
+				for _, ref := range tt.references {
+					args = append(args, "--reference", ref)
+				}
+				cmd.SetArgs(args)
+				var out bytes.Buffer
+				cmd.SetOut(&out)
+				require.NoError(t, cmd.Execute())
+
+				var view evidenceSkillView
+				require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+				assert.Equal(t, tt.skillName, view.SkillName)
+				assert.Equal(t, 1, view.RunVersion)
+				assert.True(t, view.Recorded)
+				assert.True(t, view.Stamped)
+
+				rec, err := state.LoadVerification(root, slug, tt.skillName)
+				require.NoError(t, err)
+				assert.Equal(t, model.VerificationVerdictPass, rec.Verdict)
+				assert.Equal(t, "Selected reviewer intentionally reran in fresh context.", rec.Notes)
+				handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
+				require.True(t, ok)
+				assert.Equal(t, tt.freshHandle, handle.Handle)
+
+				change, err := state.LoadChange(root, slug)
+				require.NoError(t, err)
+				digests, err := state.LoadEvidenceDigestsForChange(root, change)
+				require.NoError(t, err)
+				require.Contains(t, digests.Skills, tt.skillName)
+			})
+		})
+	}
 }
 
 func TestEvidenceSkillRejectsUnselectedSecurityReview(t *testing.T) {
