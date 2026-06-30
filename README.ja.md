@@ -25,6 +25,7 @@
 </p>
 
 [ドキュメント](https://signalridge.github.io/slipway/) |
+[デモを見る](#デモを見る) |
 [ここから始める](docs/start-here.md) |
 [クイックスタート](#クイックスタート) |
 [インストール](docs/installation.md) |
@@ -41,6 +42,24 @@
 **AI 支援によるソフトウェアデリバリーのための、ローカルで動作する Git ネイティブな
 ガバナンス CLI。コードを書くのはエージェント、変更が本当に完了したかを判断するのは
 Slipway です。**
+
+## デモを見る
+
+<!-- markdownlint-disable MD034 -->
+<details open>
+<summary><strong>自動モード</strong>: 事前の承認がまだ有効なとき、ペーシング用の停止を自動で進めます。</summary>
+
+https://github.com/user-attachments/assets/23fe8af5-59de-4f07-898d-675badc86ba1
+
+</details>
+
+<details>
+<summary><strong>対話モード</strong>: 操作者の判断が必要な場所で停止します。</summary>
+
+https://github.com/user-attachments/assets/1e0048c0-7da5-41b4-a3da-e25cf2762ee1
+
+</details>
+<!-- markdownlint-enable MD034 -->
 
 AI コーディングエージェントは高速ですが、検証を飛ばしたり、計画から逸脱したり、
 現在のワークトリーで証明される前に「完了」と報告したりすることがあります。Slipway

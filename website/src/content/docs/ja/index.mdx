@@ -7,10 +7,14 @@ hero:
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
+    - text: デモを見る
+      link: "#watch-demos"
+      icon: right-arrow
+      variant: primary
     - text: はじめに
       link: /slipway/ja/start-here/
       icon: right-arrow
-      variant: primary
+      variant: minimal
     - text: GitHub で見る
       link: https://github.com/signalridge/slipway
       icon: external
@@ -22,6 +26,21 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 Slipway は、ローカルでの AI 支援開発を対象にした小さなガバナンス用コントロールプレーンです。AI コーディングツールやプロジェクト管理ツール、Git を置き換えるものではありません。すべての変更をライフサイクル、現在の権威ファイル、そしてセッションが終わったあとでも確認できる証拠に結びつけることで、エージェントの作業を読み取れるものにします。
 
 操作は自然言語で行います。一度だけ `slipway init` を実行すれば、あとは作りたいものを AI エージェントに伝えるだけで、生成されたアダプターがそのリクエストをガバナンス済みのライフサイクルへ流してくれます。覚えておくべきコマンドの並びはありません。変更が本当に完了したかどうかの判断は、最後まで Slipway が握ります。ドキュメントに出てくるコマンドは、エージェントがあなたの代わりに実行するものであり、好きなときに自分で実行することもできます。
+
+<h2 id="watch-demos">デモを見る</h2>
+
+この 2 つの短い録画では、最初に理解しておきたい 2 つの進み方を示します。承認がまだ有効なときの前進と、操作者の判断が必要な場所での停止です。
+
+<div class="demo-grid">
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/23fe8af5-59de-4f07-898d-675badc86ba1"></video>
+		<figcaption><strong>自動モード。</strong>事前の承認がまだ有効なとき、ペーシング用の停止を進めます。</figcaption>
+	</figure>
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/1e0048c0-7da5-41b4-a3da-e25cf2762ee1"></video>
+		<figcaption><strong>対話モード。</strong>操作者の判断が必要な場所で停止します。</figcaption>
+	</figure>
+</div>
 
 <CardGrid stagger>
 	<Card title="チュートリアル" icon="open-book">

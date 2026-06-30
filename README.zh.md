@@ -25,6 +25,7 @@
 </p>
 
 [文档](https://signalridge.github.io/slipway/) |
+[观看动画](#看一遍流程) |
 [从这里开始](docs/start-here.md) |
 [快速上手](#快速上手) |
 [安装](docs/installation.md) |
@@ -39,6 +40,24 @@
 # Slipway
 
 **面向 AI 辅助软件交付的本地、Git 原生治理 CLI。你的 agent 负责写代码，Slipway 负责判定这个改动是否真的完成了。**
+
+## 看一遍流程
+
+<!-- markdownlint-disable MD034 -->
+<details open>
+<summary><strong>自动模式</strong>：在授权仍然有效时自动推进节奏性停顿。</summary>
+
+https://github.com/user-attachments/assets/a8a09c0d-b1eb-43d8-9137-a9fa4eaf601c
+
+</details>
+
+<details>
+<summary><strong>交互模式</strong>：在需要操作者判断的位置停下来。</summary>
+
+https://github.com/user-attachments/assets/fc10e83d-d08f-42ad-a51f-f3b3a58586de
+
+</details>
+<!-- markdownlint-enable MD034 -->
 
 AI 编码 agent 速度很快，但它们可能跳过验证、偏离计划，或者在当前 worktree 还没有给出证据之前就上报“完成”。Slipway 把一个工作单元变成一项受治理变更，带有生命周期状态、规划产物、任务证据、评审证据，以及一份留在仓库里的最终归档。
 

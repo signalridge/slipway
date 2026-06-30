@@ -29,7 +29,7 @@ h3,
 .sl-markdown-content h2,
 .sl-markdown-content h3 {
 	font-family: var(--slip-display);
-	letter-spacing: -0.012em;
+	letter-spacing: 0;
 }
 
 /* Header wordmark sizing. */
@@ -76,4 +76,36 @@ a.site-title img {
 }
 .card .icon {
 	color: var(--slip-coral);
+}
+
+/* Landing page demo videos. */
+.demo-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+	gap: 1rem;
+	margin: 1rem 0 2rem;
+}
+
+.demo-card {
+	margin: 0;
+}
+
+.demo-card video {
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+	background: #111;
+}
+
+.demo-card figcaption {
+	margin-top: 0.5rem;
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-2);
+}
+
+@media (max-width: 36rem) {
+	.demo-grid {
+		grid-template-columns: 1fr;
+	}
 }
