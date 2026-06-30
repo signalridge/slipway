@@ -607,6 +607,27 @@ func TestGitHubAPIConfigFileFallback(t *testing.T) {
 	assert.Equal(t, "github_api_url_not_allowed", cliErr.ErrorCode)
 }
 
+func TestGitHubAPIConfigFileAllowlistInvalidEntryIsURLInvalid(t *testing.T) {
+	t.Setenv(githubAPIURLEnv, "")
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+	t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "")
+
+	_, err := newGitHubHTTPClient(model.ConfigGitHub{
+		APIURL: "https://ghe.example.com/api/v3",
+		APIAllowedBaseURLs: []string{
+			"https://ghe.example.com/api/v3",
+			"httpss://typo.example.com",
+		},
+	})
+	require.Error(t, err)
+	var cliErr *CLIError
+	require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+	assert.Equal(t, "github_api_url_invalid", cliErr.ErrorCode)
+	assert.Equal(t, "httpss://typo.example.com", cliErr.Details["value"])
+}
+
 func TestGitHubAPIOverrideRejectsUnsafePaginationLink(t *testing.T) {
 	tests := []struct {
 		name string

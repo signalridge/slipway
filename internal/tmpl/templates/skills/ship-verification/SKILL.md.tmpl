@@ -137,6 +137,10 @@ verification must be performed independently from implementation; record that
 independence with the `closeout:reviewer_independence=pass` token below, not a
 retired stage context-origin reference.
 
+When the handoff carries `next_skill.subagent`, honor that directive before
+spawning the verifier: apply `model`, `allowed_skills`, and
+`allowed_mcp_servers`; omitted fields inherit host defaults.
+
 Delegate these bulky reads when possible:
 - stub and placeholder scan output
 - fresh full-suite command output

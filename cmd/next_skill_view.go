@@ -362,8 +362,7 @@ func assembleSkillViewWithOptions(
 	// emits no directive. A missing workspace must not break `next`, so a config
 	// load error is treated as the zero config.
 	if stage, ok := subagentStageForSkill(nextSkillName); ok {
-		cfg, _ := loadConfigAtRoot(root)
-		ns.Subagent = subagentDirectiveFromProfile(cfg.Subagents.Resolve(stage))
+		ns.Subagent = subagentDirectiveForStage(root, stage)
 	}
 
 	view.NextSkill = ns
@@ -643,10 +642,12 @@ func buildReviewBatchView(input reviewBatchBuildInput) *reviewBatchView {
 		State:           nextState,
 		Skills:          make([]reviewBatchSkillView, 0, len(pending)),
 	}
+	reviewSubagent := subagentDirectiveForStage(input.root, model.SubagentStageReview)
 	for _, skillName := range pending {
 		item := reviewBatchSkillView{
 			Name:           skillName,
 			RequiredTokens: progression.RequiredReviewLayerTokensForSkill(*input.change, input.artifactProjection, false, skillName),
+			Subagent:       cloneSubagentDirective(reviewSubagent),
 		}
 		if input.includeReviewContext &&
 			(skillName == progression.SkillSpecComplianceReview || skillName == progression.SkillCodeQualityReview) {

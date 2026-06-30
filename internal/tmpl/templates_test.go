@@ -1646,6 +1646,31 @@ func TestSpecTraceRecordsUncheckableCoverageGaps(t *testing.T) {
 	assert.Contains(t, normalizedSpecCompliance, "block or request changes")
 }
 
+func TestReviewSkillTemplatesHonorSubagentDirective(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+	for _, templatePath := range []string{
+		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
+	} {
+		templatePath := templatePath
+		t.Run(path.Base(path.Dir(templatePath)), func(t *testing.T) {
+			t.Parallel()
+			content, err := Render(templatePath, data)
+			require.NoError(t, err)
+			flat := strings.Join(strings.Fields(content), " ")
+			assert.Contains(t, flat, "`next_skill.subagent`")
+			assert.Contains(t, flat, "`review_batch.skills[].subagent`")
+			assert.Contains(t, flat, "`allowed_skills`")
+			assert.Contains(t, flat, "`allowed_mcp_servers`")
+			assert.Contains(t, flat, "omitted fields inherit host defaults")
+		})
+	}
+}
+
 // TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory pins issue #140:
 // the Decision Fidelity Check must enforce fidelity only against
 // locked_decisions and treat pending_decisions (a recommended-but-unconfirmed
@@ -1701,6 +1726,26 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "A reviewer's evidence may accumulate multiple `context_origin:stage=fix=<repair-subagent-handle>` references")
 		assert.Contains(t, content, "one per fresh-context repair subagent / batch")
 		assert.Contains(t, content, "without invalidating the single `context_origin:stage=review` handle")
+	})
+
+	t.Run("command bodies honor subagent envelope directives", func(t *testing.T) {
+		nextBody := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "next", "command-next-body", "claude")
+		assert.Contains(t, nextBody, "`next_skill.subagent`")
+		assert.Contains(t, nextBody, "`review_batch.skills[].subagent`")
+		assert.Contains(t, nextBody, "`input_context.wave_plan.executor_subagent`")
+		assert.Contains(t, nextBody, "`allowed_mcp_servers`")
+
+		runBody := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "run", "command-run-body", "claude")
+		flatRunBody := strings.Join(strings.Fields(runBody), " ")
+		assert.Contains(t, flatRunBody, "honor every returned subagent directive before spawning")
+		assert.Contains(t, flatRunBody, "`input_context.wave_plan.executor_subagent`")
+
+		reviewBody := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "review", "command-review-body", "claude")
+		assert.Contains(t, reviewBody, "`review_batch.skills[].subagent` directive is the host spawning contract")
+
+		fixBody := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
+		assert.Contains(t, fixBody, "`contract.subagent`")
+		assert.Contains(t, fixBody, "`allowed_mcp_servers`")
 	})
 
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {

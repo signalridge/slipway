@@ -41,6 +41,7 @@ type nextSkillHandoff struct {
 	SkillConstraints     *skillConstraints  `json:"skill_constraints,omitempty"`
 	ReviewContext        *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
+	Subagent             *subagentDirective `json:"subagent,omitempty"`
 }
 
 type contextBudgetHandoff struct {
@@ -75,6 +76,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			SkillConstraints:     cloneSkillConstraints(view.NextSkill.SkillConstraints),
 			ReviewContext:        cloneReviewContext(view.NextSkill.ReviewContext),
 			TechniqueHints:       cloneTechniqueHints(view.NextSkill.TechniqueHints),
+			Subagent:             cloneSubagentDirective(view.NextSkill.Subagent),
 		}
 	}
 	budget := buildContextBudgetHandoff(view.ContextBudget)
@@ -172,6 +174,17 @@ func cloneTechniqueHints(in []techniqueHint) []techniqueHint {
 	return out
 }
 
+func cloneSubagentDirective(in *subagentDirective) *subagentDirective {
+	if in == nil {
+		return nil
+	}
+	return &subagentDirective{
+		Model:             in.Model,
+		AllowedSkills:     append([]string(nil), in.AllowedSkills...),
+		AllowedMCPServers: append([]string(nil), in.AllowedMCPServers...),
+	}
+}
+
 func cloneReviewBatch(in *reviewBatchView) *reviewBatchView {
 	if in == nil {
 		return nil
@@ -190,6 +203,7 @@ func cloneReviewBatch(in *reviewBatchView) *reviewBatchView {
 				ReviewContext:    cloneReviewContext(batchSkill.ReviewContext),
 				TechniqueHints:   cloneTechniqueHints(batchSkill.TechniqueHints),
 				SkillConstraints: cloneSkillConstraints(batchSkill.SkillConstraints),
+				Subagent:         cloneSubagentDirective(batchSkill.Subagent),
 			})
 		}
 	}

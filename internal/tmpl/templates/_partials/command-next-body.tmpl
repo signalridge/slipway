@@ -16,6 +16,10 @@ slipway next --json
   `next_skill.verification_dir`.
 - Treat the default JSON as an action contract, not a context dump.
 - Treat `next_skill.skill_constraints` and `next_skill.technique_hints` as action metadata for that host.
+- Honor subagent: `next_skill.subagent`,
+  `review_batch.skills[].subagent`,
+  `input_context.wave_plan.executor_subagent`; apply `model`, `allowed_skills`,
+  `allowed_mcp_servers`; omitted fields inherit defaults.
 - Use only paths returned under `input_context`.
 - Do not expect inline policy-pack prose; read policy-pack content only by path when diagnostics or local config provide one.
 - Branch on `confirmation_requirement.next_action_kind` (`skill_handoff` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`) and run `confirmation_requirement.next_command` when present; `next_action` is human prose, not a contract to parse.

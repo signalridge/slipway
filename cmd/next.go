@@ -179,9 +179,17 @@ func subagentDirectiveFromProfile(profile model.SubagentProfile) *subagentDirect
 	}
 	return &subagentDirective{
 		Model:             profile.Model,
-		AllowedSkills:     profile.AllowedSkills,
-		AllowedMCPServers: profile.AllowedMCPServers,
+		AllowedSkills:     append([]string(nil), profile.AllowedSkills...),
+		AllowedMCPServers: append([]string(nil), profile.AllowedMCPServers...),
 	}
+}
+
+func subagentDirectiveForStage(root string, stage model.SubagentStage) *subagentDirective {
+	cfg, err := loadConfigAtRoot(root)
+	if err != nil {
+		return nil
+	}
+	return subagentDirectiveFromProfile(cfg.Subagents.Resolve(stage))
 }
 
 // subagentStageForSkill maps a next/review skill name to the governed subagent
@@ -216,6 +224,7 @@ type reviewBatchSkillView struct {
 	ReviewContext    *reviewContextView `json:"review_context,omitempty"`
 	TechniqueHints   []techniqueHint    `json:"technique_hints,omitempty"`
 	SkillConstraints *skillConstraints  `json:"skill_constraints,omitempty"`
+	Subagent         *subagentDirective `json:"subagent,omitempty"`
 }
 
 // skillConstraints carries per-skill metadata from the Go registry
@@ -336,6 +345,10 @@ type wavePlanView struct {
 	TotalTasks int        `json:"total_tasks"`
 	WaveCount  int        `json:"wave_count"`
 	Waves      []waveView `json:"waves"`
+	// ExecutorSubagent is the advisory directive the wave-orchestration host
+	// should honor when spawning S2 task executor subagents. It is view-only
+	// handoff data and must not be copied into wave-plan.yaml.
+	ExecutorSubagent *subagentDirective `json:"executor_subagent,omitempty"`
 	// Advisories are non-blocking wave-narrowing cues (REQ-006) computed in the
 	// view layer only. They never block execution and are deliberately excluded
 	// from wave-plan.yaml and every freshness hash; they exist solely on the

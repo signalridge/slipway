@@ -46,9 +46,8 @@ type EnvCatalogEntry struct {
 
 // EnvCatalog returns the curated, name-sorted catalog of environment variables
 // Slipway reads. Repo-policy entries carry the FileConfigKey they override so an
-// operator can see the env > file > default relationship at a glance. The two
-// ambient GitHub token fallbacks are included as secrets for completeness even
-// though they are not SLIPWAY_-prefixed.
+// operator can see the env > file > default relationship at a glance. Ambient
+// fallback variables are included even though they are not SLIPWAY_-prefixed.
 func EnvCatalog() []EnvCatalogEntry {
 	entries := []EnvCatalogEntry{
 		{
@@ -106,6 +105,16 @@ func EnvCatalog() []EnvCatalogEntry {
 			Scope:       EnvScopeSecret,
 			Secret:      true,
 			Description: "Ambient GitHub token fallback sent only to https://api.github.com; never read from .slipway.yaml.",
+		},
+		{
+			Name:        "USER",
+			Scope:       EnvScopeRuntimeHost,
+			Description: "Ambient OS username fallback for handoff session owner when SLIPWAY_SESSION_OWNER is unset.",
+		},
+		{
+			Name:        "USERNAME",
+			Scope:       EnvScopeRuntimeHost,
+			Description: "Ambient OS username fallback for handoff session owner when SLIPWAY_SESSION_OWNER and USER are unset.",
 		},
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })

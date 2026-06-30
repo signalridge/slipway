@@ -16,6 +16,9 @@ func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 		Review: SubagentProfile{
 			Model: "review-model",
 		},
+		Executor: SubagentProfile{
+			AllowedMCPServers: []string{"executor-mcp"},
+		},
 		Fix: SubagentProfile{
 			AllowedSkills: []string{"fix-skill"},
 		},
@@ -31,6 +34,18 @@ func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 	}
 	if !reflect.DeepEqual(review.AllowedMCPServers, []string{"mcp-a"}) {
 		t.Errorf("review mcp = %v, want default [mcp-a]", review.AllowedMCPServers)
+	}
+
+	// Executor overrides only MCP; model/skills fall back to Default.
+	executor := sa.Resolve(SubagentStageExecutor)
+	if executor.Model != "default-model" {
+		t.Errorf("executor model = %q, want default-model", executor.Model)
+	}
+	if !reflect.DeepEqual(executor.AllowedSkills, []string{"skill-a"}) {
+		t.Errorf("executor skills = %v, want default [skill-a]", executor.AllowedSkills)
+	}
+	if !reflect.DeepEqual(executor.AllowedMCPServers, []string{"executor-mcp"}) {
+		t.Errorf("executor mcp = %v, want [executor-mcp]", executor.AllowedMCPServers)
 	}
 
 	// Fix overrides only skills; model/MCP fall back to Default.
@@ -57,6 +72,27 @@ func TestConfigSubagentsResolveEmptyInheritsNothing(t *testing.T) {
 	}
 }
 
+func TestConfigSubagentsResolveEmptySlicesInheritDefault(t *testing.T) {
+	sa := ConfigSubagents{
+		Default: SubagentProfile{
+			AllowedSkills:     []string{"default-skill"},
+			AllowedMCPServers: []string{"default-mcp"},
+		},
+		Review: SubagentProfile{
+			AllowedSkills:     []string{},
+			AllowedMCPServers: []string{},
+		},
+	}
+
+	got := sa.Resolve(SubagentStageReview)
+	if !reflect.DeepEqual(got.AllowedSkills, []string{"default-skill"}) {
+		t.Errorf("review skills = %v, want default", got.AllowedSkills)
+	}
+	if !reflect.DeepEqual(got.AllowedMCPServers, []string{"default-mcp"}) {
+		t.Errorf("review MCP servers = %v, want default", got.AllowedMCPServers)
+	}
+}
+
 func TestConfigSubagentsIsZero(t *testing.T) {
 	if !(ConfigSubagents{}).IsZero() {
 		t.Error("empty ConfigSubagents should be zero")
@@ -64,16 +100,22 @@ func TestConfigSubagentsIsZero(t *testing.T) {
 	if (ConfigSubagents{Verify: SubagentProfile{Model: "x"}}).IsZero() {
 		t.Error("ConfigSubagents with a verify model must not be zero")
 	}
+	if (ConfigSubagents{Executor: SubagentProfile{Model: "x"}}).IsZero() {
+		t.Error("ConfigSubagents with an executor model must not be zero")
+	}
 }
 
 func TestConfigSubagentsYAMLRoundTrip(t *testing.T) {
-	in := []byte("subagents:\n  default:\n    model: fast\n  review:\n    allowed_skills:\n      - code-quality-review\n    allowed_mcp_servers:\n      - serena\n")
+	in := []byte("subagents:\n  default:\n    model: fast\n  executor:\n    allowed_skills:\n      - coding-discipline\n  review:\n    allowed_skills:\n      - code-quality-review\n    allowed_mcp_servers:\n      - serena\n")
 	cfg, err := ParseConfigYAML(in)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if cfg.Subagents.Default.Model != "fast" {
 		t.Errorf("default.model = %q, want fast", cfg.Subagents.Default.Model)
+	}
+	if !reflect.DeepEqual(cfg.Subagents.Executor.AllowedSkills, []string{"coding-discipline"}) {
+		t.Errorf("executor.allowed_skills = %v, want [coding-discipline]", cfg.Subagents.Executor.AllowedSkills)
 	}
 	if len(cfg.UnknownTopLevel) != 0 {
 		t.Errorf("subagents must not land in UnknownTopLevel: %v", cfg.UnknownTopLevel)
@@ -92,6 +134,53 @@ func TestConfigSubagentsYAMLRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(cfg.Subagents, back.Subagents) {
 		t.Errorf("subagents round-trip drift: %+v vs %+v", cfg.Subagents, back.Subagents)
+	}
+}
+
+func TestConfigSubagentsResolveCoversEveryStageProfileField(t *testing.T) {
+	typ := reflect.TypeOf(ConfigSubagents{})
+	val := reflect.ValueOf(&ConfigSubagents{}).Elem()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if field.Name == "Default" {
+			continue
+		}
+		stage := SubagentStage(strings.TrimSuffix(field.Tag.Get("yaml"), ",omitempty"))
+		if stage == "" {
+			t.Fatalf("subagent field %s has no yaml stage tag", field.Name)
+		}
+		wantModel := string(stage) + "-model"
+		val.Field(i).Set(reflect.ValueOf(SubagentProfile{Model: wantModel}))
+		cfg := val.Interface().(ConfigSubagents)
+		got := cfg.Resolve(stage)
+		if got.Model != wantModel {
+			t.Errorf("Resolve(%q).Model = %q, want %q (field %s is not covered)", stage, got.Model, wantModel, field.Name)
+		}
+		val.Field(i).Set(reflect.Zero(field.Type))
+	}
+}
+
+func TestConfigSubagentsExplicitEmptyListRoundTripInherits(t *testing.T) {
+	in := []byte("subagents:\n  default:\n    allowed_skills:\n      - default-skill\n  review:\n    allowed_skills: []\n")
+	cfg, err := ParseConfigYAML(in)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := cfg.Subagents.Resolve(SubagentStageReview).AllowedSkills; !reflect.DeepEqual(got, []string{"default-skill"}) {
+		t.Fatalf("pre-round-trip review skills = %v, want default", got)
+	}
+
+	out, err := cfg.ToYAML()
+	if err != nil {
+		t.Fatalf("toYAML: %v", err)
+	}
+	back, err := ParseConfigYAML(out)
+	if err != nil {
+		t.Fatalf("reparse: %v", err)
+	}
+	if got := back.Subagents.Resolve(SubagentStageReview).AllowedSkills; !reflect.DeepEqual(got, []string{"default-skill"}) {
+		t.Errorf("post-round-trip review skills = %v, want default", got)
 	}
 }
 
@@ -147,6 +236,51 @@ func TestConfigGitHubValidateRejectsNonHTTPS(t *testing.T) {
 	cfg.GitHub.APIURL = ""
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("empty github.api_url should be valid, got: %v", err)
+	}
+}
+
+func TestConfigGitHubValidateRejectsRuntimeUnsafeURLs(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{name: "userinfo", url: "https://token@ghe.example.com/api/v3"},
+		{name: "query", url: "https://ghe.example.com/api/v3?token=secret"},
+		{name: "fragment", url: "https://ghe.example.com/api/v3#token"},
+		{name: "noncanonical path", url: "https://ghe.example.com/api//v3"},
+		{name: "encoded path", url: "https://ghe.example.com/api%2Fv3"},
+		{name: "public host path", url: "https://api.github.com/api/v3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.GitHub.APIURL = tt.url
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("expected github.api_url %q to be rejected", tt.url)
+			}
+			if !strings.Contains(err.Error(), "github.api_url") {
+				t.Errorf("error should name github.api_url, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestConfigGitHubValidateRejectsInvalidAllowedBaseURLs(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.GitHub.APIURL = "https://ghe.example.com/api/v3"
+	cfg.GitHub.APIAllowedBaseURLs = []string{
+		"https://ghe.example.com/api/v3",
+		"httpss://typo.example.com",
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected invalid github.api_allowed_base_urls entry to be rejected")
+	}
+	if !strings.Contains(err.Error(), "github.api_allowed_base_urls[1]") {
+		t.Errorf("error should name invalid allowlist index, got: %v", err)
 	}
 }
 

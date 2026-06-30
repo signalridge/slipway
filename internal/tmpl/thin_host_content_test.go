@@ -27,6 +27,8 @@ func TestThinHostShipVerificationDelegatesBulkyEvidence(t *testing.T) {
 	assert.Contains(t, content, "high_risk_check:<domain>.safety_baseline=pass")
 	assert.Contains(t, flat, "isolated verifier context when supported; otherwise use a bounded structured-summary fallback")
 	assert.Contains(t, flatLower, "the host owns the final verdict")
+	assert.Contains(t, flat, "When the handoff carries `next_skill.subagent`, honor that directive before spawning the verifier")
+	assert.Contains(t, flat, "`allowed_mcp_servers`")
 	assert.Contains(t, flat, "`high_risk_check:<domain>.safety_baseline=pass` must be paired with `fresh:command_ref=`")
 	assert.Contains(t, flat, "prose-only delegated verdict")
 	assert.Contains(t, flat, "private attestation")
@@ -77,6 +79,9 @@ func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	assert.NotContains(t, flatReadContext, "- `TESTING.md`")
 	assert.NotContains(t, flatReadContext, "- `CONCERNS.md`")
 	assert.Contains(t, flatContent, "keep the coordinator context to `input_context.wave_plan`")
+	assert.Contains(t, flatContent, "`input_context.wave_plan.executor_subagent` is present")
+	assert.Contains(t, flatContent, "honor its `model`, `allowed_skills`, and `allowed_mcp_servers`")
+	assert.Contains(t, flatContent, "`wave_count`, `advisories`, or `executor_subagent`")
 	assert.Contains(t, flatContent, "pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths")
 	assert.Contains(t, flatContent, "executor-owned relevance/staleness self-check")
 	assert.Contains(t, flatContent, "codebase-map relevance/staleness self-check")
@@ -89,6 +94,8 @@ func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	assert.Contains(t, flatRef, "input_context.codebase_map_docs")
 	assert.Contains(t, flatRef, "codebase_map_doc_states")
 	assert.Contains(t, flatRef, "relevance/staleness self-check")
+	assert.Contains(t, flatRef, "input_context.wave_plan.executor_subagent")
+	assert.Contains(t, flatRef, "Apply its `model`, `allowed_skills`, and `allowed_mcp_servers`")
 }
 
 func TestWaveOrchestrationDispatchReferenceDefinesRuntimeAdapters(t *testing.T) {

@@ -11,6 +11,11 @@ slipway review
 ## Contract
 - `review` is the explicit S3 review stage command.
 - Evaluates artifact completeness, implementation quality, selected reviewer evidence, and plan/code alignment.
+- When `slipway next --json` / `slipway run --json` returns a review batch,
+  each `review_batch.skills[].subagent` directive is the host spawning contract
+  for that reviewer. Honor its `model`, `allowed_skills`, and
+  `allowed_mcp_servers` before dispatching the fresh review subagent; omitted
+  fields inherit host defaults.
 - Review feedback is repaired through `slipway fix`: dispatch a fresh-context repair subagent, record the affected reviewer evidence, then close by reviewer rereview.
 - Same-intent scope gaps found during review are change amendments inside the current change.
 - Intent conflict is not review alignment; surface `new_change_required:intent_conflict` and start a new governed change.

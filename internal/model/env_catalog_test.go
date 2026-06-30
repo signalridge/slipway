@@ -10,12 +10,12 @@ import (
 	"testing"
 )
 
-// slipwayEnvLiteral matches a SLIPWAY_* environment-variable name written as a
-// Go string literal, whether inline in os.Getenv("SLIPWAY_FOO") or as a named
-// const (fooEnv = "SLIPWAY_FOO"). Scanning string literals (rather than only
-// os.Getenv("...") call sites) catches the GitHub vars, which are read via const
-// identifiers, not inline literals.
-var slipwayEnvLiteral = regexp.MustCompile(`"(SLIPWAY_[A-Z0-9_]+)"`)
+// envLiteral matches environment-variable names Slipway treats as public
+// runtime/config surface: SLIPWAY_* names, ambient token fallbacks, and ambient
+// username fallbacks. Scanning string literals (rather than only
+// os.Getenv("...") call sites) catches vars read via const identifiers and
+// simple fallback slices.
+var envLiteral = regexp.MustCompile(`"(SLIPWAY_[A-Z0-9_]+|[A-Z][A-Z0-9_]*_TOKEN|GH_TOKEN|USER|USERNAME)"`)
 
 // repoRootForTest resolves the repository root from this test's package
 // directory (internal/model => ../..). Walking from here keeps the source scan
@@ -29,11 +29,12 @@ func repoRootForTest(t *testing.T) string {
 	return root
 }
 
-// scanSlipwayEnvUsages walks the repo's Go source (excluding _test.go files and
-// env_catalog.go itself) and returns every distinct SLIPWAY_* env name read in
-// source. env_catalog.go is excluded so the catalog cannot trivially "cover
-// itself": the test proves every USE site elsewhere is documented.
-func scanSlipwayEnvUsages(t *testing.T, root string) map[string]string {
+// scanEnvUsages walks the repo's Go source (excluding _test.go files and
+// env_catalog.go itself) and returns every distinct env name Slipway exposes as
+// runtime/config surface. env_catalog.go is excluded so the catalog cannot
+// trivially "cover itself": the test proves every use site elsewhere is
+// documented.
+func scanEnvUsages(t *testing.T, root string) map[string]string {
 	t.Helper()
 	skipDirs := map[string]bool{
 		".git": true, ".worktrees": true, "artifacts": true,
@@ -61,7 +62,7 @@ func scanSlipwayEnvUsages(t *testing.T, root string) map[string]string {
 		if readErr != nil {
 			return readErr
 		}
-		for _, m := range slipwayEnvLiteral.FindAllStringSubmatch(string(data), -1) {
+		for _, m := range envLiteral.FindAllStringSubmatch(string(data), -1) {
 			rel, relErr := filepath.Rel(root, path)
 			if relErr != nil {
 				rel = path
@@ -79,18 +80,19 @@ func scanSlipwayEnvUsages(t *testing.T, root string) map[string]string {
 }
 
 // TestEnvCatalogCoversEveryGetenv is the drift guard for the runtime env
-// surface: every SLIPWAY_* env var read anywhere in source must have an
-// EnvCatalog() entry. Reading a new env var without cataloguing it FAILS here
-// and names the missing variable and the file that reads it — the env-side
-// mirror of TestConfigCatalogCoversEveryStructLeaf.
+// surface: every SLIPWAY_* env var plus ambient token/username fallback read
+// anywhere in source must have an EnvCatalog() entry. Reading a new env var
+// without cataloguing it FAILS here and names the missing variable and the file
+// that reads it — the env-side mirror of
+// TestConfigCatalogCoversEveryStructLeaf.
 func TestEnvCatalogCoversEveryGetenv(t *testing.T) {
 	have := map[string]bool{}
 	for _, entry := range EnvCatalog() {
 		have[entry.Name] = true
 	}
-	usages := scanSlipwayEnvUsages(t, repoRootForTest(t))
+	usages := scanEnvUsages(t, repoRootForTest(t))
 	if len(usages) == 0 {
-		t.Fatal("scanned zero SLIPWAY_* env usages; the source scan is broken")
+		t.Fatal("scanned zero env usages; the source scan is broken")
 	}
 	names := make([]string, 0, len(usages))
 	for name := range usages {

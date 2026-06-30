@@ -51,8 +51,9 @@ func derivedWavePlanView(root, artifactBundle string) *wavePlanView {
 
 	forcedParallel := state.EffectiveForcedParallel(root)
 	planView := &wavePlanView{
-		WaveCount: len(waves),
-		Waves:     make([]waveView, len(waves)),
+		WaveCount:        len(waves),
+		Waves:            make([]waveView, len(waves)),
+		ExecutorSubagent: subagentDirectiveForStage(root, model.SubagentStageExecutor),
 	}
 
 	for i, w := range waves {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -126,28 +127,65 @@ func (g ConfigGitHub) IsZero() bool {
 	return g.APIURL == "" && len(g.APIAllowedBaseURLs) == 0
 }
 
-// Validate checks that a configured github.api_url is an absolute https URL with
-// a host. An empty api_url is valid: the env/default precedence applies at the
-// call site. The allowed-base-URL list is normalized and allowlisted at the
-// github call site (against the same URL rules the env path uses), so it is not
-// re-validated here. The override token stays env-only and is never on this
-// struct.
+// Validate checks that configured GitHub API base URLs obey the same safety
+// contract as the runtime HTTP backend. Empty api_url is valid: the env/default
+// precedence applies at the call site. The override token stays env-only and is
+// never on this struct.
 func (g ConfigGitHub) Validate() error {
 	trimmed := strings.TrimSpace(g.APIURL)
-	if trimmed == "" {
-		return nil
+	if trimmed != "" {
+		if _, err := NormalizeGitHubAPIBaseURL(trimmed); err != nil {
+			return fmt.Errorf("github.api_url: invalid URL %q: %w", g.APIURL, err)
+		}
 	}
-	parsed, err := url.Parse(trimmed)
-	if err != nil {
-		return fmt.Errorf("github.api_url: invalid URL %q: %w", g.APIURL, err)
-	}
-	if !strings.EqualFold(parsed.Scheme, "https") {
-		return fmt.Errorf("github.api_url: must be an absolute https URL, got %q", g.APIURL)
-	}
-	if strings.TrimSpace(parsed.Host) == "" {
-		return fmt.Errorf("github.api_url: must include a host, got %q", g.APIURL)
+	for i, raw := range g.APIAllowedBaseURLs {
+		if _, err := NormalizeGitHubAPIBaseURL(raw); err != nil {
+			return fmt.Errorf("github.api_allowed_base_urls[%d]: invalid URL %q: %w", i, raw, err)
+		}
 	}
 	return nil
+}
+
+// NormalizeGitHubAPIBaseURL canonicalizes a GitHub REST/GraphQL API base URL and
+// rejects forms that could smuggle credentials, confuse path matching, or differ
+// from the runtime HTTP backend's allowlist comparison.
+func NormalizeGitHubAPIBaseURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", fmt.Errorf("URL is empty")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return "", fmt.Errorf("parse URL")
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return "", fmt.Errorf("scheme must be https")
+	}
+	if parsed.User != nil || strings.TrimSpace(parsed.Host) == "" {
+		return "", fmt.Errorf("URL must not include userinfo and must include a host")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("URL must not include query or fragment")
+	}
+	if parsed.RawPath != "" {
+		return "", fmt.Errorf("encoded path is not accepted")
+	}
+	cleanPath := path.Clean(parsed.Path)
+	switch cleanPath {
+	case ".", "/":
+		parsed.Path = ""
+	default:
+		if cleanPath != parsed.Path {
+			return "", fmt.Errorf("path must be canonical")
+		}
+		if strings.EqualFold(parsed.Hostname(), "api.github.com") {
+			return "", fmt.Errorf("public api.github.com override must not include a path")
+		}
+		parsed.Path = cleanPath
+	}
+	parsed.Scheme = "https"
+	parsed.Host = strings.ToLower(parsed.Host)
+	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
 // SubagentStage identifies the governed subagent dispatch surface a profile
@@ -157,6 +195,9 @@ func (g ConfigGitHub) Validate() error {
 type SubagentStage string
 
 const (
+	// SubagentStageExecutor covers S2 implementation wave task executors spawned
+	// by the wave-orchestration host.
+	SubagentStageExecutor SubagentStage = "executor"
 	// SubagentStageReview covers the fresh-context S3 review peers
 	// (spec-compliance / code-quality / independent / security review).
 	SubagentStageReview SubagentStage = "review"
@@ -178,11 +219,11 @@ type SubagentProfile struct {
 	// Model names the model the host should run the subagent on (e.g. a faster or
 	// cheaper model for mechanical review). Empty inherits the host default.
 	Model string `yaml:"model,omitempty" json:"model,omitempty"`
-	// AllowedSkills restricts the skills the spawned subagent may load. Empty (nil)
+	// AllowedSkills restricts the skills the spawned subagent may load. Empty
 	// inherits the host default skill set.
 	AllowedSkills []string `yaml:"allowed_skills,omitempty" json:"allowed_skills,omitempty"`
 	// AllowedMCPServers restricts the MCP servers the spawned subagent may reach.
-	// Empty (nil) inherits the host default MCP set.
+	// Empty inherits the host default MCP set.
 	AllowedMCPServers []string `yaml:"allowed_mcp_servers,omitempty" json:"allowed_mcp_servers,omitempty"`
 }
 
@@ -193,12 +234,12 @@ func (p SubagentProfile) IsZero() bool {
 // ConfigSubagents carries optional per-stage subagent directives. The Default
 // profile supplies the fallback for any dimension a stage profile leaves unset,
 // so a project can set one model/skill/MCP policy once and override only the
-// stages that differ. The Default profile also applies to wave executors, whose
-// dispatch reference instructs the host to honor it.
+// stages that differ, including executor subagents.
 type ConfigSubagents struct {
-	// Default supplies the fallback profile for every stage and for wave
-	// executors.
+	// Default supplies the fallback profile for every stage.
 	Default SubagentProfile `yaml:"default,omitempty" json:"default,omitempty"`
+	// Executor overrides the Default for S2 implementation wave task executors.
+	Executor SubagentProfile `yaml:"executor,omitempty" json:"executor,omitempty"`
 	// Review overrides the Default for the S3 review peers.
 	Review SubagentProfile `yaml:"review,omitempty" json:"review,omitempty"`
 	// Fix overrides the Default for the S3 review-finding repair subagent.
@@ -208,7 +249,11 @@ type ConfigSubagents struct {
 }
 
 func (s ConfigSubagents) IsZero() bool {
-	return s.Default.IsZero() && s.Review.IsZero() && s.Fix.IsZero() && s.Verify.IsZero()
+	return s.Default.IsZero() &&
+		s.Executor.IsZero() &&
+		s.Review.IsZero() &&
+		s.Fix.IsZero() &&
+		s.Verify.IsZero()
 }
 
 // Resolve returns the effective profile for stage, merging each dimension over
@@ -218,6 +263,8 @@ func (s ConfigSubagents) IsZero() bool {
 func (s ConfigSubagents) Resolve(stage SubagentStage) SubagentProfile {
 	var override SubagentProfile
 	switch stage {
+	case SubagentStageExecutor:
+		override = s.Executor
 	case SubagentStageReview:
 		override = s.Review
 	case SubagentStageFix:
@@ -231,10 +278,10 @@ func (s ConfigSubagents) Resolve(stage SubagentStage) SubagentProfile {
 	if override.Model != "" {
 		resolved.Model = override.Model
 	}
-	if override.AllowedSkills != nil {
+	if len(override.AllowedSkills) > 0 {
 		resolved.AllowedSkills = override.AllowedSkills
 	}
-	if override.AllowedMCPServers != nil {
+	if len(override.AllowedMCPServers) > 0 {
 		resolved.AllowedMCPServers = override.AllowedMCPServers
 	}
 	return resolved

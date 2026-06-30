@@ -18,6 +18,10 @@ slipway run --resume --json
 - `run --resume` resumes governed execution from the latest incomplete wave.
 - If resumable execution exists, plain `run` is rejected and `--resume` is required.
 - `run` reuses the same `next --json` contract for the returned next-skill / blocker surface.
+- Because `run` returns the same handoff contract as `next`, honor every
+  returned subagent directive before spawning: `next_skill.subagent`,
+  `review_batch.skills[].subagent`, and
+  `input_context.wave_plan.executor_subagent`.
 - `advanced` reports the mutation performed by this invocation; `blockers` reports the current stop condition after that mutation. A successful advance can still return error-severity blockers for the next required skill.
 - Branch on `confirmation_requirement.next_action_kind` and run `confirmation_requirement.next_command` when present (`next_action` is human prose, not a contract to parse).
 - Under auto (`execution.auto` or `slipway run --auto`), prior authorization can cross only pure-pacing pauses: review batches without `security-review` and non-sensitive/non-security-review skill handoffs. Pending workflow-preset confirmation is auto-confirmed upgrade-only.

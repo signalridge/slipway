@@ -106,6 +106,11 @@ dispatch, or explicitly select the named fallback (for example
 `same_context_degraded`) and record fresh reviewer evidence for the degraded run —
 do not review inline without recording the selected fallback.
 
+When the handoff carries `next_skill.subagent` or the review batch carries
+`review_batch.skills[].subagent` for this reviewer, honor that directive before
+spawning: apply `model`, `allowed_skills`, and `allowed_mcp_servers`; omitted
+fields inherit host defaults.
+
 Record this review's context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched
 subagent's handle/identity. All S3 reviewers share stage `review`, but each

@@ -2485,9 +2485,15 @@ func TestReadmeAndCommandDescriptionsReflectCurrentEntrySurface(t *testing.T) {
 		"sensitive/guardrail confirmations",
 		"the intake Approved Summary",
 		"every evidence gate",
+		"`slipway config list --env`",
+		"Runtime/host environment variables describe the current AI host session",
+		"Secret environment variables, including GitHub tokens, are environment-only",
+		"`SLIPWAY_GITHUB_API_URL`",
+		"`SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS`",
+		"`SLIPWAY_GITHUB_API_TOKEN`",
 	} {
 		assert.Contains(t, normalizedReadme, phrase,
-			"README auto-mode safety phrase missing")
+			"README expected phrase missing")
 	}
 	assert.NotContains(t, readme, "request intake")
 	assert.NotContains(t, readme, "active request resolution")
@@ -2512,6 +2518,10 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must instruct parallel-by-default dispatch")
 	assert.Contains(t, skill, "parallel: true",
 		"wave-orchestration must reference the per-wave parallel signal from next --json")
+	assert.Contains(t, skill, "input_context.wave_plan.executor_subagent",
+		"wave-orchestration must reference the executor subagent directive from next --json")
+	assert.Contains(t, skill, "allowed_mcp_servers",
+		"wave-orchestration must tell hosts to honor the full executor subagent envelope")
 	assert.Contains(t, skill, "degradation",
 		"wave-orchestration must require noting a degraded sequential fallback")
 	assert.Contains(t, skill, "dispatch_mode:wave=<wave_index>:degraded_sequential",
@@ -2564,6 +2574,10 @@ func TestGeneratedWaveOrchestrationCodexDispatchUsesSpawnAgent(t *testing.T) {
 		"generated Codex dispatch reference must discover deferred tools")
 	assert.Contains(t, ref, "fork_context: false",
 		"generated Codex dispatch reference must request fresh-context execution")
+	assert.Contains(t, ref, "input_context.wave_plan.executor_subagent",
+		"generated dispatch reference must tell hosts where executor subagent directives live")
+	assert.Contains(t, ref, "allowed_mcp_servers",
+		"generated dispatch reference must preserve the model/skill/MCP directive contract")
 	assert.Contains(t, ref, "collect agent IDs",
 		"generated Codex dispatch reference must collect spawned agent handles")
 	assert.Contains(t, ref, "wait for all",

@@ -155,7 +155,7 @@ func runConfigList(cmd *cobra.Command, jsonFlag, envFlag bool) error {
 
 func writeEnvCatalogText(cmd *cobra.Command, entries []model.EnvCatalogEntry) error {
 	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-	if _, err := fmt.Fprintln(tw, "NAME\tSCOPE\tDEFAULT\tFILE-CONFIG-KEY\tDESCRIPTION"); err != nil {
+	if _, err := fmt.Fprintln(tw, "NAME\tSCOPE\tSECRET\tDEFAULT\tFILE-CONFIG-KEY\tDESCRIPTION"); err != nil {
 		return err
 	}
 	for _, entry := range entries {
@@ -171,7 +171,11 @@ func writeEnvCatalogText(cmd *cobra.Command, entries []model.EnvCatalogEntry) er
 		if description == "" {
 			description = "-"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", entry.Name, entry.Scope, def, fileKey, description); err != nil {
+		secret := "false"
+		if entry.Secret {
+			secret = "true"
+		}
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", entry.Name, entry.Scope, secret, def, fileKey, description); err != nil {
 			return err
 		}
 	}

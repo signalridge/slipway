@@ -956,6 +956,39 @@ func reviewBatchSkillNames(batch *reviewBatchView) []string {
 	return names
 }
 
+func assertReviewSubagentDirective(t *testing.T, got *subagentDirective) {
+	t.Helper()
+	require.NotNil(t, got)
+	assert.Equal(t, "review-fast", got.Model)
+	assert.Equal(t, []string{"code-quality-review", "independent-review"}, got.AllowedSkills)
+	assert.Equal(t, []string{"serena"}, got.AllowedMCPServers)
+}
+
+func assertExecutorSubagentDirective(t *testing.T, got *subagentDirective) {
+	t.Helper()
+	require.NotNil(t, got)
+	assert.Equal(t, "executor-fast", got.Model)
+	assert.Equal(t, []string{"coding-discipline", "test-design"}, got.AllowedSkills)
+	assert.Equal(t, []string{"serena", "github"}, got.AllowedMCPServers)
+}
+
+func TestSubagentStageForSkillCoversSelectedReviewAndVerifySkills(t *testing.T) {
+	t.Parallel()
+
+	for _, skillName := range skill.SelectedReviewSkills(skill.ReviewSkillSelection{SecurityReviewSelected: true}) {
+		stage, ok := subagentStageForSkill(skillName)
+		require.True(t, ok, "%s must map to a subagent stage", skillName)
+		assert.Equal(t, model.SubagentStageReview, stage, "%s must use the review stage profile", skillName)
+	}
+
+	stage, ok := subagentStageForSkill(progression.SkillShipVerification)
+	require.True(t, ok, "ship-verification must map to a subagent stage")
+	assert.Equal(t, model.SubagentStageVerify, stage)
+
+	_, ok = subagentStageForSkill(progression.SkillWaveOrchestration)
+	assert.False(t, ok, "wave-orchestration host reads executor_subagent from input_context.wave_plan")
+}
+
 func TestWriteNextHumanShowsPlanningSubStepAndRecoveryNote(t *testing.T) {
 	t.Parallel()
 
@@ -1425,6 +1458,63 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 		assert.Equal(t, "review_batch", runView.ConfirmationRequirement.Reason)
 		assert.Equal(t, "review_batch", runView.CurrentActionKind)
 	})
+}
+
+func TestReviewBatchDefaultJSONPreservesSubagentDirectives(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "delegation")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	cfg, err := model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	cfg.Subagents.Review = model.SubagentProfile{
+		Model:             "review-fast",
+		AllowedSkills:     []string{"code-quality-review", "independent-review"},
+		AllowedMCPServers: []string{"serena"},
+	}
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+	var nextHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextHandoff))
+	require.NotNil(t, nextHandoff.NextSkill)
+	assertReviewSubagentDirective(t, nextHandoff.NextSkill.Subagent)
+	require.NotNil(t, nextHandoff.ReviewBatch)
+	for _, skillView := range nextHandoff.ReviewBatch.Skills {
+		assertReviewSubagentDirective(t, skillView.Subagent)
+	}
+
+	runCmd := commandForRoot(t, root, makeRunCmd())
+	runCmd.SetArgs([]string{"--json", "--change", slug})
+	var runOut bytes.Buffer
+	runCmd.SetOut(&runOut)
+	require.NoError(t, runCmd.Execute())
+	var runHandoff nextHandoffView
+	require.NoError(t, json.Unmarshal(runOut.Bytes(), &runHandoff))
+	require.NotNil(t, runHandoff.NextSkill)
+	assertReviewSubagentDirective(t, runHandoff.NextSkill.Subagent)
+	require.NotNil(t, runHandoff.ReviewBatch)
+	for _, skillView := range runHandoff.ReviewBatch.Skills {
+		assertReviewSubagentDirective(t, skillView.Subagent)
+	}
+
+	diagCmd := commandForRoot(t, root, makeNextCmd())
+	diagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+	var diagOut bytes.Buffer
+	diagCmd.SetOut(&diagOut)
+	require.NoError(t, diagCmd.Execute())
+	var diag nextView
+	require.NoError(t, json.Unmarshal(diagOut.Bytes(), &diag))
+	require.NotNil(t, diag.NextSkill)
+	assertReviewSubagentDirective(t, diag.NextSkill.Subagent)
+	require.NotNil(t, diag.ReviewBatch)
+	for _, skillView := range diag.ReviewBatch.Skills {
+		assertReviewSubagentDirective(t, skillView.Subagent)
+	}
 }
 
 // TestReviewBatchHostSubagentDelegationSurfacedAcrossCapabilityStates pins the
@@ -3630,6 +3720,76 @@ func TestNextHandoffJSONIncludesWavePlanParallelSignal(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestNextWavePlanPreservesExecutorSubagentDirective(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		cfg, err := model.LoadConfig(state.ConfigPath(root))
+		require.NoError(t, err)
+		cfg.Subagents.Executor = model.SubagentProfile{
+			Model:             "executor-fast",
+			AllowedSkills:     []string{"coding-discipline", "test-design"},
+			AllowedMCPServers: []string{"serena", "github"},
+		}
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "executor subagent directive")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.CurrentState = model.StateS2Implement
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, change.Slug, "tasks.md", []byte(`
+- [ ] `+"`t-01`"+` first executor directive task
+  - depends_on: []
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+- [ ] `+"`t-02`"+` second executor directive task
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`)))
+		_, err = state.MaterializeWavePlan(root, change)
+		require.NoError(t, err)
+
+		nextCmd := commandForRoot(t, root, makeNextCmd())
+		nextCmd.SetArgs([]string{"--json", "--change", slug})
+		var nextOut bytes.Buffer
+		nextCmd.SetOut(&nextOut)
+		require.NoError(t, nextCmd.Execute())
+		var nextHandoff nextHandoffView
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextHandoff))
+		require.NotNil(t, nextHandoff.InputContext.WavePlan)
+		assertExecutorSubagentDirective(t, nextHandoff.InputContext.WavePlan.ExecutorSubagent)
+
+		runCmd := commandForRoot(t, root, makeRunCmd())
+		runCmd.SetArgs([]string{"--json", "--change", slug})
+		var runOut bytes.Buffer
+		runCmd.SetOut(&runOut)
+		require.NoError(t, runCmd.Execute())
+		var runHandoff nextHandoffView
+		require.NoError(t, json.Unmarshal(runOut.Bytes(), &runHandoff))
+		require.NotNil(t, runHandoff.InputContext.WavePlan)
+		assertExecutorSubagentDirective(t, runHandoff.InputContext.WavePlan.ExecutorSubagent)
+
+		diagCmd := commandForRoot(t, root, makeNextCmd())
+		diagCmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var diagOut bytes.Buffer
+		diagCmd.SetOut(&diagOut)
+		require.NoError(t, diagCmd.Execute())
+		var diag nextView
+		require.NoError(t, json.Unmarshal(diagOut.Bytes(), &diag))
+		require.NotNil(t, diag.InputContext.WavePlan)
+		assertExecutorSubagentDirective(t, diag.InputContext.WavePlan.ExecutorSubagent)
+	})
 }
 
 func TestNextPreviewUsesCurrentTasksDuringS2Implementation(t *testing.T) {

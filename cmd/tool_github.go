@@ -375,14 +375,20 @@ func resolveGitHubAPIConfig(fileCfg model.ConfigGitHub) (githubAPIConfig, error)
 		return githubAPIConfig{}, err
 	}
 	override := baseURL != githubDefaultAPIBaseURL
-	if override && !githubAPIBaseURLAllowed(baseURL, fileCfg) {
-		return githubAPIConfig{}, newPreconditionError(
-			"github_api_url_not_allowed",
-			fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL),
-			"Allowlist the exact HTTPS API base URL via SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS or github.api_allowed_base_urls before using a github.api_url override.",
-			"",
-			map[string]any{"base_url": baseURL},
-		)
+	if override {
+		allowed, err := githubAPIBaseURLAllowed(baseURL, fileCfg)
+		if err != nil {
+			return githubAPIConfig{}, err
+		}
+		if !allowed {
+			return githubAPIConfig{}, newPreconditionError(
+				"github_api_url_not_allowed",
+				fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL),
+				"Allowlist the exact HTTPS API base URL via SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS or github.api_allowed_base_urls before using a github.api_url override.",
+				"",
+				map[string]any{"base_url": baseURL},
+			)
+		}
 	}
 	token := githubAPITokenForBaseURL(override)
 	if token == "" {
@@ -411,46 +417,19 @@ func normalizeGitHubAPIBaseURL(raw string) (string, error) {
 	if value == "" {
 		value = githubDefaultAPIBaseURL
 	}
-	parsed, err := url.Parse(value)
-	if err != nil || parsed == nil {
-		return "", newInvalidGitHubAPIURLError(value, "parse URL")
+	normalized, err := model.NormalizeGitHubAPIBaseURL(value)
+	if err != nil {
+		return "", newInvalidGitHubAPIURLError(value, err.Error())
 	}
-	if !strings.EqualFold(parsed.Scheme, "https") {
-		return "", newInvalidGitHubAPIURLError(value, "scheme must be https")
-	}
-	if parsed.User != nil || strings.TrimSpace(parsed.Host) == "" {
-		return "", newInvalidGitHubAPIURLError(value, "URL must not include userinfo and must include a host")
-	}
-	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", newInvalidGitHubAPIURLError(value, "URL must not include query or fragment")
-	}
-	if parsed.RawPath != "" {
-		return "", newInvalidGitHubAPIURLError(value, "encoded path is not accepted")
-	}
-	cleanPath := path.Clean(parsed.Path)
-	switch cleanPath {
-	case ".", "/":
-		parsed.Path = ""
-	default:
-		if cleanPath != parsed.Path {
-			return "", newInvalidGitHubAPIURLError(value, "path must be canonical")
-		}
-		if strings.EqualFold(parsed.Hostname(), "api.github.com") {
-			return "", newInvalidGitHubAPIURLError(value, "public api.github.com override must not include a path")
-		}
-		parsed.Path = cleanPath
-	}
-	parsed.Scheme = "https"
-	parsed.Host = strings.ToLower(parsed.Host)
-	return strings.TrimRight(parsed.String(), "/"), nil
+	return normalized, nil
 }
 
 func newInvalidGitHubAPIURLError(value, reason string) error {
 	return newInvalidUsageError(
 		"github_api_url_invalid",
 		fmt.Sprintf("invalid GitHub API base URL %q: %s", value, reason),
-		"Use https://api.github.com, or an exact HTTPS GitHub Enterprise API base URL allowlisted by SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS.",
-		nil,
+		"Use https://api.github.com, or an exact HTTPS GitHub Enterprise API base URL allowlisted by SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS or github.api_allowed_base_urls.",
+		map[string]any{"value": value, "reason": reason},
 	)
 }
 
@@ -458,26 +437,26 @@ func newInvalidGitHubAPIURLError(value, reason string) error {
 // env list (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set and otherwise falling
 // back to the file list (github.api_allowed_base_urls). Both lists are
 // normalized through the same URL rules as the override itself before matching.
-func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) bool {
+func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) (bool, error) {
 	raw := strings.TrimSpace(os.Getenv(githubAPIAllowedBaseURLsEnv))
 	if raw == "" {
 		// File fallback: join the list with newlines (a recognized separator) so
 		// the same parser/normalizer covers both surfaces.
 		raw = strings.Join(fileCfg.APIAllowedBaseURLs, "\n")
 	}
-	entries, invalid := parseGitHubAPIAllowedBaseURLs(raw)
-	if invalid != "" {
-		return false
+	entries, err := parseGitHubAPIAllowedBaseURLs(raw)
+	if err != nil {
+		return false, err
 	}
 	for _, entry := range entries {
 		if entry == baseURL {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, string) {
+func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, error) {
 	parts := strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || r == '\n' || r == '\t' || r == ' '
 	})
@@ -489,11 +468,11 @@ func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, string) {
 		}
 		normalized, err := normalizeGitHubAPIBaseURL(value)
 		if err != nil {
-			return nil, value
+			return nil, err
 		}
 		out = append(out, normalized)
 	}
-	return out, ""
+	return out, nil
 }
 
 func githubAPITokenForBaseURL(override bool) string {

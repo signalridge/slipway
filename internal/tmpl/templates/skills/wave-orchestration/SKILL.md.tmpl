@@ -53,16 +53,21 @@ the governed objective.
 At `S2_IMPLEMENT`, read the current task-derived wave projection from
 `input_context.wave_plan` in `slipway next --json`: `wave_count`, `total_tasks`,
 and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
-`depends_on`, `target_files`, `task_kind`). Slipway has already dependency-ordered
-the waves and detected cycles from the current `tasks.md`; do not re-derive a
-separate grouping that could diverge from the engine projection. `input_context.wave_plan`
+`depends_on`, `target_files`, `task_kind`). If
+`input_context.wave_plan.executor_subagent` is present, it is the host spawning
+directive for every task executor in these waves: honor its `model`,
+`allowed_skills`, and `allowed_mcp_servers` before spawning executors; omitted
+fields inherit host defaults. Slipway has already dependency-ordered the waves
+and detected cycles from the current `tasks.md`; do not re-derive a separate
+grouping that could diverge from the engine projection. `input_context.wave_plan`
 is a diagnostic-only, non-persistable projection of `slipway next --json`: read it
 for reporting, but never write it back. The persisted `wave-plan.yaml` is a separate
 engine-owned execution cache that Slipway regenerates from the authoritative `tasks.md`
 and engine state — it is not S1 planning authority and is not copied from this
 projection. Never round-trip the projection's view-only fields (for example
-`wave_count` or `advisories`) into `wave-plan.yaml`; the strict cache loader rejects
-them and that corrupts the engine-owned cache. If `input_context.wave_plan.parse_error`
+`wave_count`, `advisories`, or `executor_subagent`) into `wave-plan.yaml`; the
+strict cache loader rejects them and that corrupts the engine-owned cache. If
+`input_context.wave_plan.parse_error`
 is set (for example, a dependency cycle or invalid task metadata), treat it as a
 blocker and follow the named remediation rather than executing.
 
@@ -172,6 +177,9 @@ gate unless a task owns a genuinely isolated command.
 - Record dispatch references for successful fan-out: `dispatch_mode:wave=<wave_index>:parallel_subagents` plus one `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` per spawned task.
 - If an executor handle is lost, no parseable result returns, or waiting stalls, record `executor_handle_lost`, `executor_result_missing`, or `executor_dispatch_stalled` with known handles and last observed state; ask for operator direction and do not inline or mark the task complete without explicit authorization.
 - Pass file paths only; executors read source files in their own context.
+- If `input_context.wave_plan.executor_subagent` is present, apply it to every
+  spawned executor before dispatch; do not ignore configured `model`,
+  `allowed_skills`, or `allowed_mcp_servers`.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
 - Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the codebase-map relevance/staleness self-check.
