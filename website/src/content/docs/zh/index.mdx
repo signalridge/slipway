@@ -7,10 +7,14 @@ hero:
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
+    - text: 观看动画
+      link: "#watch-demos"
+      icon: right-arrow
+      variant: primary
     - text: 从这里开始
       link: /slipway/zh/start-here/
       icon: right-arrow
-      variant: primary
+      variant: minimal
     - text: 在 GitHub 上查看
       link: https://github.com/signalridge/slipway
       icon: external
@@ -22,6 +26,21 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 Slipway 是一个轻量的治理控制面，服务于本地的 AI 辅助开发。它不取代你的 AI 编码工具、项目看板或 Git，而是把每一次变更绑定到一条生命周期、一份当前权威文件，以及一份会话结束后仍可查证的证据上，让 agent 的工作变得可读、可追溯。
 
 你用自然语言驱动它。一次性跑完 `slipway init` 之后，只要告诉 AI agent 你想做什么，生成的适配器就会把这个请求送进受管生命周期——没有命令序列需要背。一次变更到底有没有做完，由 Slipway 说了算；文档里出现的那些命令，是 agent 替你跑的，你也可以随时自己跑。
+
+<h2 id="watch-demos">观看动画</h2>
+
+这两段短录屏展示最先需要理解的两种节奏：授权仍然有效时继续向前推进，以及需要操作者判断时停下来。
+
+<div class="demo-grid">
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/a8a09c0d-b1eb-43d8-9137-a9fa4eaf601c"></video>
+		<figcaption><strong>自动模式。</strong>授权仍然有效时，节奏性停顿会继续推进。</figcaption>
+	</figure>
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/fc10e83d-d08f-42ad-a51f-f3b3a58586de"></video>
+		<figcaption><strong>交互模式。</strong>需要操作者判断的位置会停下来。</figcaption>
+	</figure>
+</div>
 
 <CardGrid stagger>
 	<Card title="教程" icon="open-book">

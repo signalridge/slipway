@@ -7,10 +7,14 @@ hero:
   image:
     file: ../../assets/slipway-wordmark.svg
   actions:
+    - text: Watch demos
+      link: "#watch-demos"
+      icon: right-arrow
+      variant: primary
     - text: Start Here
       link: /slipway/start-here/
       icon: right-arrow
-      variant: primary
+      variant: minimal
     - text: View on GitHub
       link: https://github.com/signalridge/slipway
       icon: external
@@ -29,6 +33,23 @@ what you want to build, and the generated adapter routes that request through th
 lifecycle — no command sequence to memorize. Slipway stays the authority on whether the
 change is actually done; the commands throughout these docs are what the agent runs for
 you, and what you can run directly whenever you want.
+
+<h2 id="watch-demos">Watch demos</h2>
+
+These short recordings show the two pacing modes most users care about first:
+hands-off progress when authorization is still fresh, and hard stops when operator
+judgment matters.
+
+<div class="demo-grid">
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/fa0eb364-7967-4e74-ae56-e26e9e753b96"></video>
+		<figcaption><strong>Auto mode.</strong> Pacing pauses advance when prior authorization remains fresh.</figcaption>
+	</figure>
+	<figure class="demo-card">
+		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/477ef7f0-cf68-49e1-be6f-76ba804be643"></video>
+		<figcaption><strong>Interactive mode.</strong> Checkpoints stop where operator judgment matters.</figcaption>
+	</figure>
+</div>
 
 <CardGrid stagger>
 	<Card title="Tutorials" icon="open-book">

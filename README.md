@@ -25,6 +25,7 @@
 </p>
 
 [Documentation](https://signalridge.github.io/slipway/) |
+[Watch Demos](#see-it-run) |
 [Start Here](docs/start-here.md) |
 [Quick Start](#quick-start) |
 [Installation](docs/installation.md) |
@@ -40,6 +41,24 @@
 
 **A local, Git-native governance CLI for AI-assisted software delivery. Your
 agent writes the code; Slipway decides when the change is actually done.**
+
+## See It Run
+
+<!-- markdownlint-disable MD034 -->
+<details open>
+<summary><strong>Auto mode</strong> - pacing pauses advance when prior authorization is still fresh.</summary>
+
+https://github.com/user-attachments/assets/fa0eb364-7967-4e74-ae56-e26e9e753b96
+
+</details>
+
+<details>
+<summary><strong>Interactive mode</strong> - checkpoints stop where operator judgment matters.</summary>
+
+https://github.com/user-attachments/assets/477ef7f0-cf68-49e1-be6f-76ba804be643
+
+</details>
+<!-- markdownlint-enable MD034 -->
 
 AI coding agents are fast, but they can skip verification, drift from the plan,
 or report "done" before the current worktree proves it. Slipway turns one unit
