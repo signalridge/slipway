@@ -885,6 +885,24 @@ func TestResearchOrchestrationUsesResearchArtifactSchemaHeadings(t *testing.T) {
 	assert.Contains(t, content, "research_section_placeholder")
 }
 
+func TestResearchOrchestrationStaleDiscoveryEvidenceRoutesToEvidenceSkill(t *testing.T) {
+	t.Parallel()
+
+	content, err := Content("skills/research-orchestration/SKILL.md")
+	require.NoError(t, err)
+
+	start := strings.Index(content, "- **Stale**")
+	require.NotEqual(t, -1, start)
+	end := strings.Index(content[start:], "- **Missing**")
+	require.NotEqual(t, -1, end)
+	staleBullet := content[start : start+end]
+
+	assert.Contains(t, staleBullet, "`required_skill_stale`")
+	assert.Contains(t, staleBullet, "`slipway evidence skill --skill research-orchestration --verdict pass`")
+	assert.NotContains(t, staleBullet, "`slipway run`")
+	assert.Contains(t, staleBullet, "must never be restamped")
+}
+
 func TestPlanningSkillsFollowArtifactDependencyOrder(t *testing.T) {
 	t.Parallel()
 
