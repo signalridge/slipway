@@ -56,7 +56,8 @@ original key ordering are not preserved.
                            allowed-values, scope).
   config list --env [--json]
                            Enumerate the environment-variable surface (name,
-                           scope, default, file-config-key, description).
+                           scope, secret, default, file-config-key,
+                           description).
   config get <key> [--json]
                            Print the resolved effective value for a file key.
   config set <key> <value> Validate and persist a file key to .slipway.yaml.`,
