@@ -61,13 +61,13 @@ func EnvCatalog() []EnvCatalogEntry {
 			Name:          "SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS",
 			Scope:         EnvScopeRepoPolicy,
 			FileConfigKey: "github.api_allowed_base_urls",
-			Description:   "Comma/space/semicolon separated HTTPS API base URLs allowed for a SLIPWAY_GITHUB_API_URL override; overrides github.api_allowed_base_urls.",
+			Description:   "Comma/space/semicolon separated HTTPS API base URLs allowed for a GitHub API override; overrides github.api_allowed_base_urls and confirms file-configured token destinations.",
 		},
 		{
 			Name:        "SLIPWAY_GITHUB_API_TOKEN",
 			Scope:       EnvScopeSecret,
 			Secret:      true,
-			Description: "Token used only for an allowlisted SLIPWAY_GITHUB_API_URL override host; never read from .slipway.yaml.",
+			Description: "Token used only for an allowlisted and env-confirmed GitHub API override host; never read from .slipway.yaml.",
 		},
 		{
 			Name:        "SLIPWAY_CONTEXT_WINDOW_TOKENS",

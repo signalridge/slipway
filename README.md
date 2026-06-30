@@ -139,8 +139,10 @@ environment override; `github.api_allowed_base_urls` and
 `SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS` define the allowlist. Environment wins
 over file config, and file config wins over defaults. Tokens stay env-only:
 `SLIPWAY_GITHUB_API_TOKEN` is used only for an allowlisted GitHub Enterprise API
-override, while ambient `GH_TOKEN` / `GITHUB_TOKEN` are sent only to
-`https://api.github.com`.
+override, and a file-configured override URL cannot self-authorize token egress:
+set `SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS` to the exact URL, or set
+`SLIPWAY_GITHUB_API_URL` to the same URL, before the override token is sent.
+Ambient `GH_TOKEN` / `GITHUB_TOKEN` are sent only to `https://api.github.com`.
 
 ```bash
 slipway config list

@@ -555,13 +555,15 @@ func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T
 	assert.Equal(t, "Bearer override-token", seenAuth)
 }
 
-// TestGitHubAPIConfigFileFallback proves the env > file > default precedence:
-// when SLIPWAY_GITHUB_API_URL is unset, github.api_url from .slipway.yaml is
-// used and its allowlist (github.api_allowed_base_urls) authorizes the override;
-// when the env var IS set it wins over the file value.
-func TestGitHubAPIConfigFileFallback(t *testing.T) {
+// TestGitHubAPIConfigFileFallback proves the env > file > default precedence
+// while keeping the override token's destination operator-confirmed. A repo file
+// may name and allowlist a GHE host, but that file cannot by itself authorize
+// sending SLIPWAY_GITHUB_API_TOKEN to the host.
+func TestGitHubAPIConfigFileFallbackRequiresOperatorTokenDestinationConfirmation(t *testing.T) {
+	var hits int
 	var seenAuth string
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
 		seenAuth = r.Header.Get("Authorization")
 		_, _ = io.WriteString(w, `{"number":11}`)
 	}))
@@ -581,8 +583,16 @@ func TestGitHubAPIConfigFileFallback(t *testing.T) {
 		APIURL:             server.URL,
 		APIAllowedBaseURLs: []string{server.URL},
 	}
+	_, err := newGitHubHTTPClient(fileCfg)
+	require.Error(t, err)
+	var cliErr *CLIError
+	require.True(t, errors.As(err, &cliErr))
+	assert.Equal(t, "github_api_override_token_destination_unconfirmed", cliErr.ErrorCode)
+	assert.Equal(t, 0, hits, "file config must not self-authorize override token egress")
+
+	t.Setenv(githubAPIAllowedBaseURLsEnv, server.URL)
 	client, err := newGitHubHTTPClient(fileCfg)
-	require.NoError(t, err, "file github.api_url + allowlist should authorize the override")
+	require.NoError(t, err, "env allowlist confirms the file-configured token destination")
 	var out struct {
 		Number int `json:"number"`
 	}
@@ -590,10 +600,18 @@ func TestGitHubAPIConfigFileFallback(t *testing.T) {
 	assert.Equal(t, 11, out.Number)
 	assert.Equal(t, "Bearer override-token", seenAuth)
 
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+	t.Setenv(githubAPIURLEnv, server.URL)
+	client, err = newGitHubHTTPClient(fileCfg)
+	require.NoError(t, err, "env URL confirms the destination when it matches the file policy")
+	require.NoError(t, client.getJSON("/repos/o/r/pulls/11", &out))
+	assert.Equal(t, 11, out.Number)
+	assert.Equal(t, "Bearer override-token", seenAuth)
+
 	// A file override host NOT in the file allowlist is rejected.
+	t.Setenv(githubAPIURLEnv, "")
 	_, err = newGitHubHTTPClient(model.ConfigGitHub{APIURL: server.URL})
 	require.Error(t, err)
-	var cliErr *CLIError
 	require.True(t, errors.As(err, &cliErr))
 	assert.Equal(t, "github_api_url_not_allowed", cliErr.ErrorCode)
 

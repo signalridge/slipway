@@ -31,7 +31,9 @@ const githubBackendEnvHelp = `Environment variables (env > file > default; see `
                           Comma/space/semicolon separated HTTPS API base URLs
                           allowed for an API URL override. Falls back to the
                           github.api_allowed_base_urls key in .slipway.yaml when
-                          unset.
+                          unset. File-configured override URLs require this env
+                          allowlist, or a matching SLIPWAY_GITHUB_API_URL, before
+                          SLIPWAY_GITHUB_API_TOKEN is sent.
   SLIPWAY_GITHUB_API_TOKEN
                           Token used only for an allowed override URL. Ambient
                           GH_TOKEN/GITHUB_TOKEN are sent only to
@@ -362,31 +364,51 @@ type githubAPIConfig struct {
 	token   string
 }
 
+type githubAPIConfigSource string
+
+const (
+	githubAPIConfigSourceDefault githubAPIConfigSource = "default"
+	githubAPIConfigSourceEnv     githubAPIConfigSource = "env"
+	githubAPIConfigSourceFile    githubAPIConfigSource = "file"
+)
+
+type githubAPIBaseURLResolution struct {
+	value  string
+	source githubAPIConfigSource
+}
+
+type githubAPIAllowlistDecision struct {
+	allowed bool
+	source  githubAPIConfigSource
+}
+
 // resolveGitHubAPIConfig resolves the effective GitHub API base URL and token
 // with env > file > default precedence: the base URL is the env override
 // (SLIPWAY_GITHUB_API_URL) when set, else the file value (github.api_url), else
 // https://api.github.com. An override host must be allowlisted by the env list
 // (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set, else the file allowlist
-// (github.api_allowed_base_urls). The token stays env-only (secrets are never
-// read from .slipway.yaml).
+// (github.api_allowed_base_urls). The override token stays env-only and is sent
+// to a file-configured override only after an operator-controlled env value
+// confirms the destination.
 func resolveGitHubAPIConfig(fileCfg model.ConfigGitHub) (githubAPIConfig, error) {
-	baseURL, err := normalizeGitHubAPIBaseURL(firstNonEmpty(os.Getenv(githubAPIURLEnv), fileCfg.APIURL, githubDefaultAPIBaseURL))
+	baseURL, err := resolveGitHubAPIBaseURL(fileCfg)
 	if err != nil {
 		return githubAPIConfig{}, err
 	}
-	override := baseURL != githubDefaultAPIBaseURL
+	override := baseURL.value != githubDefaultAPIBaseURL
+	var allowlist githubAPIAllowlistDecision
 	if override {
-		allowed, err := githubAPIBaseURLAllowed(baseURL, fileCfg)
+		allowlist, err = githubAPIBaseURLAllowed(baseURL.value, fileCfg)
 		if err != nil {
 			return githubAPIConfig{}, err
 		}
-		if !allowed {
+		if !allowlist.allowed {
 			return githubAPIConfig{}, newPreconditionError(
 				"github_api_url_not_allowed",
-				fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL),
+				fmt.Sprintf("GitHub API override %q is not allowlisted", baseURL.value),
 				"Allowlist the exact HTTPS API base URL via SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS or github.api_allowed_base_urls before using a github.api_url override.",
 				"",
-				map[string]any{"base_url": baseURL},
+				map[string]any{"base_url": baseURL.value},
 			)
 		}
 	}
@@ -398,7 +420,7 @@ func resolveGitHubAPIConfig(fileCfg model.ConfigGitHub) (githubAPIConfig, error)
 				"GitHub API override token missing; ambient GH_TOKEN/GITHUB_TOKEN are not sent to override hosts",
 				"Set SLIPWAY_GITHUB_API_TOKEN for the allowed override host, or clear the SLIPWAY_GITHUB_API_URL / github.api_url override to use https://api.github.com.",
 				"",
-				map[string]any{"base_url": baseURL},
+				map[string]any{"base_url": baseURL.value},
 			)
 		}
 		return githubAPIConfig{}, newPreconditionError(
@@ -409,7 +431,48 @@ func resolveGitHubAPIConfig(fileCfg model.ConfigGitHub) (githubAPIConfig, error)
 			nil,
 		)
 	}
-	return githubAPIConfig{baseURL: baseURL, token: token}, nil
+	if override && !githubAPIOverrideTokenDestinationAuthorized(baseURL, allowlist) {
+		return githubAPIConfig{}, newPreconditionError(
+			"github_api_override_token_destination_unconfirmed",
+			fmt.Sprintf("GitHub API override token destination %q is not operator-confirmed", baseURL.value),
+			"Set SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS to the exact HTTPS API base URL, or set SLIPWAY_GITHUB_API_URL to the same value, before sending SLIPWAY_GITHUB_API_TOKEN to a file-configured github.api_url.",
+			"",
+			map[string]any{
+				"base_url":         baseURL.value,
+				"base_url_source":  string(baseURL.source),
+				"allowlist_source": string(allowlist.source),
+			},
+		)
+	}
+	return githubAPIConfig{baseURL: baseURL.value, token: token}, nil
+}
+
+func resolveGitHubAPIBaseURL(fileCfg model.ConfigGitHub) (githubAPIBaseURLResolution, error) {
+	envURL := strings.TrimSpace(os.Getenv(githubAPIURLEnv))
+	if envURL != "" {
+		value, err := normalizeGitHubAPIBaseURL(envURL)
+		if err != nil {
+			return githubAPIBaseURLResolution{}, err
+		}
+		return githubAPIBaseURLResolution{value: value, source: githubAPIConfigSourceEnv}, nil
+	}
+	fileURL := strings.TrimSpace(fileCfg.APIURL)
+	if fileURL != "" {
+		value, err := normalizeGitHubAPIBaseURL(fileURL)
+		if err != nil {
+			return githubAPIBaseURLResolution{}, err
+		}
+		return githubAPIBaseURLResolution{value: value, source: githubAPIConfigSourceFile}, nil
+	}
+	value, err := normalizeGitHubAPIBaseURL(githubDefaultAPIBaseURL)
+	if err != nil {
+		return githubAPIBaseURLResolution{}, err
+	}
+	return githubAPIBaseURLResolution{value: value, source: githubAPIConfigSourceDefault}, nil
+}
+
+func githubAPIOverrideTokenDestinationAuthorized(baseURL githubAPIBaseURLResolution, allowlist githubAPIAllowlistDecision) bool {
+	return allowlist.source == githubAPIConfigSourceEnv || baseURL.source == githubAPIConfigSourceEnv
 }
 
 func normalizeGitHubAPIBaseURL(raw string) (string, error) {
@@ -433,27 +496,29 @@ func newInvalidGitHubAPIURLError(value, reason string) error {
 	)
 }
 
-// githubAPIBaseURLAllowed reports whether baseURL is allowlisted, preferring the
-// env list (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set and otherwise falling
-// back to the file list (github.api_allowed_base_urls). Both lists are
+// githubAPIBaseURLAllowed reports whether baseURL is allowlisted, preferring
+// the env list (SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS) when set and otherwise
+// falling back to the file list (github.api_allowed_base_urls). Both lists are
 // normalized through the same URL rules as the override itself before matching.
-func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) (bool, error) {
+func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) (githubAPIAllowlistDecision, error) {
 	raw := strings.TrimSpace(os.Getenv(githubAPIAllowedBaseURLsEnv))
+	source := githubAPIConfigSourceEnv
 	if raw == "" {
 		// File fallback: join the list with newlines (a recognized separator) so
 		// the same parser/normalizer covers both surfaces.
 		raw = strings.Join(fileCfg.APIAllowedBaseURLs, "\n")
+		source = githubAPIConfigSourceFile
 	}
 	entries, err := parseGitHubAPIAllowedBaseURLs(raw)
 	if err != nil {
-		return false, err
+		return githubAPIAllowlistDecision{}, err
 	}
 	for _, entry := range entries {
 		if entry == baseURL {
-			return true, nil
+			return githubAPIAllowlistDecision{allowed: true, source: source}, nil
 		}
 	}
-	return false, nil
+	return githubAPIAllowlistDecision{allowed: false, source: source}, nil
 }
 
 func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, error) {
@@ -484,15 +549,6 @@ func githubAPITokenForBaseURL(override bool) string {
 		token = strings.TrimSpace(os.Getenv(githubAmbientTokenSecondaryEnv))
 	}
 	return token
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 type githubPageHandler func(raw []byte) (int, error)

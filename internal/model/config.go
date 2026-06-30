@@ -108,9 +108,10 @@ func (t ConfigGovernanceThresholds) Validate() error {
 // SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variables so a project can
 // pin a GitHub Enterprise host in version control instead of relying on ambient
 // environment alone. The matching environment variables still override these
-// file values (env > file > default), and the override token
+// file values (env > file > default). The override token
 // (SLIPWAY_GITHUB_API_TOKEN) is intentionally NOT representable here: secrets
-// stay environment-only.
+// stay environment-only, and the runtime must confirm file-configured token
+// destinations from env before sending the token.
 type ConfigGitHub struct {
 	// APIURL pins the GitHub REST/GraphQL API base URL used by the token-backed
 	// HTTP backend. Empty means the default https://api.github.com unless the
@@ -118,7 +119,8 @@ type ConfigGitHub struct {
 	APIURL string `yaml:"api_url,omitempty" json:"api_url,omitempty"`
 	// APIAllowedBaseURLs lists the HTTPS API base URLs allowed for an APIURL
 	// override. The SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variable, when
-	// set, overrides this list wholesale.
+	// set, overrides this list wholesale and confirms token egress to a
+	// file-configured override.
 	APIAllowedBaseURLs []string `yaml:"api_allowed_base_urls,omitempty" json:"api_allowed_base_urls,omitempty"`
 }
 

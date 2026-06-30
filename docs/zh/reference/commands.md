@@ -81,7 +81,7 @@ slipway config list --json
 - `slipway health --doctor --json` 在 health 报告中加入面向修复的诊断。
 - `slipway tool <helper>` 由生成的 skill 直接调用，不生成适配器提示词接入面。
 - `slipway hook session-start` 和 `slipway hook context-pressure` 由生成的宿主 hook 配置直接调用；hook 辅助命令会静默失败，避免自动 hook 阻塞用户。
-- `slipway config`、`slipway config list --json`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看或更新 `.slipway.yaml`；`config` 刻意保持 CLI-only，不生成适配器提示词接入面。
+- `slipway config`、`slipway config list --json`、`slipway config list --env [--json]`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看 `.slipway.yaml` 配置键和运行时/密钥环境变量面；只有文件配置键可以更新。`config` 刻意保持 CLI-only，不生成适配器提示词接入面。
 
 ## 只读类命令
 

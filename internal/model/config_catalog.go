@@ -104,7 +104,7 @@ func configDescriptions() map[string]string {
 		"governance.thresholds.security_review_blast_radius":    "Minimum blast radius that triggers the security-review control.",
 		"governance.thresholds.worktree_blast_radius":           "Minimum blast radius that triggers the worktree-isolation control.",
 		"github.api_url":                                        "GitHub REST/GraphQL API base URL (env SLIPWAY_GITHUB_API_URL overrides; default https://api.github.com).",
-		"github.api_allowed_base_urls":                          "HTTPS API base URLs allowed for a github.api_url override (env SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS overrides).",
+		"github.api_allowed_base_urls":                          "HTTPS API base URLs allowed for a github.api_url override; env SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS overrides and confirms token egress.",
 		"context.tech_stack":                                    "Project tech stack injected into skill templates.",
 		"context.conventions":                                   "Project conventions injected into skill templates.",
 		"context.test_cmd":                                      "Project test command injected into skill templates.",
