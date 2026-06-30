@@ -101,6 +101,76 @@ func TestRecoveryRelevantTokensResolveToRemediation(t *testing.T) {
 	}
 }
 
+// preserveEmptyCommandReasonCodes are the canonical codes intentionally rendered
+// with prose-only recovery and NO primary command (preserve-first, multi-step
+// manual judgment with no single safe automated command). They are in
+// blockerRemediations but deliberately carry an empty CommandTemplate.
+var preserveEmptyCommandReasonCodes = map[string]struct{}{
+	"orphaned_bundle_ownership_unknown":  {},
+	"orphaned_bundle_unmanaged_worktree": {},
+}
+
+// TestRecoveryCoverageIsExhaustive is the completeness guard the hand-maintained
+// recoveryRelevantCanonicalCodes() allowlist could not provide. It iterates EVERY
+// canonical reason code and requires each to fall in exactly one recovery class,
+// so a newly added code cannot silently surface to an operator or host AI with no
+// discoverable next action — which is precisely the discoverability gap this guard
+// exists to prevent.
+func TestRecoveryCoverageIsExhaustive(t *testing.T) {
+	t.Parallel()
+
+	for code := range canonicalReasonDefinitions {
+		code := code
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+
+			rec := BuildRecovery([]ReasonCode{NewReasonCode(code, "")})
+			hasCommand := rec != nil && strings.TrimSpace(rec.PrimaryCommand) != ""
+			_, isPreserve := preserveEmptyCommandReasonCodes[code]
+			_, isDiagnostic := diagnosticOnlyReasonCodes[code]
+
+			matched := 0
+			for _, in := range []bool{hasCommand, isPreserve, isDiagnostic} {
+				if in {
+					matched++
+				}
+			}
+			require.Equalf(t, 1, matched,
+				"canonical code %q must be in EXACTLY ONE recovery class "+
+					"(hasCommand=%v preserveEmptyCommand=%v diagnosticOnly=%v); add a "+
+					"blockerRemediations entry or classify it in diagnosticOnlyReasonCodes",
+				code, hasCommand, isPreserve, isDiagnostic)
+
+			if hasCommand {
+				assert.NotContainsf(t, rec.PrimaryCommand, "{",
+					"code %q primary command must not leak a placeholder", code)
+			}
+		})
+	}
+}
+
+// TestDiagnosticAndPreserveSetsAreCanonical guards the two hand-maintained
+// classification sets against typos: every code they name must be a real
+// canonical reason code, or the exhaustive guard above could be silently
+// satisfied by a misspelled entry.
+func TestDiagnosticAndPreserveSetsAreCanonical(t *testing.T) {
+	t.Parallel()
+
+	for code := range diagnosticOnlyReasonCodes {
+		_, ok := canonicalReasonDefinitions[code]
+		assert.Truef(t, ok, "diagnosticOnlyReasonCodes names non-canonical code %q", code)
+		_, alsoBlocker := blockerRemediations[code]
+		assert.Falsef(t, alsoBlocker, "code %q is in BOTH diagnosticOnlyReasonCodes and blockerRemediations", code)
+	}
+	for code := range preserveEmptyCommandReasonCodes {
+		_, ok := canonicalReasonDefinitions[code]
+		assert.Truef(t, ok, "preserveEmptyCommandReasonCodes names non-canonical code %q", code)
+		rem, ok := blockerRemediations[code]
+		require.Truef(t, ok, "preserve code %q must have a (prose-only) blockerRemediations entry", code)
+		assert.Emptyf(t, strings.TrimSpace(rem.CommandTemplate), "preserve code %q must have an empty CommandTemplate", code)
+	}
+}
+
 func TestInScopeProducedBlockersResolveToCanonicalRecovery(t *testing.T) {
 	t.Parallel()
 
