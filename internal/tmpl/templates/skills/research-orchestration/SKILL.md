@@ -120,6 +120,24 @@ slipway evidence skill \
   --notes-file artifacts/changes/{slug}/verification/research-orchestration-notes.md
 ```
 
+## Discovery Evidence States
+Slipway tracks discovery (research-orchestration) evidence in three states. Read
+the state from `slipway next --json` / `slipway validate --json` rather than
+inferring it: the engine decides freshness from whether the certified inputs
+changed after the verdict was recorded, not from your judgment.
+
+- **Present** — a current research-orchestration verdict exists and its certified
+  inputs have not changed since it was recorded. Discovery is satisfied; proceed
+  to planning.
+- **Stale** — a verdict exists, but the certified inputs changed *after* it was
+  recorded, so it is not usable as-is. Re-run discovery against the current inputs
+  and re-record fresh evidence (`slipway run` / `slipway evidence skill`). A stale
+  record is a re-run **and** re-record, not a first-time discovery run, and the
+  stale verdict must never be restamped or hand-edited into a fresh state.
+- **Missing** — no research-orchestration evidence is recorded at all. The
+  `missing_discovery_evidence` blocker fires, and discovery must be run to produce
+  the evidence before planning.
+
 ## Surface Findings
 Author `research.md` from `slipway instructions research` — its payload carries
 the template, the resolved output path to write, and the upstream inputs to read
