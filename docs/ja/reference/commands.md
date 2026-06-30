@@ -86,7 +86,7 @@ slipway config list --json
 - `slipway health --doctor --json` は、ヘルスレポートに修復向けの診断を追加します。
 - `slipway tool <helper>` は生成されたスキルから直接呼び出され、生成されたアダプターのプロンプトサーフェスはありません。
 - `slipway hook session-start` と `slipway hook context-pressure` は生成されたホストフック設定から直接呼び出されます。フックヘルパーは、ホストの自動フックがユーザーをブロックしないよう静かに失敗します。
-- `slipway config`、`slipway config list --json`、`slipway config get <key> --json`、`slipway config set <key> <value>` は `.slipway.yaml` を確認・更新します。`config` は意図的に CLI 専用であり、生成されたアダプターのプロンプトサーフェスはありません。
+- `slipway config`、`slipway config list --json`、`slipway config list --env [--json]`、`slipway config get <key> --json`、`slipway config set <key> <value>` は `.slipway.yaml` キーとランタイム/シークレット環境変数サーフェスを確認します。更新できるのはファイル設定キーだけです。`config` は意図的に CLI 専用であり、生成されたアダプターのプロンプトサーフェスはありません。
 
 ## 読み取り専用サーフェス
 

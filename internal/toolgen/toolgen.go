@@ -312,7 +312,7 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--tools all|none|claude,cursor,...] [--refresh]",
 		Prerequisites: []string{"Run from the target project root or any child directory inside it.", "The workspace must be inside a git working tree."}},
 	{ID: "config", Class: CommandClassMutation, Description: "Inspect and set repo-level Slipway configuration keys", Tier: "setup", HasPromptSurface: false,
-		Arguments:     "[list [--json] | get <key> [--json] | set <key> <value>]",
+		Arguments:     "[list [--json] [--env] | get <key> [--json] | set <key> <value>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"},
 		Notes: []string{
 			"`slipway config` is intentionally CLI-only: it is part of the public command inventory and JSON contracts, but Slipway does not export `$slipway-config` or host command prompt wrappers.",
