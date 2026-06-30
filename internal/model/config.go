@@ -3,7 +3,9 @@ package model
 import (
 	"bytes"
 	"fmt"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -16,6 +18,7 @@ type Config struct {
 	Defaults        ConfigDefaults        `yaml:"defaults" json:"defaults"`
 	Execution       ConfigExecution       `yaml:"execution" json:"execution"`
 	Governance      ConfigGovernance      `yaml:"governance,omitempty" json:"governance,omitempty"`
+	GitHub          ConfigGitHub          `yaml:"github,omitempty" json:"github,omitempty"`
 	Context         ProjectContext        `yaml:"context,omitempty" json:"context,omitempty"`
 	CustomArtifacts []ArtifactDefinition  `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	UnknownTopLevel map[string]*yaml.Node `yaml:"-" json:"-"`
@@ -98,6 +101,90 @@ func (t ConfigGovernanceThresholds) Validate() error {
 		return fmt.Errorf("governance.thresholds.worktree_blast_radius: invalid signal level %q", t.WorktreeBlastRadius)
 	}
 	return nil
+}
+
+// ConfigGitHub holds the repo-policy GitHub API settings that may live in
+// .slipway.yaml. These mirror the SLIPWAY_GITHUB_API_URL and
+// SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variables so a project can
+// pin a GitHub Enterprise host in version control instead of relying on ambient
+// environment alone. The matching environment variables still override these
+// file values (env > file > default), and the override token
+// (SLIPWAY_GITHUB_API_TOKEN) is intentionally NOT representable here: secrets
+// stay environment-only.
+type ConfigGitHub struct {
+	// APIURL pins the GitHub REST/GraphQL API base URL used by the token-backed
+	// HTTP backend. Empty means the default https://api.github.com unless the
+	// SLIPWAY_GITHUB_API_URL environment variable overrides it.
+	APIURL string `yaml:"api_url,omitempty" json:"api_url,omitempty"`
+	// APIAllowedBaseURLs lists the HTTPS API base URLs allowed for an APIURL
+	// override. The SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS environment variable, when
+	// set, overrides this list wholesale.
+	APIAllowedBaseURLs []string `yaml:"api_allowed_base_urls,omitempty" json:"api_allowed_base_urls,omitempty"`
+}
+
+func (g ConfigGitHub) IsZero() bool {
+	return g.APIURL == "" && len(g.APIAllowedBaseURLs) == 0
+}
+
+// Validate checks that configured GitHub API base URLs obey the same safety
+// contract as the runtime HTTP backend. Empty api_url is valid: the env/default
+// precedence applies at the call site. The override token stays env-only and is
+// never on this struct.
+func (g ConfigGitHub) Validate() error {
+	trimmed := strings.TrimSpace(g.APIURL)
+	if trimmed != "" {
+		if _, err := NormalizeGitHubAPIBaseURL(trimmed); err != nil {
+			return fmt.Errorf("github.api_url: invalid URL %q: %w", g.APIURL, err)
+		}
+	}
+	for i, raw := range g.APIAllowedBaseURLs {
+		if _, err := NormalizeGitHubAPIBaseURL(raw); err != nil {
+			return fmt.Errorf("github.api_allowed_base_urls[%d]: invalid URL %q: %w", i, raw, err)
+		}
+	}
+	return nil
+}
+
+// NormalizeGitHubAPIBaseURL canonicalizes a GitHub REST/GraphQL API base URL and
+// rejects forms that could smuggle credentials, confuse path matching, or differ
+// from the runtime HTTP backend's allowlist comparison.
+func NormalizeGitHubAPIBaseURL(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", fmt.Errorf("URL is empty")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed == nil {
+		return "", fmt.Errorf("parse URL")
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return "", fmt.Errorf("scheme must be https")
+	}
+	if parsed.User != nil || strings.TrimSpace(parsed.Host) == "" {
+		return "", fmt.Errorf("URL must not include userinfo and must include a host")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("URL must not include query or fragment")
+	}
+	if parsed.RawPath != "" {
+		return "", fmt.Errorf("encoded path is not accepted")
+	}
+	cleanPath := path.Clean(parsed.Path)
+	switch cleanPath {
+	case ".", "/":
+		parsed.Path = ""
+	default:
+		if cleanPath != parsed.Path {
+			return "", fmt.Errorf("path must be canonical")
+		}
+		if strings.EqualFold(parsed.Hostname(), "api.github.com") {
+			return "", fmt.Errorf("public api.github.com override must not include a path")
+		}
+		parsed.Path = cleanPath
+	}
+	parsed.Scheme = "https"
+	parsed.Host = strings.ToLower(parsed.Host)
+	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
 // ProjectContext provides project-specific context injected into skill templates.
@@ -265,6 +352,9 @@ func (c Config) Validate() error {
 	default:
 		return fmt.Errorf("execution.parallelization must be unset or one of: forced, off")
 	}
+	if err := c.GitHub.Validate(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -298,6 +388,10 @@ func ParseConfigYAML(data []byte) (Config, error) {
 		case "governance":
 			if err := decodeNodeStrict(value, &cfg.Governance); err != nil {
 				return Config{}, fmt.Errorf("decode governance: %w", err)
+			}
+		case "github":
+			if err := decodeNodeStrict(value, &cfg.GitHub); err != nil {
+				return Config{}, fmt.Errorf("decode github: %w", err)
 			}
 		case "agents":
 			return Config{}, fmt.Errorf("top-level agents configuration has been removed; governed handoff is skill-based via next_skill.name and slipway-{name}/SKILL.md host skill surfaces")
@@ -346,6 +440,17 @@ func (c Config) ToYAML() ([]byte, error) {
 			return nil, err
 		}
 		appendMappingEntry(root, "governance", governanceNode)
+	}
+
+	// Emit the github section only when a repo-policy GitHub setting is present.
+	// Reuse IsZero() as the single empty-section predicate so the section never
+	// round-trips into UnknownTopLevel as an empty mapping.
+	if !cfg.GitHub.IsZero() {
+		githubNode, err := encodeYAMLNode(cfg.GitHub)
+		if err != nil {
+			return nil, err
+		}
+		appendMappingEntry(root, "github", githubNode)
 	}
 
 	// Emit the context section whenever any context leaf is set. Reuse IsZero()

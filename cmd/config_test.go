@@ -97,6 +97,59 @@ func TestConfigListJSONSurvivesBrokenConfig(t *testing.T) {
 	})
 }
 
+func TestConfigListEnvTextShowsScopeAndSecretColumn(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		out, errOut, err := runConfigCmd(t, root, "list", "--env")
+		require.NoError(t, err)
+		assert.Empty(t, errOut)
+		assert.Contains(t, out, "NAME")
+		assert.Contains(t, out, "SCOPE")
+		assert.Contains(t, out, "SECRET")
+		assert.Contains(t, out, "FILE-CONFIG-KEY")
+		assert.Contains(t, out, "SLIPWAY_GITHUB_API_URL")
+		assert.Contains(t, out, "github.api_url")
+		assert.Contains(t, out, "GH_TOKEN")
+		assert.Contains(t, out, "secret")
+		assert.Contains(t, out, "true")
+	})
+}
+
+func TestConfigListEnvJSONShape(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		out, errOut, err := runConfigCmd(t, root, "list", "--env", "--json")
+		require.NoError(t, err)
+		assert.Empty(t, errOut)
+
+		var entries []model.EnvCatalogEntry
+		require.NoError(t, json.Unmarshal([]byte(out), &entries))
+		require.NotEmpty(t, entries)
+
+		byName := map[string]model.EnvCatalogEntry{}
+		for _, entry := range entries {
+			byName[entry.Name] = entry
+		}
+		apiURL, ok := byName["SLIPWAY_GITHUB_API_URL"]
+		require.True(t, ok)
+		assert.Equal(t, model.EnvScopeRepoPolicy, apiURL.Scope)
+		assert.Equal(t, "github.api_url", apiURL.FileConfigKey)
+		assert.False(t, apiURL.Secret)
+
+		token, ok := byName["GH_TOKEN"]
+		require.True(t, ok)
+		assert.Equal(t, model.EnvScopeSecret, token.Scope)
+		assert.True(t, token.Secret)
+		assert.Empty(t, token.FileConfigKey)
+	})
+}
+
 func TestConfigHelpDisclosesSetRewrite(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -384,6 +437,29 @@ func TestConfigSetInvalidRejectsWithFileUnchanged(t *testing.T) {
 		// Non-integer for an int field is rejected too.
 		_, _, typeErr := runConfigCmd(t, root, "set", "execution.lock_wait_timeout_seconds", "abc")
 		require.Error(t, typeErr)
+	})
+}
+
+func TestConfigSetRejectsUnsafeGitHubAPIURLBeforeWrite(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		before, err := os.ReadFile(state.ConfigPath(root))
+		require.NoError(t, err)
+
+		_, _, setErr := runConfigCmd(t, root, "set", "github.api_url", "https://token@ghe.example.com/api/v3")
+		require.Error(t, setErr, "unsafe github.api_url must be rejected before persistence")
+		cliErr := asCLIError(setErr)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "config_value_invalid", cliErr.ErrorCode)
+		assert.Equal(t, "github.api_url", cliErr.Details["key"])
+
+		after, err := os.ReadFile(state.ConfigPath(root))
+		require.NoError(t, err)
+		assert.Equal(t, string(before), string(after), "rejected github.api_url must leave the config file unchanged")
+		assert.NotContains(t, string(after), "token@", "credentials must never be persisted to .slipway.yaml")
 	})
 }
 
