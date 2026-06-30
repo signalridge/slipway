@@ -1,0 +1,60 @@
+version: 1
+slug: fix-issue-384-expose-an-intentional-refresh-path-for-already
+description: 'Fix issue #384: expose an intentional refresh path for already-current passing review evidence'
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-30T13:55:03.9079Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/fix-issue-384-expose-an-intentional-refresh-path-for-already
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 7f3ac82a6996067a2386605b85f03fbaa86dd6bf4bc943141b18d1a2d54871d4
+        updated_at: 2026-06-30T15:34:01.369668249Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: e1deb9601fed5e055e379a0f8a5a31d01446de89c4bf5921cc067785679be7ab
+        updated_at: 2026-06-30T14:18:19.738312648Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 4492ea832b053a6b9aa638146c29ecc4147d5b556fae3fb3ef208cd89f1aece3
+        updated_at: 2026-06-30T14:10:05.25456465Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 8082a5489b64fea8876fbbc92f3887635ccd974412c81eec0e39701157ae0556
+        updated_at: 2026-06-30T14:18:19.736806872Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: b544db237ac57ad2deb0514bfc63133a7f84a7b4349a733b2df03530baab6f8e
+        updated_at: 2026-06-30T14:13:08.216746781Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 88c453d2df905401cf6e19d97ca9dd8d118e8de81f85093b52fdf3b623d6f14c
+        updated_at: 2026-06-30T15:17:33.063386946Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/code-quality-review.yaml
+    independent-review: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/plan-audit.yaml
+    research-orchestration: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/research-orchestration.yaml
+    ship-verification: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-issue-384-expose-an-intentional-refresh-path-for-already/artifacts/changes/fix-issue-384-expose-an-intentional-refresh-path-for-already/verification/wave-orchestration.yaml

@@ -13,6 +13,9 @@ slipway evidence task --result-file <path> [--result-file <path> ...] --json
 
 slipway evidence skill --skill <name> --verdict <pass|fail> \
   --reference "<ref>" --notes-file <path> --json
+
+slipway evidence skill --skill <selected-review-skill> --verdict pass \
+  --refresh-current --reference "<ref>" --notes-file <path> --json
 ```
 
 ## Contract
@@ -33,6 +36,10 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
 - `evidence skill` validates the requested skill against the current lifecycle
   state and plan substep, and run-summary-bound skills require a ready
   `execution-summary.yaml`.
+- `--refresh-current` is an explicit opt-in replacement path for an
+  already-current passing selected S3 review skill after an operator
+  intentionally reruns that review. Without it, duplicate current review evidence
+  remains fail-closed.
 - `evidence skill` writes the verification record, updates the change evidence
   reference, and does not advance lifecycle state; advance separately with
   `slipway run`.
@@ -58,6 +65,8 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
 - `--blocker <code[:detail]>`: skill blocker (repeatable)
 - `--notes <text>`: inline verification notes
 - `--notes-file <path>`: file containing verification notes
+- `--refresh-current`: intentionally replace already-current passing evidence
+  for a selected S3 review skill
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 {{- end -}}

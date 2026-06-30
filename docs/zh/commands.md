@@ -206,6 +206,7 @@ slipway health --doctor --json
 | delete JSON | `slipway delete --change <slug> --json` |
 | done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
+| evidence skill refresh-current JSON | `slipway evidence skill --skill <name> --verdict pass --refresh-current --json` |
 | evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
 | fix JSON | `slipway fix --json` |
 | handoff JSON | `slipway handoff show --json` |
