@@ -67,6 +67,7 @@ slipway delete --change <slug> --json
 slipway repair --json
 slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
 slipway evidence skill --skill <name> --verdict pass --json
+slipway evidence skill --skill <name> --verdict pass --refresh-current --json
 slipway health --json
 slipway instructions <artifact> --json
 slipway config list --json
@@ -82,6 +83,7 @@ slipway config list --json
 - `slipway handoff show --json` は現在の変更ごとの handoff を構造化して出力します。
 - `slipway evidence task --result-file <path> --json` はコンパクトな実行タスク結果を取り込みます。原子的なバッチにするには `--result-file` を繰り返します。
 - `slipway evidence skill --skill <name> --verdict pass --json` は、そのスキルを所有するステージで統制スキルのエビデンスを記録します。
+- `slipway evidence skill --skill <name> --verdict pass --refresh-current --json` は、選択済み S3 レビュースキルの既に current な passing エビデンスを、意図的な再実行として置き換える場合だけに使います。通常の重複エビデンスは引き続き拒否されます。
 - `slipway status --stats --json` は、廃止されたトップレベルの `stats` コマンドを戻さずにワークスペース診断を報告します。
 - `slipway health --doctor --json` は、ヘルスレポートに修復向けの診断を追加します。
 - `slipway tool <helper>` は生成されたスキルから直接呼び出され、生成されたアダプターのプロンプトサーフェスはありません。
