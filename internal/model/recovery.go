@@ -779,6 +779,134 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway done",
 		Class:           RecoveryClassAdvance,
 	},
+
+	// --- Wave/review blocker codes (completeness pass) ---
+	// These surface as gate blockers in the lists passed to BuildRecovery by
+	// next/status/validate/review, so each must carry a CLI-valid next action.
+	// Commands are sourced from the producing stage, not guessed.
+	"execution_verdict_fail": {
+		Remediation:     "The recorded execution verdict is fail; resolve the failing wave/task evidence and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"missing_run_summary": {
+		Remediation:     "No execution run summary is recorded; run wave-orchestration to produce it.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"non_pass_wave": {
+		Remediation:     "A governed execution wave did not pass; resolve the failing wave's task evidence and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"task_blockers": {
+		Remediation:     "A governed task reported blockers; resolve the task's blockers and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"task_blockers_invalid_key": {
+		Remediation:     "A governed task blocker key is invalid; fix the malformed task ID in tasks.md, then re-run validation.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassFixScope,
+	},
+	"task": {
+		// Wrapper code: detail is taskID:<innerCode>:<innerDetail>. Surface the
+		// task ID and route to wave-orchestration, which owns task execution.
+		Remediation:     "Task {subject} reported an execution blocker ({detail}); resolve it and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+		SplitDetail:     true,
+	},
+	"task_blocker": {
+		// Wrapper code: detail is taskID:<innerCode>:<innerDetail>.
+		Remediation:     "Task {subject} reported a wave blocker ({detail}); resolve it and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+		SplitDetail:     true,
+	},
+	"task_evidence_invalid": {
+		Remediation:     "Task evidence is malformed; re-run wave-orchestration to re-record valid task evidence.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"task_changed_file_scope_escape": {
+		Remediation:     "Task {subject} recorded a changed file outside its planned target_files; fix the task's target_files in tasks.md to cover it (or revert the out-of-scope change), re-record evidence, then let review verify plan/code alignment.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassFixScope,
+		SplitDetail:     true,
+	},
+	"parallel_wave_changed_file_overlap": {
+		Remediation:     "Two tasks in the same parallel wave recorded the same changed file and can clobber each other in the shared worktree; split the overlapping target_files in tasks.md or record degraded_sequential dispatch for the wave, then re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"dispatch_mode_absent_on_started_parallel_wave": {
+		Remediation:     "A started parallel wave recorded no valid dispatch_mode; record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) evidence and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"executor_agent_missing": {
+		Remediation:     "A parallel_subagents wave is missing the executor_agent handle for a planned task; record executor_agent:wave=<n>:task=<id>:<handle> for every task in the wave and re-run wave-orchestration.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"intent_drift": {
+		Remediation:     "Implementation intent drift was detected; re-align the implementation with the approved intent and refresh affected evidence. If the intent itself changed, open a new governed change instead.",
+		CommandTemplate: "slipway run",
+		Class:           RecoveryClassReviewAlignment,
+	},
+	"invalid_blocker": {
+		Remediation:     "A blocker token is invalid; inspect the original token in the blocker detail, fix the producer to emit a canonical reason code, then re-run validation.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassSatisfyControl,
+	},
+}
+
+// diagnosticOnlyReasonCodes are canonical reason codes that deliberately carry
+// NO BuildRecovery command. Their omission from blockerRemediations is
+// intentional, not a discoverability gap: each one's operator next-action is
+// carried by a different public surface (named per entry), or the code is a
+// terminal/informational/advisory state with no corrective command. This set is
+// the explicit, test-enforced companion to blockerRemediations — every canonical
+// reason code must appear in exactly one of the two (see TestRecoveryCoverageIsExhaustive),
+// so a newly added code cannot silently surface with no discoverable action.
+var diagnosticOnlyReasonCodes = map[string]struct{}{
+	// Surfaced only as `slipway health` findings; the operator next-action is
+	// carried by that finding's RepairHint, not by BuildRecovery (health never
+	// calls BuildRecovery). The RepairHint command is noted for traceability.
+	"multiple_active_changes":              {}, // RepairHint: slipway status
+	"execution_interrupted":                {}, // RepairHint: slipway run --resume
+	"orphan_task_evidence":                 {}, // RepairHint: slipway repair
+	"orphan_bundle_directory":              {}, // RepairHint: inspect/remove the orphan bundle manually
+	"task_evidence_unreadable":             {}, // RepairHint: regenerate execution evidence (slipway run)
+	"workspace_scope_config_missing":       {}, // RepairHint: slipway repair
+	"workspace_scope_marker_missing":       {}, // RepairHint: slipway repair
+	"skill_prompt_surface_missing":         {}, // RepairHint: slipway init --tools <id> --refresh
+	"skill_prompt_surface_unreadable":      {}, // RepairHint: slipway init --tools <id> --refresh
+	"codebase_map_freshness_missing":       {}, // RepairHint: slipway codebase-map
+	"codebase_map_freshness_partial":       {}, // RepairHint: slipway codebase-map
+	"codebase_map_freshness_scaffold_only": {}, // RepairHint: slipway codebase-map
+	"codebase_map_freshness_stale":         {}, // RepairHint: slipway codebase-map
+	"codebase_map_freshness_unknown":       {}, // RepairHint: slipway codebase-map
+	"lifecycle_event_log_unreadable":       {}, // RepairHint: inspect events/lifecycle.jsonl
+	"lifecycle_event_scan_failed":          {}, // RepairHint: inspect repo state, rerun health
+	"lifecycle_event_scan_skipped":         {}, // RepairHint: fix change.yaml (real issue surfaces as change_bundle_unreadable)
+	"archived_lifecycle_event_scan_failed": {}, // RepairHint: inspect archived change directory
+
+	// Surfaced as a state-integrity CLIError whose next-action is carried by the
+	// error's structured Remediation field (newStateIntegrityError), not by
+	// BuildRecovery (which receives no reasons on those error paths).
+	"config_parse_failure":         {}, // CLIError.Remediation: slipway repair
+	"change_bundle_unreadable":     {}, // CLIError.Remediation: fix change.yaml, then slipway repair
+	"execution_summary_unreadable": {}, // CLIError.Remediation: fix execution-summary.yaml, then slipway repair
+	"skill_registry_invalid":       {}, // CLIError.Remediation: slipway repair (restore generated skills)
+
+	// Terminal / informational / advisory states. These can reach BuildRecovery in
+	// a blocker list, but they need no corrective command: `next` renders their
+	// guidance directly, or they are non-actionable advisories.
+	"change_is_done":            {}, // terminal success; `next` renders done guidance
+	"no_skill_required":         {}, // informational advance posture; `next` renders advance guidance
+	"session_isolation_warning": {}, // advisory evidence warning; no single corrective command
 }
 
 // RecoveryStep is one actionable (code, subject) group rendered with its parsed

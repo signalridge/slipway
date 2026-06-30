@@ -79,6 +79,23 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 - do not look for retired agent fields or a second exported prompt file
 - do not guess the next governed host without the CLI response
 
+## Reading Blockers And Recovery
+`slipway next --json`, `slipway status --json`, `slipway validate --json`, and any
+CLIError output emit a machine-readable next-action contract. Read it instead of
+guessing the recovery command.
+- `blockers[]` — each entry carries `code` and optional `detail` (plus
+  `severity`/`message`). Blockers name *what* is blocking, not the command to run.
+- `recovery` — the actionable projection of those blockers (absent when no blocker
+  has an actionable command):
+  - `primary_command` — the single governed CLI command to run next
+  - `primary_action` — the prose remediation for that command
+  - `recovery_class` — the category of the chosen recovery
+  - `steps[]` — one actionable step per blocker group; each carries `code`,
+    optional `subject`, `remediation`, `command`, and `recovery_class`
+- Operative rule: take the next governed action from `recovery.primary_command`
+  (and `recovery.steps[].command`), not from memory or a guessed command. When
+  `recovery` is absent, re-read `blockers[]` and the surface's own guidance.
+
 ## Runtime Session Handoff
 Use the generated `slipway-handoff` command surface for per-change advisory
 continuation notes. It owns when to run `slipway handoff write`, how to use
