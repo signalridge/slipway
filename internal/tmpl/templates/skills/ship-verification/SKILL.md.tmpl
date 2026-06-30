@@ -139,7 +139,8 @@ retired stage context-origin reference.
 
 When the handoff carries `next_skill.subagent`, honor that directive before
 spawning the verifier: apply `model`, `allowed_skills`, and
-`allowed_mcp_servers`; omitted fields inherit host defaults.
+`allowed_mcp_servers`; omitted fields inherit host defaults, while explicit empty
+arrays mean no skills/MCP servers for that dimension.
 
 Delegate these bulky reads when possible:
 - stub and placeholder scan output

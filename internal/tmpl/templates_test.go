@@ -1666,7 +1666,7 @@ func TestReviewSkillTemplatesHonorSubagentDirective(t *testing.T) {
 			assert.Contains(t, flat, "`review_batch.skills[].subagent`")
 			assert.Contains(t, flat, "`allowed_skills`")
 			assert.Contains(t, flat, "`allowed_mcp_servers`")
-			assert.Contains(t, flat, "omitted fields inherit host defaults")
+			assert.Contains(t, flat, "explicit empty arrays mean no skills/MCP servers")
 		})
 	}
 }

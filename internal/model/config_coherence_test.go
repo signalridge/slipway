@@ -6,21 +6,33 @@ import (
 	"testing"
 )
 
+func stringList(values ...string) *[]string {
+	out := append([]string(nil), values...)
+	return &out
+}
+
+func stringListValue(in *[]string) []string {
+	if in == nil {
+		return nil
+	}
+	return *in
+}
+
 func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 	sa := ConfigSubagents{
 		Default: SubagentProfile{
 			Model:             "default-model",
-			AllowedSkills:     []string{"skill-a"},
-			AllowedMCPServers: []string{"mcp-a"},
+			AllowedSkills:     stringList("skill-a"),
+			AllowedMCPServers: stringList("mcp-a"),
 		},
 		Review: SubagentProfile{
 			Model: "review-model",
 		},
 		Executor: SubagentProfile{
-			AllowedMCPServers: []string{"executor-mcp"},
+			AllowedMCPServers: stringList("executor-mcp"),
 		},
 		Fix: SubagentProfile{
-			AllowedSkills: []string{"fix-skill"},
+			AllowedSkills: stringList("fix-skill"),
 		},
 	}
 
@@ -29,10 +41,10 @@ func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 	if review.Model != "review-model" {
 		t.Errorf("review model = %q, want review-model", review.Model)
 	}
-	if !reflect.DeepEqual(review.AllowedSkills, []string{"skill-a"}) {
+	if !reflect.DeepEqual(stringListValue(review.AllowedSkills), []string{"skill-a"}) {
 		t.Errorf("review skills = %v, want default [skill-a]", review.AllowedSkills)
 	}
-	if !reflect.DeepEqual(review.AllowedMCPServers, []string{"mcp-a"}) {
+	if !reflect.DeepEqual(stringListValue(review.AllowedMCPServers), []string{"mcp-a"}) {
 		t.Errorf("review mcp = %v, want default [mcp-a]", review.AllowedMCPServers)
 	}
 
@@ -41,10 +53,10 @@ func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 	if executor.Model != "default-model" {
 		t.Errorf("executor model = %q, want default-model", executor.Model)
 	}
-	if !reflect.DeepEqual(executor.AllowedSkills, []string{"skill-a"}) {
+	if !reflect.DeepEqual(stringListValue(executor.AllowedSkills), []string{"skill-a"}) {
 		t.Errorf("executor skills = %v, want default [skill-a]", executor.AllowedSkills)
 	}
-	if !reflect.DeepEqual(executor.AllowedMCPServers, []string{"executor-mcp"}) {
+	if !reflect.DeepEqual(stringListValue(executor.AllowedMCPServers), []string{"executor-mcp"}) {
 		t.Errorf("executor mcp = %v, want [executor-mcp]", executor.AllowedMCPServers)
 	}
 
@@ -53,13 +65,13 @@ func TestConfigSubagentsResolveFallsBackToDefault(t *testing.T) {
 	if fix.Model != "default-model" {
 		t.Errorf("fix model = %q, want default-model", fix.Model)
 	}
-	if !reflect.DeepEqual(fix.AllowedSkills, []string{"fix-skill"}) {
+	if !reflect.DeepEqual(stringListValue(fix.AllowedSkills), []string{"fix-skill"}) {
 		t.Errorf("fix skills = %v, want [fix-skill]", fix.AllowedSkills)
 	}
 
 	// Verify has no override; entirely Default.
 	verify := sa.Resolve(SubagentStageVerify)
-	if verify.Model != "default-model" || !reflect.DeepEqual(verify.AllowedSkills, []string{"skill-a"}) {
+	if verify.Model != "default-model" || !reflect.DeepEqual(stringListValue(verify.AllowedSkills), []string{"skill-a"}) {
 		t.Errorf("verify profile = %+v, want full default", verify)
 	}
 }
@@ -72,24 +84,68 @@ func TestConfigSubagentsResolveEmptyInheritsNothing(t *testing.T) {
 	}
 }
 
-func TestConfigSubagentsResolveEmptySlicesInheritDefault(t *testing.T) {
+func TestConfigSubagentsResolveExplicitEmptyListsOverrideDefault(t *testing.T) {
 	sa := ConfigSubagents{
 		Default: SubagentProfile{
-			AllowedSkills:     []string{"default-skill"},
-			AllowedMCPServers: []string{"default-mcp"},
+			AllowedSkills:     stringList("default-skill"),
+			AllowedMCPServers: stringList("default-mcp"),
 		},
 		Review: SubagentProfile{
-			AllowedSkills:     []string{},
-			AllowedMCPServers: []string{},
+			AllowedSkills:     stringList(),
+			AllowedMCPServers: stringList(),
 		},
 	}
 
 	got := sa.Resolve(SubagentStageReview)
-	if !reflect.DeepEqual(got.AllowedSkills, []string{"default-skill"}) {
-		t.Errorf("review skills = %v, want default", got.AllowedSkills)
+	if got.AllowedSkills == nil || len(*got.AllowedSkills) != 0 {
+		t.Errorf("review skills = %v, want explicit empty list", got.AllowedSkills)
 	}
-	if !reflect.DeepEqual(got.AllowedMCPServers, []string{"default-mcp"}) {
-		t.Errorf("review MCP servers = %v, want default", got.AllowedMCPServers)
+	if got.AllowedMCPServers == nil || len(*got.AllowedMCPServers) != 0 {
+		t.Errorf("review MCP servers = %v, want explicit empty list", got.AllowedMCPServers)
+	}
+}
+
+func TestConfigSubagentsResolvePerReviewerFallsBackThroughReview(t *testing.T) {
+	sa := ConfigSubagents{
+		Default: SubagentProfile{
+			Model:             "default-model",
+			AllowedSkills:     stringList("default-skill"),
+			AllowedMCPServers: stringList("default-mcp"),
+		},
+		Review: SubagentProfile{
+			Model:             "review-model",
+			AllowedSkills:     stringList("review-skill"),
+			AllowedMCPServers: stringList("review-mcp"),
+		},
+		SecurityReview: SubagentProfile{
+			Model:             "security-model",
+			AllowedMCPServers: stringList("security-mcp"),
+		},
+		CodeQualityReview: SubagentProfile{
+			AllowedSkills: stringList(),
+		},
+	}
+
+	security := sa.Resolve(SubagentStageSecurityReview)
+	if security.Model != "security-model" {
+		t.Errorf("security model = %q, want security-model", security.Model)
+	}
+	if !reflect.DeepEqual(stringListValue(security.AllowedSkills), []string{"review-skill"}) {
+		t.Errorf("security skills = %v, want review fallback", security.AllowedSkills)
+	}
+	if !reflect.DeepEqual(stringListValue(security.AllowedMCPServers), []string{"security-mcp"}) {
+		t.Errorf("security MCP servers = %v, want per-reviewer override", security.AllowedMCPServers)
+	}
+
+	codeQuality := sa.Resolve(SubagentStageCodeQualityReview)
+	if codeQuality.Model != "review-model" {
+		t.Errorf("code-quality model = %q, want review fallback", codeQuality.Model)
+	}
+	if codeQuality.AllowedSkills == nil || len(*codeQuality.AllowedSkills) != 0 {
+		t.Errorf("code-quality skills = %v, want explicit empty list", codeQuality.AllowedSkills)
+	}
+	if !reflect.DeepEqual(stringListValue(codeQuality.AllowedMCPServers), []string{"review-mcp"}) {
+		t.Errorf("code-quality MCP servers = %v, want review fallback", codeQuality.AllowedMCPServers)
 	}
 }
 
@@ -114,7 +170,7 @@ func TestConfigSubagentsYAMLRoundTrip(t *testing.T) {
 	if cfg.Subagents.Default.Model != "fast" {
 		t.Errorf("default.model = %q, want fast", cfg.Subagents.Default.Model)
 	}
-	if !reflect.DeepEqual(cfg.Subagents.Executor.AllowedSkills, []string{"coding-discipline"}) {
+	if !reflect.DeepEqual(stringListValue(cfg.Subagents.Executor.AllowedSkills), []string{"coding-discipline"}) {
 		t.Errorf("executor.allowed_skills = %v, want [coding-discipline]", cfg.Subagents.Executor.AllowedSkills)
 	}
 	if len(cfg.UnknownTopLevel) != 0 {
@@ -161,14 +217,14 @@ func TestConfigSubagentsResolveCoversEveryStageProfileField(t *testing.T) {
 	}
 }
 
-func TestConfigSubagentsExplicitEmptyListRoundTripInherits(t *testing.T) {
+func TestConfigSubagentsExplicitEmptyListRoundTripStaysBare(t *testing.T) {
 	in := []byte("subagents:\n  default:\n    allowed_skills:\n      - default-skill\n  review:\n    allowed_skills: []\n")
 	cfg, err := ParseConfigYAML(in)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if got := cfg.Subagents.Resolve(SubagentStageReview).AllowedSkills; !reflect.DeepEqual(got, []string{"default-skill"}) {
-		t.Fatalf("pre-round-trip review skills = %v, want default", got)
+	if got := cfg.Subagents.Resolve(SubagentStageReview).AllowedSkills; got == nil || len(*got) != 0 {
+		t.Fatalf("pre-round-trip review skills = %v, want explicit empty list", got)
 	}
 
 	out, err := cfg.ToYAML()
@@ -179,8 +235,8 @@ func TestConfigSubagentsExplicitEmptyListRoundTripInherits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reparse: %v", err)
 	}
-	if got := back.Subagents.Resolve(SubagentStageReview).AllowedSkills; !reflect.DeepEqual(got, []string{"default-skill"}) {
-		t.Errorf("post-round-trip review skills = %v, want default", got)
+	if got := back.Subagents.Resolve(SubagentStageReview).AllowedSkills; got == nil || len(*got) != 0 {
+		t.Errorf("post-round-trip review skills = %v, want explicit empty list", got)
 	}
 }
 

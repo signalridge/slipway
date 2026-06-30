@@ -35,6 +35,15 @@ func TestFixJSONSurfacesReviewFindingRepairContract(t *testing.T) {
 			Timestamp: time.Now().UTC(),
 		})
 
+		cfg, err := model.LoadConfig(state.ConfigPath(root))
+		require.NoError(t, err)
+		cfg.Subagents.Fix = model.SubagentProfile{
+			Model:             "fix-fast",
+			AllowedSkills:     stringList("code-quality-review"),
+			AllowedMCPServers: stringList("serena"),
+		}
+		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
 		cmd := commandForRoot(t, root, makeFixCmd())
 		cmd.SetArgs([]string{"--json", "--change", slug})
 		var buf bytes.Buffer
@@ -52,9 +61,22 @@ func TestFixJSONSurfacesReviewFindingRepairContract(t *testing.T) {
 		assert.Contains(t, view.Contract.RepairBrief, "One repair brief")
 		assert.Equal(t, model.ContextOriginReferencePrefix+model.StageContextFix+"=<repair-subagent-handle>", view.Contract.ContextReference)
 		assert.Contains(t, view.Contract.Prohibited, "Do not repair individual review findings before collecting the selected review batch findings.")
+		require.NotNil(t, view.Contract.Subagent)
+		assert.Equal(t, "fix-fast", view.Contract.Subagent.Model)
+		assert.Equal(t, []string{"code-quality-review"}, subagentListValue(view.Contract.Subagent.AllowedSkills))
+		assert.Equal(t, []string{"serena"}, subagentListValue(view.Contract.Subagent.AllowedMCPServers))
 		require.NotEmpty(t, view.RepairTargets)
 		assert.Equal(t, progression.SkillSpecComplianceReview, view.RepairTargets[0].Reviewer)
 		assert.Equal(t, "review_finding", view.RepairTargets[0].Kind)
+
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(buf.Bytes(), &raw))
+		rawContract, ok := raw["contract"].(map[string]any)
+		require.True(t, ok, "raw JSON must include contract")
+		rawSubagent, ok := rawContract["subagent"].(map[string]any)
+		require.True(t, ok, "raw JSON must include contract.subagent")
+		_, ok = rawSubagent["allowed_mcp_servers"]
+		assert.True(t, ok, "raw JSON must include contract.subagent.allowed_mcp_servers")
 	})
 }
 

@@ -38,7 +38,8 @@ coordinator context.
 - When `input_context.wave_plan.executor_subagent` is present, it is the host
   spawning directive for every task executor. Apply its `model`,
   `allowed_skills`, and `allowed_mcp_servers` before spawning executors; omitted
-  fields inherit host defaults. This field is view-only handoff data from
+  fields inherit host defaults, while explicit empty arrays mean no skills/MCP
+  servers for that dimension. This field is view-only handoff data from
   `slipway next --json`, not part of the persisted `wave-plan.yaml` cache.
 - Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support. In the latter case note the degradation in the wave report and record `dispatch_mode:wave=<wave_index>:degraded_sequential` in the wave-orchestration verification references. Notes/prose alone are human-readable context and are not parsed as dispatch evidence. If inline execution would pollute coordinator context and the user has not authorized it, stop rather than pretending parallel dispatch happened.
 - Executors share a single worktree unless the runtime explicitly provides stronger isolation. Do not run shared-worktree-wide integration commands such as `go build ./...` concurrently inside each task executor; leave merged-state build/test/lint checks to the post-wave integration gate unless a task owns a genuinely isolated command.

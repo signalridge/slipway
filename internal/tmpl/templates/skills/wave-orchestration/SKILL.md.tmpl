@@ -57,7 +57,8 @@ and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
 `input_context.wave_plan.executor_subagent` is present, it is the host spawning
 directive for every task executor in these waves: honor its `model`,
 `allowed_skills`, and `allowed_mcp_servers` before spawning executors; omitted
-fields inherit host defaults. Slipway has already dependency-ordered the waves
+fields inherit host defaults, while explicit empty arrays mean no skills/MCP
+servers for that dimension. Slipway has already dependency-ordered the waves
 and detected cycles from the current `tasks.md`; do not re-derive a separate
 grouping that could diverge from the engine projection. `input_context.wave_plan`
 is a diagnostic-only, non-persistable projection of `slipway next --json`: read it

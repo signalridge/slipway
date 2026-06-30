@@ -180,8 +180,8 @@ func cloneSubagentDirective(in *subagentDirective) *subagentDirective {
 	}
 	return &subagentDirective{
 		Model:             in.Model,
-		AllowedSkills:     append([]string(nil), in.AllowedSkills...),
-		AllowedMCPServers: append([]string(nil), in.AllowedMCPServers...),
+		AllowedSkills:     cloneStringSliceDirective(in.AllowedSkills),
+		AllowedMCPServers: cloneStringSliceDirective(in.AllowedMCPServers),
 	}
 }
 

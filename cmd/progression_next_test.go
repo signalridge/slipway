@@ -956,29 +956,47 @@ func reviewBatchSkillNames(batch *reviewBatchView) []string {
 	return names
 }
 
+func stringList(values ...string) *[]string {
+	out := append([]string(nil), values...)
+	return &out
+}
+
+func subagentListValue(in *[]string) []string {
+	if in == nil {
+		return nil
+	}
+	return *in
+}
+
 func assertReviewSubagentDirective(t *testing.T, got *subagentDirective) {
 	t.Helper()
 	require.NotNil(t, got)
 	assert.Equal(t, "review-fast", got.Model)
-	assert.Equal(t, []string{"code-quality-review", "independent-review"}, got.AllowedSkills)
-	assert.Equal(t, []string{"serena"}, got.AllowedMCPServers)
+	assert.Equal(t, []string{"code-quality-review", "independent-review"}, subagentListValue(got.AllowedSkills))
+	assert.Equal(t, []string{"serena"}, subagentListValue(got.AllowedMCPServers))
 }
 
 func assertExecutorSubagentDirective(t *testing.T, got *subagentDirective) {
 	t.Helper()
 	require.NotNil(t, got)
 	assert.Equal(t, "executor-fast", got.Model)
-	assert.Equal(t, []string{"coding-discipline", "test-design"}, got.AllowedSkills)
-	assert.Equal(t, []string{"serena", "github"}, got.AllowedMCPServers)
+	assert.Equal(t, []string{"coding-discipline", "test-design"}, subagentListValue(got.AllowedSkills))
+	assert.Equal(t, []string{"serena", "github"}, subagentListValue(got.AllowedMCPServers))
 }
 
 func TestSubagentStageForSkillCoversSelectedReviewAndVerifySkills(t *testing.T) {
 	t.Parallel()
 
+	cases := map[string]model.SubagentStage{
+		progression.SkillSpecComplianceReview: model.SubagentStageSpecComplianceReview,
+		progression.SkillCodeQualityReview:    model.SubagentStageCodeQualityReview,
+		progression.SkillIndependentReview:    model.SubagentStageIndependentReview,
+		progression.SkillSecurityReview:       model.SubagentStageSecurityReview,
+	}
 	for _, skillName := range skill.SelectedReviewSkills(skill.ReviewSkillSelection{SecurityReviewSelected: true}) {
 		stage, ok := subagentStageForSkill(skillName)
 		require.True(t, ok, "%s must map to a subagent stage", skillName)
-		assert.Equal(t, model.SubagentStageReview, stage, "%s must use the review stage profile", skillName)
+		assert.Equal(t, cases[skillName], stage, "%s must use its per-reviewer profile", skillName)
 	}
 
 	stage, ok := subagentStageForSkill(progression.SkillShipVerification)
@@ -1469,8 +1487,8 @@ func TestReviewBatchDefaultJSONPreservesSubagentDirectives(t *testing.T) {
 	require.NoError(t, err)
 	cfg.Subagents.Review = model.SubagentProfile{
 		Model:             "review-fast",
-		AllowedSkills:     []string{"code-quality-review", "independent-review"},
-		AllowedMCPServers: []string{"serena"},
+		AllowedSkills:     stringList("code-quality-review", "independent-review"),
+		AllowedMCPServers: stringList("serena"),
 	}
 	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
@@ -1515,6 +1533,85 @@ func TestReviewBatchDefaultJSONPreservesSubagentDirectives(t *testing.T) {
 	for _, skillView := range diag.ReviewBatch.Skills {
 		assertReviewSubagentDirective(t, skillView.Subagent)
 	}
+}
+
+func TestReviewBatchDefaultJSONUsesPerReviewerSubagentProfiles(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "delegation")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	cfg, err := model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	cfg.Subagents.Review = model.SubagentProfile{
+		Model:             "review-shared",
+		AllowedSkills:     stringList("review-shared-skill"),
+		AllowedMCPServers: stringList("review-shared-mcp"),
+	}
+	cfg.Subagents.SecurityReview = model.SubagentProfile{
+		Model:             "security-strong",
+		AllowedMCPServers: stringList("security-scanner"),
+	}
+	cfg.Subagents.CodeQualityReview = model.SubagentProfile{
+		Model:         "code-fast",
+		AllowedSkills: stringList(),
+	}
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+
+	nextCmd := commandForRoot(t, root, makeNextCmd())
+	nextCmd.SetArgs([]string{"--json", "--change", slug})
+	var nextOut bytes.Buffer
+	nextCmd.SetOut(&nextOut)
+	require.NoError(t, nextCmd.Execute())
+
+	var handoff nextHandoffView
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &handoff))
+	require.NotNil(t, handoff.ReviewBatch)
+
+	byName := map[string]reviewBatchSkillView{}
+	for _, skillView := range handoff.ReviewBatch.Skills {
+		byName[skillView.Name] = skillView
+	}
+
+	security := byName[progression.SkillSecurityReview].Subagent
+	require.NotNil(t, security)
+	assert.Equal(t, "security-strong", security.Model)
+	assert.Equal(t, []string{"review-shared-skill"}, subagentListValue(security.AllowedSkills))
+	assert.Equal(t, []string{"security-scanner"}, subagentListValue(security.AllowedMCPServers))
+
+	codeQuality := byName[progression.SkillCodeQualityReview].Subagent
+	require.NotNil(t, codeQuality)
+	assert.Equal(t, "code-fast", codeQuality.Model)
+	require.NotNil(t, codeQuality.AllowedSkills, "explicit empty allowed_skills must survive resolution")
+	assert.Empty(t, *codeQuality.AllowedSkills, "explicit empty allowed_skills means bare/no skills")
+	assert.Equal(t, []string{"review-shared-mcp"}, subagentListValue(codeQuality.AllowedMCPServers))
+
+	independent := byName[progression.SkillIndependentReview].Subagent
+	require.NotNil(t, independent)
+	assert.Equal(t, "review-shared", independent.Model)
+	assert.Equal(t, []string{"review-shared-skill"}, subagentListValue(independent.AllowedSkills))
+	assert.Equal(t, []string{"review-shared-mcp"}, subagentListValue(independent.AllowedMCPServers))
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(nextOut.Bytes(), &raw))
+	rawBatch, ok := raw["review_batch"].(map[string]any)
+	require.True(t, ok, "raw JSON must include review_batch")
+	rawSkills, ok := rawBatch["skills"].([]any)
+	require.True(t, ok, "raw JSON must include review_batch.skills")
+	rawByName := map[string]map[string]any{}
+	for _, rawSkill := range rawSkills {
+		rawSkillMap, ok := rawSkill.(map[string]any)
+		require.True(t, ok)
+		name, ok := rawSkillMap["name"].(string)
+		require.True(t, ok)
+		rawByName[name] = rawSkillMap
+	}
+	rawCodeQualitySubagent, ok := rawByName[progression.SkillCodeQualityReview]["subagent"].(map[string]any)
+	require.True(t, ok, "code-quality raw JSON must include subagent")
+	rawAllowedSkills, ok := rawCodeQualitySubagent["allowed_skills"].([]any)
+	require.True(t, ok, "code-quality raw JSON must include allowed_skills leaf")
+	assert.Empty(t, rawAllowedSkills, "explicit empty allowed_skills must encode as []")
+	_, ok = rawCodeQualitySubagent["allowed_mcp_servers"]
+	assert.True(t, ok, "code-quality raw JSON must include allowed_mcp_servers leaf")
 }
 
 // TestReviewBatchHostSubagentDelegationSurfacedAcrossCapabilityStates pins the
@@ -3733,8 +3830,8 @@ func TestNextWavePlanPreservesExecutorSubagentDirective(t *testing.T) {
 		require.NoError(t, err)
 		cfg.Subagents.Executor = model.SubagentProfile{
 			Model:             "executor-fast",
-			AllowedSkills:     []string{"coding-discipline", "test-design"},
-			AllowedMCPServers: []string{"serena", "github"},
+			AllowedSkills:     stringList("coding-discipline", "test-design"),
+			AllowedMCPServers: stringList("serena", "github"),
 		}
 		require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
 
@@ -3765,6 +3862,16 @@ func TestNextWavePlanPreservesExecutorSubagentDirective(t *testing.T) {
 		var nextOut bytes.Buffer
 		nextCmd.SetOut(&nextOut)
 		require.NoError(t, nextCmd.Execute())
+		var nextRaw map[string]any
+		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextRaw))
+		nextInputContext, ok := nextRaw["input_context"].(map[string]any)
+		require.True(t, ok, "raw JSON must include input_context")
+		nextWavePlan, ok := nextInputContext["wave_plan"].(map[string]any)
+		require.True(t, ok, "raw JSON must include input_context.wave_plan")
+		nextExecutorSubagent, ok := nextWavePlan["executor_subagent"].(map[string]any)
+		require.True(t, ok, "raw JSON must include input_context.wave_plan.executor_subagent")
+		_, ok = nextExecutorSubagent["allowed_mcp_servers"]
+		assert.True(t, ok, "raw JSON must include executor_subagent.allowed_mcp_servers")
 		var nextHandoff nextHandoffView
 		require.NoError(t, json.Unmarshal(nextOut.Bytes(), &nextHandoff))
 		require.NotNil(t, nextHandoff.InputContext.WavePlan)

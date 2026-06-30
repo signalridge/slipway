@@ -21,7 +21,8 @@ slipway fix --start-reexecution
 - Each repair batch MUST be performed by a fresh-context repair subagent, not inline in the host context.
 - When `slipway fix --json` returns `contract.subagent`, honor its `model`,
   `allowed_skills`, and `allowed_mcp_servers` before spawning the repair
-  subagent; omitted fields inherit host defaults.
+  subagent; omitted fields inherit host defaults, while explicit empty arrays
+  mean no skills/MCP servers for that dimension.
 - Pass the subagent paths, blockers, reviewer notes, and acceptance target; do not pass the host conversation as authority.
 - The repair subagent may update code, artifacts, tests, and current-change scope/task evidence when needed for the same governed intent.
 - After repair, rerun the affected selected reviewers under separate fresh review contexts.

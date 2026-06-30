@@ -355,15 +355,13 @@ func assembleSkillViewWithOptions(
 	}
 
 	// Surface the advisory subagent directive for review/verify dispatch. When
-	// `.slipway.yaml` configures a non-empty profile for this skill's stage, the
-	// host should honor model/allowed_skills/allowed_mcp_servers when it spawns the
-	// fresh-context subagent. Slipway only emits this contract; it does not spawn or
-	// enforce the subagent. An unconfigured project resolves to a zero profile and
-	// emits no directive. A missing workspace must not break `next`, so a config
-	// load error is treated as the zero config.
-	if stage, ok := subagentStageForSkill(nextSkillName); ok {
-		ns.Subagent = subagentDirectiveForStage(root, stage)
-	}
+	// `.slipway.yaml` configures a non-empty profile for this skill, the host
+	// should honor model/allowed_skills/allowed_mcp_servers when it spawns the
+	// fresh-context subagent. Slipway only emits this contract; it does not spawn
+	// or enforce the subagent. An unconfigured project resolves to a zero profile
+	// and emits no directive. A missing workspace must not break `next`, so a
+	// config load error is treated as the zero config.
+	ns.Subagent = subagentDirectiveForSkill(root, nextSkillName)
 
 	view.NextSkill = ns
 	if governedChange != nil && governedChange.CurrentState == model.StateS3Review && len(selectedReviewSkills) > 0 {
@@ -642,12 +640,11 @@ func buildReviewBatchView(input reviewBatchBuildInput) *reviewBatchView {
 		State:           nextState,
 		Skills:          make([]reviewBatchSkillView, 0, len(pending)),
 	}
-	reviewSubagent := subagentDirectiveForStage(input.root, model.SubagentStageReview)
 	for _, skillName := range pending {
 		item := reviewBatchSkillView{
 			Name:           skillName,
 			RequiredTokens: progression.RequiredReviewLayerTokensForSkill(*input.change, input.artifactProjection, false, skillName),
-			Subagent:       cloneSubagentDirective(reviewSubagent),
+			Subagent:       subagentDirectiveForSkill(input.root, skillName),
 		}
 		if input.includeReviewContext &&
 			(skillName == progression.SkillSpecComplianceReview || skillName == progression.SkillCodeQualityReview) {

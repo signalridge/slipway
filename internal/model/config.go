@@ -198,9 +198,17 @@ const (
 	// SubagentStageExecutor covers S2 implementation wave task executors spawned
 	// by the wave-orchestration host.
 	SubagentStageExecutor SubagentStage = "executor"
-	// SubagentStageReview covers the fresh-context S3 review peers
-	// (spec-compliance / code-quality / independent / security review).
+	// SubagentStageReview covers shared defaults for the fresh-context S3 review
+	// peers. Per-reviewer stages can override it.
 	SubagentStageReview SubagentStage = "review"
+	// SubagentStageSpecComplianceReview covers the spec-compliance S3 reviewer.
+	SubagentStageSpecComplianceReview SubagentStage = "spec_compliance_review"
+	// SubagentStageCodeQualityReview covers the code-quality S3 reviewer.
+	SubagentStageCodeQualityReview SubagentStage = "code_quality_review"
+	// SubagentStageIndependentReview covers the independent S3 reviewer.
+	SubagentStageIndependentReview SubagentStage = "independent_review"
+	// SubagentStageSecurityReview covers the security S3 reviewer.
+	SubagentStageSecurityReview SubagentStage = "security_review"
 	// SubagentStageFix covers the fresh-context S3 review-finding repair subagent
 	// dispatched by `slipway fix`.
 	SubagentStageFix SubagentStage = "fix"
@@ -210,25 +218,28 @@ const (
 
 // SubagentProfile is an advisory directive describing the model, allowed skills,
 // and allowed MCP servers a host should apply when it spawns a governed
-// subagent. Every field is optional; an empty field means "inherit the host
-// default" for that dimension. This is a contract the host honors when spawning
-// subagents, not an enforcement surface — Slipway emits it via the `slipway
-// next --json` and `slipway fix --json` envelopes and the generated dispatch
-// skills, but the host owns spawning.
+// subagent. Every field is optional: nil list fields mean "inherit the fallback
+// profile or host default" for that dimension, while an explicitly configured
+// empty list means "allow no skills/MCP servers" and must be emitted as an
+// empty JSON array. This is a contract the host honors when spawning subagents,
+// not an enforcement surface — Slipway emits it via the `slipway next --json`
+// and `slipway fix --json` envelopes and the generated dispatch skills, but the
+// host owns spawning.
 type SubagentProfile struct {
 	// Model names the model the host should run the subagent on (e.g. a faster or
 	// cheaper model for mechanical review). Empty inherits the host default.
 	Model string `yaml:"model,omitempty" json:"model,omitempty"`
-	// AllowedSkills restricts the skills the spawned subagent may load. Empty
-	// inherits the host default skill set.
-	AllowedSkills []string `yaml:"allowed_skills,omitempty" json:"allowed_skills,omitempty"`
+	// AllowedSkills restricts the skills the spawned subagent may load. Nil
+	// inherits the fallback/default; an explicit empty list means no skills.
+	AllowedSkills *[]string `yaml:"allowed_skills,omitempty" json:"allowed_skills,omitempty"`
 	// AllowedMCPServers restricts the MCP servers the spawned subagent may reach.
-	// Empty inherits the host default MCP set.
-	AllowedMCPServers []string `yaml:"allowed_mcp_servers,omitempty" json:"allowed_mcp_servers,omitempty"`
+	// Nil inherits the fallback/default; an explicit empty list means no MCP
+	// servers.
+	AllowedMCPServers *[]string `yaml:"allowed_mcp_servers,omitempty" json:"allowed_mcp_servers,omitempty"`
 }
 
 func (p SubagentProfile) IsZero() bool {
-	return p.Model == "" && len(p.AllowedSkills) == 0 && len(p.AllowedMCPServers) == 0
+	return p.Model == "" && p.AllowedSkills == nil && p.AllowedMCPServers == nil
 }
 
 // ConfigSubagents carries optional per-stage subagent directives. The Default
@@ -240,8 +251,20 @@ type ConfigSubagents struct {
 	Default SubagentProfile `yaml:"default,omitempty" json:"default,omitempty"`
 	// Executor overrides the Default for S2 implementation wave task executors.
 	Executor SubagentProfile `yaml:"executor,omitempty" json:"executor,omitempty"`
-	// Review overrides the Default for the S3 review peers.
+	// Review overrides the Default for S3 review peers unless a per-reviewer
+	// profile is configured.
 	Review SubagentProfile `yaml:"review,omitempty" json:"review,omitempty"`
+	// SpecComplianceReview overrides the shared Review profile for
+	// spec-compliance-review.
+	SpecComplianceReview SubagentProfile `yaml:"spec_compliance_review,omitempty" json:"spec_compliance_review,omitempty"`
+	// CodeQualityReview overrides the shared Review profile for
+	// code-quality-review.
+	CodeQualityReview SubagentProfile `yaml:"code_quality_review,omitempty" json:"code_quality_review,omitempty"`
+	// IndependentReview overrides the shared Review profile for
+	// independent-review.
+	IndependentReview SubagentProfile `yaml:"independent_review,omitempty" json:"independent_review,omitempty"`
+	// SecurityReview overrides the shared Review profile for security-review.
+	SecurityReview SubagentProfile `yaml:"security_review,omitempty" json:"security_review,omitempty"`
 	// Fix overrides the Default for the S3 review-finding repair subagent.
 	Fix SubagentProfile `yaml:"fix,omitempty" json:"fix,omitempty"`
 	// Verify overrides the Default for the terminal ship-verification subagent.
@@ -252,39 +275,68 @@ func (s ConfigSubagents) IsZero() bool {
 	return s.Default.IsZero() &&
 		s.Executor.IsZero() &&
 		s.Review.IsZero() &&
+		s.SpecComplianceReview.IsZero() &&
+		s.CodeQualityReview.IsZero() &&
+		s.IndependentReview.IsZero() &&
+		s.SecurityReview.IsZero() &&
 		s.Fix.IsZero() &&
 		s.Verify.IsZero()
 }
 
 // Resolve returns the effective profile for stage, merging each dimension over
-// the Default profile: a stage value wins when set, otherwise the Default
-// value applies, otherwise the dimension is empty (host inherits). An unknown
-// stage resolves to the Default profile.
+// fallback profiles: a stage value wins when set, otherwise the fallback value
+// applies, otherwise the dimension is absent (host inherits). Per-reviewer
+// profiles fall back to the shared Review profile, then Default. An unknown stage
+// resolves to the Default profile.
 func (s ConfigSubagents) Resolve(stage SubagentStage) SubagentProfile {
-	var override SubagentProfile
+	resolved := mergeSubagentProfiles(SubagentProfile{}, s.Default)
 	switch stage {
 	case SubagentStageExecutor:
-		override = s.Executor
+		return mergeSubagentProfiles(resolved, s.Executor)
 	case SubagentStageReview:
-		override = s.Review
+		return mergeSubagentProfiles(resolved, s.Review)
+	case SubagentStageSpecComplianceReview:
+		return mergeSubagentProfiles(mergeSubagentProfiles(resolved, s.Review), s.SpecComplianceReview)
+	case SubagentStageCodeQualityReview:
+		return mergeSubagentProfiles(mergeSubagentProfiles(resolved, s.Review), s.CodeQualityReview)
+	case SubagentStageIndependentReview:
+		return mergeSubagentProfiles(mergeSubagentProfiles(resolved, s.Review), s.IndependentReview)
+	case SubagentStageSecurityReview:
+		return mergeSubagentProfiles(mergeSubagentProfiles(resolved, s.Review), s.SecurityReview)
 	case SubagentStageFix:
-		override = s.Fix
+		return mergeSubagentProfiles(resolved, s.Fix)
 	case SubagentStageVerify:
-		override = s.Verify
+		return mergeSubagentProfiles(resolved, s.Verify)
 	default:
-		override = SubagentProfile{}
+		return resolved
 	}
-	resolved := s.Default
+}
+
+func mergeSubagentProfiles(base, override SubagentProfile) SubagentProfile {
+	resolved := SubagentProfile{
+		Model:             base.Model,
+		AllowedSkills:     cloneStringSlicePtr(base.AllowedSkills),
+		AllowedMCPServers: cloneStringSlicePtr(base.AllowedMCPServers),
+	}
 	if override.Model != "" {
 		resolved.Model = override.Model
 	}
-	if len(override.AllowedSkills) > 0 {
-		resolved.AllowedSkills = override.AllowedSkills
+	if override.AllowedSkills != nil {
+		resolved.AllowedSkills = cloneStringSlicePtr(override.AllowedSkills)
 	}
-	if len(override.AllowedMCPServers) > 0 {
-		resolved.AllowedMCPServers = override.AllowedMCPServers
+	if override.AllowedMCPServers != nil {
+		resolved.AllowedMCPServers = cloneStringSlicePtr(override.AllowedMCPServers)
 	}
 	return resolved
+}
+
+func cloneStringSlicePtr(in *[]string) *[]string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(*in))
+	copy(out, *in)
+	return &out
 }
 
 // ProjectContext provides project-specific context injected into skill templates.

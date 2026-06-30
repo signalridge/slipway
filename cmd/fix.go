@@ -365,7 +365,7 @@ func reviewFixContract(slug string, sub *subagentDirective) fixRepairContract {
 		CollectAllSelectedReviewFindingsFirst: true,
 		RequiresFreshContext:                  true,
 		FindingCollection:                     "Collect all selected S3 reviewer findings first, then consolidate by root cause before dispatching repair.",
-		Dispatch:                              "Spawn a fresh-context repair subagent with the consolidated repair brief; pass paths and blocker facts, not the host conversation. When this contract carries a subagent directive (subagent.model / subagent.allowed_skills / subagent.allowed_mcp_servers), the host MUST honor those dimensions when it spawns the fix subagent, and an empty dimension means inherit the host default — Slipway only signals the contract, it does not spawn or enforce the subagent.",
+		Dispatch:                              "Spawn a fresh-context repair subagent with the consolidated repair brief; pass paths and blocker facts, not the host conversation. When this contract carries a subagent directive (subagent.model / subagent.allowed_skills / subagent.allowed_mcp_servers), the host MUST honor those dimensions when it spawns the fix subagent; omitted dimensions inherit the fallback or host default, while present empty lists mean no skills/MCP servers — Slipway only signals the contract, it does not spawn or enforce the subagent.",
 		RepairBrief:                           "One repair brief covers the open finding set for this repair_batch_id. Do not repair one reviewer finding while the selected review batch is still collecting findings.",
 		ContextReference:                      model.ContextOriginReferencePrefix + model.StageContextFix + "=<repair-subagent-handle>",
 		RecordEvidence: []string{
@@ -433,11 +433,11 @@ func writeFixText(w io.Writer, view fixView) error {
 		if sub.Model != "" {
 			writer.Writef("- subagent model: %s\n", sub.Model)
 		}
-		if len(sub.AllowedSkills) > 0 {
-			writer.Writef("- subagent allowed skills: %s\n", strings.Join(sub.AllowedSkills, ", "))
+		if sub.AllowedSkills != nil {
+			writer.Writef("- subagent allowed skills: %s\n", formatSubagentDirectiveList(sub.AllowedSkills))
 		}
-		if len(sub.AllowedMCPServers) > 0 {
-			writer.Writef("- subagent allowed MCP servers: %s\n", strings.Join(sub.AllowedMCPServers, ", "))
+		if sub.AllowedMCPServers != nil {
+			writer.Writef("- subagent allowed MCP servers: %s\n", formatSubagentDirectiveList(sub.AllowedMCPServers))
 		}
 	}
 	writer.Writef("- %s\n", view.Contract.RepairBrief)
