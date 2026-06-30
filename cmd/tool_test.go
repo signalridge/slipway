@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -407,7 +408,7 @@ func TestGitHubBackendSelection(t *testing.T) {
 				return tt.ghPath, nil
 			}
 
-			backend, err := newGitHubBackend(context.Background(), tt.mode)
+			backend, err := newGitHubBackend(context.Background(), tt.mode, model.ConfigGitHub{})
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				var cliErr *CLIError
@@ -472,7 +473,7 @@ func TestGitHubAPIOverrideRejectsUnsafeURLs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(githubAPIURLEnv, tt.baseURL)
-			_, err := newGitHubHTTPClient()
+			_, err := newGitHubHTTPClient(model.ConfigGitHub{})
 			require.Error(t, err)
 			var cliErr *CLIError
 			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
@@ -508,7 +509,7 @@ func TestGitHubAPIOverrideRejectsAllowlistedPublicPathConfusion(t *testing.T) {
 			t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
 			t.Setenv(githubAmbientTokenSecondaryEnv, "")
 
-			_, err := newGitHubHTTPClient()
+			_, err := newGitHubHTTPClient(model.ConfigGitHub{})
 			require.Error(t, err)
 			var cliErr *CLIError
 			require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
@@ -536,7 +537,7 @@ func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T
 	t.Setenv(githubAmbientTokenSecondaryEnv, "secondary-ambient-token")
 	t.Setenv(githubAPIOverrideTokenEnv, "")
 
-	_, err := newGitHubHTTPClient()
+	_, err := newGitHubHTTPClient(model.ConfigGitHub{})
 	require.Error(t, err)
 	var cliErr *CLIError
 	require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
@@ -544,7 +545,7 @@ func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T
 	assert.Equal(t, 0, hits, "ambient tokens must not be sent to override hosts")
 
 	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
-	client, err := newGitHubHTTPClient()
+	client, err := newGitHubHTTPClient(model.ConfigGitHub{})
 	require.NoError(t, err)
 	var out struct {
 		Number int `json:"number"`
@@ -552,6 +553,97 @@ func TestGitHubAPIOverrideRequiresOverrideTokenAndDoesNotUseAmbient(t *testing.T
 	require.NoError(t, client.getJSON("/repos/o/r/pulls/7", &out))
 	assert.Equal(t, 7, out.Number)
 	assert.Equal(t, "Bearer override-token", seenAuth)
+}
+
+// TestGitHubAPIConfigFileFallback proves the env > file > default precedence
+// while keeping the override token's destination operator-confirmed. A repo file
+// may name and allowlist a GHE host, but that file cannot by itself authorize
+// sending SLIPWAY_GITHUB_API_TOKEN to the host.
+func TestGitHubAPIConfigFileFallbackRequiresOperatorTokenDestinationConfirmation(t *testing.T) {
+	var hits int
+	var seenAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		seenAuth = r.Header.Get("Authorization")
+		_, _ = io.WriteString(w, `{"number":11}`)
+	}))
+	defer server.Close()
+	previousTransport := githubHTTPTransport
+	githubHTTPTransport = server.Client().Transport
+	t.Cleanup(func() { githubHTTPTransport = previousTransport })
+
+	// No env override URL/allowlist; the file config supplies both.
+	t.Setenv(githubAPIURLEnv, "")
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+	t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "")
+
+	fileCfg := model.ConfigGitHub{
+		APIURL:             server.URL,
+		APIAllowedBaseURLs: []string{server.URL},
+	}
+	_, err := newGitHubHTTPClient(fileCfg)
+	require.Error(t, err)
+	var cliErr *CLIError
+	require.True(t, errors.As(err, &cliErr))
+	assert.Equal(t, "github_api_override_token_destination_unconfirmed", cliErr.ErrorCode)
+	assert.Equal(t, 0, hits, "file config must not self-authorize override token egress")
+
+	t.Setenv(githubAPIAllowedBaseURLsEnv, server.URL)
+	client, err := newGitHubHTTPClient(fileCfg)
+	require.NoError(t, err, "env allowlist confirms the file-configured token destination")
+	var out struct {
+		Number int `json:"number"`
+	}
+	require.NoError(t, client.getJSON("/repos/o/r/pulls/11", &out))
+	assert.Equal(t, 11, out.Number)
+	assert.Equal(t, "Bearer override-token", seenAuth)
+
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+	t.Setenv(githubAPIURLEnv, server.URL)
+	client, err = newGitHubHTTPClient(fileCfg)
+	require.NoError(t, err, "env URL confirms the destination when it matches the file policy")
+	require.NoError(t, client.getJSON("/repos/o/r/pulls/11", &out))
+	assert.Equal(t, 11, out.Number)
+	assert.Equal(t, "Bearer override-token", seenAuth)
+
+	// A file override host NOT in the file allowlist is rejected.
+	t.Setenv(githubAPIURLEnv, "")
+	_, err = newGitHubHTTPClient(model.ConfigGitHub{APIURL: server.URL})
+	require.Error(t, err)
+	require.True(t, errors.As(err, &cliErr))
+	assert.Equal(t, "github_api_url_not_allowed", cliErr.ErrorCode)
+
+	// Env URL overrides the file value: an env override that is NOT allowlisted
+	// (env list empty, file allowlist only covers the file URL) is rejected,
+	// proving the env value, not the file value, drove resolution.
+	t.Setenv(githubAPIURLEnv, "https://ghe.env-only.example/api/v3")
+	_, err = newGitHubHTTPClient(fileCfg)
+	require.Error(t, err)
+	require.True(t, errors.As(err, &cliErr))
+	assert.Equal(t, "github_api_url_not_allowed", cliErr.ErrorCode)
+}
+
+func TestGitHubAPIConfigFileAllowlistInvalidEntryIsURLInvalid(t *testing.T) {
+	t.Setenv(githubAPIURLEnv, "")
+	t.Setenv(githubAPIAllowedBaseURLsEnv, "")
+	t.Setenv(githubAPIOverrideTokenEnv, "override-token")
+	t.Setenv(githubAmbientTokenPrimaryEnv, "ambient-token")
+	t.Setenv(githubAmbientTokenSecondaryEnv, "")
+
+	_, err := newGitHubHTTPClient(model.ConfigGitHub{
+		APIURL: "https://ghe.example.com/api/v3",
+		APIAllowedBaseURLs: []string{
+			"https://ghe.example.com/api/v3",
+			"httpss://typo.example.com",
+		},
+	})
+	require.Error(t, err)
+	var cliErr *CLIError
+	require.True(t, errors.As(err, &cliErr), "expected CLIError, got %T", err)
+	assert.Equal(t, "github_api_url_invalid", cliErr.ErrorCode)
+	assert.Equal(t, "httpss://typo.example.com", cliErr.Details["value"])
 }
 
 func TestGitHubAPIOverrideRejectsUnsafePaginationLink(t *testing.T) {

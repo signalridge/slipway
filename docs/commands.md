@@ -171,7 +171,7 @@ codebase-map advisory.
 | Command | Class | Purpose |
 | --- | --- | --- |
 | `slipway init` | mutation | Initialize `.slipway.yaml`, the repo-local runtime layout, and optional AI-tool adapters. |
-| `slipway config [list\|get\|set]` | mutation | Inspect and update repo-level `.slipway.yaml` configuration keys. CLI-only; no generated adapter prompt surface. |
+| `slipway config [list\|get\|set]` | mutation | Inspect and update repo-level `.slipway.yaml` keys; `config list --env` lists runtime/secret environment variables and their ownership. CLI-only; no generated adapter prompt surface. |
 
 `docs/SURFACE-MANIFEST.json` is the committed generated-surface inventory for
 adapter, command, skill, JSON, and documentation rows. The manifest is rebuilt

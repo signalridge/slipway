@@ -119,6 +119,37 @@ identity and freshness fields only; it does not snapshot lifecycle state or the
 next action. Fresh sessions still run `slipway status --json` and
 `slipway next --json` for authority.
 
+## Configuration Surfaces
+
+Slipway keeps repository policy, host runtime facts, and secrets on separate
+surfaces:
+
+- `.slipway.yaml` is version-controlled repo policy. Use `slipway config list`,
+  `slipway config get <key>`, and `slipway config set <key> <value>` for these
+  dotted file keys.
+- Runtime/host environment variables describe the current AI host session:
+  context-window size, host capabilities, handoff owner identity, and similar
+  facts. Discover them with `slipway config list --env`.
+- Secret environment variables, including GitHub tokens, are environment-only
+  and are never representable in `.slipway.yaml`.
+
+Some repo policy can be set from either surface. For GitHub Enterprise, for
+example, `github.api_url` is the file key and `SLIPWAY_GITHUB_API_URL` is the
+environment override; `github.api_allowed_base_urls` and
+`SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS` define the allowlist. Environment wins
+over file config, and file config wins over defaults. Tokens stay env-only:
+`SLIPWAY_GITHUB_API_TOKEN` is used only for an allowlisted GitHub Enterprise API
+override, and a file-configured override URL cannot self-authorize token egress:
+set `SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS` to the exact URL, or set
+`SLIPWAY_GITHUB_API_URL` to the same URL, before the override token is sent.
+Ambient `GH_TOKEN` / `GITHUB_TOKEN` are sent only to `https://api.github.com`.
+
+```bash
+slipway config list
+slipway config list --env
+slipway config list --env --json
+```
+
 <details>
 <summary><strong>Command-first lifecycle</strong></summary>
 
