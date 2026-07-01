@@ -170,6 +170,8 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			assert.Equal(t, tt.wantFallbackMode, req.FallbackMode)
 			assert.NotEmpty(t, req.EvidenceRequirement)
 			assert.NotEmpty(t, req.Remediation)
+			assert.Contains(t, req.Remediation, "context_origin:stage=review=<handle>")
+			assert.Contains(t, req.Remediation, "fallback:<mode>")
 		})
 	}
 }
@@ -200,6 +202,10 @@ func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 			assert.False(t, req.FallbackSelected)
 			assert.NotEmpty(t, req.EvidenceRequirement)
 			assert.NotEmpty(t, req.Remediation)
+			if hostCapabilityTestIsSelectedReviewSkill(skillID) {
+				assert.Contains(t, req.Remediation, "context_origin:stage=review=<handle>")
+				assert.Contains(t, req.Remediation, "fallback:<mode>")
+			}
 		})
 		t.Run(skillID+"/explicit none is unavailable", func(t *testing.T) {
 			t.Parallel()
@@ -233,6 +239,8 @@ func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 		require.NotNil(t, req, "security-review must carry a registry host-capability contract")
 		assert.Equal(t, "subagent", req.Capability)
 		assert.Equal(t, "unavailable", req.Availability)
+		assert.Contains(t, req.Remediation, "context_origin:stage=review=<handle>")
+		assert.Contains(t, req.Remediation, "fallback:<mode>")
 	})
 
 	t.Run("skills without any contract still resolve to nil", func(t *testing.T) {
@@ -240,6 +248,15 @@ func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 		assert.Nil(t, ResolveHostCapabilityRequirement("context-assembly", Signals{}))
 		assert.Nil(t, ResolveHostCapabilityRequirement("no-such-skill", Signals{}))
 	})
+}
+
+func hostCapabilityTestIsSelectedReviewSkill(skillID string) bool {
+	switch skillID {
+	case "spec-compliance-review", "code-quality-review", "independent-review", "security-review":
+		return true
+	default:
+		return false
+	}
 }
 
 func TestResolveHostCapabilityRequirementUsesRegistryContract(t *testing.T) {

@@ -360,6 +360,88 @@ func TestReviewContextOriginHandleFromVerification(t *testing.T) {
 	}
 }
 
+func TestExactlyOneReviewContextOriginHandleFromVerification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		record     VerificationRecord
+		wantOK     bool
+		wantHandle string
+	}{
+		{
+			name: "single valid review origin token",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=review=ctx-reviewer"},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-reviewer",
+		},
+		{
+			name: "missing review origin token",
+			record: VerificationRecord{
+				References: []string{"independent-review:pass"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "malformed review origin token",
+			record: VerificationRecord{
+				References: []string{"context_origin:stage=review"},
+			},
+			wantOK: false,
+		},
+		{
+			name: "duplicate identical review origin token is rejected",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-reviewer",
+					"context_origin:stage=review=ctx-reviewer",
+				},
+			},
+			wantOK: false,
+		},
+		{
+			name: "duplicate conflicting review origin token is rejected",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-reviewer-a",
+					"context_origin:stage=review=ctx-reviewer-b",
+				},
+			},
+			wantOK: false,
+		},
+		{
+			name: "single review handle may coexist with fix handles",
+			record: VerificationRecord{
+				References: []string{
+					"context_origin:stage=review=ctx-reviewer",
+					"context_origin:stage=fix=ctx-fix-1",
+					"context_origin:stage=fix=ctx-fix-2",
+				},
+			},
+			wantOK:     true,
+			wantHandle: "ctx-reviewer",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, ok := ExactlyOneReviewContextOriginHandleFromVerification(tt.record)
+			require.Equal(t, tt.wantOK, ok)
+			if !tt.wantOK {
+				assert.Equal(t, ContextOriginHandle{}, got)
+				return
+			}
+			assert.Equal(t, StageContextReview, got.Stage)
+			assert.Equal(t, tt.wantHandle, got.Handle)
+		})
+	}
+}
+
 func TestFixContextOriginHandleSetFromVerification(t *testing.T) {
 	t.Parallel()
 

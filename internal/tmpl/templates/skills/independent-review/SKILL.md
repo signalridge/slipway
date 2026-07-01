@@ -20,7 +20,7 @@ host_capabilities:
       - manual_independent_review
       - same_context_degraded
     evidence_requirement: "record independent-review evidence from a fresh independent reviewer context"
-    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence."
+    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded."
 ---
 
 # Independent Review

@@ -1186,6 +1186,7 @@ func TestEvidenceSkillRecordsCLIStampedVerificationAndDigest(t *testing.T) {
 			"--verdict", "pass",
 			"--reference", "layer:R0=pass",
 			"--reference", "scope_contract:pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=cli-stamped-spec-review",
 			"--notes-file", "review-notes.md",
 		})
 		var out bytes.Buffer
@@ -1207,7 +1208,11 @@ func TestEvidenceSkillRecordsCLIStampedVerificationAndDigest(t *testing.T) {
 		assert.Equal(t, 2, rec.RunVersion)
 		assert.False(t, rec.Timestamp.IsZero())
 		assert.Equal(t, "review notes from disk", rec.Notes)
-		assert.Equal(t, []string{"layer:R0=pass", "scope_contract:pass"}, rec.References)
+		assert.Equal(t, []string{
+			model.ContextOriginReferencePrefix + model.StageContextReview + "=cli-stamped-spec-review",
+			"layer:R0=pass",
+			"scope_contract:pass",
+		}, rec.References)
 
 		digests, err := state.LoadOptionalEvidenceDigestsForChange(root, change)
 		require.NoError(t, err)

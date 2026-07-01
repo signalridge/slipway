@@ -165,6 +165,41 @@ func ReviewContextOriginHandleFromVerification(record VerificationRecord) (Conte
 	return handle, true
 }
 
+// ExactlyOneReviewContextOriginHandleFromVerification extracts the selected S3
+// reviewer handle only when the record carries exactly one well-formed
+// context_origin:stage=review=<handle> reference. Unlike
+// ReviewContextOriginHandleFromVerification, this rejects repeated identical
+// review handles so record-time evidence validation can fail before CLI
+// reference de-duplication hides a duplicate submission.
+func ExactlyOneReviewContextOriginHandleFromVerification(record VerificationRecord) (ContextOriginHandle, bool) {
+	var found ContextOriginHandle
+	count := 0
+	for _, ref := range record.References {
+		raw := strings.Trim(strings.TrimSpace(ref), "\"'`.,;()[]{}")
+		if !strings.HasPrefix(raw, ContextOriginReferencePrefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(raw, ContextOriginReferencePrefix)
+		stage, _, _ := strings.Cut(rest, "=")
+		if strings.TrimSpace(stage) != StageContextReview {
+			continue
+		}
+		stage, handle, ok := parseContextOriginReference(ref)
+		if !ok {
+			return ContextOriginHandle{}, false
+		}
+		count++
+		if count > 1 {
+			return ContextOriginHandle{}, false
+		}
+		found = ContextOriginHandle{Stage: stage, Handle: handle}
+	}
+	if count != 1 {
+		return ContextOriginHandle{}, false
+	}
+	return found, true
+}
+
 // FixContextOriginHandleSetFromVerification flattens every
 // context_origin:stage=fix=<handle> reference a record attests into a deduped
 // set of fix context handles. The fix stage is multi-valued — a reviewer's
