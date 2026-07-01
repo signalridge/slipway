@@ -8,9 +8,11 @@
 
 可能な限りリリース提供のチャネルを使ってください。
 
-```bash
-brew install --cask signalridge/tap/slipway
-```
+| プラットフォーム | 推奨パス |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | [インストール](../installation.md#linux)の `.deb`、`.rpm`、`.apk`、`tar.gz`、AUR、またはコンテナイメージのパスを使います。 |
 
 リリースパッケージが利用できない場合や、意図的に Go 管理のバイナリが欲しい場合は Go install を使います。
 

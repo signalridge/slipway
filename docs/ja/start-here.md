@@ -28,12 +28,14 @@ Slipway は、いくつかの永続的なプロジェクト記録を中心に構
 
 ## 最初のインストール
 
-利用中のプラットフォームに対応したインストール方法を選びます。代表的な選択肢は次のとおりです。
+利用中のプラットフォームに合わせて、公式のリリースに基づくインストールパスを選びます。
 
-```bash
-brew install --cask signalridge/tap/slipway
-go install github.com/signalridge/slipway@latest
-```
+| プラットフォーム | 推奨パス |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | [インストール](installation.md#linux)の `.deb`、`.rpm`、`.apk`、`tar.gz`、AUR、またはコンテナイメージのパスを使います。 |
+| Go フォールバック | `go install github.com/signalridge/slipway@latest` |
 
 続いて、バイナリが認識されているか確認します。
 

@@ -88,19 +88,26 @@ then makes the CLI recompute whether those pieces still agree.
 
 ## Quick Start
 
-Install Slipway, initialize your repository, and generate the adapter for the AI
-tool you actually use:
+Install Slipway from an official release-backed channel, then initialize the
+repository adapter for the AI tool you actually use.
+
+| Platform | Recommended path |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | Use the `.deb`, `.rpm`, `.apk`, `tar.gz`, AUR, or container image paths in [Installation](docs/installation.md#linux). |
+| Go fallback | `go install github.com/signalridge/slipway@latest` |
 
 ```bash
-brew install --cask signalridge/tap/slipway
-# or
-go install github.com/signalridge/slipway@latest
-
+slipway --version
 slipway init --tools codex
 ```
 
 Other adapter IDs are `claude`, `codex`, `cursor`, `opencode`,
 `copilot`, `kilo`, `kiro`, `pi`, `qwen`, `windsurf`, `all`, and `none`.
+
+Using an AI coding tool to install Slipway? Ask it to follow the
+[AI Tool Installation Prompt](docs/installation.md#ai-tool-installation-prompt).
 
 That one-time setup is the whole installation. From there you do not drive
 Slipway by hand. In your AI-tool session, describe the change in plain language:
