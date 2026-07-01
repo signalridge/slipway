@@ -1,0 +1,18 @@
+version: 1
+slug: repair-release-publishing
+description: repair release publishing
+status: active
+current_state: S1_PLAN
+plan_substep: research
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-06-29T16:33:56.260702Z
+guardrail_domain: external_api_contracts
+quality_mode: standard
+workflow_profile: config
+workflow_preset: standard
+worktree_branch: feat/repair-release-publishing
+artifact_schema: expanded
+evidence_refs:
+    intake-clarification: .worktrees/repair-release-publishing/artifacts/changes/repair-release-publishing/verification/intake-clarification.yaml
