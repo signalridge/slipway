@@ -156,14 +156,14 @@ var builtinSubagentDispatchContracts = map[string]HostCapabilityContract{
 		Required:            true,
 		FallbackModes:       []string{"manual_spec_compliance_review", "same_context_degraded"},
 		EvidenceRequirement: "record spec-compliance-review evidence from a fresh independent reviewer context",
-		Remediation:         "Run spec-compliance-review in a host with subagent capability, or explicitly select manual_spec_compliance_review / same_context_degraded fallback and record fresh reviewer evidence.",
+		Remediation:         "Run spec-compliance-review in a host with subagent capability, or explicitly select manual_spec_compliance_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded.",
 	},
 	"code-quality-review": {
 		Capability:          "subagent",
 		Required:            true,
 		FallbackModes:       []string{"manual_code_quality_review", "same_context_degraded"},
 		EvidenceRequirement: "record code-quality-review evidence from a fresh independent reviewer context",
-		Remediation:         "Run code-quality-review in a host with subagent capability, or explicitly select manual_code_quality_review / same_context_degraded fallback and record fresh reviewer evidence.",
+		Remediation:         "Run code-quality-review in a host with subagent capability, or explicitly select manual_code_quality_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded.",
 	},
 	"ship-verification": {
 		Capability:          "subagent",

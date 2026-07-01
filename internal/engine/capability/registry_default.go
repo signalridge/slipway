@@ -50,7 +50,7 @@ func independentReview() Skill {
 				Required:            true,
 				FallbackModes:       []string{"manual_independent_review", "same_context_degraded"},
 				EvidenceRequirement: "record independent-review evidence from a fresh independent reviewer context",
-				Remediation:         "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence.",
+				Remediation:         "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded.",
 			},
 		},
 	}

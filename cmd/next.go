@@ -1153,7 +1153,8 @@ func withSubagentDelegationPrerequisite(req confirmationRequirement, view nextVi
 	req.NextAction = strings.TrimRight(strings.TrimSpace(req.NextAction), ".") +
 		". Host subagent delegation is a prerequisite the host has not declared available: authorize subagent dispatch, " +
 		"or explicitly select a named degraded fallback (e.g. same_context_degraded) and record fresh evidence for each listed skill " +
-		"(see host_capabilities[] and recovery for the per-skill fallback names)"
+		"(see host_capabilities[] and recovery for the per-skill fallback names). For S3 review skills, record exactly one " +
+		"context_origin:stage=review=<handle> reference and an additional fallback:<mode> reference when degraded"
 	return req
 }
 

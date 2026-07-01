@@ -9,7 +9,7 @@ host_capabilities:
       - manual_independent_review
       - same_context_degraded
     evidence_requirement: "record independent-review evidence from a fresh independent reviewer context"
-    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence."
+    remediation: "Run independent-review in a host with subagent capability, or explicitly select manual_independent_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded."
 ---
 
 # Independent Review
@@ -104,7 +104,10 @@ subagent capability available, `slipway next`/`run` surfaces a subagent-delegati
 prerequisite plus a named degraded fallback for this review: authorize subagent
 dispatch, or explicitly select the named fallback (for example
 `same_context_degraded`) and record fresh reviewer evidence for the degraded run —
-do not review inline without recording the selected fallback.
+do not review inline without recording the selected fallback. The fallback is an
+additional structured reference such as
+`--reference "fallback:same_context_degraded"`; it does not replace the required
+`context_origin:stage=review=<handle>` reference.
 
 Record this review's context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

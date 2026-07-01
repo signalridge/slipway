@@ -15,7 +15,12 @@ slipway evidence skill --skill <name> --verdict <pass|fail> \
   --reference "<ref>" --notes-file <path> --json
 
 slipway evidence skill --skill <selected-review-skill> --verdict pass \
-  --refresh-current --reference "<ref>" --notes-file <path> --json
+  --reference "context_origin:stage=review=<handle>" \
+  --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json
+
+slipway evidence skill --skill <selected-review-skill> --verdict pass \
+  --refresh-current --reference "context_origin:stage=review=<handle>" \
+  --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json
 ```
 
 ## Contract
@@ -40,6 +45,13 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
   already-current passing selected S3 review skill after an operator
   intentionally reruns that review. Without it, duplicate current review evidence
   remains fail-closed.
+- A passing selected S3 review skill must include exactly one
+  `--reference "context_origin:stage=review=<handle>"` before YAML is written;
+  malformed, missing, or duplicate review-stage handles fail closed. Use
+  `artifacts/changes/<slug>/verification/<skill>-notes.md` for review notes.
+- A degraded fallback is an additional structured reference, for example
+  `--reference "fallback:same_context_degraded"`; fallback prose in Markdown is
+  not a substitute for the review-stage context handle.
 - `evidence skill` writes the verification record, updates the change evidence
   reference, and does not advance lifecycle state; advance separately with
   `slipway run`.
