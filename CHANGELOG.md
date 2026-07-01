@@ -5,6 +5,20 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0](https://github.com/signalridge/slipway/compare/v0.37.4...v0.38.0) (2026-07-01)
+
+
+### Features
+
+* **config:** unify scattered SLIPWAY_* env vars with .slipway.yaml ([#366](https://github.com/signalridge/slipway/issues/366)) ([#391](https://github.com/signalridge/slipway/issues/391)) ([7500d30](https://github.com/signalridge/slipway/commit/7500d3012240bc9e1a5298a23467f834732dd1e7))
+* **evidence:** add --refresh-current for intentional review-evidence refresh ([#396](https://github.com/signalridge/slipway/issues/396)) ([bf10c33](https://github.com/signalridge/slipway/commit/bf10c335ad22c1957cd745949b3b59dc2eb520e2)), closes [#384](https://github.com/signalridge/slipway/issues/384)
+
+
+### Bug Fixes
+
+* **evidence:** require review context origin before persistence ([#397](https://github.com/signalridge/slipway/issues/397)) ([8cbcbe6](https://github.com/signalridge/slipway/commit/8cbcbe69f17dab068600ac415b09243a3838b2a4))
+* **recovery:** exhaustive, test-enforced reason-code recovery coverage + skill discoverability ([#389](https://github.com/signalridge/slipway/issues/389)) ([7d0a69e](https://github.com/signalridge/slipway/commit/7d0a69ed75e8a24431899ed9b8bfdf7662518d05))
+
 ## [0.37.4](https://github.com/signalridge/slipway/compare/v0.37.3...v0.37.4) (2026-06-29)
 
 
