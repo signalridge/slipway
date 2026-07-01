@@ -8,9 +8,11 @@
 
 尽量使用基于发布版本的渠道：
 
-```bash
-brew install --cask signalridge/tap/slipway
-```
+| 平台 | 推荐路径 |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | 使用[安装](../installation.md#linux)中的 `.deb`、`.rpm`、`.apk`、`tar.gz`、AUR 或容器镜像路径。 |
 
 当没有现成的发布包，或你确实想要一个由 Go 管理的二进制文件时，使用 Go install：
 

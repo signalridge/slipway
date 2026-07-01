@@ -31,12 +31,14 @@ For concrete adoption patterns, use
 
 ## First Install
 
-Pick the install path your platform supports. Common options:
+Pick an official release-backed path for your platform:
 
-```bash
-brew install --cask signalridge/tap/slipway
-go install github.com/signalridge/slipway@latest
-```
+| Platform | Recommended path |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | Use the `.deb`, `.rpm`, `.apk`, `tar.gz`, AUR, or container image paths in [Installation](installation.md#linux). |
+| Go fallback | `go install github.com/signalridge/slipway@latest` |
 
 Then confirm the binary is visible:
 

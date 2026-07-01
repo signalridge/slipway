@@ -85,12 +85,13 @@ release:
 
     Container image: `ghcr.io/signalridge/slipway:{{ .Version }}`
 
-    Installation:
+    Installation: https://signalridge.github.io/slipway/installation/
 
-    ```bash
-    brew install --cask signalridge/tap/slipway
-    go install github.com/signalridge/slipway@{{ .Tag }}
-    ```
+    Common paths:
+
+    - macOS: `brew install --cask signalridge/tap/slipway`
+    - Windows: add `signalridge/scoop-bucket`, then `scoop install slipway`
+    - Linux packages, direct archives, container, Go, and Nix are covered in Installation.
 homebrew_casks:
   - name: slipway
     repository:

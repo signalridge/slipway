@@ -89,19 +89,27 @@ Slipway はホスティングサービスでもプロジェクト管理ツール
 
 ## クイックスタート
 
-Slipway をインストールし、リポジトリを初期化して、実際に使っている AI ツール向けの
-アダプターを生成します。
+公式のリリースに基づくチャネルから Slipway をインストールし、実際に使っている
+AI ツール向けにリポジトリアダプターを初期化します。
+
+| プラットフォーム | 推奨パス |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | [インストール](docs/installation.md#linux)の `.deb`、`.rpm`、`.apk`、`tar.gz`、AUR、またはコンテナイメージのパスを使います。 |
+| Go フォールバック | `go install github.com/signalridge/slipway@latest` |
 
 ```bash
-brew install --cask signalridge/tap/slipway
-# or
-go install github.com/signalridge/slipway@latest
-
+slipway --version
 slipway init --tools codex
 ```
 
 その他のアダプター ID は `claude`、`codex`、`cursor`、`opencode`、`copilot`、
 `kilo`、`kiro`、`pi`、`qwen`、`windsurf`、`all`、`none` です。
+
+AI コーディングツールに Slipway のインストールを任せる場合は、
+[AI Tool Installation Prompt](docs/installation.md#ai-tool-installation-prompt)
+に従わせてください。
 
 この一度きりのセットアップがインストールのすべてです。以降は Slipway を手作業で
 操作しません。AI ツールのセッションで、変更を平易な言葉で記述します。
