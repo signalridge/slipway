@@ -97,7 +97,7 @@ func isConstrainedConfigLeaf(key string, ft reflect.Type) bool {
 		return true
 	}
 	switch ft {
-	case reflect.TypeOf(ArtifactSchemaName("")), reflect.TypeOf(WorkflowPreset("")), reflect.TypeOf(SignalLevel("")):
+	case reflect.TypeOf(ArtifactSchemaName("")), reflect.TypeOf(WorkflowPreset("")), reflect.TypeOf(SignalLevel("")), reflect.TypeOf(SubagentType("")):
 		return true
 	default:
 		return false
@@ -185,6 +185,7 @@ func TestConfigCatalogAllowedValuesEnriched(t *testing.T) {
 		"defaults.artifact_schema":                              {"core", "expanded", "custom"},
 		"execution.parallelization":                             {"forced", "off"},
 		"governance.thresholds.independent_review_blast_radius": {"low", "medium", "high"},
+		"subagents.review.type":                                 {"native", "mcp", "skills"},
 	}
 	for key, want := range cases {
 		entry, ok := byName[key]
@@ -278,6 +279,28 @@ func TestConfigSetValueValidApplies(t *testing.T) {
 	if updated.Defaults.ArtifactSchema != ArtifactSchemaCore {
 		t.Errorf("after set, artifact_schema = %q, want core", updated.Defaults.ArtifactSchema)
 	}
+
+	updated, err = ConfigSetValue(cfg, "subagents.review.name", "sliphub")
+	if err != nil {
+		t.Fatalf("ConfigSetValue returned error: %v", err)
+	}
+	updated, err = ConfigSetValue(updated, "subagents.review.type", "skills")
+	if err != nil {
+		t.Fatalf("ConfigSetValue returned error: %v", err)
+	}
+	updated, err = ConfigSetValue(updated, "subagents.review.session_instructions", "run selected reviewers")
+	if err != nil {
+		t.Fatalf("ConfigSetValue returned error: %v", err)
+	}
+	updated, err = ConfigSetValue(updated, "subagents.review.timeout", "30m")
+	if err != nil {
+		t.Fatalf("ConfigSetValue returned error: %v", err)
+	}
+	resolved := updated.ResolveSubagent(SubagentSlotReview)
+	if resolved.Type != SubagentTypeSkills || resolved.Name != "sliphub" ||
+		resolved.SessionInstructions != "run selected reviewers" || resolved.Timeout != "30m" {
+		t.Errorf("subagents.review resolved = %+v, want configured skills slot", resolved)
+	}
 }
 
 func TestConfigSetValueClonesPointerLeaves(t *testing.T) {
@@ -342,6 +365,21 @@ func TestConfigSetValueInvalidNoMutation(t *testing.T) {
 	if _, err := ConfigSetValue(cfg, "execution.lock_wait_timeout_seconds", "abc"); err == nil {
 		t.Error("expected error for non-integer int value, got nil")
 	}
+
+	if _, err := ConfigSetValue(cfg, "subagents.review.type", "skills"); err == nil {
+		t.Error("expected setting skills type without a provider target name to fail")
+	}
+	for _, key := range []string{
+		"subagents.security_review.type",
+		"subagents.review.profile",
+		"subagents.review.prompt",
+		"subagents.review.allowed_skills",
+		"subagent_provider_profiles",
+	} {
+		if _, err := ConfigSetValue(cfg, key, "true"); err == nil {
+			t.Errorf("expected error for removed/unknown subagent key %q, got nil", key)
+		}
+	}
 }
 
 // TestConfigCatalogEffectiveDefaults asserts the DEFAULT column reflects the
@@ -357,6 +395,7 @@ func TestConfigCatalogEffectiveDefaults(t *testing.T) {
 		"defaults.artifact_schema":           "expanded",
 		"governance.auto_provision_worktree": "true",
 		"execution.parallelization":          "forced",
+		"subagents.review.type":              "native",
 	}
 	for key, want := range cases {
 		if got := byName[key].Default; got != want {
@@ -373,6 +412,7 @@ func TestConfigGetValueEffectiveDefaults(t *testing.T) {
 	for key, want := range map[string]string{
 		"governance.auto_provision_worktree": "true",
 		"execution.parallelization":          "forced",
+		"subagents.review.type":              "native",
 	} {
 		got, err := ConfigGetValue(unset, key)
 		if err != nil {

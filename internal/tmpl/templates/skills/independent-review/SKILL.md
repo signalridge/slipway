@@ -31,8 +31,11 @@ IRON LAW: REVIEW WITH FRESH CONTEXT, EXIT WITH A VERDICT
 
 ## Purpose
 Perform code review as an independent reader. In S3 this runs as a
-workflow-owned review host with its own native subagent context. Do not reuse
-the author's narration as your source of truth.
+workflow-owned review peer dispatched through the configured `review` slot,
+defaulting to native host dispatch when no slot is configured. If the directive
+includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
+boundary, not as a provider capability description. Do not reuse the author's
+narration as your source of truth.
 
 ## Diff-scoped review
 

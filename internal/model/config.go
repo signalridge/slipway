@@ -19,9 +19,212 @@ type Config struct {
 	Execution       ConfigExecution       `yaml:"execution" json:"execution"`
 	Governance      ConfigGovernance      `yaml:"governance,omitempty" json:"governance,omitempty"`
 	GitHub          ConfigGitHub          `yaml:"github,omitempty" json:"github,omitempty"`
+	Subagents       ConfigSubagents       `yaml:"subagents,omitempty" json:"subagents,omitempty"`
 	Context         ProjectContext        `yaml:"context,omitempty" json:"context,omitempty"`
 	CustomArtifacts []ArtifactDefinition  `yaml:"custom_artifacts,omitempty" json:"custom_artifacts,omitempty"`
 	UnknownTopLevel map[string]*yaml.Node `yaml:"-" json:"-"`
+}
+
+type SubagentType string
+
+const (
+	SubagentTypeNative SubagentType = "native"
+	SubagentTypeMCP    SubagentType = "mcp"
+	SubagentTypeSkills SubagentType = "skills"
+)
+
+func (t SubagentType) IsValid() bool {
+	switch t {
+	case "", SubagentTypeNative, SubagentTypeMCP, SubagentTypeSkills:
+		return true
+	default:
+		return false
+	}
+}
+
+func effectiveSubagentType(t SubagentType) SubagentType {
+	if t == "" {
+		return SubagentTypeNative
+	}
+	return t
+}
+
+type SubagentSlotName string
+
+const (
+	SubagentSlotPlanAudit SubagentSlotName = "plan_audit"
+	SubagentSlotExecutor  SubagentSlotName = "executor"
+	SubagentSlotReview    SubagentSlotName = "review"
+	SubagentSlotFix       SubagentSlotName = "fix"
+	SubagentSlotVerify    SubagentSlotName = "verify"
+)
+
+// SubagentSlot describes one host delegation slot. Type selects the provider
+// family, name selects the provider-owned target, and session_instructions are
+// guidance for the delegated session rather than provider profile inheritance.
+type SubagentSlot struct {
+	Type                SubagentType `yaml:"type,omitempty" json:"type,omitempty"`
+	Name                string       `yaml:"name,omitempty" json:"name,omitempty"`
+	SessionInstructions string       `yaml:"session_instructions,omitempty" json:"session_instructions,omitempty"`
+	Timeout             string       `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+}
+
+func (s SubagentSlot) IsZero() bool {
+	return s.Type == "" &&
+		s.Name == "" &&
+		s.SessionInstructions == "" &&
+		s.Timeout == ""
+}
+
+func (s SubagentSlot) Validate(path string) error {
+	if !s.Type.IsValid() {
+		return fmt.Errorf("%s.type must be one of: native, mcp, skills", path)
+	}
+	if strings.TrimSpace(s.Name) != s.Name {
+		return fmt.Errorf("%s.name must not have surrounding whitespace", path)
+	}
+	if strings.TrimSpace(s.Timeout) != s.Timeout {
+		return fmt.Errorf("%s.timeout must not have surrounding whitespace", path)
+	}
+	return nil
+}
+
+type ConfigSubagents struct {
+	Default   SubagentSlot `yaml:"default,omitempty" json:"default,omitempty"`
+	PlanAudit SubagentSlot `yaml:"plan_audit,omitempty" json:"plan_audit,omitempty"`
+	Executor  SubagentSlot `yaml:"executor,omitempty" json:"executor,omitempty"`
+	Review    SubagentSlot `yaml:"review,omitempty" json:"review,omitempty"`
+	Fix       SubagentSlot `yaml:"fix,omitempty" json:"fix,omitempty"`
+	Verify    SubagentSlot `yaml:"verify,omitempty" json:"verify,omitempty"`
+}
+
+func (s ConfigSubagents) IsZero() bool {
+	return s.Default.IsZero() &&
+		s.PlanAudit.IsZero() &&
+		s.Executor.IsZero() &&
+		s.Review.IsZero() &&
+		s.Fix.IsZero() &&
+		s.Verify.IsZero()
+}
+
+func (s ConfigSubagents) Validate() error {
+	for _, entry := range []struct {
+		path string
+		slot SubagentSlot
+	}{
+		{"subagents.default", s.Default},
+		{"subagents.plan_audit", s.PlanAudit},
+		{"subagents.executor", s.Executor},
+		{"subagents.review", s.Review},
+		{"subagents.fix", s.Fix},
+		{"subagents.verify", s.Verify},
+	} {
+		if err := entry.slot.Validate(entry.path); err != nil {
+			return err
+		}
+	}
+	if !s.Default.IsZero() {
+		switch effectiveSubagentType(s.Default.Type) {
+		case SubagentTypeMCP, SubagentTypeSkills:
+			if strings.TrimSpace(s.Default.Name) == "" {
+				return fmt.Errorf("subagents.default.name is required when type is %q", effectiveSubagentType(s.Default.Type))
+			}
+		}
+	}
+	for _, entry := range []struct {
+		name SubagentSlotName
+		path string
+	}{
+		{SubagentSlotPlanAudit, "subagents.plan_audit"},
+		{SubagentSlotExecutor, "subagents.executor"},
+		{SubagentSlotReview, "subagents.review"},
+		{SubagentSlotFix, "subagents.fix"},
+		{SubagentSlotVerify, "subagents.verify"},
+	} {
+		resolved := s.Resolve(entry.name)
+		if resolved.IsZero() {
+			continue
+		}
+		switch effectiveSubagentType(resolved.Type) {
+		case SubagentTypeMCP, SubagentTypeSkills:
+			if strings.TrimSpace(resolved.Name) == "" {
+				return subagentResolvedNameRequiredError(s.Default, entry.path, effectiveSubagentType(resolved.Type))
+			}
+		}
+	}
+	return nil
+}
+
+func subagentResolvedNameRequiredError(defaultSlot SubagentSlot, path string, typ SubagentType) error {
+	if defaultSlot.Name != "" && effectiveSubagentType(defaultSlot.Type) != typ {
+		return fmt.Errorf("%s.name is required when resolved type is %q; default.name is not inherited across provider families", path, typ)
+	}
+	return fmt.Errorf("%s.name is required when resolved type is %q", path, typ)
+}
+
+func (s ConfigSubagents) Resolve(slot SubagentSlotName) SubagentSlot {
+	var override SubagentSlot
+	switch slot {
+	case SubagentSlotPlanAudit:
+		override = s.PlanAudit
+	case SubagentSlotExecutor:
+		override = s.Executor
+	case SubagentSlotReview:
+		override = s.Review
+	case SubagentSlotFix:
+		override = s.Fix
+	case SubagentSlotVerify:
+		override = s.Verify
+	default:
+		override = SubagentSlot{}
+	}
+	return mergeSubagentSlots(s.Default, override)
+}
+
+func mergeSubagentSlots(base, override SubagentSlot) SubagentSlot {
+	resolved := SubagentSlot{
+		Type:                base.Type,
+		Name:                base.Name,
+		SessionInstructions: base.SessionInstructions,
+		Timeout:             base.Timeout,
+	}
+	if override.Type != "" {
+		if effectiveSubagentType(base.Type) != effectiveSubagentType(override.Type) && override.Name == "" {
+			resolved.Name = ""
+		}
+		resolved.Type = override.Type
+	}
+	if override.Name != "" {
+		resolved.Name = override.Name
+	}
+	if override.SessionInstructions != "" {
+		resolved.SessionInstructions = override.SessionInstructions
+	}
+	if override.Timeout != "" {
+		resolved.Timeout = override.Timeout
+	}
+	return resolved
+}
+
+type SubagentEngineBoundary struct {
+	ReadOnly       bool   `json:"read_only"`
+	MutationPolicy string `json:"mutation_policy"`
+}
+
+type ResolvedSubagentDirective struct {
+	Type                SubagentType            `json:"type"`
+	Name                string                  `json:"name,omitempty"`
+	SessionInstructions string                  `json:"session_instructions,omitempty"`
+	Timeout             string                  `json:"timeout,omitempty"`
+	EngineBoundary      *SubagentEngineBoundary `json:"engine_boundary,omitempty"`
+}
+
+func (d ResolvedSubagentDirective) IsZero() bool {
+	return d.Type == "" &&
+		d.Name == "" &&
+		d.SessionInstructions == "" &&
+		d.Timeout == "" &&
+		d.EngineBoundary == nil
 }
 
 // ConfigGovernance holds governance-related configuration such as per-control
@@ -349,6 +552,9 @@ func (c Config) Validate() error {
 	if err := c.Governance.Thresholds.Validate(); err != nil {
 		return err
 	}
+	if err := c.Subagents.Validate(); err != nil {
+		return err
+	}
 	switch c.Execution.Parallelization {
 	case "", ParallelizationForced, ParallelizationOff:
 	default:
@@ -358,6 +564,31 @@ func (c Config) Validate() error {
 		return err
 	}
 	return nil
+}
+
+func (c Config) ResolveSubagent(slot SubagentSlotName) ResolvedSubagentDirective {
+	resolved := c.Subagents.Resolve(slot)
+	if resolved.IsZero() {
+		return ResolvedSubagentDirective{}
+	}
+	return ResolvedSubagentDirective{
+		Type:                effectiveSubagentType(resolved.Type),
+		Name:                resolved.Name,
+		SessionInstructions: resolved.SessionInstructions,
+		Timeout:             resolved.Timeout,
+		EngineBoundary:      generatedSubagentEngineBoundary(slot),
+	}
+}
+
+func generatedSubagentEngineBoundary(slot SubagentSlotName) *SubagentEngineBoundary {
+	switch slot {
+	case SubagentSlotPlanAudit, SubagentSlotReview, SubagentSlotVerify:
+		return &SubagentEngineBoundary{ReadOnly: true, MutationPolicy: "deny"}
+	case SubagentSlotExecutor, SubagentSlotFix:
+		return &SubagentEngineBoundary{ReadOnly: false, MutationPolicy: "allow"}
+	default:
+		return nil
+	}
 }
 
 func ParseConfigYAML(data []byte) (Config, error) {
@@ -395,6 +626,12 @@ func ParseConfigYAML(data []byte) (Config, error) {
 			if err := decodeNodeStrict(value, &cfg.GitHub); err != nil {
 				return Config{}, fmt.Errorf("decode github: %w", err)
 			}
+		case "subagents":
+			if err := decodeNodeStrict(value, &cfg.Subagents); err != nil {
+				return Config{}, fmt.Errorf("decode subagents: %w", err)
+			}
+		case "subagent_provider_profiles":
+			return Config{}, fmt.Errorf("top-level subagent_provider_profiles configuration has been removed; configure subagents.<slot>.type, name, session_instructions, and timeout instead")
 		case "agents":
 			return Config{}, fmt.Errorf("top-level agents configuration has been removed; governed handoff is skill-based via next_skill.name and slipway-{name}/SKILL.md host skill surfaces")
 		case "context":
@@ -453,6 +690,14 @@ func (c Config) ToYAML() ([]byte, error) {
 			return nil, err
 		}
 		appendMappingEntry(root, "github", githubNode)
+	}
+
+	if !cfg.Subagents.IsZero() {
+		subagentsNode, err := encodeYAMLNode(cfg.Subagents)
+		if err != nil {
+			return nil, err
+		}
+		appendMappingEntry(root, "subagents", subagentsNode)
 	}
 
 	// Emit the context section whenever any context leaf is set. Reuse IsZero()

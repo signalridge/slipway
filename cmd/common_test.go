@@ -36,6 +36,28 @@ func buildStatusViewFromChange(root string, change model.Change) (statusView, er
 	return buildStatusViewFromChangeWithReadContext(newStateReadContext(root), change)
 }
 
+func writeTestSubagentConfig(t *testing.T, root string, mutate func(*model.Config)) {
+	t.Helper()
+
+	cfg, err := model.LoadConfig(state.ConfigPath(root))
+	require.NoError(t, err)
+	mutate(&cfg)
+	require.NoError(t, model.SaveConfig(state.ConfigPath(root), cfg))
+}
+
+func assertSubagentDirective(t *testing.T, got *subagentDirective, typ model.SubagentType, name, sessionInstructions, timeout string, readOnly bool, mutation string) {
+	t.Helper()
+
+	require.NotNil(t, got)
+	assert.Equal(t, typ, got.Type)
+	assert.Equal(t, name, got.Name)
+	assert.Equal(t, sessionInstructions, got.SessionInstructions)
+	assert.Equal(t, timeout, got.Timeout)
+	require.NotNil(t, got.EngineBoundary)
+	assert.Equal(t, readOnly, got.EngineBoundary.ReadOnly)
+	assert.Equal(t, mutation, got.EngineBoundary.MutationPolicy)
+}
+
 func initialTestWorkingDirectory() string {
 	wd, err := os.Getwd()
 	if err == nil {

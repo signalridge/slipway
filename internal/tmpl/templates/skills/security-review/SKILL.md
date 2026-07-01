@@ -51,9 +51,12 @@ IRON LAW: SECURE DEFAULT, EXPLICIT DEVIATION
 
 ## Purpose
 Review security-relevant code against secure-default expectations and known
-risky escape hatches. In S3 this runs as a workflow-owned review host with its
-own native subagent context. Every deviation from a secure default must be
-called out with a reproducible observation, not a taste argument.
+risky escape hatches. In S3 this runs as a workflow-owned review peer dispatched
+through the configured `review` slot, defaulting to native host dispatch when no
+slot is configured. If the directive includes `engine_boundary`, honor it as
+Slipway's slot-level mutation/read-only boundary, not as a provider capability
+description. Every deviation from a secure default must be called out with a
+reproducible observation, not a taste argument.
 
 ## Report schema
 ```yaml

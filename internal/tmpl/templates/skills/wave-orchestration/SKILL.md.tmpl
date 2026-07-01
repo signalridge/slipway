@@ -53,14 +53,20 @@ the governed objective.
 At `S2_IMPLEMENT`, read the current task-derived wave projection from
 `input_context.wave_plan` in `slipway next --json`: `wave_count`, `total_tasks`,
 and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
-`depends_on`, `target_files`, `task_kind`). Slipway has already dependency-ordered
-the waves and detected cycles from the current `tasks.md`; do not re-derive a
-separate grouping that could diverge from the engine projection. `input_context.wave_plan`
-is a diagnostic-only, non-persistable projection of `slipway next --json`: read it
-for reporting, but never write it back. The persisted `wave-plan.yaml` is a separate
-engine-owned execution cache that Slipway regenerates from the authoritative `tasks.md`
-and engine state — it is not S1 planning authority and is not copied from this
-projection. Never round-trip the projection's view-only fields (for example
+`depends_on`, `target_files`, `task_kind`). If
+`input_context.wave_plan.executor_subagent` is present, treat it as the
+configured executor delegation directive; it may name a `native`, `mcp`, or
+`skills` provider plus `session_instructions`. If it includes
+`engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
+it is not a provider capability description. Slipway has already
+dependency-ordered the waves and detected cycles from the current `tasks.md`; do
+not re-derive a separate grouping that could diverge from the engine projection.
+`input_context.wave_plan` is a diagnostic-only, non-persistable projection of
+`slipway next --json`: read it for reporting, but never write it back. The
+persisted `wave-plan.yaml` is a separate engine-owned execution cache that
+Slipway regenerates from the authoritative `tasks.md` and engine state — it is
+not S1 planning authority and is not copied from this projection. Never
+round-trip the projection's view-only fields (for example
 `wave_count` or `advisories`) into `wave-plan.yaml`; the strict cache loader rejects
 them and that corrupts the engine-owned cache. If `input_context.wave_plan.parse_error`
 is set (for example, a dependency cycle or invalid task metadata), treat it as a
@@ -164,6 +170,10 @@ inside each task executor; leave merged-state build/test/lint checks to this
 gate unless a task owns a genuinely isolated command.
 
 ## Dispatch Contract
+- Prefer the configured `input_context.wave_plan.executor_subagent` directive
+  when present. If it is absent, use the host's native fresh executor sessions.
+- If the directive includes `engine_boundary`, honor it as Slipway's slot-level
+  mutation/read-only boundary; it is not a provider capability description.
 - Dispatch one fresh-context executor subagent per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host genuinely cannot run concurrent executors (note that degradation, as above).
 - For a capable runtime, failing to spawn real executors for `parallel: true` is a blocker or operator-direction point, not permission for same-context inline execution.
 - Executor agents run in a single worktree unless a runtime explicitly provides stronger isolation; do not claim per-executor worktree isolation.

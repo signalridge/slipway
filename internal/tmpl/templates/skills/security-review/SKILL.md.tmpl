@@ -34,8 +34,8 @@ IRON LAW: SECURE DEFAULT, EXPLICIT DEVIATION
 ## Purpose
 Review security-relevant code against secure-default expectations and known
 risky escape hatches. At `S3_REVIEW` this is a workflow-owned host that
-dispatches its own native subagent on the SHARED change worktree. Every
-deviation from a secure default must be called out with a reproducible
+dispatches through the configured `review` slot on the SHARED change worktree.
+Every deviation from a secure default must be called out with a reproducible
 observation, not a taste argument.
 
 Changed security-sensitive paths and external surfaces are review scope hints
@@ -48,9 +48,11 @@ after this peer is selected; they are not resolver triggers by themselves.
 
 ## When This Runs
 At `S3_REVIEW` the workflow dispatches security-review as one of the review-stage
-native subagents. This review is an unordered peer of the other S3 reviewers; it
-does not wait for their verdicts and they do not wait for this verdict.
-`slipway next` previews the review set; it does not advance the state.
+subagents. The `review` slot may resolve to native host dispatch, MCP, or
+skills; when no slot is configured, the host uses native dispatch. This review is
+an unordered peer of the other S3 reviewers; it does not wait for their verdicts
+and they do not wait for this verdict. `slipway next` previews the review set;
+it does not advance the state.
 
 ## Review Contract
 Use fresh context; do not carry assumptions from the implementer or from peer
@@ -103,14 +105,17 @@ surface. Overlays do not replace the cross-cutting checklist; they extend it.
 | Container / Docker images | `references/infrastructure-docker.md` |
 
 ## Review Dispatch And Context-Origin Handle
-Dispatch this review in a native subagent from the S3 review host on the SHARED change worktree
-(the same worktree the implementation edited; there is no
-per-review git worktree isolation). Spawn a fresh-context subagent with a
-bounded review brief, pass it required-reading paths rather than artifact
-bodies, wait for the result, and record the handle. If the host has not declared
-subagent capability available, `slipway next`/`run` surfaces a subagent-delegation
-prerequisite plus a named degraded fallback for this review: authorize subagent
-dispatch, or explicitly select the named fallback (for example
+Dispatch this review according to the `review` slot directive from
+`slipway next --json` when present; otherwise use a native subagent from the S3
+review host on the SHARED change worktree (the same worktree the implementation
+edited; there is no per-review git worktree isolation). If the directive
+includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
+boundary; it is not a provider capability description. Spawn a fresh-context
+subagent with a bounded review brief, pass it required-reading paths rather than
+artifact bodies, wait for the result, and record the handle. If the host has not
+declared subagent capability available, `slipway next`/`run` surfaces a
+subagent-delegation prerequisite plus a named degraded fallback for this review:
+authorize subagent dispatch, or explicitly select the named fallback (for example
 `manual_security_review` or `same_context_degraded`) and record fresh reviewer
 evidence for the degraded run — do not review inline without recording the
 selected fallback. The fallback is an additional structured reference such as

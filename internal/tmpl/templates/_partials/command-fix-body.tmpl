@@ -18,7 +18,8 @@ slipway fix --start-reexecution
 - Ordinary `fix` discovers actionable review repair targets from selected reviewer evidence and review blockers.
 - Collect the full selected S3 review batch findings first; do not repair one reviewer finding while other selected reviewers are still reporting.
 - Consolidate findings by root cause into one repair brief for the current `repair_batch_id`.
-- Each repair batch MUST be performed by a fresh-context repair subagent, not inline in the host context.
+- Each repair batch MUST use `contract.subagent` when present; otherwise use a native fresh-context repair subagent. Do not repair inline in the host context.
+- If `contract.subagent.engine_boundary` is present, honor it as Slipway's slot-level mutation/read-only boundary; it is not a provider capability description.
 - Pass the subagent paths, blockers, reviewer notes, and acceptance target; do not pass the host conversation as authority.
 - The repair subagent may update code, artifacts, tests, and current-change scope/task evidence when needed for the same governed intent.
 - After repair, rerun the affected selected reviewers under separate fresh review contexts.

@@ -688,6 +688,14 @@ func TestNextS3ShipVerificationSurfacesSubagentDelegationAcrossCapabilityStates(
 	root := t.TempDir()
 	ensureTestGitRepo(t, root)
 	initTestWorkspace(t, root)
+	writeTestSubagentConfig(t, root, func(cfg *model.Config) {
+		cfg.Subagents.Verify = model.SubagentSlot{
+			Type:                model.SubagentTypeNative,
+			Name:                "ship-verifier",
+			SessionInstructions: "Verify terminal readiness without modifying files.",
+			Timeout:             "30m",
+		}
+	})
 
 	slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification subagent delegation")
 	change, err := state.LoadChange(root, slug)
@@ -711,6 +719,16 @@ func TestNextS3ShipVerificationSurfacesSubagentDelegationAcrossCapabilityStates(
 	require.NoError(t, err)
 	require.NotNil(t, unknown.NextSkill)
 	assert.Equal(t, progression.SkillShipVerification, unknown.NextSkill.Name)
+	assertSubagentDirective(
+		t,
+		unknown.NextSkill.Subagent,
+		model.SubagentTypeNative,
+		"ship-verifier",
+		"Verify terminal readiness without modifying files.",
+		"30m",
+		true,
+		"deny",
+	)
 	unknownCap := requireHostCapabilityForSkill(t, unknown.HostCapabilities, progression.SkillShipVerification)
 	assert.Equal(t, "unknown", unknownCap.Availability)
 	assert.False(t, unknownCap.FallbackSelected)
@@ -1579,6 +1597,46 @@ func TestReviewBatchSurfacesSubagentDelegationForEveryPendingReviewer(t *testing
 	}
 	assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
 	assert.Contains(t, view.ConfirmationRequirement.NextAction, "Host subagent delegation is a prerequisite")
+}
+
+func TestReviewBatchProjectsConfiguredSubagentDirective(t *testing.T) {
+	root, slug := prepareReviewBatchHostCapabilityFixture(t)
+	writeTestSubagentConfig(t, root, func(cfg *model.Config) {
+		cfg.Subagents.Review = model.SubagentSlot{
+			Type:                model.SubagentTypeSkills,
+			Name:                "sliphub",
+			SessionInstructions: "Run the selected read-only reviewers in parallel and return separate findings.",
+			Timeout:             "45m",
+		}
+	})
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "subagent")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	view := runNextDiagnostics(t, root, slug)
+
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillCodeQualityReview, view.NextSkill.Name)
+	assertSubagentDirective(
+		t,
+		view.NextSkill.Subagent,
+		model.SubagentTypeSkills,
+		"sliphub",
+		"Run the selected read-only reviewers in parallel and return separate findings.",
+		"45m",
+		true,
+		"deny",
+	)
+	require.NotNil(t, view.ReviewBatch)
+	assertSubagentDirective(
+		t,
+		view.ReviewBatch.Subagent,
+		model.SubagentTypeSkills,
+		"sliphub",
+		"Run the selected read-only reviewers in parallel and return separate findings.",
+		"45m",
+		true,
+		"deny",
+	)
 }
 
 func TestReviewBatchHostCapabilityAvailableDoesNotBlockCommandSurfaces(t *testing.T) {
@@ -3501,6 +3559,14 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
+		writeTestSubagentConfig(t, root, func(cfg *model.Config) {
+			cfg.Subagents.Executor = model.SubagentSlot{
+				Type:                model.SubagentTypeMCP,
+				Name:                "slipway-executor-hub",
+				SessionInstructions: "Execute the planned wave tasks and record task evidence.",
+				Timeout:             "60m",
+			}
+		})
 
 		slug := createGovernedRequest(t, root, levelNonDiscovery, "wave plan protocol version")
 		change, err := state.LoadChange(root, slug)
@@ -3534,6 +3600,18 @@ func TestNextPreviewIncludesWavePlanTaskShape(t *testing.T) {
 
 		wavePlan, ok := inputContext["wave_plan"].(map[string]any)
 		require.True(t, ok, "expected wave_plan in next output")
+
+		executorSubagent, ok := wavePlan["executor_subagent"].(map[string]any)
+		require.True(t, ok, "expected configured executor_subagent in wave_plan")
+		assert.Equal(t, "mcp", executorSubagent["type"])
+		assert.Equal(t, "slipway-executor-hub", executorSubagent["name"])
+		assert.Equal(t, "Execute the planned wave tasks and record task evidence.", executorSubagent["session_instructions"])
+		assert.Equal(t, "60m", executorSubagent["timeout"])
+		assert.NotContains(t, executorSubagent, "capabilities")
+		engineBoundary, ok := executorSubagent["engine_boundary"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, false, engineBoundary["read_only"])
+		assert.Equal(t, "allow", engineBoundary["mutation_policy"])
 
 		rawWaves, ok := wavePlan["waves"].([]any)
 		require.True(t, ok)

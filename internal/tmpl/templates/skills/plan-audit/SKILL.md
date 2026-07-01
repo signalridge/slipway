@@ -180,9 +180,12 @@ Audit tasks as execution units, not prose:
 - keep non-goals explicit, including scope and rollout boundaries
 
 ## Author/Auditor Dispatch And Context-Origin Handles
-Dispatch the audit work in a host-native subagent that runs on the SHARED change
-worktree (the same worktree that holds the governed bundle; there is no
-per-audit git worktree isolation). Model the dispatch on how
+Dispatch the audit work according to the `plan_audit` slot directive from
+`slipway next --json` when present; otherwise use a native subagent that runs on
+the SHARED change worktree (the same worktree that holds the governed bundle;
+there is no per-audit git worktree isolation). If the directive includes
+`engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
+it is not a provider capability description. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
 subagent with a bounded audit brief, pass it required-reading paths rather than
 artifact bodies, wait for its result, and record its handle. If the host has not

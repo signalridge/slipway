@@ -1711,6 +1711,17 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "without invalidating the single `context_origin:stage=review` handle")
 	})
 
+	t.Run("fix and review bodies prefer configured subagent directive", func(t *testing.T) {
+		fix := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
+		assert.Contains(t, fix, "Each repair batch MUST use `contract.subagent` when present")
+		assert.Contains(t, fix, "`contract.subagent.engine_boundary`")
+		assert.Contains(t, fix, "not a provider capability description")
+
+		review := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "review", "command-review-body", "claude")
+		assert.Contains(t, review, "use `contract.subagent` when present")
+		assert.Contains(t, review, "native fresh-context repair subagent")
+	})
+
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
 		require.Len(t, partials, 22)
@@ -1832,6 +1843,34 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.NotContains(t, content, "argument-hint:")
 		assert.NotContains(t, content, "$ARGUMENTS")
 	})
+}
+
+func TestSubagentHostTemplatesExplainEngineBoundary(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+	renderedTemplates := []string{
+		"skills/wave-orchestration/SKILL.md.tmpl",
+		"skills/spec-compliance-review/SKILL.md.tmpl",
+		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/independent-review/SKILL.md.tmpl",
+		"skills/security-review/SKILL.md.tmpl",
+		"skills/ship-verification/SKILL.md.tmpl",
+		"skills/workflow/command-reference.md.tmpl",
+	}
+	for _, name := range renderedTemplates {
+		t.Run(name, func(t *testing.T) {
+			content, err := Render(name, data)
+			require.NoError(t, err)
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "not a provider capability")
+		})
+	}
+
+	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	require.NoError(t, err)
+	assert.Contains(t, planAudit, "`engine_boundary`")
+	assert.Contains(t, planAudit, "not a provider capability")
 }
 
 func renderPromptSurfaceForTest(t *testing.T, templateName, commandID, bodyTemplate, toolID string) string {

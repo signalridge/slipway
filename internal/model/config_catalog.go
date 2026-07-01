@@ -30,6 +30,12 @@ func configEffectiveDefaults() map[string]string {
 		"governance.auto_provision_worktree": "true",
 		// ConfigExecution.ForcedParallel(): "" => forced.
 		"execution.parallelization": ParallelizationForced,
+		"subagents.default.type":    string(SubagentTypeNative),
+		"subagents.plan_audit.type": string(SubagentTypeNative),
+		"subagents.executor.type":   string(SubagentTypeNative),
+		"subagents.review.type":     string(SubagentTypeNative),
+		"subagents.fix.type":        string(SubagentTypeNative),
+		"subagents.verify.type":     string(SubagentTypeNative),
 	}
 }
 
@@ -83,6 +89,12 @@ func configAllowedValues() map[string][]string {
 		"governance.thresholds.worktree_blast_radius": {
 			string(SignalLevelLow), string(SignalLevelMedium), string(SignalLevelHigh),
 		},
+		"subagents.default.type":    {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
+		"subagents.plan_audit.type": {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
+		"subagents.executor.type":   {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
+		"subagents.review.type":     {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
+		"subagents.fix.type":        {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
+		"subagents.verify.type":     {string(SubagentTypeNative), string(SubagentTypeMCP), string(SubagentTypeSkills)},
 	}
 }
 
@@ -105,6 +117,30 @@ func configDescriptions() map[string]string {
 		"governance.thresholds.worktree_blast_radius":           "Minimum blast radius that triggers the worktree-isolation control.",
 		"github.api_url":                                        "GitHub REST/GraphQL API base URL (env SLIPWAY_GITHUB_API_URL overrides; default https://api.github.com).",
 		"github.api_allowed_base_urls":                          "HTTPS API base URLs allowed for a github.api_url override; env SLIPWAY_GITHUB_API_ALLOWED_BASE_URLS overrides and confirms token egress.",
+		"subagents.default.type":                                "Default subagent provider family inherited by configured slots.",
+		"subagents.default.name":                                "Default provider target inherited by configured slots.",
+		"subagents.default.session_instructions":                "Default delegated-session guidance inherited by configured slots.",
+		"subagents.default.timeout":                             "Default delegated-session timeout inherited by configured slots.",
+		"subagents.plan_audit.type":                             "Provider family for the independent plan-audit delegation slot.",
+		"subagents.plan_audit.name":                             "Provider target for the independent plan-audit delegation slot.",
+		"subagents.plan_audit.session_instructions":             "Delegated-session guidance for plan-audit.",
+		"subagents.plan_audit.timeout":                          "Timeout for plan-audit delegation.",
+		"subagents.executor.type":                               "Provider family for implementation task executor delegation.",
+		"subagents.executor.name":                               "Provider target for implementation task executor delegation.",
+		"subagents.executor.session_instructions":               "Delegated-session guidance for implementation executors.",
+		"subagents.executor.timeout":                            "Timeout for executor delegation.",
+		"subagents.review.type":                                 "Provider family for selected S3 review delegation.",
+		"subagents.review.name":                                 "Provider target for selected S3 review delegation.",
+		"subagents.review.session_instructions":                 "Delegated-session guidance for selected S3 review.",
+		"subagents.review.timeout":                              "Timeout for review delegation.",
+		"subagents.fix.type":                                    "Provider family for review-finding repair delegation.",
+		"subagents.fix.name":                                    "Provider target for review-finding repair delegation.",
+		"subagents.fix.session_instructions":                    "Delegated-session guidance for review-finding repair.",
+		"subagents.fix.timeout":                                 "Timeout for fix delegation.",
+		"subagents.verify.type":                                 "Provider family for final verification delegation.",
+		"subagents.verify.name":                                 "Provider target for final verification delegation.",
+		"subagents.verify.session_instructions":                 "Delegated-session guidance for final verification.",
+		"subagents.verify.timeout":                              "Timeout for verify delegation.",
 		"context.tech_stack":                                    "Project tech stack injected into skill templates.",
 		"context.conventions":                                   "Project conventions injected into skill templates.",
 		"context.test_cmd":                                      "Project test command injected into skill templates.",

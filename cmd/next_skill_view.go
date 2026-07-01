@@ -277,6 +277,7 @@ func assembleSkillViewWithOptions(
 
 	ns := &nextSkillView{
 		Name:                 nextSkillName,
+		Subagent:             subagentDirectiveForSkill(view.config, nextSkillName),
 		SelectedReviewSkills: append([]string(nil), selectedReviewSkills...),
 		VerificationDir:      verificationDir,
 		State:                nextState,
@@ -627,6 +628,7 @@ func buildReviewBatchView(input reviewBatchBuildInput) *reviewBatchView {
 	}
 	batch := &reviewBatchView{
 		Mode:            "parallel",
+		Subagent:        subagentDirectiveForSlot(input.view.config, model.SubagentSlotReview),
 		VerificationDir: input.verificationDir,
 		State:           nextState,
 		Skills:          make([]reviewBatchSkillView, 0, len(pending)),
@@ -649,6 +651,53 @@ func buildReviewBatchView(input reviewBatchBuildInput) *reviewBatchView {
 		batch.Skills = append(batch.Skills, item)
 	}
 	return batch
+}
+
+func subagentDirectiveForSkill(cfg model.Config, skillName string) *subagentDirective {
+	slot, ok := subagentSlotForSkill(skillName)
+	if !ok {
+		return nil
+	}
+	return subagentDirectiveForSlot(cfg, slot)
+}
+
+func subagentSlotForSkill(skillName string) (model.SubagentSlotName, bool) {
+	switch strings.TrimSpace(skillName) {
+	case progression.SkillPlanAudit:
+		return model.SubagentSlotPlanAudit, true
+	case progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+		progression.SkillIndependentReview,
+		progression.SkillSecurityReview:
+		return model.SubagentSlotReview, true
+	case progression.SkillShipVerification:
+		return model.SubagentSlotVerify, true
+	default:
+		return "", false
+	}
+}
+
+func subagentDirectiveForSlot(cfg model.Config, slot model.SubagentSlotName) *subagentDirective {
+	if cfg.Subagents.IsZero() {
+		return nil
+	}
+	resolved := cfg.ResolveSubagent(slot)
+	if resolved.IsZero() {
+		return nil
+	}
+	return cloneSubagentDirective(&resolved)
+}
+
+func cloneSubagentDirective(in *subagentDirective) *subagentDirective {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	if in.EngineBoundary != nil {
+		engineBoundary := *in.EngineBoundary
+		out.EngineBoundary = &engineBoundary
+	}
+	return &out
 }
 
 func pendingReviewBatchSkills(

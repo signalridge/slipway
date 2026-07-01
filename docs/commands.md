@@ -48,8 +48,10 @@ read, regenerate it with `slipway repair` rather than editing `tasks.md`.
 
 `slipway fix` is the S3 review-finding repair surface. It discovers reviewer
 findings and alignment blockers, then returns a `repair_batch_id` and a contract
-for a fresh-context repair subagent. Ordinary discovery does not advance
-lifecycle state; `slipway fix --start-reexecution` is the explicit review-driven
+that includes `contract.subagent` when a `fix` slot is configured. Hosts should
+use that directive when present, otherwise default to a native fresh-context
+repair subagent. Ordinary discovery does not advance lifecycle state;
+`slipway fix --start-reexecution` is the explicit review-driven
 mode that reopens S2 and materializes a fresh execution run boundary for
 implementation repairs. The host first collects the selected review
 batch findings, consolidates them by root cause into one repair brief, and must
@@ -59,6 +61,13 @@ scope evidence, rerun the affected selected reviewers and record both
 `context_origin:stage=review=<handle>` and
 `context_origin:stage=fix=<handle>` before `slipway review` closes the batch.
 `slipway repair` remains local integrity only.
+
+Configured subagent delegation targets live under `subagents.*` in
+`.slipway.yaml`. The slots are `default`, `plan_audit`, `executor`, `review`,
+`fix`, and `verify`, and each slot can choose `type: native|mcp|skills`,
+`name`, `session_instructions`, and `timeout`. See
+[Subagent Configuration](reference/subagents.md) for the schema and JSON
+surfaces.
 
 ## Creation Options
 

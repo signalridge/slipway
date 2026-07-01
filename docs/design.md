@@ -31,7 +31,7 @@ The actual enforcement level matters: axes 3–7 are mechanisms the engine genui
 
 ### 1. Attested fresh context
 
-Every stage records the distinct context handle it ran under (`context_origin:stage=<stage>=<handle>`), and a per-seam collision lattice fails closed when two stages that must be independent share a handle — reviewer versus implementer, plan auditor versus plan author, fix versus either. Recovery is to re-run the owning stage in a fresh native subagent so it re-emits a distinct handle. This is **audit/structural tier**: the handles are host-emitted strings, so the lattice raises the cost and visibility of collapsing the chain into one authoring context, but it is not cryptographic proof of independence. gsd and superpowers *spawn* fresh subagents; Slipway also *checks the independence held*. See [Independence Attestation Tier](#independence-attestation-tier) for the full per-seam edge model and the honest residual.
+Every stage records the distinct context handle it ran under (`context_origin:stage=<stage>=<handle>`), and a per-seam collision lattice fails closed when two stages that must be independent share a handle — reviewer versus implementer, plan auditor versus plan author, fix versus either. Recovery is to re-run the owning stage through its configured fresh delegated session, defaulting to native host dispatch, so it re-emits a distinct handle. This is **audit/structural tier**: the handles are host-emitted strings, so the lattice raises the cost and visibility of collapsing the chain into one authoring context, but it is not cryptographic proof of independence. gsd and superpowers *spawn* fresh subagents; Slipway also *checks the independence held*. See [Independence Attestation Tier](#independence-attestation-tier) for the full per-seam edge model and the honest residual.
 
 ### 2. Tamper-evident evidence
 
@@ -39,7 +39,7 @@ Freshness is computed from authoritative inputs, not from the verification recor
 
 ### 3. Two-sided parallel safety
 
-The wave planner buckets tasks into dependency-ordered, file-disjoint waves with a deterministic topological sort; multi-task waves run concurrently by default (`execution.parallelization: off` opts out). The distinguishing half is the *post-dispatch* audit: four fail-closed safety nets check the **actual** recorded `changed_files` — scope escape, parallel-wave file overlap, missing or unjustified dispatch mode, and missing per-task executor handles. Dispatch itself is host-driven (the AI host fans out native subagents per the materialized plan); Slipway runs no concurrent scheduler, it validates the resulting evidence. Peers that parallelize check the plan before dispatch; Slipway also audits what the agents actually edited afterward.
+The wave planner buckets tasks into dependency-ordered, file-disjoint waves with a deterministic topological sort; multi-task waves run concurrently by default (`execution.parallelization: off` opts out). The distinguishing half is the *post-dispatch* audit: four fail-closed safety nets check the **actual** recorded `changed_files` — scope escape, parallel-wave file overlap, missing or unjustified dispatch mode, and missing per-task executor handles. Dispatch itself is host-driven (the AI host fans out through the configured `executor` slot, defaulting to native subagents, per the materialized plan); Slipway runs no concurrent scheduler, it validates the resulting evidence. Peers that parallelize check the plan before dispatch; Slipway also audits what the agents actually edited afterward.
 
 ### 4. Scope containment
 
@@ -129,9 +129,10 @@ converge, recorded on its own evidence rather than a peer-shared record.
 | Ship authority | no additional context-origin edges; the terminal `ship-verification` gate owns the terminal ordering invariant plus the reviewer-independence and assurance-complete presence attestations | 0 |
 
 When a seam fails closed, recovery is to re-run the owning stage or selected
-reviewer in a fresh native subagent so it re-emits a distinct `context_origin`
-handle; the engine never accepts self-issued claims, restamps, force-closes, or treats
-unselected security evidence as a hidden lattice participant.
+reviewer through its configured fresh delegated session so it re-emits a
+distinct `context_origin` handle; the engine never accepts self-issued claims,
+restamps, force-closes, or treats unselected security evidence as a hidden
+lattice participant.
 
 **Honest residual.** The `context_origin` lattice cannot prove that the chain's
 stages ran in genuinely independent contexts, because the handles are

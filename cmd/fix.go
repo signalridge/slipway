@@ -35,16 +35,17 @@ type fixRepairTarget struct {
 }
 
 type fixRepairContract struct {
-	RepairBatchID                         string   `json:"repair_batch_id"`
-	CollectAllSelectedReviewFindingsFirst bool     `json:"collect_all_selected_review_findings_first"`
-	RequiresFreshContext                  bool     `json:"requires_fresh_context"`
-	FindingCollection                     string   `json:"finding_collection"`
-	Dispatch                              string   `json:"dispatch"`
-	RepairBrief                           string   `json:"repair_brief"`
-	ContextReference                      string   `json:"context_reference"`
-	RecordEvidence                        []string `json:"record_evidence"`
-	AfterRepair                           []string `json:"after_repair"`
-	Prohibited                            []string `json:"prohibited"`
+	RepairBatchID                         string             `json:"repair_batch_id"`
+	CollectAllSelectedReviewFindingsFirst bool               `json:"collect_all_selected_review_findings_first"`
+	RequiresFreshContext                  bool               `json:"requires_fresh_context"`
+	Subagent                              *subagentDirective `json:"subagent,omitempty"`
+	FindingCollection                     string             `json:"finding_collection"`
+	Dispatch                              string             `json:"dispatch"`
+	RepairBrief                           string             `json:"repair_brief"`
+	ContextReference                      string             `json:"context_reference"`
+	RecordEvidence                        []string           `json:"record_evidence"`
+	AfterRepair                           []string           `json:"after_repair"`
+	Prohibited                            []string           `json:"prohibited"`
 }
 
 func makeFixCmd() *cobra.Command {
@@ -143,6 +144,10 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 			return fixView{}, err
 		}
 	}
+	cfg, err := loadConfigAtRoot(root)
+	if err != nil {
+		return fixView{}, err
+	}
 
 	profile := buildChangeProfileView(change)
 	return fixView{
@@ -152,7 +157,7 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 		CurrentState:         string(change.CurrentState),
 		SelectedReviewSkills: selected,
 		RepairTargets:        targets,
-		Contract:             reviewFixContract(slug),
+		Contract:             reviewFixContract(slug, cfg),
 		Blockers:             model.NormalizeReasonCodes(readiness.Blockers),
 	}, nil
 }
@@ -344,14 +349,15 @@ func compactFixRepairTargets(targets []fixRepairTarget) []fixRepairTarget {
 	return out
 }
 
-func reviewFixContract(slug string) fixRepairContract {
+func reviewFixContract(slug string, cfg model.Config) fixRepairContract {
 	batchID := "s3-review-repair:" + strings.TrimSpace(slug)
 	return fixRepairContract{
 		RepairBatchID:                         batchID,
 		CollectAllSelectedReviewFindingsFirst: true,
 		RequiresFreshContext:                  true,
+		Subagent:                              subagentDirectiveForSlot(cfg, model.SubagentSlotFix),
 		FindingCollection:                     "Collect all selected S3 reviewer findings first, then consolidate by root cause before dispatching repair.",
-		Dispatch:                              "Spawn a fresh-context repair subagent with the consolidated repair brief; pass paths and blocker facts, not the host conversation.",
+		Dispatch:                              "Use contract.subagent when present to dispatch the repair session; otherwise default to a native fresh-context repair subagent. Pass paths and blocker facts, not the host conversation.",
 		RepairBrief:                           "One repair brief covers the open finding set for this repair_batch_id. Do not repair one reviewer finding while the selected review batch is still collecting findings.",
 		ContextReference:                      model.ContextOriginReferencePrefix + model.StageContextFix + "=<repair-subagent-handle>",
 		RecordEvidence: []string{

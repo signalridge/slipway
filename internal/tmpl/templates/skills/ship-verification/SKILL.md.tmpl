@@ -121,15 +121,19 @@ and fail closed when delegated evidence is missing, stale, inconclusive, unsafe,
 or not tied to a real command reference. Do not accept a prose-only delegated
 verdict or a private attestation as evidence.
 
-Dispatch this verification's evidence-gathering in a host-native subagent that
-runs on the SHARED change worktree (the same worktree the implementation edited;
-there is no per-verification git worktree isolation). Model the dispatch on how
-`slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
-subagent with a bounded verifier brief, pass it required-reading paths rather than
-artifact bodies, wait for its result, and record its handle. If the host has not
-declared subagent capability available, `slipway next`/`run` surfaces a
-subagent-delegation prerequisite plus a named degraded fallback for ship-verification:
-authorize subagent dispatch, or explicitly select the named fallback (for example
+Dispatch this verification's evidence-gathering according to the `verify` slot
+directive from `slipway next --json` when present; otherwise use a native
+subagent that runs on the SHARED change worktree (the same worktree the
+implementation edited; there is no per-verification git worktree isolation). If
+the directive includes `engine_boundary`, honor it as Slipway's slot-level
+mutation/read-only boundary; it is not a provider capability description.
+Model the dispatch on how `slipway-wave-orchestration` fans out executor
+subagents: spawn one fresh-context subagent with a bounded verifier brief, pass
+it required-reading paths rather than artifact bodies, wait for its result, and
+record its handle. If the host has not declared subagent capability available,
+`slipway next`/`run` surfaces a subagent-delegation prerequisite plus a named
+degraded fallback for ship-verification: authorize subagent dispatch, or
+explicitly select the named fallback (for example
 `manual_ship_verification` or `same_context_degraded`) and record fresh
 ship-verification evidence for the degraded run — do not verify inline without
 recording the selected fallback. Ship

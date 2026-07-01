@@ -565,20 +565,20 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        20,
 	},
 	"context_origin_handle_invalid": {
-		Remediation:     "A governed stage recorded a missing or invalid context-origin handle; re-run the owning stage in a fresh native subagent so it records a valid context-origin handle.",
+		Remediation:     "A governed stage recorded a missing or invalid context-origin handle; re-run the owning stage through its configured fresh delegated session, defaulting to native host dispatch, so it records a valid context-origin handle.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
 	"cross_stage_context_not_distinct": {
 		// Detail names the colliding stage pair (earlier|later); recovery routes to
-		// the later/owning stage, which must re-run in a fresh native subagent so it
-		// records a context-origin handle distinct from the earlier stage.
-		Remediation:     "Two governed stages share a context-origin handle; re-run the later (owning) stage of the colliding pair in a fresh native subagent so it records a distinct context-origin handle.",
+		// the later/owning stage, which must re-run through a fresh delegated session
+		// so it records a context-origin handle distinct from the earlier stage.
+		Remediation:     "Two governed stages share a context-origin handle; re-run the later (owning) stage of the colliding pair through its configured fresh delegated session, defaulting to native host dispatch, so it records a distinct context-origin handle.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
 	"plan_audit_origin_invalid": {
-		Remediation:     "Plan audit recorded the same author and auditor context-origin handle (self-audit); re-run plan-audit in a fresh native subagent so its auditor handle is distinct from the plan author.",
+		Remediation:     "Plan audit recorded the same author and auditor context-origin handle (self-audit); re-run plan-audit through its configured fresh delegated session, defaulting to native host dispatch, so its auditor handle is distinct from the plan author.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRerunSkill,
 	},
