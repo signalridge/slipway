@@ -149,7 +149,10 @@ host has not declared subagent capability available, `slipway next`/`run` surfac
 a subagent-delegation prerequisite plus a named degraded fallback for this review:
 authorize subagent dispatch, or explicitly select the named fallback (for example
 `same_context_degraded`) and record fresh reviewer evidence for the degraded run —
-do not review inline without recording the selected fallback.
+do not review inline without recording the selected fallback. The fallback is an
+additional structured reference such as
+`--reference "fallback:same_context_degraded"`; it does not replace the required
+`context_origin:stage=review=<handle>` reference.
 
 Record this review's per-stage context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

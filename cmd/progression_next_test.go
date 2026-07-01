@@ -1480,6 +1480,8 @@ func TestReviewBatchHostSubagentDelegationSurfacedAcrossCapabilityStates(t *test
 	assert.Equal(t, "review_batch", unknownHandoff.Confirmation.NextActionKind)
 	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "Host subagent delegation is a prerequisite")
 	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "same_context_degraded")
+	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "context_origin:stage=review=<handle>")
+	assert.Contains(t, unknownHandoff.Confirmation.NextAction, "fallback:<mode>")
 	assert.Equal(t, "blocked", unknownHandoff.OverallReadinessFreshness)
 	require.NotNil(t, unknownHandoff.Recovery)
 	assert.NotEmpty(t, unknownHandoff.Recovery.Steps)

@@ -145,7 +145,7 @@ func TestSurfaceManifestExposesEvidenceRefreshCurrentJSONContract(t *testing.T) 
 		assert.Equal(t, "cmd/evidence.go", row.Source)
 		assert.Equal(t, "docs/reference/commands.md", row.Docs)
 		assert.Equal(t,
-			"slipway evidence skill --skill <name> --verdict pass --refresh-current --json",
+			"slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference \"context_origin:stage=review=<handle>\" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json",
 			row.Token)
 		return
 	}

@@ -501,6 +501,7 @@ func TestEvidenceSkillRecordsSelectedReviewPeerWithoutSpecPredecessor(t *testing
 			"--skill", progression.SkillCodeQualityReview,
 			"--verdict", model.VerificationVerdictPass,
 			"--reference", "code-quality:pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=code-quality-review-context",
 			"--notes", "Quality review passed.",
 		})
 		var out bytes.Buffer
@@ -517,10 +518,117 @@ func TestEvidenceSkillRecordsSelectedReviewPeerWithoutSpecPredecessor(t *testing
 		require.NoError(t, err)
 		assert.Equal(t, model.VerificationVerdictPass, rec.Verdict)
 		assert.Equal(t, 1, rec.RunVersion)
+		handle, ok := model.ReviewContextOriginHandleFromVerification(rec)
+		require.True(t, ok)
+		assert.Equal(t, "code-quality-review-context", handle.Handle)
 
 		_, err = os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillSpecComplianceReview+".yaml"))
 		require.Error(t, err)
 		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestEvidenceSkillRejectsSelectedReviewPassWithoutReviewContextOrigin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		skillName  string
+		references []string
+	}{
+		{
+			name:       "missing review context origin",
+			skillName:  progression.SkillIndependentReview,
+			references: []string{"independent-review:pass"},
+		},
+		{
+			name:       "malformed review context origin",
+			skillName:  progression.SkillCodeQualityReview,
+			references: []string{"code-quality:pass", model.ContextOriginReferencePrefix + model.StageContextReview},
+		},
+		{
+			name:      "duplicate conflicting review context origin",
+			skillName: progression.SkillSpecComplianceReview,
+			references: []string{
+				"spec-compliance:pass",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=spec-review-a",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=spec-review-b",
+			},
+		},
+		{
+			name:      "duplicate identical review context origin",
+			skillName: progression.SkillIndependentReview,
+			references: []string{
+				"independent-review:pass",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=same-review-handle",
+				model.ContextOriginReferencePrefix + model.StageContextReview + "=same-review-handle",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			withCommandWorkspace(t, root, func() {
+				initTestWorkspace(t, root)
+				slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill requires review origin")
+				setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+				writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+				cmd := commandForRoot(t, root, makeEvidenceCmd())
+				args := []string{
+					"skill",
+					"--change", slug,
+					"--skill", tt.skillName,
+					"--verdict", model.VerificationVerdictPass,
+					"--notes", "Review passed without a valid context-origin handle.",
+				}
+				for _, ref := range tt.references {
+					args = append(args, "--reference", ref)
+				}
+				cmd.SetArgs(args)
+				cliErr := asCLIError(cmd.Execute())
+				require.NotNil(t, cliErr)
+				assert.Equal(t, "evidence_skill_review_context_origin_missing", cliErr.ErrorCode)
+				assert.Equal(t, tt.skillName, cliErr.Details["skill"])
+				assert.Contains(t, cliErr.Remediation, `--reference "context_origin:stage=review=<handle>"`)
+				assert.Contains(t, cliErr.Remediation, "verification/"+tt.skillName+"-notes.md")
+
+				_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), tt.skillName+".yaml"))
+				require.Error(t, err)
+				assert.True(t, os.IsNotExist(err))
+			})
+		})
+	}
+}
+
+func TestEvidenceSkillSelectedReviewContextOriginGuardSkipsFailVerdict(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "evidence skill allows review fail without origin")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillIndependentReview,
+			"--verdict", model.VerificationVerdictFail,
+			"--blocker", "review_blocked:manual-check-failed",
+			"--notes", "Independent review failed before a fresh context-origin pass.",
+		})
+		require.NoError(t, cmd.Execute())
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillIndependentReview)
+		require.NoError(t, err)
+		assert.Equal(t, model.VerificationVerdictFail, rec.Verdict)
 	})
 }
 

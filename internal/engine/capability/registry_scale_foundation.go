@@ -62,7 +62,7 @@ func securityReview() Skill {
 				Required:            true,
 				FallbackModes:       []string{"manual_security_review", "same_context_degraded"},
 				EvidenceRequirement: "record security-review evidence from a fresh independent reviewer context",
-				Remediation:         "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence.",
+				Remediation:         "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded.",
 			},
 		},
 		HydrateReferences: []HydrateReference{

@@ -201,7 +201,18 @@ func makeEvidenceSkillCmd() *cobra.Command {
 				if err := validateEvidenceSkillActionable(root, change, def, runVersion, refreshCurrent); err != nil {
 					return err
 				}
-				references = stringutil.UniqueSorted(trimNonEmptyStrings(references))
+				candidateReferences := trimNonEmptyStrings(references)
+				candidateRecord := model.VerificationRecord{
+					Verdict:    verdict,
+					Blockers:   blockerCodes,
+					RunVersion: runVersion,
+					References: candidateReferences,
+					Notes:      notesText,
+				}
+				if err := validateSelectedReviewPassContextOrigin(root, change, def, candidateRecord); err != nil {
+					return err
+				}
+				references = stringutil.UniqueSorted(candidateReferences)
 
 				if verdict == model.VerificationVerdictPass {
 					if err := progression.CheckEvidenceDigestInputsForSkill(root, change, skillName, digestSummary); err != nil {
@@ -1521,6 +1532,43 @@ func currentS3ReviewAlignmentActive(root string, change model.Change) (bool, err
 
 func selectedReviewContextOriginRefreshRequired(root string, change model.Change, skillName string) (bool, error) {
 	return progression.SelectedReviewContextOriginInvalid(root, change, skillName)
+}
+
+func validateSelectedReviewPassContextOrigin(
+	root string,
+	change model.Change,
+	def skill.Definition,
+	record model.VerificationRecord,
+) error {
+	if change.CurrentState != model.StateS3Review || !record.IsPassing() {
+		return nil
+	}
+	_, selectedReviewSkills, err := selectedReviewSkillsForChange(root, change)
+	if err != nil {
+		return err
+	}
+	if !stringInSlice(selectedReviewSkills, def.Name) {
+		return nil
+	}
+	if _, ok := model.ExactlyOneReviewContextOriginHandleFromVerification(record); ok {
+		return nil
+	}
+	notesPath := "artifacts/changes/" + change.Slug + "/verification/" + def.Name + "-notes.md"
+	return newInvalidUsageError(
+		"evidence_skill_review_context_origin_missing",
+		fmt.Sprintf("selected S3 review evidence for %s must include exactly one context_origin:stage=review=<handle> reference", def.Name),
+		fmt.Sprintf(
+			"Re-run %s in a fresh subagent, or explicitly select a degraded fallback, then record evidence with --reference \"context_origin:stage=review=<handle>\" and --notes-file %s. Fallback mode is not a substitute for the review-stage context handle; record it as an additional reference such as --reference \"fallback:same_context_degraded\".",
+			def.Name,
+			notesPath,
+		),
+		map[string]any{
+			"skill":                  def.Name,
+			"selected_review_skills": selectedReviewSkills,
+			"state":                  string(change.CurrentState),
+			"notes_file":             notesPath,
+		},
+	)
 }
 
 func evidenceTaskWrongStateRemediation(_ string, _ model.Change) string {

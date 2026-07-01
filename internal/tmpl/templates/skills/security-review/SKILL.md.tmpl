@@ -9,7 +9,7 @@ host_capabilities:
       - manual_security_review
       - same_context_degraded
     evidence_requirement: "record security-review evidence from a fresh independent reviewer context"
-    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence."
+    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded."
 hydrate_references:
   - name: authentication.md
     reason: "Password storage / session / MFA / recovery secure-default rules"
@@ -113,7 +113,10 @@ prerequisite plus a named degraded fallback for this review: authorize subagent
 dispatch, or explicitly select the named fallback (for example
 `manual_security_review` or `same_context_degraded`) and record fresh reviewer
 evidence for the degraded run — do not review inline without recording the
-selected fallback.
+selected fallback. The fallback is an additional structured reference such as
+`--reference "fallback:same_context_degraded"` or the skill-specific manual
+fallback token; it does not replace the required
+`context_origin:stage=review=<handle>` reference.
 
 Record this review's context identifier as
 `context_origin:stage=review=<handle>`, where `<handle>` is the dispatched

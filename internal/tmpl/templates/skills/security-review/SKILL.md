@@ -23,7 +23,7 @@ host_capabilities:
       - manual_security_review
       - same_context_degraded
     evidence_requirement: "record security-review evidence from a fresh independent reviewer context"
-    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence."
+    remediation: "Run security-review in a host with subagent capability, or explicitly select manual_security_review / same_context_degraded fallback and record fresh reviewer evidence with context_origin:stage=review=<handle> plus a fallback:<mode> reference when degraded."
 hydrate_references:
   - name: authentication.md
     reason: "Password storage / session / MFA / recovery secure-default rules"

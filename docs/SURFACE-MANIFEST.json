@@ -328,7 +328,7 @@
       "name": "evidence-skill-refresh-current-json",
       "source": "cmd/evidence.go",
       "docs": "docs/reference/commands.md",
-      "token": "slipway evidence skill --skill \u003cname\u003e --verdict pass --refresh-current --json"
+      "token": "slipway evidence skill --skill \u003cselected-review-skill\u003e --verdict pass --refresh-current --reference \"context_origin:stage=review=\u003chandle\u003e\" --notes-file artifacts/changes/\u003cslug\u003e/verification/\u003cselected-review-skill\u003e-notes.md --json"
     },
     {
       "kind": "json-contract",

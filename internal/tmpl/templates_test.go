@@ -1296,6 +1296,8 @@ func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
 			for _, requiredReference := range tt.requiredReferences {
 				assert.Contains(t, recordVerification, requiredReference)
 			}
+			assert.Contains(t, content, `--reference "fallback:same_context_degraded"`)
+			assert.Contains(t, content, "`context_origin:stage=review=<handle>`")
 		})
 	}
 }
@@ -1398,6 +1400,12 @@ func TestEvidenceCommandEntryUsesResultFileOnlyTaskSurface(t *testing.T) {
 	content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "evidence", "command-evidence-body", "claude")
 	assert.Contains(t, content, "slipway evidence task --result-file",
 		"evidence command body should teach result-file task evidence import")
+	assert.Contains(t, content, `--reference "context_origin:stage=review=<handle>"`,
+		"evidence command body should teach selected-review context-origin evidence")
+	assert.Contains(t, content, "artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md",
+		"evidence command body should teach selected-review notes-file convention")
+	assert.Contains(t, content, `--reference "fallback:same_context_degraded"`,
+		"evidence command body should teach degraded fallback as a structured reference")
 	assert.Equal(t, 1, strings.Count(content, "slipway evidence task --help"),
 		"evidence command body should have exactly one manual fallback breadcrumb")
 

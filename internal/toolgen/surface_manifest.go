@@ -178,7 +178,7 @@ func jsonContractRows() []SurfaceManifestRow {
 					Name:   "evidence-skill-refresh-current-json",
 					Source: commandSourcePath(def.ID),
 					Docs:   "docs/reference/commands.md",
-					Token:  "slipway evidence skill --skill <name> --verdict pass --refresh-current --json",
+					Token:  "slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference \"context_origin:stage=review=<handle>\" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json",
 				},
 			)
 			continue
