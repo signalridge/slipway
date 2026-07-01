@@ -56,7 +56,13 @@ and `waves[]` (each `wave_index` with `tasks[]` carrying `task_id`, `objective`,
 `depends_on`, `target_files`, `task_kind`). If
 `input_context.wave_plan.executor_subagent` is present, treat it as the
 configured executor delegation directive; it may name a `native`, `mcp`, or
-`skills` provider plus `session_instructions`. If it includes
+`skills` provider plus `session_instructions`. When present, read that intent
+before dispatching and translate any described model, backend/runtime (for
+example Codex or Claude), or tool intent into the concrete parameters the
+selected `type`/`name` target actually accepts, then configure the executor
+invocation accordingly; Slipway does not model these provider parameters, so
+mapping the natural-language intent onto the target's own parameter surface is
+this host's responsibility. If it includes
 `engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
 it is not a provider capability description. Slipway has already
 dependency-ordered the waves and detected cycles from the current `tasks.md`; do
@@ -174,6 +180,9 @@ gate unless a task owns a genuinely isolated command.
   when present. If it is absent, use the host's native fresh executor sessions.
 - If the directive includes `engine_boundary`, honor it as Slipway's slot-level
   mutation/read-only boundary; it is not a provider capability description.
+- When the directive carries `session_instructions`, translate its described
+  model, backend/runtime, or tool intent into the target's own accepted
+  parameters before spawning; Slipway does not model those provider parameters.
 - Dispatch one fresh-context executor subagent per task concurrently for a `parallel: true` wave; run sequentially only for a `parallel: false` wave or when the host genuinely cannot run concurrent executors (note that degradation, as above).
 - For a capable runtime, failing to spawn real executors for `parallel: true` is a blocker or operator-direction point, not permission for same-context inline execution.
 - Executor agents run in a single worktree unless a runtime explicitly provides stronger isolation; do not claim per-executor worktree isolation.

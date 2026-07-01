@@ -183,7 +183,13 @@ Audit tasks as execution units, not prose:
 Dispatch the audit work according to the `plan_audit` slot directive from
 `slipway next --json` when present; otherwise use a native subagent that runs on
 the SHARED change worktree (the same worktree that holds the governed bundle;
-there is no per-audit git worktree isolation). If the directive includes
+there is no per-audit git worktree isolation). When the `plan_audit` directive
+carries `session_instructions`, read it before dispatching and translate any
+described model, backend/runtime (for example Codex or Claude), or tool intent
+into the concrete parameters the selected `type`/`name` target actually accepts,
+then configure the auditor invocation accordingly; Slipway does not model these
+provider parameters, so mapping that natural-language intent onto the target's
+own parameter surface is this host's responsibility. If the directive includes
 `engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
 it is not a provider capability description. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context

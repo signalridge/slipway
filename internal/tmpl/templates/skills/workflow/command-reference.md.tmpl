@@ -23,7 +23,11 @@ surfaces. When `slipway next --json`, `review_batch`, `wave_plan`, or
 `slipway fix --json` includes a `subagent` directive, prefer that directive over
 hard-coded native dispatch wording. If the directive includes
 `engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
-it is not a provider capability description.
+it is not a provider capability description. When a directive carries
+`session_instructions`, read it at dispatch and map the described model,
+backend/runtime (for example Codex or Claude), or tool intent onto the selected
+`type`/`name` target's own parameters before spawning; Slipway does not model
+those provider parameters.
 
 ## Lifecycle Core
 {{- range .LifecycleCommands }}

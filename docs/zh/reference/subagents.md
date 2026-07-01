@@ -47,7 +47,7 @@ subagents:
 | --- | --- |
 | `type` | Provider family：`native`、`mcp` 或 `skills`。留空等价于 `native`。 |
 | `name` | provider 自己拥有的目标名字。对 `native` 来说，它是宿主支持的 agent 名；对 `mcp` / `skills` 来说，它是该 provider 选择的 hub、tool 或 skill 入口。 |
-| `session_instructions` | 给被委派会话的自然语言指令。它不是 provider profile，也不是模型 prompt 继承。 |
+| `session_instructions` | 自然语言意图。宿主在派发时读取它，用来把所选 `type`/`name` 目标自己的参数——模型、backend/runtime（例如 Codex 或 Claude）、工具选择——配置成与之匹配。Slipway 不建模这些参数：它不是类型化字段，也不是 provider profile，更不会作为模型 prompt 继承。 |
 | `timeout` | 可选的宿主侧超时提示。Slipway 只校验前后空白；具体解释由宿主/provider 决定。 |
 
 `mcp` 和 `skills` 的有效配置必须有非空 `name`。如果某个 slot 把 `type`
@@ -72,7 +72,19 @@ subagents:
 
 Provider 私有工具权限、模型参数，以及任意 provider 参数，都不是 Slipway 的用户配置面。
 当前 slot 需要什么工具边界，由 Slipway 和被选中的 provider 自己决定。如果某个 hub
-需要路由细节，把操作意图写进 `session_instructions`，让 provider 解释。
+需要路由细节，把操作意图写进 `session_instructions`；宿主会话在派发时读取它，并把它
+翻译成所选 `type`/`name` 目标能接受的具体参数，而不是留给 provider 事后解释。
+
+例如：
+
+```yaml
+review:
+  session_instructions: Run on the Codex backend with a high-capability model.
+```
+
+派发时宿主把这份意图映射到所选 `type`/`name` 目标自己的参数（这里是 backend 和
+模型），并据此配置被委派的调用。`native` 目标通过绑定在其 `name` 上的宿主 agent
+选择 backend 和模型，而不是通过任何 Slipway 字段。
 
 这样 `.slipway.yaml` 保持稳定，同时 `mcp` 和 `skills` provider 仍然可以在自己的
 命名目标背后支持差异很大的内部选项。

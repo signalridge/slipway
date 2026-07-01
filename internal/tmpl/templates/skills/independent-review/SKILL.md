@@ -34,7 +34,11 @@ Perform code review as an independent reader. In S3 this runs as a
 workflow-owned review peer dispatched through the configured `review` slot,
 defaulting to native host dispatch when no slot is configured. If the directive
 includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
-boundary, not as a provider capability description. Do not reuse the author's
+boundary, not as a provider capability description. When the directive carries
+`session_instructions`, read it before dispatching and translate any described
+model, backend/runtime (for example Codex or Claude), or tool intent into the
+concrete parameters the selected `type`/`name` target accepts; Slipway does not
+model these provider parameters. Do not reuse the author's
 narration as your source of truth.
 
 ## Diff-scoped review

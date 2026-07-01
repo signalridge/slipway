@@ -48,7 +48,7 @@ Each slot accepts the same fields:
 | --- | --- |
 | `type` | Provider family: `native`, `mcp`, or `skills`. Empty means `native`. |
 | `name` | Provider-owned target name. For `native`, this is the host agent name when the host supports one. For `mcp` and `skills`, this is the hub/tool/skill entry chosen by that provider. |
-| `session_instructions` | Natural-language instructions for the delegated session. This is not a provider profile and is not inherited as a model prompt. |
+| `session_instructions` | Natural-language intent. The host reads it at dispatch and uses it to configure the selected `type`/`name` target's own parameters — model, backend/runtime (e.g. Codex or Claude), tool selection — to match. Slipway does not model those parameters: this is not a typed field or provider profile, and is not inherited as a model prompt. |
 | `timeout` | Optional host-facing timeout hint. Slipway validates whitespace only; the host/provider decides how to interpret it. |
 
 `mcp` and `skills` require a non-empty effective `name`. If a slot changes
@@ -75,8 +75,21 @@ configuration begins where Slipway has a clear independence or dispatch boundary
 Provider-specific tool permissions, model settings, and arbitrary provider
 arguments are not user-facing Slipway config. Slipway and the selected provider
 decide the necessary tool boundary for the current slot. If a hub needs routing
-detail, put the operational intent in `session_instructions` and let that
-provider interpret it.
+detail, put the operational intent in `session_instructions`; the host session
+reads it at dispatch and translates it into the concrete parameters the selected
+`type`/`name` target accepts, rather than the provider interpreting it later.
+
+For example:
+
+```yaml
+review:
+  session_instructions: Run on the Codex backend with a high-capability model.
+```
+
+At dispatch the host maps that intent onto the selected `type`/`name` target's
+own parameters (here, backend and model) and configures the delegated invocation
+accordingly. A `native` target selects its backend and model through the host
+agent bound to its `name`, not through any Slipway field.
 
 This keeps `.slipway.yaml` stable while still allowing `mcp` and `skills`
 providers to support very different internal options behind their named target.

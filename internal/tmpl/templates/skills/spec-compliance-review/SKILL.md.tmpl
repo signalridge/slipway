@@ -143,8 +143,14 @@ subagents from one dispatch point on the SHARED change worktree (the same
 worktree the implementation edited; there is no per-review git worktree
 isolation). Prefer the configured `review` slot directive when present; the
 directive may be `native`, `mcp`, or `skills` and may carry
-`session_instructions`. If it includes `engine_boundary`, honor it as Slipway's
-slot-level mutation/read-only boundary; it is not a provider capability
+`session_instructions`. When present, read that intent before dispatching and
+translate any described model, backend/runtime (for example Codex or Claude), or
+tool intent into the concrete parameters the selected `type`/`name` target
+actually accepts, then configure each review invocation accordingly; Slipway
+does not model these provider parameters, so mapping the natural-language intent
+onto the target's own parameter surface is this host's responsibility. If it
+includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
+boundary; it is not a provider capability
 description. The selected reviews run in parallel as unordered peers:
 no reviewer waits for another reviewer's verdict. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn each review as a

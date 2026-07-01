@@ -108,9 +108,16 @@ surface. Overlays do not replace the cross-cutting checklist; they extend it.
 Dispatch this review according to the `review` slot directive from
 `slipway next --json` when present; otherwise use a native subagent from the S3
 review host on the SHARED change worktree (the same worktree the implementation
-edited; there is no per-review git worktree isolation). If the directive
-includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
-boundary; it is not a provider capability description. Spawn a fresh-context
+edited; there is no per-review git worktree isolation). When the `review`
+directive carries `session_instructions`, read it before dispatching and
+translate any described model, backend/runtime (for example Codex or Claude), or
+tool intent into the concrete parameters the selected `type`/`name` target
+actually accepts, then configure the review invocation accordingly; Slipway does
+not model these provider parameters, so mapping that natural-language intent onto
+the target's own parameter surface is this host's responsibility. If the
+directive includes `engine_boundary`, honor it as Slipway's slot-level
+mutation/read-only boundary; it is not a provider capability description. Spawn a
+fresh-context
 subagent with a bounded review brief, pass it required-reading paths rather than
 artifact bodies, wait for the result, and record the handle. If the host has not
 declared subagent capability available, `slipway next`/`run` surfaces a
