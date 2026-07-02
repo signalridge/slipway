@@ -23,7 +23,7 @@ Documentation is organized by Diataxis so each page has one job.
 | --- | --- | --- |
 | Tutorials | You want a guided path with commands and prompts to copy. | [First governed change](tutorials/first-governed-change.md), [Onboarding an existing codebase](tutorials/onboarding-existing-codebase.md) |
 | How-to | You need to complete a specific operational task. | [Install and refresh adapters](how-to/install-and-refresh-adapters.md), [Recover and troubleshoot](how-to/recover-and-troubleshoot.md) |
-| Reference | You need authoritative command, adapter, configuration, and contributor facts. | [Commands](reference/commands.md), [Subagents](reference/subagents.md), [AI tool adapters](reference/ai-tools.md), [Contributing](contributing.md) |
+| Reference | You need authoritative command, adapter, configuration, and contributor facts. | [Commands](reference/commands.md), [Host environment](reference/host-environment.md), [Subagents](reference/subagents.md), [AI tool adapters](reference/ai-tools.md), [Contributing](contributing.md) |
 | Explanation | You want the design reasoning behind the workflow. | [Design](explanation/design.md), [Workflow](explanation/workflow.md) |
 
 ## Mental Model

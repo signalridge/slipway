@@ -156,7 +156,9 @@ surfaces:
   [Subagent Configuration](docs/reference/subagents.md).
 - Runtime/host environment variables describe the current AI host session:
   context-window size, host capabilities, handoff owner identity, and similar
-  facts. Discover them with `slipway config list --env`.
+  facts. Discover them with `slipway config list --env`; see
+  [Host Environment Variables](docs/reference/host-environment.md) for the
+  concrete host capability tokens, fallback modes, and unset behavior.
 - Secret environment variables, including GitHub tokens, are environment-only
   and are never representable in `.slipway.yaml`.
 

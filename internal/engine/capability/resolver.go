@@ -201,17 +201,17 @@ func hostCapabilityAvailability(tokens []string, capabilityName string) string {
 }
 
 func selectedFallbackMode(tokens []string, fallbackModes []string) (string, bool) {
-	allowed := make(map[string]struct{}, len(fallbackModes))
+	allowed := make(map[string]string, len(fallbackModes))
 	for _, mode := range fallbackModes {
 		mode = strings.TrimSpace(mode)
 		if mode != "" {
-			allowed[mode] = struct{}{}
+			allowed[strings.ToLower(mode)] = mode
 		}
 	}
 	for _, token := range tokens {
-		token = strings.TrimSpace(token)
-		if _, ok := allowed[token]; ok {
-			return token, true
+		token = strings.TrimSpace(strings.ToLower(token))
+		if mode, ok := allowed[token]; ok {
+			return mode, true
 		}
 	}
 	return "", false

@@ -13,13 +13,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
 	"github.com/spf13/cobra"
 )
 
 const contextPressureMetricMaxAge = 60 * time.Second
 const contextPressureTranscriptTailBytes = 1 << 20
-const contextPressureDefaultWindowTokens = 200000
 
 type contextPressureState string
 
@@ -406,7 +406,7 @@ func contextPressureWindowTokens() int {
 			return parsed
 		}
 	}
-	return contextPressureDefaultWindowTokens
+	return model.DefaultContextWindowTokens
 }
 
 func firstNumericField(raw map[string]any, keys ...string) (float64, bool) {

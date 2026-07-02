@@ -523,7 +523,12 @@ func githubAPIBaseURLAllowed(baseURL string, fileCfg model.ConfigGitHub) (github
 
 func parseGitHubAPIAllowedBaseURLs(raw string) ([]string, error) {
 	parts := strings.FieldsFunc(raw, func(r rune) bool {
-		return r == ',' || r == ';' || r == '\n' || r == '\t' || r == ' '
+		switch r {
+		case ',', ';', ' ', '\t', '\n', '\r':
+			return true
+		default:
+			return false
+		}
 	})
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
