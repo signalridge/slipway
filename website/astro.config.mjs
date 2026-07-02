@@ -79,6 +79,11 @@ export default defineConfig({
 							slug: 'reference/commands',
 						},
 						{
+							label: 'Subagents',
+							translations: { 'zh-CN': 'Subagent 配置', ja: 'Subagent 設定' },
+							slug: 'reference/subagents',
+						},
+						{
 							label: 'AI Tool Adapters',
 							translations: { 'zh-CN': 'AI 工具适配器', ja: 'AI ツールアダプター' },
 							slug: 'reference/ai-tools',

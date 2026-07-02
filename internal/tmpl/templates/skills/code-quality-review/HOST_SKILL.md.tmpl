@@ -22,13 +22,15 @@ reviewers are unordered peers, neither gating the other.
 
 ## When This Runs
 At `S3_REVIEW` the workflow dispatches the selected review set as concurrent
-native subagents from one dispatch point. The selected set always includes
-spec-compliance-review and independent-review. It adds code-quality-review when
-the workflow profile requires code-quality review, and adds security-review when
-the security control is selected. This review does not wait for any peer
-reviewer. `slipway next` returns the selected review set at `S3_REVIEW`
-independent of which review evidence is recorded first. The terminal
-`ship-verification` gate runs last, after this selected peer set has converged.
+subagents from one dispatch point, using `review_batch.subagent` /
+`next_skill.subagent` when configured and defaulting to native host dispatch
+otherwise. The selected set always includes spec-compliance-review and
+independent-review. It adds code-quality-review when the workflow profile
+requires code-quality review, and adds security-review when the security control
+is selected. This review does not wait for any peer reviewer. `slipway next`
+returns the selected review set at `S3_REVIEW` independent of which review
+evidence is recorded first. The terminal `ship-verification` gate runs last,
+after this selected peer set has converged.
 
 ## Review Contract
 Use fresh context; do not carry assumptions from the implementer or from peer
@@ -110,16 +112,27 @@ tokens.
 
 ## Independent Review Dispatch And Context-Origin Handle
 At `S3_REVIEW` the workflow dispatches the selected review set as CONCURRENT
-native subagents from one dispatch point on the SHARED change worktree (the same
+subagents from one dispatch point on the SHARED change worktree (the same
 worktree the implementation edited; there is no per-review git worktree
-isolation). The selected reviews run in parallel as unordered peers: no reviewer
-waits for another reviewer's verdict. Model the dispatch on how
+isolation). Prefer the configured `review` slot directive when present; the
+directive may be `native`, `mcp`, or `skills` and may carry
+`session_instructions`. When present, read that intent before dispatching and
+translate any described model, backend/runtime (for example Codex or Claude), or
+tool intent into the concrete parameters the selected `type`/`name` target
+actually accepts, then configure each review invocation accordingly; Slipway
+does not model these provider parameters, so mapping the natural-language intent
+onto the target's own parameter surface is this host's responsibility. If it
+includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
+boundary; it is not a provider capability
+description. The `review` slot is read-only; do not modify files while
+reviewing. The selected reviews run in parallel as unordered peers:
+no reviewer waits for another reviewer's verdict. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn each review as a
-fresh-context subagent with a bounded review brief, pass it required-reading paths
-rather than artifact bodies, wait for the results, and record each handle. If the
-host has not declared subagent capability available, `slipway next`/`run` surfaces
-a subagent-delegation prerequisite plus a named degraded fallback for this review:
-authorize subagent dispatch, or explicitly select the named fallback (for example
+fresh-context subagent with a bounded review brief, pass it required-reading
+paths rather than artifact bodies, wait for the results, and record each handle.
+If the host has not declared subagent capability available, `slipway next`/`run`
+surfaces a subagent-delegation prerequisite plus a named degraded fallback for
+this review: authorize subagent dispatch, or explicitly select the named fallback (for example
 `same_context_degraded`) and record fresh reviewer evidence for the degraded run —
 do not review inline without recording the selected fallback. The fallback is an
 additional structured reference such as

@@ -3,7 +3,10 @@ package tmpl
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -18,8 +21,8 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 	t.Parallel()
 	// Static governance skills (loaded via Content)
 	staticSkills := []string{
-		"skills/research-orchestration/SKILL.md",
-		"skills/plan-audit/SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
 	}
 	for _, name := range staticSkills {
 		content, err := Content(name)
@@ -31,12 +34,12 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 	}
 	// Templated governance skills (loaded via Render)
 	templatedSkills := []string{
-		"skills/tdd-governance/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/independent-review/SKILL.md.tmpl",
-		"skills/security-review/SKILL.md.tmpl",
-		"skills/ship-verification/SKILL.md.tmpl",
+		"skills/tdd-governance/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
 	}
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range templatedSkills {
@@ -47,6 +50,25 @@ func TestContentReturnsGovernanceSkills(t *testing.T) {
 		assert.Contains(t, content, "<HARD-GATE>", "%s missing HARD-GATE tag", name)
 		assert.NotContains(t, content, "TodoWrite", "%s still references TodoWrite", name)
 	}
+}
+
+func TestSkillSourceEntrypointsUseRoleSpecificNames(t *testing.T) {
+	t.Parallel()
+
+	err := fs.WalkDir(TemplateFS(), "skills", func(name string, d fs.DirEntry, walkErr error) error {
+		require.NoError(t, walkErr)
+		if d.IsDir() {
+			return nil
+		}
+		assert.NotContains(t,
+			[]string{"SKILL.md", "SKILL.md.tmpl"},
+			path.Base(name),
+			"%s must use HOST_SKILL or CATALOG_SKILL source naming; generated adapter entries remain SKILL.md",
+			name,
+		)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) {
@@ -65,11 +87,11 @@ func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) 
 	assert.Contains(t, checklist, "Prune no-op prose")
 	assert.Contains(t, flatChecklist, "preserving contract tokens such as `next_skill.name`, `verification_dir`, reason codes, command names, and evidence paths.")
 
-	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	planAudit, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, planAudit, "checklist-quality.md")
 
-	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", map[string]string{
+	specCompliance, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:test",
 		"Description": "test",
@@ -81,7 +103,7 @@ func TestRequirementsQualityChecklistSidecarExistsAndIsReferenced(t *testing.T) 
 func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/workflow/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/workflow/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway",
 		"Description": "Governed workflow entry",
@@ -100,7 +122,7 @@ func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
 func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
 	t.Parallel()
 
-	workflow, err := Render("skills/workflow/SKILL.md.tmpl", map[string]string{
+	workflow, err := Render("skills/workflow/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway",
 		"Description": "Governed workflow entry",
@@ -154,7 +176,7 @@ func TestDecisionTemplatePinsSupersessionGuidance(t *testing.T) {
 func TestPlanAuditTemplateDoesNotReintroduceLightPresetVerificationBlocker(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/plan-audit/SKILL.md")
+	content, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "On light, only dimension #1")
@@ -174,8 +196,8 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 	norm := func(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 	for _, path := range []string{
-		"skills/research-orchestration/SKILL.md",
-		"skills/plan-audit/SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
 	} {
 		content, err := Content(path)
 		require.NoError(t, err, path)
@@ -193,7 +215,7 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 	// research-orchestration must not lump "stale" into the run-the-command path:
 	// a semantically stale populated/partial map is re-authored inline, not
 	// regenerated (the command only scaffolds a missing/non-durable set).
-	research, err := Content("skills/research-orchestration/SKILL.md")
+	research, err := Content("skills/research-orchestration/HOST_SKILL.md")
 	require.NoError(t, err)
 	flatResearch := norm(research)
 	assert.Contains(t, flatResearch, "do not rerun")
@@ -201,7 +223,7 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 
 	// wave-orchestration (rendered) is a durable-map consumer and must carry the
 	// relevance self-check — the exact handoff issue #80 reproduces.
-	wave, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	wave, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:wave-orchestration",
 		"Description": "test",
@@ -213,7 +235,7 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 	assert.Contains(t, flatWave, "fires for `populated` and `partial`")
 	assert.Contains(t, flatWave, "For a `partial` map, also inspect")
 
-	mapping, err := Content("skills/codebase-mapping/SKILL.md")
+	mapping, err := Content("skills/codebase-mapping/HOST_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, norm(mapping), "re-author the change-relevant documents in place")
 
@@ -231,7 +253,7 @@ func TestCodebaseMapRelevanceGuidanceInSkills(t *testing.T) {
 func TestShipVerificationTemplateRequiresAssuranceAttestationOnStandardStrict(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -251,7 +273,7 @@ func TestShipVerificationTemplateRequiresAssuranceAttestationOnStandardStrict(t 
 func TestSpecComplianceReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:spec-compliance-review",
 		"Description": "test",
@@ -272,7 +294,7 @@ func TestSpecComplianceReviewTemplateEmitsReviewContextOriginHandle(t *testing.T
 func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/code-quality-review/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/code-quality-review/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:code-quality-review",
 		"Description": "test",
@@ -289,7 +311,7 @@ func TestCodeQualityReviewTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 func TestCodeQualityReviewTemplateRequiresConfiguredGoLint(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/code-quality-review/SKILL.md.tmpl", nil)
+	content, err := Render("skills/code-quality-review/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "`golangci-lint run ./...`")
@@ -317,8 +339,8 @@ func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
 	for _, path := range []string{
-		"skills/independent-review/SKILL.md.tmpl",
-		"skills/security-review/SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
 	} {
 		path := path
 		t.Run(path, func(t *testing.T) {
@@ -326,7 +348,7 @@ func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
 
 			content, err := Render(path, map[string]string{
 				"ToolID":      "claude",
-				"Trigger":     "/slipway:" + strings.TrimSuffix(strings.TrimPrefix(path, "skills/"), "/SKILL.md.tmpl"),
+				"Trigger":     "/slipway:" + strings.TrimSuffix(strings.TrimPrefix(path, "skills/"), "/HOST_SKILL.md.tmpl"),
 				"Description": "test",
 			})
 			require.NoError(t, err)
@@ -348,7 +370,7 @@ func TestPromotedReviewTemplatesEmitReviewContextOriginHandle(t *testing.T) {
 func TestPlanAuditTemplateEmitsPlanAndAuditOriginHandles(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/plan-audit/SKILL.md")
+	content, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	// plan-audit records the author/auditor pair tokens (NOT a
@@ -363,7 +385,7 @@ func TestPlanAuditTemplateEmitsPlanAndAuditOriginHandles(t *testing.T) {
 func TestShipVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -380,7 +402,7 @@ func TestShipVerificationTemplateEmitsReviewContextOriginHandle(t *testing.T) {
 func TestShipVerificationTemplateRequiresConfiguredGoLint(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "`golangci-lint run ./...`")
@@ -390,7 +412,7 @@ func TestShipVerificationTemplateRequiresConfiguredGoLint(t *testing.T) {
 func TestShipVerificationTemplateDoesNotEmitRetiredContextOriginHandle(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -405,7 +427,7 @@ func TestShipVerificationTemplateDoesNotEmitRetiredContextOriginHandle(t *testin
 func TestShipVerificationTemplateRequiresReviewerIndependenceAndChainOrder(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -436,7 +458,7 @@ func TestShipVerificationTemplateRequiresReviewerIndependenceAndChainOrder(t *te
 func TestShipVerificationTemplateDocumentsTerminalGateInvariant(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -452,7 +474,7 @@ func TestShipVerificationTemplateDocumentsTerminalGateInvariant(t *testing.T) {
 func TestWaveOrchestrationTemplateRequiresDegradedJustification(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:wave-orchestration",
 		"Description": "test",
@@ -472,7 +494,7 @@ func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 
 	// Static governance skills should now use short workflow outlines.
 	for _, name := range []string{
-		"skills/plan-audit/SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
 	} {
 		content, err := Content(name)
 		require.NoError(t, err, "failed to load %s", name)
@@ -483,7 +505,7 @@ func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 
 	// Templated governance skills should also use outlines.
 	for _, name := range []string{
-		"skills/ship-verification/SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
@@ -494,8 +516,8 @@ func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 
 	// Wave orchestration should likewise avoid inline DOT.
 	data = map[string]string{"ToolID": "claude", "Trigger": "/slipway:wave-orchestration"}
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", data)
-	require.NoError(t, err, "failed to render wave-orchestration/SKILL.md.tmpl")
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", data)
+	require.NoError(t, err, "failed to render wave-orchestration/HOST_SKILL.md.tmpl")
 	assert.Contains(t, content, "## Workflow Outline")
 	assert.NotContains(t, content, "## Workflow Graph (Graphviz DOT)")
 	assert.NotContains(t, content, "```dot")
@@ -504,9 +526,9 @@ func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 func TestContentReturnsTechniques(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
-		"skills/tdd/SKILL.md",
-		"skills/codebase-mapping/SKILL.md",
-		"skills/coding-discipline/SKILL.md",
+		"skills/tdd/HOST_SKILL.md",
+		"skills/codebase-mapping/HOST_SKILL.md",
+		"skills/coding-discipline/HOST_SKILL.md",
 	}
 	for _, name := range techniques {
 		content, err := Content(name)
@@ -518,7 +540,7 @@ func TestContentReturnsTechniques(t *testing.T) {
 func TestContentReturnsStandaloneSkills(t *testing.T) {
 	t.Parallel()
 	standalone := []string{
-		"skills/worktree-preflight/SKILL.md",
+		"skills/worktree-preflight/HOST_SKILL.md",
 	}
 	for _, name := range standalone {
 		content, err := Content(name)
@@ -529,7 +551,7 @@ func TestContentReturnsStandaloneSkills(t *testing.T) {
 
 func TestCodebaseMappingTemplateDefinesDurableDocumentSet(t *testing.T) {
 	t.Parallel()
-	content, err := Content("skills/codebase-mapping/SKILL.md")
+	content, err := Content("skills/codebase-mapping/HOST_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, content, "input_context.codebase_map_dir")
 	assert.Contains(t, content, "artifacts/codebase/STACK.md")
@@ -541,8 +563,8 @@ func TestCodebaseMappingTemplateDefinesDurableDocumentSet(t *testing.T) {
 func TestPlanningAndDiscoveryTemplatesConsumeDurableCodebaseMap(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{
-		"skills/research-orchestration/SKILL.md",
-		"skills/plan-audit/SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
 	} {
 		content, err := Content(name)
 		require.NoError(t, err)
@@ -551,16 +573,16 @@ func TestPlanningAndDiscoveryTemplatesConsumeDurableCodebaseMap(t *testing.T) {
 
 	// Templated governance skills
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:wave-orchestration"}
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", data)
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
-	assert.Contains(t, content, "input_context.codebase_map_dir", "wave-orchestration/SKILL.md.tmpl missing durable codebase map reference")
+	assert.Contains(t, content, "input_context.codebase_map_dir", "wave-orchestration/HOST_SKILL.md.tmpl missing durable codebase map reference")
 }
 
 func TestPlanningAndDiscoveryTemplatesTreatNonDurableCodebaseMapAsAdvisory(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{
-		"skills/research-orchestration/SKILL.md",
-		"skills/plan-audit/SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
 	} {
 		content, err := Content(name)
 		require.NoError(t, err)
@@ -602,13 +624,13 @@ func TestContentReturnsArtifactTemplates(t *testing.T) {
 func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 	t.Parallel()
 	templates := []string{
-		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/independent-review/SKILL.md.tmpl",
-		"skills/security-review/SKILL.md.tmpl",
-		"skills/ship-verification/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/tdd-governance/SKILL.md.tmpl",
-		"skills/wave-orchestration/SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/tdd-governance/HOST_SKILL.md.tmpl",
+		"skills/wave-orchestration/HOST_SKILL.md.tmpl",
 	}
 	data := map[string]string{
 		"ToolID":      "claude",
@@ -626,13 +648,13 @@ func TestRenderTemplatedGovernanceSkillTemplates(t *testing.T) {
 func TestTemplatedGovernanceSkillFrontmatterIncludesDescription(t *testing.T) {
 	t.Parallel()
 	templates := []string{
-		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/independent-review/SKILL.md.tmpl",
-		"skills/security-review/SKILL.md.tmpl",
-		"skills/ship-verification/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/tdd-governance/SKILL.md.tmpl",
-		"skills/wave-orchestration/SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/tdd-governance/HOST_SKILL.md.tmpl",
+		"skills/wave-orchestration/HOST_SKILL.md.tmpl",
 	}
 	data := map[string]string{
 		"ToolID":      "claude",
@@ -731,9 +753,9 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
 	// Static governance skills
 	staticSkills := []string{
-		"skills/worktree-preflight/SKILL.md",
-		"skills/plan-audit/SKILL.md",
-		"skills/research-orchestration/SKILL.md",
+		"skills/worktree-preflight/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
 	}
 	routingFields := []string{
 		"required_levels:", "state:", "type:", "skill_name:",
@@ -758,10 +780,10 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 	// Templated governance skills (converted from static)
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range []string{
-		"skills/tdd-governance/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/ship-verification/SKILL.md.tmpl",
+		"skills/tdd-governance/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
@@ -782,7 +804,7 @@ func TestGovernanceSkillFrontmatterMinimal(t *testing.T) {
 func TestGovernanceTemplatedSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:wave-orchestration"}
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", data)
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	parts := strings.SplitN(content, "---", 3)
 	require.Len(t, parts, 3, "missing frontmatter delimiters")
@@ -801,9 +823,9 @@ func TestGovernanceTemplatedSkillFrontmatterMinimal(t *testing.T) {
 func TestTechniqueSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
 	techniques := []string{
-		"skills/tdd/SKILL.md",
-		"skills/codebase-mapping/SKILL.md",
-		"skills/coding-discipline/SKILL.md",
+		"skills/tdd/HOST_SKILL.md",
+		"skills/codebase-mapping/HOST_SKILL.md",
+		"skills/coding-discipline/HOST_SKILL.md",
 	}
 	for _, name := range techniques {
 		content, err := Content(name)
@@ -822,16 +844,16 @@ func TestTechniqueSkillFrontmatterMinimal(t *testing.T) {
 
 func TestStandaloneSkillFrontmatterMinimal(t *testing.T) {
 	t.Parallel()
-	content, err := Content("skills/worktree-preflight/SKILL.md")
+	content, err := Content("skills/worktree-preflight/HOST_SKILL.md")
 	require.NoError(t, err, "failed to load worktree-preflight")
 	parts := strings.SplitN(content, "---", 3)
-	require.Len(t, parts, 3, "skills/worktree-preflight/SKILL.md missing frontmatter delimiters")
+	require.Len(t, parts, 3, "skills/worktree-preflight/HOST_SKILL.md missing frontmatter delimiters")
 	fm := parts[1]
-	assert.Contains(t, fm, "name:", "skills/worktree-preflight/SKILL.md missing name in frontmatter")
-	assert.Contains(t, fm, "skill_id:", "skills/worktree-preflight/SKILL.md missing skill_id in frontmatter")
-	assert.Contains(t, fm, "description:", "skills/worktree-preflight/SKILL.md missing description in frontmatter")
-	assert.Contains(t, fm, "Use when ", "skills/worktree-preflight/SKILL.md description must be trigger-oriented")
-	assert.Contains(t, fm, "Triggers on", "skills/worktree-preflight/SKILL.md description must describe trigger contract")
+	assert.Contains(t, fm, "name:", "skills/worktree-preflight/HOST_SKILL.md missing name in frontmatter")
+	assert.Contains(t, fm, "skill_id:", "skills/worktree-preflight/HOST_SKILL.md missing skill_id in frontmatter")
+	assert.Contains(t, fm, "description:", "skills/worktree-preflight/HOST_SKILL.md missing description in frontmatter")
+	assert.Contains(t, fm, "Use when ", "skills/worktree-preflight/HOST_SKILL.md description must be trigger-oriented")
+	assert.Contains(t, fm, "Triggers on", "skills/worktree-preflight/HOST_SKILL.md description must describe trigger contract")
 }
 
 func TestEntrySurfaceTemplatesAvoidPlanOnlyVocabulary(t *testing.T) {
@@ -857,7 +879,7 @@ func TestEntrySurfaceTemplatesAvoidPlanOnlyVocabulary(t *testing.T) {
 func TestWorkflowStateTemplatesAvoidRetiredIntakeVocabulary(t *testing.T) {
 	t.Parallel()
 
-	researchSkill, err := Content("skills/research-orchestration/SKILL.md")
+	researchSkill, err := Content("skills/research-orchestration/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	for name, content := range map[string]string{
@@ -873,7 +895,7 @@ func TestWorkflowStateTemplatesAvoidRetiredIntakeVocabulary(t *testing.T) {
 func TestResearchOrchestrationUsesResearchArtifactSchemaHeadings(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/research-orchestration/SKILL.md")
+	content, err := Content("skills/research-orchestration/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "## Alternatives Considered")
@@ -888,7 +910,7 @@ func TestResearchOrchestrationUsesResearchArtifactSchemaHeadings(t *testing.T) {
 func TestResearchOrchestrationStaleDiscoveryEvidenceRoutesToEvidenceSkill(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/research-orchestration/SKILL.md")
+	content, err := Content("skills/research-orchestration/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	start := strings.Index(content, "- **Stale**")
@@ -906,14 +928,14 @@ func TestResearchOrchestrationStaleDiscoveryEvidenceRoutesToEvidenceSkill(t *tes
 func TestPlanningSkillsFollowArtifactDependencyOrder(t *testing.T) {
 	t.Parallel()
 
-	research, err := Content("skills/research-orchestration/SKILL.md")
+	research, err := Content("skills/research-orchestration/HOST_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, research, "Record the selected approach in `research.md`")
 	assert.Contains(t, research, "Do not author `decision.md` during research")
 	assert.NotContains(t, research, "`slipway instructions decision`")
 	assert.NotContains(t, research, "locked decision authored into `decision.md`")
 
-	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	planAudit, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 	requirementsIdx := strings.Index(planAudit, "`slipway instructions requirements`")
 	decisionIdx := strings.Index(planAudit, "`slipway instructions decision`")
@@ -932,7 +954,7 @@ func TestPlanningSkillsFollowArtifactDependencyOrder(t *testing.T) {
 func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "YAML sequence of strings only")
@@ -942,7 +964,7 @@ func TestVerificationDoctrineDocumentsStringOnlyReferences(t *testing.T) {
 func TestShipVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", nil)
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	// The prescribed scan must run on stock Windows: no perl, no BSD/macOS-incompatible
@@ -965,7 +987,7 @@ func TestShipVerificationPlaceholderScanIsMacOSPortable(t *testing.T) {
 func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/plan-audit/SKILL.md")
+	content, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "satisfiable during S2 implementation")
@@ -976,7 +998,7 @@ func TestPlanAuditBlocksFutureLifecycleAcceptanceCriteria(t *testing.T) {
 func TestPlanAuditScopeControlFlagsSharedTypeBlastRadius(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/plan-audit/SKILL.md")
+	content, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 	flat := strings.Join(strings.Fields(content), " ")
 
@@ -1010,7 +1032,7 @@ func TestNextCommandDocumentsWorktreeSkillCatalogFallback(t *testing.T) {
 func TestWorktreePreflightDocumentsRepoLocalDefaultPath(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/worktree-preflight/SKILL.md")
+	content, err := Content("skills/worktree-preflight/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, ".worktrees/<slug>")
@@ -1028,7 +1050,7 @@ func TestPartialsAreAvailableInRender(t *testing.T) {
 		"Trigger":     "/slipway:spec-compliance-review",
 		"Description": "test",
 	}
-	content, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	content, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, content, "<HARD-GATE>", "hard-gate partial should render into governance skill")
 	assert.Contains(t, content, "Do not call an advancing command", "hard-gate partial content missing")
@@ -1038,10 +1060,10 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 	t.Parallel()
 
 	staticSkills := []string{
-		"skills/intake-clarification/SKILL.md",
-		"skills/plan-audit/SKILL.md",
-		"skills/research-orchestration/SKILL.md",
-		"skills/worktree-preflight/SKILL.md",
+		"skills/intake-clarification/HOST_SKILL.md",
+		"skills/plan-audit/HOST_SKILL.md",
+		"skills/research-orchestration/HOST_SKILL.md",
+		"skills/worktree-preflight/HOST_SKILL.md",
 	}
 	forbiddenNextAdvanceFragments := []string{
 		"After confirmation: `slipway next`",
@@ -1070,12 +1092,12 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 		"Description": "test",
 	}
 	templatedSkills := []string{
-		"skills/wave-orchestration/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/code-quality-review/SKILL.md.tmpl",
-		"skills/independent-review/SKILL.md.tmpl",
-		"skills/security-review/SKILL.md.tmpl",
-		"skills/ship-verification/SKILL.md.tmpl",
+		"skills/wave-orchestration/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
 	}
 	for _, name := range templatedSkills {
 		content, err := Render(name, data)
@@ -1101,7 +1123,7 @@ func TestTDDGovernanceUsesResultFileTaskEvidenceContract(t *testing.T) {
 		"Trigger":     "/slipway:tdd-governance",
 		"Description": "test",
 	}
-	content, err := Render("skills/tdd-governance/SKILL.md.tmpl", data)
+	content, err := Render("skills/tdd-governance/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "slipway evidence task --result-file",
@@ -1115,7 +1137,7 @@ func TestTDDGovernanceUsesResultFileTaskEvidenceContract(t *testing.T) {
 func TestIncidentResponseDoesNotTriggerOnBareStatusHealth(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/incident-response/SKILL.md")
+	content, err := Content("skills/incident-response/CATALOG_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "status --focus incident")
@@ -1139,27 +1161,27 @@ func TestRunSummaryBoundGovernedTemplatesDoNotUseLiteralRunVersion(t *testing.T)
 	}{
 		{
 			name:           "wave orchestration",
-			templatePath:   "skills/wave-orchestration/SKILL.md.tmpl",
+			templatePath:   "skills/wave-orchestration/HOST_SKILL.md.tmpl",
 			wantRunSources: []string{"run_version: <current wave-orchestration run_version>"},
 		},
 		{
 			name:           "tdd governance",
-			templatePath:   "skills/tdd-governance/SKILL.md.tmpl",
+			templatePath:   "skills/tdd-governance/HOST_SKILL.md.tmpl",
 			wantRunSources: []string{"run_version: <current wave-orchestration run_version>"},
 		},
 		{
 			name:           "spec compliance review",
-			templatePath:   "skills/spec-compliance-review/SKILL.md.tmpl",
+			templatePath:   "skills/spec-compliance-review/HOST_SKILL.md.tmpl",
 			wantRunSources: []string{"slipway evidence skill", "current `run_summary_version`"},
 		},
 		{
 			name:           "code quality review",
-			templatePath:   "skills/code-quality-review/SKILL.md.tmpl",
+			templatePath:   "skills/code-quality-review/HOST_SKILL.md.tmpl",
 			wantRunSources: []string{"slipway evidence skill", "current `run_summary_version`"},
 		},
 		{
 			name:           "ship verification",
-			templatePath:   "skills/ship-verification/SKILL.md.tmpl",
+			templatePath:   "skills/ship-verification/HOST_SKILL.md.tmpl",
 			wantRunSources: []string{"run_version: <current run_summary_version from slipway status --json>"},
 		},
 	}
@@ -1198,7 +1220,7 @@ func TestPartialsDeduplicateGovernanceContent(t *testing.T) {
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
 	}
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", data)
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, content, `"should work"`, "banned-language partial should render into ship-verification")
 	assert.Contains(t, content, "opinions, not evidence", "banned-language partial content missing")
@@ -1224,7 +1246,7 @@ func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
 	}{
 		{
 			name:               "code quality review",
-			templatePath:       "skills/code-quality-review/SKILL.md.tmpl",
+			templatePath:       "skills/code-quality-review/HOST_SKILL.md.tmpl",
 			skillID:            "code-quality-review",
 			verificationRecord: "verification/code-quality-review.yaml",
 			notesFile:          "artifacts/changes/{slug}/verification/code-quality-review-notes.md",
@@ -1235,7 +1257,7 @@ func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
 		},
 		{
 			name:               "independent review",
-			templatePath:       "skills/independent-review/SKILL.md.tmpl",
+			templatePath:       "skills/independent-review/HOST_SKILL.md.tmpl",
 			skillID:            "independent-review",
 			verificationRecord: "verification/independent-review.yaml",
 			notesFile:          "artifacts/changes/{slug}/verification/independent-review-notes.md",
@@ -1245,7 +1267,7 @@ func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
 		},
 		{
 			name:               "security review",
-			templatePath:       "skills/security-review/SKILL.md.tmpl",
+			templatePath:       "skills/security-review/HOST_SKILL.md.tmpl",
 			skillID:            "security-review",
 			verificationRecord: "verification/security-review.yaml",
 			notesFile:          "artifacts/changes/{slug}/verification/security-review-notes.md",
@@ -1255,7 +1277,7 @@ func TestS3ReviewTemplateContractsStayLiveAndSynchronized(t *testing.T) {
 		},
 		{
 			name:               "spec compliance review",
-			templatePath:       "skills/spec-compliance-review/SKILL.md.tmpl",
+			templatePath:       "skills/spec-compliance-review/HOST_SKILL.md.tmpl",
 			skillID:            "spec-compliance-review",
 			verificationRecord: "verification/spec-compliance-review.yaml",
 			notesFile:          "artifacts/changes/{slug}/verification/spec-compliance-review-notes.md",
@@ -1491,7 +1513,7 @@ func TestTemplateFSExcludesTransientPythonArtifacts(t *testing.T) {
 func TestWaveOrchestrationEvidenceTaskSurfaceUsesResultFileOnly(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":  "claude",
 		"Trigger": "/slipway:wave-orchestration",
 	})
@@ -1509,7 +1531,7 @@ func TestWaveOrchestrationEvidenceTaskSurfaceUsesResultFileOnly(t *testing.T) {
 func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":  "claude",
 		"Trigger": "/slipway:wave-orchestration",
 	})
@@ -1539,7 +1561,7 @@ func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T
 func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/variant-analysis/SKILL.md")
+	content, err := Content("skills/variant-analysis/CATALOG_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "## Reference Shelf")
@@ -1550,7 +1572,7 @@ func TestVariantAnalysisSkillMakesReferenceShelfVisible(t *testing.T) {
 func TestCodingDisciplineSkillKeepsFourPrinciplesAndDesignStance(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/coding-discipline/SKILL.md")
+	content, err := Content("skills/coding-discipline/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "## Design Stance")
@@ -1571,15 +1593,15 @@ func TestCodingDisciplineSkillKeepsFourPrinciplesAndDesignStance(t *testing.T) {
 func TestGovernedHostTemplatesReferenceCodingDiscipline(t *testing.T) {
 	t.Parallel()
 
-	planAudit, err := Content("skills/plan-audit/SKILL.md")
+	planAudit, err := Content("skills/plan-audit/HOST_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, planAudit, "`slipway-coding-discipline`")
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 	for _, name := range []string{
-		"skills/wave-orchestration/SKILL.md.tmpl",
-		"skills/spec-compliance-review/SKILL.md.tmpl",
-		"skills/code-quality-review/SKILL.md.tmpl",
+		"skills/wave-orchestration/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
 	} {
 		content, err := Render(name, data)
 		require.NoError(t, err, "failed to render %s", name)
@@ -1592,12 +1614,12 @@ func TestReviewTemplatesRequireNegativePathAndToolchainEvidence(t *testing.T) {
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 
-	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	specCompliance, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, specCompliance, "requirement-named negative/error paths")
 	assert.Contains(t, specCompliance, "negative_path:pass")
 
-	codeQuality, err := Render("skills/code-quality-review/SKILL.md.tmpl", data)
+	codeQuality, err := Render("skills/code-quality-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, codeQuality, "dependency/toolchain compatibility")
 	assert.Contains(t, codeQuality, "MSRV")
@@ -1614,7 +1636,7 @@ func TestSpecComplianceReviewGuardsAgainstTestPresenceOverTrust(t *testing.T) {
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 
-	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	specCompliance, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, specCompliance, "Test presence is not")
 	assert.Contains(t, specCompliance, "satisfied only in appearance")
@@ -1633,7 +1655,7 @@ func TestSpecTraceRecordsUncheckableCoverageGaps(t *testing.T) {
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 
-	specTrace, err := Content("skills/spec-trace/SKILL.md")
+	specTrace, err := Content("skills/spec-trace/CATALOG_SKILL.md")
 	require.NoError(t, err)
 	assert.Contains(t, specTrace, "status: covered | skipped | drift | ambiguous | uncheckable")
 	assert.Contains(t, specTrace, "reason: \"<why this mapping is ambiguous or uncheckable>\"")
@@ -1646,7 +1668,7 @@ func TestSpecTraceRecordsUncheckableCoverageGaps(t *testing.T) {
 	assert.Contains(t, checklist, "must include a reason")
 	assert.Contains(t, checklist, "coverage gaps")
 
-	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	specCompliance, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	normalizedSpecCompliance := strings.Join(strings.Fields(specCompliance), " ")
 	assert.Contains(t, specCompliance, "ambiguous` or `uncheckable`")
@@ -1663,7 +1685,7 @@ func TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory(t *testing.T) {
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
 
-	specCompliance, err := Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+	specCompliance, err := Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 	assert.Contains(t, specCompliance, "skill_constraints.pending_decisions")
 	assert.Contains(t, specCompliance, "Enforce fidelity ONLY against `skill_constraints.locked_decisions`")
@@ -1675,7 +1697,7 @@ func TestSpecComplianceReviewTreatsPendingDecisionsAsAdvisory(t *testing.T) {
 func TestRootCauseTracingAbsorbsSystematicDebuggingDoctrine(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/root-cause-tracing/SKILL.md")
+	content, err := Content("skills/root-cause-tracing/CATALOG_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, content, "Capture the exact symptom")
@@ -1711,6 +1733,17 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.Contains(t, content, "without invalidating the single `context_origin:stage=review` handle")
 	})
 
+	t.Run("fix and review bodies prefer configured subagent directive", func(t *testing.T) {
+		fix := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
+		assert.Contains(t, fix, "Each repair batch MUST use `contract.subagent` when present")
+		assert.Contains(t, fix, "`contract.subagent.engine_boundary`")
+		assert.Contains(t, fix, "not a provider capability description")
+
+		review := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "review", "command-review-body", "claude")
+		assert.Contains(t, review, "use `contract.subagent` when present")
+		assert.Contains(t, review, "native fresh-context repair subagent")
+	})
+
 	t.Run("every prompt surface has matching body partial", func(t *testing.T) {
 		partials := promptSurfaceBodyTemplates(t)
 		require.Len(t, partials, 22)
@@ -1726,7 +1759,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 	})
 
 	t.Run("wave orchestration continues across wave boundaries", func(t *testing.T) {
-		content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+		content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 			"ToolID":  "claude",
 			"Trigger": "/slipway:wave-orchestration",
 		})
@@ -1832,6 +1865,135 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 		assert.NotContains(t, content, "argument-hint:")
 		assert.NotContains(t, content, "$ARGUMENTS")
 	})
+}
+
+func TestSubagentHostTemplatesExplainEngineBoundaryAndSessionInstructions(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
+	renderedTemplates := []string{
+		"skills/wave-orchestration/HOST_SKILL.md.tmpl",
+		"skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+		"skills/code-quality-review/HOST_SKILL.md.tmpl",
+		"skills/independent-review/HOST_SKILL.md.tmpl",
+		"skills/security-review/HOST_SKILL.md.tmpl",
+		"skills/ship-verification/HOST_SKILL.md.tmpl",
+		"skills/workflow/command-reference.md.tmpl",
+	}
+	for _, name := range renderedTemplates {
+		t.Run(name, func(t *testing.T) {
+			content, err := Render(name, data)
+			require.NoError(t, err)
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "not a provider capability")
+			assert.Contains(t, content, "`session_instructions`")
+		})
+	}
+
+	readOnlyTemplates := []struct {
+		name string
+		read func() (string, error)
+	}{
+		{
+			name: "skills/plan-audit/HOST_SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/plan-audit/HOST_SKILL.md")
+			},
+		},
+		{
+			name: "skills/independent-review/CATALOG_SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/independent-review/CATALOG_SKILL.md")
+			},
+		},
+		{
+			name: "skills/security-review/CATALOG_SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/security-review/CATALOG_SKILL.md")
+			},
+		},
+		{
+			name: "skills/spec-compliance-review/HOST_SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", data)
+			},
+		},
+		{
+			name: "skills/code-quality-review/HOST_SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/code-quality-review/HOST_SKILL.md.tmpl", data)
+			},
+		},
+		{
+			name: "skills/ship-verification/HOST_SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/ship-verification/HOST_SKILL.md.tmpl", data)
+			},
+		},
+	}
+	for _, item := range readOnlyTemplates {
+		t.Run(item.name, func(t *testing.T) {
+			content, err := item.read()
+			require.NoError(t, err)
+			flat := strings.Join(strings.Fields(content), " ")
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "read-only")
+			assert.Contains(t, flat, "do not modify files")
+			assert.Contains(t, content, "`session_instructions`")
+		})
+	}
+}
+
+func TestSubagentReferenceDocsDescribeBoundaryAndRetiredKeys(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := templatesTestRepoRoot(t)
+	docs := []string{
+		"docs/reference/subagents.md",
+		"docs/zh/reference/subagents.md",
+		"docs/ja/reference/subagents.md",
+	}
+	requiredSlots := []string{
+		"`default`",
+		"`plan_audit`",
+		"`executor`",
+		"`review`",
+		"`fix`",
+		"`verify`",
+	}
+	retiredKeys := []string{
+		"`subagent_provider_profiles`",
+		"`allowed_skills`",
+		"`allowed_mcp_servers`",
+		"`tool_policy`",
+		"`profile`",
+		"`prompt`",
+	}
+	for _, docPath := range docs {
+		t.Run(docPath, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(repoRoot, docPath))
+			require.NoError(t, err)
+			content := string(data)
+
+			for _, slot := range requiredSlots {
+				assert.Contains(t, content, slot)
+			}
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "`read_only")
+			assert.Contains(t, content, "`mutation_policy")
+			for _, key := range retiredKeys {
+				assert.NotContains(t, content, key)
+			}
+		})
+	}
+}
+
+func templatesTestRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 }
 
 func renderPromptSurfaceForTest(t *testing.T, templateName, commandID, bodyTemplate, toolID string) string {

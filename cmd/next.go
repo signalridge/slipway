@@ -79,6 +79,9 @@ type nextView struct {
 	// boundaries in deriveConfirmationRequirement for non-guardrail changes; it
 	// never weakens an evidence gate or a guardrail/sensitive boundary.
 	auto bool
+	// config is the loaded project configuration used to project host-facing
+	// delegation directives without re-reading .slipway.yaml at every surface.
+	config model.Config
 }
 
 type confirmationRequirement struct {
@@ -146,6 +149,7 @@ type nextSkillView struct {
 	DisplayName          string             `json:"display_name,omitempty"`
 	BlockingName         string             `json:"blocking_name,omitempty"`
 	ResolutionReason     string             `json:"resolution_reason,omitempty"`
+	Subagent             *subagentDirective `json:"subagent,omitempty"`
 	SelectedReviewSkills []string           `json:"selected_review_skills,omitempty"`
 	RequiredTokens       []string           `json:"required_tokens,omitempty"`
 	VerificationDir      string             `json:"verification_dir"`
@@ -157,10 +161,13 @@ type nextSkillView struct {
 
 type reviewBatchView struct {
 	Mode            string                 `json:"mode"`
+	Subagent        *subagentDirective     `json:"subagent,omitempty"`
 	Skills          []reviewBatchSkillView `json:"skills"`
 	VerificationDir string                 `json:"verification_dir"`
 	State           string                 `json:"state"`
 }
+
+type subagentDirective = model.ResolvedSubagentDirective
 
 type reviewBatchSkillView struct {
 	Name             string             `json:"name"`
@@ -285,9 +292,10 @@ type handoffRiskView struct {
 // this struct as a read-side diagnostic surface only; do not round-trip it
 // through wave-plan.yaml.
 type wavePlanView struct {
-	TotalTasks int        `json:"total_tasks"`
-	WaveCount  int        `json:"wave_count"`
-	Waves      []waveView `json:"waves"`
+	TotalTasks       int                `json:"total_tasks"`
+	WaveCount        int                `json:"wave_count"`
+	ExecutorSubagent *subagentDirective `json:"executor_subagent,omitempty"`
+	Waves            []waveView         `json:"waves"`
 	// Advisories are non-blocking wave-narrowing cues (REQ-006) computed in the
 	// view layer only. They never block execution and are deliberately excluded
 	// from wave-plan.yaml and every freshness hash; they exist solely on the
@@ -448,6 +456,10 @@ func buildNextViewForCommand(root string, ref changeRef, opts nextViewOptions) (
 
 func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref changeRef, opts nextViewOptions) (nextView, error) {
 	root := readCtx.root
+	cfg, err := loadConfigAtRoot(root)
+	if err != nil {
+		return nextView{}, err
+	}
 	preview := opts.Preview
 	autoSkipEvidence := opts.AutoSkipEvidence
 	skipAutoPass := opts.SkipAutoPass
@@ -474,6 +486,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		OverallReadinessFreshness:   "unknown",
 		ConfirmationRequirement:     confirmationNoBoundary("initializing"),
 		auto:                        auto,
+		config:                      cfg,
 		InputContext: nextContext{
 			WorkspaceRoot: root,
 		},
@@ -584,7 +597,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 
 	// Attach wave plan when at S2_IMPLEMENT for governed changes.
 	if view.CurrentState == model.StateS2Implement && governedChange != nil {
-		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle)
+		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle, view.config)
 	}
 
 	if view.CurrentState == model.StateDone {

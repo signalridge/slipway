@@ -18,8 +18,16 @@ func skillsFS() fs.FS {
 	return tmpl.TemplateFS()
 }
 
-func skillTemplatePath(id string) string {
-	return path.Join("skills", id, "SKILL.md")
+func skillSourcePath(t *testing.T, templates fs.FS, id string) string {
+	t.Helper()
+	for _, file := range []string{"CATALOG_SKILL.md", "HOST_SKILL.md", "HOST_SKILL.md.tmpl"} {
+		name := path.Join("skills", id, file)
+		if _, err := fs.Stat(templates, name); err == nil {
+			return name
+		}
+	}
+	t.Fatalf("skill %s has no recognized source entrypoint", id)
+	return ""
 }
 
 // skillsRootPath points to the embedded source-of-truth directory for catalog skill sources.
@@ -27,9 +35,12 @@ func skillsRootPath() string {
 	return "skills"
 }
 
-// loadFrontmatter parses SKILL.md frontmatter from the embedded template FS.
+// loadFrontmatter parses source skill frontmatter from the embedded template FS.
 func loadFrontmatter(t *testing.T, templates fs.FS, name string) frontmatter {
 	t.Helper()
+	if strings.HasSuffix(name, ".tmpl") {
+		return loadRenderedFrontmatter(t, name, nil)
+	}
 	raw, err := fs.ReadFile(templates, name)
 	require.NoError(t, err)
 	text := extractFrontmatterBlock(t, string(raw))
@@ -49,7 +60,7 @@ func loadRenderedFrontmatter(t *testing.T, name string, data any) frontmatter {
 }
 
 // TestFrontmatterMirrorsRegistryBindings is the binding-compare gate.
-// It parses each SKILL.md's frontmatter and asserts the bindings[] list
+// It parses each source skill's frontmatter and asserts the bindings[] list
 // matches the Go-owned Skill entry exactly.
 func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 	t.Parallel()
@@ -59,14 +70,14 @@ func TestFrontmatterMirrorsRegistryBindings(t *testing.T) {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
+			fm := loadFrontmatter(t, templates, skillSourcePath(t, templates, sk.ID))
 			assertBindingsEqual(t, sk, fm.Bindings)
 		})
 	}
 }
 
 // TestFrontmatterMirrorsRegistryHydrateReferences is the hydrate
-// compare gate. Every catalog skill's SKILL.md frontmatter
+// compare gate. Every catalog skill's source frontmatter
 // `hydrate_references:` list must match the Go-owned Skill.HydrateReferences
 // record-for-record after sorting by name.
 func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
@@ -77,7 +88,7 @@ func TestFrontmatterMirrorsRegistryHydrateReferences(t *testing.T) {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
+			fm := loadFrontmatter(t, templates, skillSourcePath(t, templates, sk.ID))
 			assertHydrateReferencesEqual(t, sk, fm.HydrateReferences)
 		})
 	}
@@ -91,16 +102,16 @@ func TestFrontmatterMirrorsRegistryHostCapabilities(t *testing.T) {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
+			fm := loadFrontmatter(t, templates, skillSourcePath(t, templates, sk.ID))
 			assertHostCapabilitiesEqual(t, sk, fm.HostCapabilities)
 		})
 	}
 
-	t.Run("independent-review/SKILL.md.tmpl", func(t *testing.T) {
+	t.Run("independent-review/HOST_SKILL.md.tmpl", func(t *testing.T) {
 		t.Parallel()
 		sk, ok := reg.Lookup("independent-review")
 		require.True(t, ok)
-		fm := loadRenderedFrontmatter(t, "skills/independent-review/SKILL.md.tmpl", nil)
+		fm := loadRenderedFrontmatter(t, "skills/independent-review/HOST_SKILL.md.tmpl", nil)
 		assertHostCapabilitiesEqual(t, sk, fm.HostCapabilities)
 	})
 }
@@ -116,7 +127,7 @@ func TestSizeBudgetsForRegisteredSkills(t *testing.T) {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			name := skillTemplatePath(sk.ID)
+			name := skillSourcePath(t, templates, sk.ID)
 			raw, err := fs.ReadFile(templates, name)
 			require.NoError(t, err)
 			body := stripFrontmatter(string(raw))
@@ -152,7 +163,7 @@ func TestFrontmatterHasRequiredFields(t *testing.T) {
 		sk := sk
 		t.Run(sk.ID, func(t *testing.T) {
 			t.Parallel()
-			fm := loadFrontmatter(t, templates, skillTemplatePath(sk.ID))
+			fm := loadFrontmatter(t, templates, skillSourcePath(t, templates, sk.ID))
 			assert.Equal(t, sk.ID, fm.SkillID)
 			assert.Equal(t, string(sk.Domain), fm.Domain)
 			assert.Equal(t, string(sk.Tier), fm.Tier)

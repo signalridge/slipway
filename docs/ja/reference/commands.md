@@ -89,6 +89,7 @@ slipway config list --json
 - `slipway tool <helper>` は生成されたスキルから直接呼び出され、生成されたアダプターのプロンプトサーフェスはありません。
 - `slipway hook session-start` と `slipway hook context-pressure` は生成されたホストフック設定から直接呼び出されます。フックヘルパーは、ホストの自動フックがユーザーをブロックしないよう静かに失敗します。
 - `slipway config`、`slipway config list --json`、`slipway config list --env [--json]`、`slipway config get <key> --json`、`slipway config set <key> <value>` は `.slipway.yaml` キーとランタイム/シークレット環境変数サーフェスを確認します。更新できるのはファイル設定キーだけです。`config` は意図的に CLI 専用であり、生成されたアダプターのプロンプトサーフェスはありません。
+- `subagents.*` config は `plan_audit`、`executor`、`review`、`fix`、`verify` の slot-based delegation target を制御します。詳しくは [Subagent 設定](subagents.md) を参照してください。
 
 ## 読み取り専用サーフェス
 

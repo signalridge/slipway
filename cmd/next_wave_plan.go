@@ -15,8 +15,12 @@ import (
 // buildWavePlan returns a live projection from the current tasks.md in S2.
 // The persisted wave-plan.yaml is an execution artifact/cache; it is not the
 // planning authority while implementation tasks are still being amended.
-func buildWavePlan(root, artifactBundle string) *wavePlanView {
-	return derivedWavePlanView(root, artifactBundle)
+func buildWavePlan(root, artifactBundle string, cfg model.Config) *wavePlanView {
+	view := derivedWavePlanView(root, artifactBundle)
+	if view != nil {
+		view.ExecutorSubagent = subagentDirectiveForSlot(cfg, model.SubagentSlotExecutor)
+	}
+	return view
 }
 
 // derivedWavePlanView parses tasks.md and computes dependency-ordered waves.

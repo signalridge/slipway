@@ -85,6 +85,7 @@ artifact-readiness detail, transition traces, or context-budget diagnostics.
 - `slipway tool <helper>` is invoked directly by generated skills and has no generated adapter prompt surface.
 - `slipway hook session-start` and `slipway hook context-pressure` are invoked directly by generated host hook configuration; hook helpers fail silent so automatic hooks cannot block the user.
 - `slipway config`, `slipway config list --json`, `slipway config list --env [--json]`, `slipway config get <key> --json`, and `slipway config set <key> <value>` inspect `.slipway.yaml` keys and the runtime/secret environment surface; only file keys can be updated. `config` is intentionally CLI-only and has no generated adapter prompt surface.
+- `subagents.*` config controls slot-based delegation targets for `plan_audit`, `executor`, `review`, `fix`, and `verify`; see [Subagent Configuration](subagents.md).
 
 ## Read-Only Authority
 

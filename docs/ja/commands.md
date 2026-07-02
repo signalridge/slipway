@@ -13,7 +13,7 @@
 | `slipway plan` | mutation | S1 の計画アーティファクト作成、または同一インテント変更の修正を実行する。 |
 | `slipway implement` | mutation | S2 の実装ウェーブオーケストレーションを実行する。 |
 | `slipway review` | mutation | S3 のレビュー収束とレビュアーフィードバックの修復を実行する。 |
-| `slipway fix` | mutation | S3 レビュー指摘に対するフレッシュコンテキストの修正をディスパッチする。 |
+| `slipway fix` | mutation | S3 レビュー指摘に対する `contract.subagent` 設定の修正をディスパッチする。 |
 | `slipway done` | mutation | done-ready な変更をファイナライズしてアーカイブする。 |
 | `slipway next` | query | 状態を進めずに、次に実行可能なスキルやブロッカーを確認する。 |
 | `slipway run` | mutation | スキル、ブロッカー、または done-ready の結果が現れるまで、現在のライフサイクルステージをショートカット駆動する。 |
@@ -23,7 +23,12 @@
 
 計画の現在性は構造的なタスク計画ハッシュをキーとします。プラン監査は S2 が開始できる前に計画バンドルをレビューしますが、`wave-plan.yaml` を計画の権威として認証するものではありません。`wave-plan.yaml` は現在の `tasks.md` から具現化された S2 実行用の投影／キャッシュであり、その `generated_at` は現在性を判断する根拠ではなく、表示・監査用の具現化時刻です。`slipway next --json` の `input_context.wave_plan` フィールドは別個の診断専用の投影で、永続化された `wave-plan.yaml` キャッシュが定義しない表示専用フィールド（`wave_count`、`advisories`）を含むため、決してキャッシュにコピーしてはなりません。`wave-plan.yaml` はツール（`slipway repair`）が再生成するエンジン所有のキャッシュで、手編集はしません。読み取れない場合は、`tasks.md` を編集するのではなく `slipway repair` で再生成してください。
 
-`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` と現在の入力に基づく修復サブエージェント向けのコントラクトを返します。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
+`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` とコントラクトを返します。`fix` slot が設定されている場合、そのコントラクトには `contract.subagent` が含まれます。ホストはその directive を優先し、存在しない場合は native fresh-context 修復サブエージェントへフォールバックします。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
+
+設定された subagent delegation target は `.slipway.yaml` の `subagents.*` にあります。
+slot は `default`、`plan_audit`、`executor`、`review`、`fix`、`verify` です。各
+slot は `type: native|mcp|skills`、`name`、`session_instructions`、`timeout` を
+受け取ります。Schema と JSON surface は [Subagent 設定](reference/subagents.md) を参照してください。
 
 ## 作成オプション
 

@@ -152,7 +152,8 @@ surfaces:
 
 - `.slipway.yaml` is version-controlled repo policy. Use `slipway config list`,
   `slipway config get <key>`, and `slipway config set <key> <value>` for these
-  dotted file keys.
+  dotted file keys. Subagent delegation policy lives under `subagents`; see
+  [Subagent Configuration](docs/reference/subagents.md).
 - Runtime/host environment variables describe the current AI host session:
   context-window size, host capabilities, handoff owner identity, and similar
   facts. Discover them with `slipway config list --env`.
@@ -398,6 +399,8 @@ Documentation is organized by task:
 - [Recover and Troubleshoot](docs/how-to/recover-and-troubleshoot.md):
   fail-closed recovery.
 - [Commands](docs/reference/commands.md): command and JSON surface reference.
+- [Subagent Configuration](docs/reference/subagents.md): slot-based delegation
+  policy for native, MCP, and skills providers.
 - [AI Tool Adapters](docs/reference/ai-tools.md): generated host files and
   invocation style.
 - [Design](docs/explanation/design.md) and

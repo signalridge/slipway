@@ -12,7 +12,7 @@ func TestTestDesignTemplatesStayLanguageNeutral(t *testing.T) {
 	t.Parallel()
 
 	templates := []string{
-		"skills/test-design/SKILL.md",
+		"skills/test-design/CATALOG_SKILL.md",
 		"skills/test-design/references/test-doubles.md",
 		"skills/test-design/references/behavior-vs-implementation.md",
 		"skills/test-design/references/case-enumeration.md",

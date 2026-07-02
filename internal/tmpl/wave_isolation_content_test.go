@@ -11,7 +11,7 @@ import (
 func TestWaveOrchestrationDispatchContractIsolatesTestAuthoring(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "codex",
 		"Trigger":     "/slipway:wave-orchestration",
 		"Description": "test",
@@ -41,7 +41,7 @@ func TestWaveOrchestrationDispatchContractIsolatesTestAuthoring(t *testing.T) {
 func TestWaveOrchestrationDocumentsEngineSafetyModelAndBlockers(t *testing.T) {
 	t.Parallel()
 
-	skill, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	skill, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "codex",
 		"Trigger":     "/slipway:wave-orchestration",
 		"Description": "test",
@@ -63,7 +63,7 @@ func TestWaveOrchestrationDocumentsEngineSafetyModelAndBlockers(t *testing.T) {
 		name    string
 		content string
 	}{
-		{"SKILL.md.tmpl", skill},
+		{"HOST_SKILL.md.tmpl", skill},
 		{"executor-dispatch-reference.md", ref},
 	} {
 		lower := strings.ToLower(surface.content)
@@ -88,7 +88,7 @@ func TestWaveOrchestrationDocumentsEngineSafetyModelAndBlockers(t *testing.T) {
 func TestTDDGovernanceNamesFrozenTestAuthoringCommitAsRedProof(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/tdd-governance/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/tdd-governance/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "codex",
 		"Trigger":     "/slipway:tdd-governance",
 		"Description": "test",
