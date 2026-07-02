@@ -108,7 +108,7 @@ func configDescriptions() map[string]string {
 		"execution.cancel_grace_period_seconds":                 "Grace period before a cancel forcibly tears down in-flight execution.",
 		"execution.max_plan_audit_iterations":                   "Maximum plan-audit retry iterations before the gate fails closed.",
 		"execution.parallelization":                             "Within-wave parallel dispatch: unset/forced runs concurrently, off opts out.",
-		"execution.auto":                                        "Opt into auto-advance execution that auto-advances pass-through stages.",
+		"execution.auto":                                        "Opt into bounded auto mode that continues routine run-to-advance command boundaries.",
 		"governance.default_preset":                             "Default workflow preset applied to new governed changes.",
 		"governance.min_preset":                                 "Minimum workflow preset a change may be downgraded to.",
 		"governance.auto_provision_worktree":                    "Whether `slipway new` provisions a dedicated worktree per change (default enabled).",

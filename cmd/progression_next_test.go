@@ -3472,7 +3472,7 @@ func TestShouldStopRunLoopDoesNotStopForExecutionResumeContext(t *testing.T) {
 		},
 	}
 
-	assert.False(t, shouldStopRunLoop(view))
+	assert.False(t, shouldStopRunLoop(view, false))
 }
 
 func TestNextIncludesFreshnessInExecutionResume(t *testing.T) {

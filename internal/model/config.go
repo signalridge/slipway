@@ -449,9 +449,9 @@ type ConfigExecution struct {
 	// by default; "off" opts the project out so the host may run waves sequentially
 	// without recording a degradation.
 	Parallelization string `yaml:"parallelization,omitempty" json:"parallelization,omitempty"`
-	// Auto opts the project into auto-advance execution that auto-advances pure
-	// pass-through stages. Default (unset) is false; it is emitted only when
-	// enabled.
+	// Auto opts the project into bounded auto mode that continues routine
+	// run-to-advance command boundaries. Default (unset) is false; it is emitted
+	// only when enabled.
 	Auto bool `yaml:"auto,omitempty" json:"auto,omitempty"`
 }
 
@@ -466,8 +466,8 @@ func (e ConfigExecution) ForcedParallel() bool {
 	return e.Parallelization != ParallelizationOff
 }
 
-// AutoEnabled reports whether auto-advance execution is opted in. Default
-// (unset) is false.
+// AutoEnabled reports whether bounded auto mode is opted in. Default (unset) is
+// false.
 func (e ConfigExecution) AutoEnabled() bool {
 	return e.Auto
 }

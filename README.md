@@ -201,10 +201,11 @@ current primary stage command and stops at operator-facing boundaries.
 ### Execution auto mode
 
 `execution.auto` in `.slipway.yaml` is **off by default**. When opted in (or
-overridden per run with `slipway run --auto`), `slipway run` auto-advances
-pure-pacing pauses on prior authorization — review batches, non-sensitive skill
-handoffs, and **fresh** human-verify checkpoints — without stopping for a fresh
-confirmation. `slipway run --no-auto` forces a single run back to manual pacing
+overridden per run with `slipway run --auto`), `slipway run` keeps moving across
+routine `run_slipway_run_to_advance` command boundaries after a successful
+advance when prior authorization is sufficient. In plain terms: it avoids
+asking you to run `slipway run` again just to cross a pass-through step.
+`slipway run --no-auto` forces a single run back to manual pacing
 (`--no-auto=false` is not an affirmative override and falls through to config).
 
 Config-level `execution.auto` also applies to the stage commands
@@ -212,13 +213,17 @@ Config-level `execution.auto` also applies to the stage commands
 consistently with `run` but expose no per-stage flag; the per-run `--auto` /
 `--no-auto` overrides live only on `slipway run`.
 
-Auto mode never relaxes governance. `security-review` boundaries,
-sensitive/guardrail confirmations, the intake Approved Summary, decision and
-human_action checkpoints, stale or unknown-freshness checkpoints, and every
-evidence gate are **never** auto-advanced; they always hard-stop for explicit
-operator input and fresh evidence. The upgrade-only preset auto-confirm only
-ever raises governance strictness (never lowers it), so it is not one of these
-red lines.
+Auto mode never relaxes governance. It does not execute governance skills,
+dispatch review batches, record evidence, approve the intake Approved Summary,
+or finalize a done-ready change. Non-sensitive skill handoffs and review batches
+may be reported by `next --json` as `evidence_continuation` with prior
+authorization sufficient, but `run` and stage loops still stop for the host to
+run the skill or review and record evidence. `security-review` boundaries,
+sensitive/guardrail confirmations, decision and human_action checkpoints, stale
+or unknown-freshness checkpoints, and every evidence gate are **never**
+auto-advanced; they always hard-stop for explicit operator input and fresh
+evidence. The upgrade-only preset auto-confirm only ever raises governance
+strictness (never lowers it), so it is not one of these red lines.
 
 </details>
 

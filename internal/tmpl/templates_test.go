@@ -1388,6 +1388,10 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	for _, phrase := range []string{
 		"Under auto (`execution.auto` or `slipway run --auto`)",
 		"`--auto`/`--no-auto`: override `execution.auto` for this run",
+		"auto continues only routine `run_slipway_run_to_advance` command boundaries",
+		"never skill/review handoffs",
+		"Skill handoffs and review batches still stop the run loop for host work",
+		"`evidence_continuation` instead of `hard_stop`",
 		"Auto never crosses sensitive/guardrail confirmations",
 		"`security-review` boundaries",
 		"the intake Approved Summary",
@@ -1830,8 +1834,13 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 
 	t.Run("next dispatch content preserved", func(t *testing.T) {
 		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "next", "command-next-body", "claude")
+		normalized := strings.Join(strings.Fields(content), " ")
 		assert.Contains(t, content, "`next_skill.name` is the authoritative governed-host handoff.")
 		assert.Contains(t, content, "`slipway run --json`")
+		assert.Contains(t, normalized, "`evidence_continuation` with prior authorization sufficient")
+		assert.Contains(t, normalized, "run/stage loops still stop for the host to run the skill or review and record evidence")
+		assert.Contains(t, normalized, "`security-review` boundaries")
+		assert.Contains(t, normalized, "the intake Approved Summary")
 		assert.NotContains(t, content, "Tool-Specific Dispatch")
 	})
 
@@ -1846,6 +1855,8 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 				content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", commandID, bodyTemplate, "claude")
 				assert.Contains(t, content, "Config-level `execution.auto` applies to this stage command")
 				assert.Contains(t, content, "there are no per-stage auto override flags")
+				assert.Contains(t, content, "`evidence_continuation`")
+				assert.Contains(t, content, "skill/review handoffs still stop the loop for host work")
 				assert.Contains(t, content, "sensitive/guardrail confirmations")
 				assert.NotContains(t, content, "- `--auto`")
 				assert.NotContains(t, content, "- `--no-auto`")

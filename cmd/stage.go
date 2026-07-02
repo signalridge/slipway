@@ -147,7 +147,7 @@ func runStageLoop(root string, ref changeRef, spec stageCommandSpec, auto bool) 
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)
 		}
-		if view.CurrentState != spec.ExpectedState || shouldStopRunLoop(view) {
+		if view.CurrentState != spec.ExpectedState || shouldStopRunLoop(view, auto) {
 			break
 		}
 	}

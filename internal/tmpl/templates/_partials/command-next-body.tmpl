@@ -21,7 +21,8 @@ slipway next --json
 - Branch on `confirmation_requirement.next_action_kind` (`skill_handoff` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`) and run `confirmation_requirement.next_command` when present; `next_action` is human prose, not a contract to parse.
 - `context_budget` appears only when `guard_action` is `warn` or `stop`; absence means no budget guard is active.
 - `next` is query-only: it reflects config-level `execution.auto`, has no `--auto`/`--no-auto` flags, and never mutates pending preset confirmations; per-run `slipway run --auto` behavior is on `run`.
-- Under auto, only pure-pacing pauses auto-advance on prior authorization; mutating run/stage commands may auto-confirm an upgrade-only preset. Still hard-stop at `security-review`, sensitive/guardrail confirmations, intake Approved Summary, and evidence gates.
+- Under auto, non-sensitive skill handoffs and review batches may be reported as `evidence_continuation` with prior authorization sufficient. That is standing authorization for host work, not a loop advance: run/stage loops still stop for the host to run the skill or review and record evidence.
+- Auto hard-stops at `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, done finalization, and evidence gates.
 - Write evidence to `next_skill.verification_dir`.
 - If `blockers` is non-empty, resolve the blockers before executing the skill.
 - If governance control details are needed, run `slipway health --governance --json --change <slug>`.

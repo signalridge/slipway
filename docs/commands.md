@@ -282,8 +282,12 @@ When diagnostics are enabled, review-state handoff JSON can also include:
 `run --auto` / `run --no-auto` override `execution.auto` for one invocation.
 Config-level `execution.auto` also applies to `intake`, `plan`, and
 `implement`; those stage commands have no override flags. Auto only crosses
-pure-pacing boundaries. `security-review` boundaries, sensitive/guardrail
-confirmations, the intake Approved Summary, and evidence gates remain stops.
+routine `run_slipway_run_to_advance` command boundaries after a successful
+advance. Skill handoffs and review batches still stop the run/stage loop for
+host work; non-sensitive/non-guardrail handoffs may be reported as
+`evidence_continuation` instead of `hard_stop`. `security-review` boundaries,
+sensitive/guardrail confirmations, the intake Approved Summary, done
+finalization, and evidence gates remain hard stops.
 
 `validate` is the active-readiness authority: it answers whether the
 current governed state can advance now and mirrors actionable review handoff

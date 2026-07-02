@@ -123,9 +123,10 @@ override behavior is needed.
 
 ## Run Auto Mode
 
-`slipway run` can auto-advance pure-pacing pauses so a governed change keeps
-moving without a fresh human stop at every routine handoff. Enable it per repo
-with the `execution.auto` config, or override it for a single invocation:
+`slipway run` can continue routine `run_slipway_run_to_advance` command
+boundaries after a successful advance, so a governed change does not stop just
+to ask for the same `slipway run` command again. Enable it per repo with the
+`execution.auto` config, or override it for a single invocation:
 
 ```bash
 slipway run --json --auto
@@ -133,12 +134,16 @@ slipway run --json --no-auto
 ```
 
 `--auto` and `--no-auto` take precedence over the `execution.auto` config for
-that one run. Under auto, Slipway auto-advances pure-pacing pauses (review
-batches without `security-review`, non-sensitive/non-security-review skill
-handoffs) on prior authorization and auto-confirms a pending workflow-preset
-upgrade-only (never downgraded). `security-review` boundaries, sensitive and
-guardrail confirmations, the intake Approved Summary, and every evidence gate
-still hard-stop and are never auto-advanced.
+that one run. Under auto, Slipway continues only routine run-to-advance command
+boundaries and auto-confirms a pending workflow-preset upgrade-only (never
+downgraded). It does not execute governance skills, dispatch review batches,
+record evidence, approve the intake Approved Summary, or finalize done-ready
+changes. Non-sensitive skill handoffs and review batches may be reported by
+`next --json` as `evidence_continuation` with prior authorization sufficient,
+but run/stage loops still stop for the host to run the skill or review and
+record evidence. `security-review` boundaries, sensitive and guardrail
+confirmations, and every evidence gate still hard-stop and are never
+auto-advanced.
 
 ## Surface Manifest
 
