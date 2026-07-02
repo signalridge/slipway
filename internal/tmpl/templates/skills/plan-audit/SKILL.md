@@ -191,7 +191,8 @@ then configure the auditor invocation accordingly; Slipway does not model these
 provider parameters, so mapping that natural-language intent onto the target's
 own parameter surface is this host's responsibility. If the directive includes
 `engine_boundary`, honor it as Slipway's slot-level mutation/read-only boundary;
-it is not a provider capability description. Model the dispatch on how
+it is not a provider capability description. The `plan_audit` slot is read-only;
+do not modify files during the audit. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn one fresh-context
 subagent with a bounded audit brief, pass it required-reading paths rather than
 artifact bodies, wait for its result, and record its handle. If the host has not

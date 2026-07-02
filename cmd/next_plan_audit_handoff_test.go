@@ -111,6 +111,36 @@ func TestNextS1PlanAuditProjectsConfiguredSubagentDirective(t *testing.T) {
 	})
 }
 
+func TestNextS1PlanAuditProjectsDefaultReadOnlyBoundary(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, levelDiscovery, "plan-audit default subagent boundary")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.PlanSubStep = model.PlanSubStepBundle
+		require.NoError(t, state.SaveChange(root, change))
+
+		view := runNextDiagnostics(t, root, slug)
+
+		require.NotNil(t, view.NextSkill)
+		assert.Equal(t, progression.SkillPlanAudit, view.NextSkill.Name)
+		assertSubagentDirective(
+			t,
+			view.NextSkill.Subagent,
+			model.SubagentTypeNative,
+			"",
+			"",
+			"",
+			true,
+			"deny",
+		)
+	})
+}
+
 // TestNextS1PlanAuditSurfacesSubagentDelegationAcrossCapabilityStates pins the
 // host subagent-delegation contract for the S1 plan-audit handoff (#339).
 // plan-audit REQUIRES dispatching an independent auditor subagent, but it is not

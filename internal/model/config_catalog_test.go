@@ -373,7 +373,9 @@ func TestConfigSetValueInvalidNoMutation(t *testing.T) {
 		"subagents.security_review.type",
 		"subagents.review.profile",
 		"subagents.review.prompt",
+		"subagents.review.model",
 		"subagents.review.allowed_skills",
+		"subagents.review.allowed_mcp_servers",
 		"subagent_provider_profiles",
 	} {
 		if _, err := ConfigSetValue(cfg, key, "true"); err == nil {

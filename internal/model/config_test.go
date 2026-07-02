@@ -211,6 +211,37 @@ subagents:
 	assert.Equal(t, "Keep outputs concise.", verify.SessionInstructions)
 }
 
+func TestConfigSubagentsResolveReadOnlyBoundaryWithoutUserConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	for _, slot := range []SubagentSlotName{
+		SubagentSlotPlanAudit,
+		SubagentSlotReview,
+		SubagentSlotVerify,
+	} {
+		got := cfg.ResolveSubagent(slot)
+		assert.Equal(t, SubagentTypeNative, got.Type, slot)
+		assert.Empty(t, got.Name, slot)
+		assert.Empty(t, got.SessionInstructions, slot)
+		assert.Empty(t, got.Timeout, slot)
+		require.NotNil(t, got.EngineBoundary, slot)
+		assert.True(t, got.EngineBoundary.ReadOnly, slot)
+		assert.Equal(t, "deny", got.EngineBoundary.MutationPolicy, slot)
+	}
+
+	assert.True(
+		t,
+		cfg.ResolveSubagent(SubagentSlotExecutor).IsZero(),
+		"unconfigured executor should not emit a writable directive",
+	)
+	assert.True(
+		t,
+		cfg.ResolveSubagent(SubagentSlotFix).IsZero(),
+		"unconfigured fix should not emit a writable directive",
+	)
+}
+
 func TestConfigSubagentsTypeOverrideDoesNotInheritCrossProviderName(t *testing.T) {
 	t.Parallel()
 
@@ -336,6 +367,15 @@ subagents:
 			want: "tool_policy",
 		},
 		{
+			name: "old model field",
+			body: `
+subagents:
+  review:
+    model: gpt-5
+`,
+			want: "model",
+		},
+		{
 			name: "allowed skills",
 			body: `
 subagents:
@@ -343,6 +383,15 @@ subagents:
     allowed_skills: []
 `,
 			want: "allowed_skills",
+		},
+		{
+			name: "allowed mcp servers",
+			body: `
+subagents:
+  review:
+    allowed_mcp_servers: []
+`,
+			want: "allowed_mcp_servers",
 		},
 	}
 

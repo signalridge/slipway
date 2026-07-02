@@ -50,6 +50,12 @@ subagents:
 | `session_instructions` | 自然语言意图。宿主在派发时读取它，用来把所选 `type`/`name` 目标自己的参数——模型、backend/runtime（例如 Codex 或 Claude）、工具选择——配置成与之匹配。Slipway 不建模这些参数：它不是类型化字段，也不是 provider profile，更不会作为模型 prompt 继承。 |
 | `timeout` | 可选的宿主侧超时提示。Slipway 只校验前后空白；具体解释由宿主/provider 决定。 |
 
+Slipway 还会在宿主侧 JSON directive 中投影 `engine_boundary` 对象。这个字段由
+引擎生成，不接受写进 `.slipway.yaml`。它告诉宿主该 slot 是否只读，以及适用的
+mutation policy。`plan_audit`、`review` 和 `verify` 即使没有任何 `subagents`
+配置，也始终收到只读 `engine_boundary`（`read_only: true`、
+`mutation_policy: deny`），所以安全边界不依赖用户是否写了路由配置。
+
 `mcp` 和 `skills` 的有效配置必须有非空 `name`。如果某个 slot 把 `type`
 改成了不同于 `default` 的 provider family，也要在这个 slot 上设置 `name`；
 名字不会跨 provider family 继承。
@@ -58,7 +64,7 @@ subagents:
 
 | Slot | JSON 输出面 | 说明 |
 | --- | --- | --- |
-| `default` | 被其他 slot 继承 | 共享兜底。如果完全没有 `subagents` 配置，Slipway 不输出委派 directive。 |
+| `default` | 被其他 slot 继承 | 共享兜底。如果完全没有 `subagents` 配置，只读 slot 仍会输出 native 的 boundary-only directive。 |
 | `plan_audit` | `plan-audit` 的 `next_skill.subagent` | plan 编写本身仍在主会话里；只有 plan audit 被委派。 |
 | `executor` | `input_context.wave_plan.executor_subagent` | S2 wave 执行。provider 可以在内部 fan out，但 Slipway 仍审计任务证据和 changed files。 |
 | `review` | 已选 S3 reviewers 的 `next_skill.subagent` 和 `review_batch.subagent` | 一个 slot 覆盖整个已选 review batch。不配置逐 reviewer 的 provider family。 |

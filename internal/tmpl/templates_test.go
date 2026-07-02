@@ -3,7 +3,10 @@ package tmpl
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1845,7 +1848,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 	})
 }
 
-func TestSubagentHostTemplatesExplainEngineBoundary(t *testing.T) {
+func TestSubagentHostTemplatesExplainEngineBoundaryAndSessionInstructions(t *testing.T) {
 	t.Parallel()
 
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}
@@ -1864,13 +1867,114 @@ func TestSubagentHostTemplatesExplainEngineBoundary(t *testing.T) {
 			require.NoError(t, err)
 			assert.Contains(t, content, "`engine_boundary`")
 			assert.Contains(t, content, "not a provider capability")
+			assert.Contains(t, content, "`session_instructions`")
 		})
 	}
 
-	planAudit, err := Content("skills/plan-audit/SKILL.md")
-	require.NoError(t, err)
-	assert.Contains(t, planAudit, "`engine_boundary`")
-	assert.Contains(t, planAudit, "not a provider capability")
+	readOnlyTemplates := []struct {
+		name string
+		read func() (string, error)
+	}{
+		{
+			name: "skills/plan-audit/SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/plan-audit/SKILL.md")
+			},
+		},
+		{
+			name: "skills/independent-review/SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/independent-review/SKILL.md")
+			},
+		},
+		{
+			name: "skills/security-review/SKILL.md",
+			read: func() (string, error) {
+				return Content("skills/security-review/SKILL.md")
+			},
+		},
+		{
+			name: "skills/spec-compliance-review/SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/spec-compliance-review/SKILL.md.tmpl", data)
+			},
+		},
+		{
+			name: "skills/code-quality-review/SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/code-quality-review/SKILL.md.tmpl", data)
+			},
+		},
+		{
+			name: "skills/ship-verification/SKILL.md.tmpl",
+			read: func() (string, error) {
+				return Render("skills/ship-verification/SKILL.md.tmpl", data)
+			},
+		},
+	}
+	for _, item := range readOnlyTemplates {
+		t.Run(item.name, func(t *testing.T) {
+			content, err := item.read()
+			require.NoError(t, err)
+			flat := strings.Join(strings.Fields(content), " ")
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "read-only")
+			assert.Contains(t, flat, "do not modify files")
+			assert.Contains(t, content, "`session_instructions`")
+		})
+	}
+}
+
+func TestSubagentReferenceDocsDescribeBoundaryAndRetiredKeys(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := templatesTestRepoRoot(t)
+	docs := []string{
+		"docs/reference/subagents.md",
+		"docs/zh/reference/subagents.md",
+		"docs/ja/reference/subagents.md",
+	}
+	requiredSlots := []string{
+		"`default`",
+		"`plan_audit`",
+		"`executor`",
+		"`review`",
+		"`fix`",
+		"`verify`",
+	}
+	retiredKeys := []string{
+		"`subagent_provider_profiles`",
+		"`allowed_skills`",
+		"`allowed_mcp_servers`",
+		"`tool_policy`",
+		"`profile`",
+		"`prompt`",
+	}
+	for _, docPath := range docs {
+		t.Run(docPath, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(repoRoot, docPath))
+			require.NoError(t, err)
+			content := string(data)
+
+			for _, slot := range requiredSlots {
+				assert.Contains(t, content, slot)
+			}
+			assert.Contains(t, content, "`engine_boundary`")
+			assert.Contains(t, content, "`read_only")
+			assert.Contains(t, content, "`mutation_policy")
+			for _, key := range retiredKeys {
+				assert.NotContains(t, content, key)
+			}
+		})
+	}
+}
+
+func templatesTestRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, filename, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
 }
 
 func renderPromptSurfaceForTest(t *testing.T, templateName, commandID, bodyTemplate, toolID string) string {

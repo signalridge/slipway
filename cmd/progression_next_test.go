@@ -777,6 +777,41 @@ func TestNextS3ShipVerificationSurfacesSubagentDelegationAcrossCapabilityStates(
 	assert.Equal(t, "skill_handoff:"+progression.SkillShipVerification, fallback.ConfirmationRequirement.Reason)
 }
 
+func TestNextS3ShipVerificationProjectsDefaultReadOnlyBoundary(t *testing.T) {
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug := createGovernedRequest(t, root, levelNonDiscovery, "ship verification default subagent boundary")
+	change, err := state.LoadChange(root, slug)
+	require.NoError(t, err)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+	writeShipReadyGovernedBundle(t, root, change)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	writePassingReviewEvidencePack(t, root, slug, 1)
+
+	t.Setenv("SLIPWAY_HOST_CAPABILITIES", "subagent")
+	t.Setenv("SLIPWAY_HOST_CAPABILITY_FALLBACKS", "")
+
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+	assertSubagentDirective(
+		t,
+		view.NextSkill.Subagent,
+		model.SubagentTypeNative,
+		"",
+		"",
+		"",
+		true,
+		"deny",
+	)
+}
+
 func TestNextDoesNotAutoPassStrictPresetReview(t *testing.T) {
 	t.Parallel()
 
@@ -1584,6 +1619,28 @@ func TestReviewBatchSurfacesSubagentDelegationForEveryPendingReviewer(t *testing
 
 	view := runNextDiagnostics(t, root, slug)
 	specs := model.ReasonSpecs(view.Blockers)
+	require.NotNil(t, view.NextSkill)
+	assertSubagentDirective(
+		t,
+		view.NextSkill.Subagent,
+		model.SubagentTypeNative,
+		"",
+		"",
+		"",
+		true,
+		"deny",
+	)
+	require.NotNil(t, view.ReviewBatch)
+	assertSubagentDirective(
+		t,
+		view.ReviewBatch.Subagent,
+		model.SubagentTypeNative,
+		"",
+		"",
+		"",
+		true,
+		"deny",
+	)
 	for _, reviewer := range []string{
 		progression.SkillCodeQualityReview,
 		progression.SkillIndependentReview,

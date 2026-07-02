@@ -678,9 +678,6 @@ func subagentSlotForSkill(skillName string) (model.SubagentSlotName, bool) {
 }
 
 func subagentDirectiveForSlot(cfg model.Config, slot model.SubagentSlotName) *subagentDirective {
-	if cfg.Subagents.IsZero() {
-		return nil
-	}
 	resolved := cfg.ResolveSubagent(slot)
 	if resolved.IsZero() {
 		return nil

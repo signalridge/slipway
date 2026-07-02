@@ -116,7 +116,8 @@ actually accepts, then configure the review invocation accordingly; Slipway does
 not model these provider parameters, so mapping that natural-language intent onto
 the target's own parameter surface is this host's responsibility. If the
 directive includes `engine_boundary`, honor it as Slipway's slot-level
-mutation/read-only boundary; it is not a provider capability description. Spawn a
+mutation/read-only boundary; it is not a provider capability description. The
+`review` slot is read-only; do not modify files while reviewing. Spawn a
 fresh-context
 subagent with a bounded review brief, pass it required-reading paths rather than
 artifact bodies, wait for the result, and record the handle. If the host has not

@@ -51,6 +51,13 @@ subagents:
 | `session_instructions` | 自然言語の意図。ホストは dispatch 時にこれを読み、選択された `type`/`name` ターゲット自身のパラメータ——model、backend/runtime（例: Codex や Claude）、tool 選択——をそれに合わせて設定します。Slipway はこれらのパラメータをモデル化しません。型付きフィールドでも provider profile でもなく、model prompt として継承もされません。 |
 | `timeout` | 任意のホスト向け timeout hint。Slipway は前後空白だけを検証し、解釈は host/provider に任せます。 |
 
+Slipway は、ホスト向け JSON directive に `engine_boundary` オブジェクトも投影します。
+これは engine が生成するフィールドで、`.slipway.yaml` では受け付けません。slot
+が read-only かどうか、どの mutation policy が適用されるかをホストへ伝えます。
+`plan_audit`、`review`、`verify` は、`subagents` 設定がなくても常に read-only の
+`engine_boundary`（`read_only: true`、`mutation_policy: deny`）を受け取ります。
+そのため、安全境界はユーザーが routing 設定を書いたかどうかに依存しません。
+
 `mcp` と `skills` では、有効な `name` が必須です。slot が `default` と異なる
 provider family に `type` を変更する場合、その slot にも `name` を設定してください。
 名前は provider family をまたいで継承されません。
@@ -59,7 +66,7 @@ provider family に `type` を変更する場合、その slot にも `name` を
 
 | Slot | JSON surface | Notes |
 | --- | --- | --- |
-| `default` | 他の slot に継承 | 共有 fallback。`subagents` がない場合、Slipway は delegation directive を出しません。 |
+| `default` | 他の slot に継承 | 共有 fallback。`subagents` がない場合でも、read-only slot は native の boundary-only directive を出します。 |
 | `plan_audit` | `plan-audit` の `next_skill.subagent` | plan authoring 自体は main session に残ります。委譲されるのは plan audit だけです。 |
 | `executor` | `input_context.wave_plan.executor_subagent` | S2 wave execution。provider が内部で fan out しても、Slipway は task evidence と changed files を監査します。 |
 | `review` | 選択された S3 reviewers の `next_skill.subagent` と `review_batch.subagent` | 1 つの slot が選択済み review batch 全体をカバーします。reviewer ごとの provider family は設定しません。 |

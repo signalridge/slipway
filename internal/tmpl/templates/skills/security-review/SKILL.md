@@ -59,7 +59,8 @@ description. When the directive carries `session_instructions`, read it before
 dispatching and translate any described model, backend/runtime (for example
 Codex or Claude), or tool intent into the concrete parameters the selected
 `type`/`name` target accepts; Slipway does not model these provider parameters.
-Every deviation from a secure default must be called out with a
+The `review` slot is read-only; do not modify files while reviewing. Every
+deviation from a secure default must be called out with a
 reproducible observation, not a taste argument.
 
 ## Report schema

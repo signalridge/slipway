@@ -569,6 +569,13 @@ func (c Config) Validate() error {
 func (c Config) ResolveSubagent(slot SubagentSlotName) ResolvedSubagentDirective {
 	resolved := c.Subagents.Resolve(slot)
 	if resolved.IsZero() {
+		boundary := generatedSubagentEngineBoundary(slot)
+		if boundary != nil && boundary.ReadOnly {
+			return ResolvedSubagentDirective{
+				Type:           SubagentTypeNative,
+				EngineBoundary: boundary,
+			}
+		}
 		return ResolvedSubagentDirective{}
 	}
 	return ResolvedSubagentDirective{

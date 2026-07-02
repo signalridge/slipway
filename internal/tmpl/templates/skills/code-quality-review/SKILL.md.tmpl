@@ -124,7 +124,8 @@ does not model these provider parameters, so mapping the natural-language intent
 onto the target's own parameter surface is this host's responsibility. If it
 includes `engine_boundary`, honor it as Slipway's slot-level mutation/read-only
 boundary; it is not a provider capability
-description. The selected reviews run in parallel as unordered peers:
+description. The `review` slot is read-only; do not modify files while
+reviewing. The selected reviews run in parallel as unordered peers:
 no reviewer waits for another reviewer's verdict. Model the dispatch on how
 `slipway-wave-orchestration` fans out executor subagents: spawn each review as a
 fresh-context subagent with a bounded review brief, pass it required-reading
