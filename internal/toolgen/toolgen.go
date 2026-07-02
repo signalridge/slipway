@@ -486,6 +486,12 @@ const workflowSkillID = "workflow"
 
 const workflowEntryPublicName = "slipway"
 
+const (
+	hostSkillSourceFile         = "HOST_SKILL.md"
+	hostSkillTemplateSourceFile = "HOST_SKILL.md.tmpl"
+	catalogSkillSourceFile      = "CATALOG_SKILL.md"
+)
+
 // standaloneNames lists standalone skills (not governance, not technique) to generate.
 var standaloneNames = []string{workflowSkillID}
 
@@ -580,13 +586,13 @@ func ShouldExportAsHostSkill(id string) bool {
 	return shouldExportAsHostSkill(id)
 }
 
-// GovernanceSkillNames lists the static exported governance surfaces (.md).
+// GovernanceSkillNames lists the static exported governance surfaces.
 var GovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderStatic)
 
 // standaloneGovernanceNames lists standalone exported governance helpers.
 var standaloneGovernanceNames = governanceSurfaceIDsByRenderMode(governanceRenderStandalone)
 
-// TemplatedGovernanceSkillNames lists governance surfaces rendered from .md.tmpl.
+// TemplatedGovernanceSkillNames lists governance surfaces rendered from host templates.
 var TemplatedGovernanceSkillNames = governanceSurfaceIDsByRenderMode(governanceRenderTemplated)
 
 // catalogSkillIDs returns Go-registry skill IDs sorted for deterministic
@@ -1033,7 +1039,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		if !closure.includesHostSkill(name) {
 			continue
 		}
-		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, hostSkillSourceFile))
 		if err != nil {
 			return fmt.Errorf("load governance skill %q: %w", name, err)
 		}
@@ -1050,7 +1056,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		}
 	}
 
-	// Templated governance skills (tool-aware .md.tmpl)
+	// Templated governance skills (tool-aware host templates)
 	for _, name := range TemplatedGovernanceSkillNames {
 		if !closure.includesHostSkill(name) {
 			continue
@@ -1131,7 +1137,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			continue
 		}
 
-		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, hostSkillSourceFile))
 		if err != nil {
 			return fmt.Errorf("load standalone %q: %w", name, err)
 		}
@@ -1152,7 +1158,7 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		if !shouldExportAsHostSkill(name) {
 			continue
 		}
-		content, err := tmpl.Content(sourceSkillTemplatePath(name, "SKILL.md"))
+		content, err := tmpl.Content(sourceSkillTemplatePath(name, hostSkillSourceFile))
 		if err != nil {
 			return fmt.Errorf("load technique %q: %w", name, err)
 		}
@@ -1910,8 +1916,8 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}, pl
 }
 
 // renderCatalogSkill assembles a registry-owned catalog SKILL.md from the
-// source body and optional typed templates in fixed order:
-// SKILL.md body -> PROSE.tmpl -> CHECKLIST.tmpl -> VERDICT.tmpl.
+// catalog source body and optional typed templates in fixed order:
+// CATALOG_SKILL.md body -> PROSE.tmpl -> CHECKLIST.tmpl -> VERDICT.tmpl.
 //
 // The assembled output rewrites the authoring-side frontmatter so adapter
 // skill loaders (Codex, Claude) see the required `name` and `description`
@@ -1919,7 +1925,7 @@ func cleanupPrefixedEntries(dir, prefix string, expected map[string]struct{}, pl
 // ...) are preserved below them so audit and binding-compare gates still
 // work.
 func renderCatalogSkill(sk capability.Skill) (string, error) {
-	base, err := tmpl.Content(sourceSkillTemplatePath(sk.ID, "SKILL.md"))
+	base, err := tmpl.Content(sourceSkillTemplatePath(sk.ID, catalogSkillSourceFile))
 	if err != nil {
 		return "", fmt.Errorf("load catalog base body: %w", err)
 	}
@@ -2194,11 +2200,11 @@ func emitSharedReferenceSupportFromFS(srcFS fs.FS, skillID, dstDir string, refre
 	return nil
 }
 
-// skillReferencesSharedDoc reports whether a skill's authored SKILL.md (or
-// SKILL.md.tmpl) names the shared reference doc, so generation only ships it to
-// the skills that consume it.
+// skillReferencesSharedDoc reports whether a skill's source entry names the
+// shared reference doc, so generation only ships it to the skills that consume
+// it.
 func skillReferencesSharedDoc(srcFS fs.FS, skillID, doc string) (bool, error) {
-	for _, leaf := range []string{"SKILL.md", "SKILL.md.tmpl"} {
+	for _, leaf := range []string{hostSkillSourceFile, hostSkillTemplateSourceFile, catalogSkillSourceFile} {
 		content, err := fs.ReadFile(srcFS, sourceSkillTemplatePath(skillID, leaf))
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -2296,14 +2302,15 @@ func trimCatalogSection(section string) string {
 	return strings.Trim(section, "\n")
 }
 
-// renderTemplatedGovernanceSkill renders a templated governance SKILL.md from a .tmpl template.
+// renderTemplatedGovernanceSkill renders a generated governance SKILL.md from
+// the host-skill template source.
 func renderTemplatedGovernanceSkill(cfg ToolConfig, id string) (string, error) {
 	data := map[string]string{
 		"ToolID":      cfg.ID,
 		"Trigger":     commandTrigger(cfg, id),
 		"Description": commandDescriptions[id],
 	}
-	raw, err := tmpl.Render(sourceSkillTemplatePath(id, "SKILL.md.tmpl"), data)
+	raw, err := tmpl.Render(sourceSkillTemplatePath(id, hostSkillTemplateSourceFile), data)
 	if err != nil {
 		return "", err
 	}
@@ -2315,7 +2322,7 @@ func renderStandaloneWorkflowSkill(cfg ToolConfig) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	raw, err := tmpl.Render(sourceSkillTemplatePath("workflow", "SKILL.md.tmpl"), data)
+	raw, err := tmpl.Render(sourceSkillTemplatePath("workflow", hostSkillTemplateSourceFile), data)
 	if err != nil {
 		return "", err
 	}
@@ -2398,7 +2405,7 @@ func renderSurfaceRouterSkill(cfg ToolConfig, def namespaceRouterDefinition) (st
 			Description: description,
 		})
 	}
-	return tmpl.Render(sourceSkillTemplatePath("surface", "SKILL.md.tmpl"), data)
+	return tmpl.Render(sourceSkillTemplatePath("surface", hostSkillTemplateSourceFile), data)
 }
 
 // renderCommandEntry renders an inline command prompt from the appropriate template.

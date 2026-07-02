@@ -11,7 +11,7 @@ import (
 func TestThinHostShipVerificationDelegatesBulkyEvidence(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/ship-verification/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/ship-verification/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:ship-verification",
 		"Description": "test",
@@ -37,7 +37,7 @@ func TestThinHostShipVerificationDelegatesBulkyEvidence(t *testing.T) {
 func TestThinHostWorktreePreflightKeepsOnlyBoundedBaselineSummary(t *testing.T) {
 	t.Parallel()
 
-	content, err := Content("skills/worktree-preflight/SKILL.md")
+	content, err := Content("skills/worktree-preflight/HOST_SKILL.md")
 	require.NoError(t, err)
 
 	flat := thinHostFlatten(content)
@@ -56,7 +56,7 @@ func TestThinHostWorktreePreflightKeepsOnlyBoundedBaselineSummary(t *testing.T) 
 func TestThinHostWaveOrchestrationDelegatesCodebaseMapReads(t *testing.T) {
 	t.Parallel()
 
-	content, err := Render("skills/wave-orchestration/SKILL.md.tmpl", map[string]string{
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
 		"ToolID":      "claude",
 		"Trigger":     "/slipway:wave-orchestration",
 		"Description": "test",
@@ -148,23 +148,23 @@ func TestRemainingHeavyHostsUseDiskHandoffContract(t *testing.T) {
 	}{
 		{
 			name:    "research-orchestration",
-			content: mustContent(t, "skills/research-orchestration/SKILL.md"),
+			content: mustContent(t, "skills/research-orchestration/HOST_SKILL.md"),
 		},
 		{
 			name:    "plan-audit",
-			content: mustContent(t, "skills/plan-audit/SKILL.md"),
+			content: mustContent(t, "skills/plan-audit/HOST_SKILL.md"),
 		},
 		{
 			name:    "intake-clarification",
-			content: mustContent(t, "skills/intake-clarification/SKILL.md"),
+			content: mustContent(t, "skills/intake-clarification/HOST_SKILL.md"),
 		},
 		{
 			name:    "spec-compliance-review",
-			content: mustRender(t, "skills/spec-compliance-review/SKILL.md.tmpl", data),
+			content: mustRender(t, "skills/spec-compliance-review/HOST_SKILL.md.tmpl", data),
 		},
 		{
 			name:    "code-quality-review",
-			content: mustRender(t, "skills/code-quality-review/SKILL.md.tmpl", data),
+			content: mustRender(t, "skills/code-quality-review/HOST_SKILL.md.tmpl", data),
 		},
 	}
 

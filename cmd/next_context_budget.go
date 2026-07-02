@@ -50,8 +50,9 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 			return 0
 		}
 		for _, candidate := range []string{
-			"skills/" + skillName + "/SKILL.md",
-			"skills/" + skillName + "/SKILL.md.tmpl",
+			"skills/" + skillName + "/HOST_SKILL.md",
+			"skills/" + skillName + "/HOST_SKILL.md.tmpl",
+			"skills/" + skillName + "/CATALOG_SKILL.md",
 		} {
 			content, exists, err := tmpl.ContentIfExists(candidate)
 			if err != nil || !exists {
