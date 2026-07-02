@@ -10,9 +10,11 @@ channels, and source-build details, see [Installation](../installation.md).
 
 Use a release-backed channel when possible:
 
-```bash
-brew install --cask signalridge/tap/slipway
-```
+| Platform | Recommended path |
+| --- | --- |
+| macOS | `brew install --cask signalridge/tap/slipway` |
+| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
+| Linux | Use the `.deb`, `.rpm`, `.apk`, `tar.gz`, AUR, or container image paths in [Installation](../installation.md#linux). |
 
 Use Go install when release packages are unavailable or you intentionally want a
 Go-managed binary:
