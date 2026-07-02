@@ -1,21 +1,25 @@
 package model
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-// envLiteral matches environment-variable names Slipway treats as public
-// runtime/config surface: SLIPWAY_* names, ambient token fallbacks, and ambient
-// username fallbacks. Scanning string literals (rather than only
-// os.Getenv("...") call sites) catches vars read via const identifiers and
-// simple fallback slices.
-var envLiteral = regexp.MustCompile(`"(SLIPWAY_[A-Z0-9_]+|[A-Z][A-Z0-9_]*_TOKEN|GH_TOKEN|USER|USERNAME)"`)
+// publicEnvLiteral matches environment-variable names Slipway treats as public
+// runtime/config surface when they appear as source string literals:
+// SLIPWAY_* names, ambient token fallbacks, and ambient username fallbacks.
+// Scanning string literals catches vars read via const identifiers and simple
+// fallback slices.
+var publicEnvLiteral = regexp.MustCompile(`^(SLIPWAY_[A-Z0-9_]+|[A-Z][A-Z0-9_]*_TOKEN|GH_TOKEN|USER|USERNAME)$`)
 
 // repoRootForTest resolves the repository root from this test's package
 // directory (internal/model => ../..). Walking from here keeps the source scan
@@ -58,19 +62,32 @@ func scanEnvUsages(t *testing.T, root string) map[string]string {
 		if name == "env_catalog.go" {
 			return nil
 		}
-		data, readErr := os.ReadFile(path) // #nosec G304 -- test-only scan of in-repo source.
-		if readErr != nil {
-			return readErr
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = path
 		}
-		for _, m := range envLiteral.FindAllStringSubmatch(string(data), -1) {
-			rel, relErr := filepath.Rel(root, path)
-			if relErr != nil {
-				rel = path
-			}
-			if _, ok := found[m[1]]; !ok {
-				found[m[1]] = rel
-			}
+		fileSet := token.NewFileSet()
+		file, parseErr := parser.ParseFile(fileSet, path, nil, 0)
+		if parseErr != nil {
+			return parseErr
 		}
+		ast.Inspect(file, func(n ast.Node) bool {
+			switch node := n.(type) {
+			case *ast.BasicLit:
+				if node.Kind != token.STRING {
+					return true
+				}
+				value, err := strconv.Unquote(node.Value)
+				if err == nil && publicEnvLiteral.MatchString(value) {
+					recordEnvUsage(found, value, rel)
+				}
+			case *ast.CallExpr:
+				if name, ok := directEnvReadLiteral(node); ok {
+					recordEnvUsage(found, name, rel)
+				}
+			}
+			return true
+		})
 		return nil
 	})
 	if err != nil {
@@ -79,13 +96,44 @@ func scanEnvUsages(t *testing.T, root string) map[string]string {
 	return found
 }
 
+func recordEnvUsage(found map[string]string, name, rel string) {
+	if _, ok := found[name]; !ok {
+		found[name] = rel
+	}
+}
+
+func directEnvReadLiteral(call *ast.CallExpr) (string, bool) {
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || len(call.Args) != 1 {
+		return "", false
+	}
+	pkg, ok := selector.X.(*ast.Ident)
+	if !ok || pkg.Name != "os" {
+		return "", false
+	}
+	switch selector.Sel.Name {
+	case "Getenv", "LookupEnv":
+	default:
+		return "", false
+	}
+	lit, ok := call.Args[0].(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	name, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return "", false
+	}
+	name = strings.TrimSpace(name)
+	return name, name != ""
+}
+
 // TestEnvCatalogCoversPublicEnvLiterals is the drift guard for the runtime env
 // surface: every public env-var literal in the SLIPWAY_ namespace plus ambient
-// token/username fallbacks must have an EnvCatalog() entry. Reading a new env
-// var through a string literal or shared const without cataloguing it FAILS here
-// and names the missing variable and source file. This intentionally scans
-// literals rather than only os.Getenv call arguments so const-backed reads are
-// still covered.
+// token/username fallback, and every direct os.Getenv/os.LookupEnv string
+// argument, must have an EnvCatalog() entry. Reading a new env var through a
+// string literal, shared const, or direct env call without cataloguing it FAILS
+// here and names the missing variable and source file.
 func TestEnvCatalogCoversPublicEnvLiterals(t *testing.T) {
 	have := map[string]bool{}
 	for _, entry := range EnvCatalog() {
@@ -223,6 +271,36 @@ func TestEnvCatalogHostCapabilityWiringContract(t *testing.T) {
 		if !fallbackTokens[token] {
 			t.Fatalf("SLIPWAY_HOST_CAPABILITY_FALLBACKS accepted values missing %q: %#v", token, fallbackTokens)
 		}
+	}
+}
+
+func TestEnvCatalogContextWindowDefaultMirrorsRuntimeConstant(t *testing.T) {
+	defaultWindow := strconv.Itoa(DefaultContextWindowTokens)
+	entries := EnvCatalog()
+	for _, entry := range entries {
+		if entry.Name != "SLIPWAY_CONTEXT_WINDOW_TOKENS" {
+			continue
+		}
+		if !strings.Contains(entry.UnsetBehavior, defaultWindow) {
+			t.Fatalf("SLIPWAY_CONTEXT_WINDOW_TOKENS unset behavior %q does not mention default %s", entry.UnsetBehavior, defaultWindow)
+		}
+		if len(entry.Examples) == 0 || !strings.Contains(entry.Examples[0], defaultWindow) {
+			t.Fatalf("SLIPWAY_CONTEXT_WINDOW_TOKENS examples %#v do not mention default %s", entry.Examples, defaultWindow)
+		}
+		return
+	}
+	t.Fatal("SLIPWAY_CONTEXT_WINDOW_TOKENS missing from env catalog")
+}
+
+func TestHostEnvironmentDocsMirrorContextWindowDefault(t *testing.T) {
+	defaultWindow := strconv.Itoa(DefaultContextWindowTokens)
+	path := filepath.Join(repoRootForTest(t), "docs", "reference", "host-environment.md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read host environment docs: %v", err)
+	}
+	if !strings.Contains(string(content), "`"+defaultWindow+"`") {
+		t.Fatalf("host environment docs must mention default context window %s", defaultWindow)
 	}
 }
 

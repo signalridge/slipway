@@ -1,6 +1,13 @@
 package model
 
-import "sort"
+import (
+	"sort"
+	"strconv"
+)
+
+// DefaultContextWindowTokens is the assumed host context window when no valid
+// SLIPWAY_CONTEXT_WINDOW_TOKENS override is provided.
+const DefaultContextWindowTokens = 200000
 
 // Environment-variable scopes classify how a SLIPWAY_* (or ambient) variable
 // relates to the file config surface. The scope tells an operator whether the
@@ -23,8 +30,8 @@ const (
 // EnvCatalogEntry describes one environment variable Slipway reads, giving the
 // runtime env surface the same discoverability the file config surface gets from
 // ConfigCatalog(). Unlike file keys, env vars are not derivable by reflection, so
-// this catalog is curated; a contract test (TestEnvCatalogCoversEveryGetenv)
-// asserts every SLIPWAY_* name read in source has an entry here.
+// this catalog is curated; TestEnvCatalogCoversPublicEnvLiterals asserts public
+// env names read in source have entries here.
 type EnvCatalogEntry struct {
 	// Name is the environment variable name, e.g. "SLIPWAY_GITHUB_API_URL".
 	Name string `json:"name"`
@@ -66,6 +73,7 @@ type EnvAcceptedValue struct {
 // operator can see the env > file > default relationship at a glance. Ambient
 // fallback variables are included even though they are not SLIPWAY_-prefixed.
 func EnvCatalog() []EnvCatalogEntry {
+	defaultContextWindow := strconv.Itoa(DefaultContextWindowTokens)
 	entries := []EnvCatalogEntry{
 		{
 			Name:          "SLIPWAY_GITHUB_API_URL",
@@ -100,8 +108,8 @@ func EnvCatalog() []EnvCatalogEntry {
 			Scope:         EnvScopeRuntimeHost,
 			Description:   "Host model context-window size (tokens) used to estimate context-budget pressure.",
 			ValueSyntax:   "Positive integer token count.",
-			Examples:      []string{"SLIPWAY_CONTEXT_WINDOW_TOKENS=200000"},
-			UnsetBehavior: "Uses the built-in 200000-token context window; malformed, zero, or negative values are ignored and also fall back to 200000.",
+			Examples:      []string{"SLIPWAY_CONTEXT_WINDOW_TOKENS=" + defaultContextWindow},
+			UnsetBehavior: "Uses the built-in " + defaultContextWindow + "-token context window; malformed, zero, or negative values are ignored and also fall back to " + defaultContextWindow + ".",
 		},
 		{
 			Name:          "SLIPWAY_CONTEXT_METRICS_PATH",

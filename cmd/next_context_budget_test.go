@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"testing"
+
+	"github.com/signalridge/slipway/internal/model"
 )
 
 func TestEstimateContextBudgetFallsBackWhenMarshalFails(t *testing.T) {
@@ -32,7 +34,6 @@ func TestEstimateContextBudgetFallsBackWhenMarshalFails(t *testing.T) {
 // non-positive — a malformed override must not silently weaken the context
 // hard-stop guard.
 func TestEstimateContextBudgetEnvWindow(t *testing.T) {
-	const defaultWindow = 200000
 	skill := &nextSkillView{Name: "plan-audit"}
 	ctx := nextContext{WorkspaceRoot: "/tmp/workspace", ArtifactBundle: "artifacts/changes/demo"}
 
@@ -42,9 +43,9 @@ func TestEstimateContextBudgetEnvWindow(t *testing.T) {
 		want    int
 	}{
 		{"valid override honored", "300000", 300000},
-		{"malformed override falls back to default", "bad", defaultWindow},
-		{"non-positive override falls back to default", "0", defaultWindow},
-		{"unset falls back to default", "", defaultWindow},
+		{"malformed override falls back to default", "bad", model.DefaultContextWindowTokens},
+		{"non-positive override falls back to default", "0", model.DefaultContextWindowTokens},
+		{"unset falls back to default", "", model.DefaultContextWindowTokens},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

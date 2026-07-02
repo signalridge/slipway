@@ -162,6 +162,16 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			wantFallbackMode: "same_context_degraded",
 		},
 		{
+			name: "same-context degraded fallback is matched case-insensitively and returned canonical",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"Same_Context_Degraded"},
+			},
+			wantAvailability: "unavailable",
+			wantFallback:     true,
+			wantFallbackMode: "same_context_degraded",
+		},
+		{
 			name: "fallback tokens are matched case-insensitively and returned canonical",
 			signals: Signals{
 				HostCapabilities: []string{"none"},
@@ -215,10 +225,12 @@ func TestEnvCatalogHostCapabilityFallbacksMirrorContracts(t *testing.T) {
 	want := map[string]bool{}
 	reg := DefaultRegistry()
 	for _, skill := range reg.All() {
-		for _, contract := range skill.HostCapabilities {
-			for _, mode := range contract.FallbackModes {
-				want[mode] = true
-			}
+		contract, ok := resolveHostCapabilityContract(reg, skill.ID)
+		if !ok {
+			continue
+		}
+		for _, mode := range contract.FallbackModes {
+			want[mode] = true
 		}
 	}
 	for _, skillID := range []string{"plan-audit", "spec-compliance-review", "code-quality-review", "ship-verification"} {
@@ -297,6 +309,18 @@ func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 		assert.Equal(t, "unavailable", req.Availability)
 		assert.Contains(t, req.Remediation, "context_origin:stage=review=<handle>")
 		assert.Contains(t, req.Remediation, "fallback:<mode>")
+	})
+
+	t.Run("security-review same-context degraded fallback is case-insensitive", func(t *testing.T) {
+		t.Parallel()
+		req := ResolveHostCapabilityRequirement("security-review", Signals{
+			HostCapabilities: []string{"none"},
+			Fallbacks:        []string{"Same_Context_Degraded"},
+		})
+		require.NotNil(t, req, "security-review must carry a registry host-capability contract")
+		assert.Equal(t, "unavailable", req.Availability)
+		assert.True(t, req.FallbackSelected)
+		assert.Equal(t, "same_context_degraded", req.FallbackMode)
 	})
 
 	t.Run("skills without any contract still resolve to nil", func(t *testing.T) {
