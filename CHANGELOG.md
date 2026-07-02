@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0](https://github.com/signalridge/slipway/compare/v0.38.0...v0.39.0) (2026-07-02)
+
+
+### Features
+
+* **subagents:** add slot-based provider directives ([#400](https://github.com/signalridge/slipway/issues/400)) ([c8133e0](https://github.com/signalridge/slipway/commit/c8133e067b8685d8cb18e168ac51671449b9b27c))
+
 ## [0.38.0](https://github.com/signalridge/slipway/compare/v0.37.4...v0.38.0) (2026-07-01)
 
 
