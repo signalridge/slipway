@@ -5,6 +5,13 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.1](https://github.com/signalridge/slipway/compare/v0.39.0...v0.39.1) (2026-07-02)
+
+
+### Bug Fixes
+
+* **runtime:** expose host env contracts ([#402](https://github.com/signalridge/slipway/issues/402)) ([f49f966](https://github.com/signalridge/slipway/commit/f49f9663c77f44a1bebdfea56b3ca77e680bed8c))
+
 ## [0.39.0](https://github.com/signalridge/slipway/compare/v0.38.0...v0.39.0) (2026-07-02)
 
 
