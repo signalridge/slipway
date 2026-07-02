@@ -34,6 +34,7 @@ type nextSkillHandoff struct {
 	DisplayName          string             `json:"display_name,omitempty"`
 	BlockingName         string             `json:"blocking_name,omitempty"`
 	ResolutionReason     string             `json:"resolution_reason,omitempty"`
+	Subagent             *subagentDirective `json:"subagent,omitempty"`
 	SelectedReviewSkills []string           `json:"selected_review_skills,omitempty"`
 	RequiredTokens       []string           `json:"required_tokens,omitempty"`
 	VerificationDir      string             `json:"verification_dir"`
@@ -68,6 +69,7 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			DisplayName:          view.NextSkill.DisplayName,
 			BlockingName:         view.NextSkill.BlockingName,
 			ResolutionReason:     view.NextSkill.ResolutionReason,
+			Subagent:             cloneSubagentDirective(view.NextSkill.Subagent),
 			SelectedReviewSkills: append([]string(nil), view.NextSkill.SelectedReviewSkills...),
 			RequiredTokens:       append([]string(nil), view.NextSkill.RequiredTokens...),
 			VerificationDir:      view.NextSkill.VerificationDir,
@@ -178,6 +180,7 @@ func cloneReviewBatch(in *reviewBatchView) *reviewBatchView {
 	}
 	out := &reviewBatchView{
 		Mode:            in.Mode,
+		Subagent:        cloneSubagentDirective(in.Subagent),
 		VerificationDir: in.VerificationDir,
 		State:           in.State,
 	}

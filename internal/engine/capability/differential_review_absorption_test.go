@@ -11,26 +11,26 @@ import (
 
 // TestIndependentReviewPreservesDiffOnlyRules locks the essential diff-scoped
 // rules absorbed from the retired `differential-review` skill. Route-surface
-// plan §8 requires the absorbed SKILL.md to still classify findings as new /
+// plan §8 requires the absorbed catalog skill to still classify findings as new /
 // pre-existing / worsened and to document the diff-scoped blocker policy.
 func TestIndependentReviewPreservesDiffOnlyRules(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Content("skills/independent-review/SKILL.md")
+	body, err := tmpl.Content("skills/independent-review/CATALOG_SKILL.md")
 	require.NoError(t, err)
 
 	lowered := strings.ToLower(body)
 	for _, token := range []string{"new", "pre-existing", "worsened"} {
 		assert.Contains(t, lowered, token,
-			"independent-review SKILL.md must preserve the %q finding classification from differential-review", token)
+			"independent-review catalog skill must preserve the %q finding classification from differential-review", token)
 	}
 	assert.Contains(t, lowered, "diff-scoped blocker policy",
-		"independent-review SKILL.md must preserve the diff-scoped blocker policy section")
+		"independent-review catalog skill must preserve the diff-scoped blocker policy section")
 }
 
 // TestIndependentReviewPreservesDifferentialReviewEvidenceVerdictContract
 // prevents the absorption from silently weakening the evidence contract from
-// `verdict` to `artifact`. The registry entry and the absorbed SKILL.md both
+// `verdict` to `artifact`. The registry entry and the absorbed catalog skill both
 // must keep the verdict-shaped contract visible.
 func TestIndependentReviewPreservesDifferentialReviewEvidenceVerdictContract(t *testing.T) {
 	t.Parallel()
@@ -41,32 +41,32 @@ func TestIndependentReviewPreservesDifferentialReviewEvidenceVerdictContract(t *
 	assert.Equal(t, EvidenceVerdict, sk.Evidence,
 		"independent-review must keep the verdict evidence contract after absorbing differential-review")
 
-	body, err := tmpl.Content("skills/independent-review/SKILL.md")
+	body, err := tmpl.Content("skills/independent-review/CATALOG_SKILL.md")
 	require.NoError(t, err)
 	lowered := strings.ToLower(body)
 	assert.Contains(t, lowered, "verdict",
-		"absorbed SKILL.md must still speak in terms of the verdict evidence contract")
+		"absorbed catalog skill must still speak in terms of the verdict evidence contract")
 	assert.Contains(t, lowered, "evidence contract",
-		"SKILL.md must keep an explicit evidence-contract section")
+		"catalog skill must keep an explicit evidence-contract section")
 }
 
 // TestIndependentReviewWithoutDiffContextKeepsBaseReviewContract ensures the
 // absorbed diff-only section cannot leak its obligations into `review --all`
-// or any other full-review execution path. The SKILL.md must explicitly gate
+// or any other full-review execution path. The catalog skill must explicitly gate
 // the diff-scoped rules on a concrete diff target being in scope.
 func TestIndependentReviewWithoutDiffContextKeepsBaseReviewContract(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Content("skills/independent-review/SKILL.md")
+	body, err := tmpl.Content("skills/independent-review/CATALOG_SKILL.md")
 	require.NoError(t, err)
 	lowered := strings.ToLower(body)
 
 	assert.Contains(t, lowered, "when a concrete diff target is in scope",
-		"SKILL.md must gate diff-scoped rules on a concrete diff target")
+		"catalog skill must gate diff-scoped rules on a concrete diff target")
 	assert.Contains(t, lowered, "when no diff context is present",
-		"SKILL.md must explicitly describe the no-diff fallback path")
+		"catalog skill must explicitly describe the no-diff fallback path")
 	assert.Contains(t, lowered, "--all",
-		"SKILL.md should mention `review --all` as the full-review path that skips diff-scoped rules")
+		"catalog skill should mention `review --all` as the full-review path that skips diff-scoped rules")
 }
 
 // TestDifferentialReviewAbsentFromRegistry guards the hard-cut from

@@ -71,7 +71,7 @@ stamper.
 
 | Token | Attests | Enforced | Recovery when the gate fails closed |
 | --- | --- | --- | --- |
-| `context_origin:stage=<stage>=<handle>` across the chain participants, with selected S3 reviewers all using `stage=review` and review-finding fixes using `stage=fix` when present | each owned participant ran under distinct contexts on the shared worktree; selected reviewers are keyed by skill name and must be pairwise distinct; recorded fix handles must not collapse with implementation or review handles | standard/strict error, light advisory | re-run the owning reviewer or fix in a fresh native subagent so it re-emits a distinct `context_origin` handle |
+| `context_origin:stage=<stage>=<handle>` across the chain participants, with selected S3 reviewers all using `stage=review` and review-finding fixes using `stage=fix` when present | each owned participant ran under distinct contexts on the shared worktree; selected reviewers are keyed by skill name and must be pairwise distinct; recorded fix handles must not collapse with implementation or review handles | standard/strict error, light advisory | re-run the owning reviewer or fix through its configured fresh delegated session so it re-emits a distinct `context_origin` handle |
 | `closeout:reviewer_independence=pass` on ship-verification | the reviewer-independence attestation is present on the terminal ship record (Pattern-A); missing fails closed with `ship_verification_reviewer_independence_missing` | standard/strict error, light advisory | re-run **ship-verification** and record the token |
 | `closeout:assurance_complete=pass` on ship-verification | the host attests `assurance.md` is complete on the terminal ship record; missing fails closed with `ship_verification_assurance_attestation_missing` | standard/strict error, light advisory | re-run **ship-verification** and record the token |
 | terminal ordering `ship-verification >= every selected S3 peer` (always-on, no token) | the terminal ship record was stamped after every selected S3 review peer rather than before any of them, so the gate observed the final review evidence | every preset (always-on; no light carveout) | re-stamp the stale selected reviewer, then re-run **ship-verification** so its verdict timestamp is at or after every peer |
@@ -100,9 +100,10 @@ so each edge is checked exactly once:
 | Review authority | every edge among `{executor, fix}` plus the selected review-skill keys; S1 `audit_origin` is not a live S3 participant | variable by workflow profile, selected security control, and optional fix handle |
 | Ship authority | no additional context-origin edges; the terminal `ship-verification` gate owns the terminal ordering invariant plus the reviewer-independence and assurance-complete presence attestations | 0 |
 
-When a seam fails closed, re-run its owning stage or selected reviewer in a fresh
-native subagent so the stage re-emits a distinct `context_origin` handle; the
-engine remains the sole verdict stamper and never restamps the collapsed handle.
+When a seam fails closed, re-run its owning stage or selected reviewer through
+the configured fresh delegated session, defaulting to native host dispatch, so
+the stage re-emits a distinct `context_origin` handle; the engine remains the
+sole verdict stamper and never restamps the collapsed handle.
 
 The `context_origin` lattice is **audit/structural tier**: the handles are
 host-emitted strings — the same structural tier as the executor-dispatch
@@ -119,7 +120,8 @@ through the command surfaces. Spec and independent review are selected for every
 workflow profile; code-quality review joins only when the profile requires
 code-quality review, and the security reviewer joins only when the engine-derived
 security control is selected. `slipway next` exposes the selected set, and host
-adapters fan those reviewers out as concurrent native subagents. Any conventional
+adapters fan those reviewers out using the configured `review` slot, defaulting
+to concurrent native subagents when no slot is configured. Any conventional
 single primary skill is only a compatibility projection for surfaces that truly
 need one; it does not imply review ordering. The terminal `ship-verification`
 gate is dispatched after this peer set converges, never as a member of it.

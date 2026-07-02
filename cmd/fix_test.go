@@ -21,6 +21,15 @@ func TestFixJSONSurfacesReviewFindingRepairContract(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
+		writeTestSubagentConfig(t, root, func(cfg *model.Config) {
+			cfg.Subagents.Fix = model.SubagentSlot{
+				Type:                model.SubagentTypeNative,
+				Name:                "review-repairer",
+				SessionInstructions: "Collect all selected reviewer findings before editing files.",
+				Timeout:             "40m",
+			}
+		})
+
 		slug := createGovernedRequest(t, root, levelNonDiscovery, "fix should surface review findings")
 
 		change, err := state.LoadChange(root, slug)
@@ -48,7 +57,19 @@ func TestFixJSONSurfacesReviewFindingRepairContract(t *testing.T) {
 		assert.Equal(t, "s3-review-repair:"+slug, view.Contract.RepairBatchID)
 		assert.True(t, view.Contract.CollectAllSelectedReviewFindingsFirst)
 		assert.True(t, view.Contract.RequiresFreshContext)
+		assertSubagentDirective(
+			t,
+			view.Contract.Subagent,
+			model.SubagentTypeNative,
+			"review-repairer",
+			"Collect all selected reviewer findings before editing files.",
+			"40m",
+			false,
+			"allow",
+		)
 		assert.Contains(t, view.Contract.FindingCollection, "Collect all selected S3 reviewer findings first")
+		assert.Contains(t, view.Contract.Dispatch, "Use contract.subagent when present")
+		assert.Contains(t, view.Contract.Dispatch, "native fresh-context repair subagent")
 		assert.Contains(t, view.Contract.RepairBrief, "One repair brief")
 		assert.Equal(t, model.ContextOriginReferencePrefix+model.StageContextFix+"=<repair-subagent-handle>", view.Contract.ContextReference)
 		assert.Contains(t, view.Contract.Prohibited, "Do not repair individual review findings before collecting the selected review batch findings.")

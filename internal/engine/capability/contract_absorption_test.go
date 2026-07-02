@@ -11,7 +11,7 @@ import (
 func TestSpecKittyScopeContractAbsorptionAppearsInReviewGuidance(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Render("skills/spec-compliance-review/SKILL.md.tmpl", nil)
+	body, err := tmpl.Render("skills/spec-compliance-review/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, body, "Scope Contract Evidence")
@@ -22,7 +22,7 @@ func TestSpecKittyScopeContractAbsorptionAppearsInReviewGuidance(t *testing.T) {
 func TestSpecTraceReportSchemaIncludesScopeContractEvidence(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Content("skills/spec-trace/SKILL.md")
+	body, err := tmpl.Content("skills/spec-trace/CATALOG_SKILL.md")
 	require.NoError(t, err)
 
 	assert.Contains(t, body, "scope_contract:")
@@ -32,7 +32,7 @@ func TestSpecTraceReportSchemaIncludesScopeContractEvidence(t *testing.T) {
 func TestShipVerificationRequiresScopeContractStatement(t *testing.T) {
 	t.Parallel()
 
-	body, err := tmpl.Render("skills/ship-verification/SKILL.md.tmpl", nil)
+	body, err := tmpl.Render("skills/ship-verification/HOST_SKILL.md.tmpl", nil)
 	require.NoError(t, err)
 
 	assert.Contains(t, body, "Scope Contract: pass|fail|not_applicable")

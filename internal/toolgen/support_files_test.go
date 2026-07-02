@@ -26,7 +26,7 @@ func TestEmitSupportFilesCopiesReferences(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
-		"skills/refs-only/SKILL.md":              &fstest.MapFile{Data: []byte("# refs-only\n")},
+		"skills/refs-only/HOST_SKILL.md":         &fstest.MapFile{Data: []byte("# refs-only\n")},
 		"skills/refs-only/references/topic-a.md": &fstest.MapFile{Data: []byte("# topic a\n")},
 		"skills/refs-only/references/topic-b.md": &fstest.MapFile{Data: []byte("# topic b\n")},
 	}
@@ -46,7 +46,7 @@ func TestEmitSupportFilesSkipsEmpty(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
-		"skills/bare/SKILL.md": &fstest.MapFile{Data: []byte("# bare\n")},
+		"skills/bare/HOST_SKILL.md": &fstest.MapFile{Data: []byte("# bare\n")},
 	}
 
 	dst := t.TempDir()
@@ -63,7 +63,7 @@ func TestEmitSupportFilesRefreshPrunesStaleArtifacts(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
-		"skills/sample/SKILL.md":              &fstest.MapFile{Data: []byte("# sample\n")},
+		"skills/sample/HOST_SKILL.md":         &fstest.MapFile{Data: []byte("# sample\n")},
 		"skills/sample/references/current.md": &fstest.MapFile{Data: []byte("# current\n")},
 		"skills/sample/scripts/current.sh":    &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\nexit 0\n")},
 	}
@@ -93,7 +93,7 @@ func TestEmitSupportFilesOmitsScriptArtifacts(t *testing.T) {
 	t.Parallel()
 
 	srcFS := fstest.MapFS{
-		"skills/python-helper/SKILL.md":                                    &fstest.MapFile{Data: []byte("# python-helper\n")},
+		"skills/python-helper/HOST_SKILL.md":                               &fstest.MapFile{Data: []byte("# python-helper\n")},
 		"skills/python-helper/scripts/merge-sarif.py":                      &fstest.MapFile{Data: []byte("#!/usr/bin/env python3\nprint('ok')\n")},
 		"skills/python-helper/scripts/__pycache__/merge-sarif.cpython.pyc": &fstest.MapFile{Data: []byte("compiled")},
 	}
@@ -112,7 +112,7 @@ func TestEmitSupportFilesOmitsSharedGitHubHelpers(t *testing.T) {
 
 	srcFS := fstest.MapFS{
 		"skills/_shared/scripts/gh-common.sh":                           &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\nexit 0\n")},
-		"skills/review-comment-triage/SKILL.md":                         &fstest.MapFile{Data: []byte("# review-comment-triage\n")},
+		"skills/review-comment-triage/CATALOG_SKILL.md":                 &fstest.MapFile{Data: []byte("# review-comment-triage\n")},
 		"skills/review-comment-triage/scripts/fetch-review-requests.sh": &fstest.MapFile{Data: []byte("#!/usr/bin/env bash\n. ./gh-common.sh\n")},
 	}
 

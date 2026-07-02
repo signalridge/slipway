@@ -19,7 +19,7 @@
 | `slipway plan` | mutation | 执行 S1 阶段的计划产物编写，或对同一意图的变更进行修订。 |
 | `slipway implement` | mutation | 执行 S2 阶段的实现 wave 编排。 |
 | `slipway review` | mutation | 执行 S3 阶段的评审收敛与评审反馈修复。 |
-| `slipway fix` | mutation | 为 S3 评审发现派发全新上下文的修复任务。 |
+| `slipway fix` | mutation | 为 S3 评审发现派发按 `contract.subagent` 配置的修复任务。 |
 | `slipway done` | mutation | 将一个 done-ready 的变更收尾并归档。 |
 | `slipway next` | query | 查看下一个可执行的 skill 或阻塞项，但不推进状态。 |
 | `slipway run` | mutation | 以快捷方式驱动当前生命周期阶段，直到出现 skill、阻塞项或 done-ready 结果。 |
@@ -38,13 +38,19 @@
 读不出来，请用 `slipway repair` 重新生成，而不是去改 `tasks.md`。
 
 `slipway fix` 是 S3 评审发现的修复面。它会发现评审反馈和对齐阻塞项，然后返回一个
-`repair_batch_id` 以及一份供全新上下文修复子代理使用的契约。普通的发现过程不会推进生命周期状态；
+`repair_batch_id` 以及一份契约；如果配置了 `fix` slot，契约会包含 `contract.subagent`。宿主应优先使用
+这个 directive，否则回退到 native fresh-context 修复子代理。普通的发现过程不会推进生命周期状态；
 `slipway fix --start-reexecution` 才是显式的、由评审驱动的模式，它会重新打开 S2，并为实现修复生成
 一个全新的执行运行边界。宿主会先收集所选评审批次的发现，按根因将它们合并成一份修复简报，并且
 在其他所选评审仍在报告期间，绝不能内联或逐条修复发现。等子代理改完代码、产物、测试或同一意图范围
 证据之后，重新运行受影响的所选评审，并在 `slipway review` 关闭该批次之前同时记录
 `context_origin:stage=review=<handle>` 和 `context_origin:stage=fix=<handle>`。
 `slipway repair` 仍然只负责本地完整性。
+
+配置化的 subagent 委派目标位于 `.slipway.yaml` 的 `subagents.*` 下。可用 slot 是
+`default`、`plan_audit`、`executor`、`review`、`fix` 和 `verify`；每个 slot 可选择
+`type: native|mcp|skills`、`name`、`session_instructions` 和 `timeout`。Schema 和
+JSON 输出面见 [Subagent 配置](reference/subagents.md)。
 
 ## 创建选项
 

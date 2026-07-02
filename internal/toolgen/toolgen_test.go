@@ -288,7 +288,7 @@ func TestPromotedReviewHostsAreWorkflowOwnedTemplatedSurfaces(t *testing.T) {
 	for _, id := range []string{"independent-review", "security-review"} {
 		desc, ok := descriptors[id]
 		require.Truef(t, ok, "%s must be promoted into the workflow-owned governance descriptor table", id)
-		assert.Equal(t, governanceRenderTemplated, desc.RenderMode, "%s must render from SKILL.md.tmpl", id)
+		assert.Equal(t, governanceRenderTemplated, desc.RenderMode, "%s must render from HOST_SKILL.md.tmpl", id)
 		assert.Truef(t, desc.WorkflowOwned, "%s must be owned by workflow governance", id)
 		assert.Falsef(t, desc.ExportOnlyExtra, "%s must not be an export-only catalog helper", id)
 		assert.Truef(t, shouldExportAsHostSkill(id), "%s must export as a host skill", id)
@@ -964,7 +964,7 @@ func TestRenderCatalogSkillPreservesSingleFileWhenNoTypedTemplates(t *testing.T)
 	content, err := renderCatalogSkill(skill)
 	require.NoError(t, err)
 
-	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "context-assembly", "SKILL.md")))
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "context-assembly", catalogSkillSourceFile)))
 	require.NoError(t, err)
 
 	// Output equals the source body with the adapter-frontmatter header
@@ -1077,7 +1077,7 @@ func TestRenderCatalogSkillUsesTypedTemplatesForProductionSkill(t *testing.T) {
 	content, err := renderCatalogSkill(skill)
 	require.NoError(t, err)
 
-	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "independent-review", "SKILL.md")))
+	raw, err := tmpl.Content(filepath.ToSlash(filepath.Join("skills", "independent-review", catalogSkillSourceFile)))
 	require.NoError(t, err)
 
 	// This asserts production catalog assembly actually uses optional typed
@@ -3516,14 +3516,14 @@ func TestSkillHelperDocsUseSlipwayTool(t *testing.T) {
 		path     string
 		contains string
 	}{
-		{path: "skills/ci-triage/SKILL.md", contains: "slipway tool fetch-pr-checks"},
-		{path: "skills/gha-security-review/SKILL.md", contains: "slipway tool pin-actions"},
-		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-pr-feedback"},
-		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool fetch-review-requests"},
-		{path: "skills/review-comment-triage/SKILL.md", contains: "slipway tool reply-to-thread"},
+		{path: "skills/ci-triage/CATALOG_SKILL.md", contains: "slipway tool fetch-pr-checks"},
+		{path: "skills/gha-security-review/CATALOG_SKILL.md", contains: "slipway tool pin-actions"},
+		{path: "skills/review-comment-triage/CATALOG_SKILL.md", contains: "slipway tool fetch-pr-feedback"},
+		{path: "skills/review-comment-triage/CATALOG_SKILL.md", contains: "slipway tool fetch-review-requests"},
+		{path: "skills/review-comment-triage/CATALOG_SKILL.md", contains: "slipway tool reply-to-thread"},
 		{path: "skills/root-cause-tracing/references/root-cause-tracing.md", contains: "slipway tool find-polluter-go"},
 		{path: "skills/sast-orchestration/references/sarif-merge.md", contains: "slipway tool merge-sarif"},
-		{path: "skills/variant-analysis/SKILL.md", contains: "slipway tool find-variant"},
+		{path: "skills/variant-analysis/CATALOG_SKILL.md", contains: "slipway tool find-variant"},
 	}
 
 	for _, tc := range cases {

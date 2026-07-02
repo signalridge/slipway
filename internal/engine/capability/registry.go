@@ -97,8 +97,8 @@ type HostCapabilityContract struct {
 
 // Skill is the authoritative runtime record for one catalog skill.
 //
-// The fields mirror the SKILL.md frontmatter contract. The binding-compare
-// gate uses this record as the source of truth against generated SKILL.md
+// The fields mirror the source skill frontmatter contract. The binding-compare
+// gate uses this record as the source of truth against generated host
 // frontmatter.
 type Skill struct {
 	ID                string
