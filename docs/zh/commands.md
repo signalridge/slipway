@@ -249,8 +249,11 @@ slipway health --doctor --json
   生成的动作。
 
 `run --auto` / `run --no-auto` 为单次调用覆盖 `execution.auto`。配置级的 `execution.auto` 也适用
-于 `intake`、`plan` 和 `implement`；这些阶段命令没有覆盖标志。auto 只跨越纯节奏边界。
-`security-review` 边界、敏感/guardrail 确认、intake 的 Approved Summary 以及证据门禁仍然是停点。
+于 `intake`、`plan` 和 `implement`；这些阶段命令没有覆盖标志。auto 只在一次成功推进之后
+跨越例行的 `run_slipway_run_to_advance` 命令边界。技能交接和评审批次仍会让 run/stage
+循环停下等待 host 工作；非敏感/非 guardrail 的交接可能报告为 `evidence_continuation`
+而不是 `hard_stop`。`security-review` 边界、敏感/guardrail 确认、intake 的
+Approved Summary、done finalize 以及证据门禁仍然是硬停点。
 
 `validate` 是活动就绪状态的权威：它回答当前受治理状态现在能否推进，并通过
 `actionable_next_skill` 映射可执行的评审交接，其中包括可执行 skill 必须提供的确切层引用

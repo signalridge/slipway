@@ -490,6 +490,140 @@ func TestDeriveConfirmationRequirementAutoOffUnchanged(t *testing.T) {
 	assert.Equal(t, confirmationHardStop("skill_handoff:wave-orchestration"), deriveConfirmationRequirement(skillView))
 }
 
+func TestShouldStopRunLoopAutoContinuesRoutineRunBoundary(t *testing.T) {
+	t.Parallel()
+
+	view := routineRunBoundaryView()
+
+	assert.True(t, shouldStopRunLoop(view, false), "manual mode must preserve command-required pacing")
+	assert.False(t, shouldStopRunLoop(view, true), "auto mode should continue over routine run-to-advance pacing")
+}
+
+func TestRunGovernedLoopWithBuilderAutoContinuesRoutineRunBoundary(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	view, err := runGovernedLoopWithBuilder("", changeRef{Slug: "auto-loop"}, true, func() (nextView, error) {
+		calls++
+		if calls == 1 {
+			return routineRunBoundaryView(), nil
+		}
+		return nextView{
+			CurrentState:            model.StateS2Implement,
+			NextSkill:               &nextSkillView{Name: progression.SkillWaveOrchestration},
+			ConfirmationRequirement: confirmationHardStop("skill_handoff:" + progression.SkillWaveOrchestration),
+		}, nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls)
+	require.NotNil(t, view.NextSkill)
+	assert.Equal(t, progression.SkillWaveOrchestration, view.NextSkill.Name)
+	require.Len(t, view.AutoTransitions, 1)
+	assert.Equal(t, "advanced", view.AutoTransitions[0].Action)
+}
+
+func TestRunGovernedLoopWithBuilderManualStopsAtRoutineRunBoundary(t *testing.T) {
+	t.Parallel()
+
+	calls := 0
+	view, err := runGovernedLoopWithBuilder("", changeRef{Slug: "manual-loop"}, false, func() (nextView, error) {
+		calls++
+		return routineRunBoundaryView(), nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls)
+	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	require.Len(t, view.AutoTransitions, 1)
+	assert.Equal(t, "advanced", view.AutoTransitions[0].Action)
+}
+
+func TestShouldStopRunLoopAutoKeepsRealStops(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name   string
+		mutate func(*nextView)
+	}{
+		{
+			name: "next_skill",
+			mutate: func(view *nextView) {
+				view.NextSkill = &nextSkillView{Name: progression.SkillWaveOrchestration}
+			},
+		},
+		{
+			name: "review_batch",
+			mutate: func(view *nextView) {
+				view.ReviewBatch = &reviewBatchView{
+					Skills: []reviewBatchSkillView{{Name: progression.SkillSpecComplianceReview}},
+				}
+			},
+		},
+		{
+			name: "non_pacing_blocker",
+			mutate: func(view *nextView) {
+				view.Blockers = append(view.Blockers, model.NewReasonCode("scope_contract_drift", "cmd/run.go"))
+			},
+		},
+		{
+			name: "guardrail_domain",
+			mutate: func(view *nextView) {
+				view.GuardrailDomain = "credentials"
+			},
+		},
+		{
+			name: "done_ready",
+			mutate: func(view *nextView) {
+				view.Advanced = &progression.AdvanceSummary{Action: "done_ready"}
+			},
+		},
+		{
+			name: "noop",
+			mutate: func(view *nextView) {
+				view.Advanced = &progression.AdvanceSummary{Action: "noop"}
+			},
+		},
+		{
+			name: "missing_command_confirmation",
+			mutate: func(view *nextView) {
+				view.ConfirmationRequirement = confirmationNoBoundary("no_confirmation_boundary")
+			},
+		},
+	} {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			view := routineRunBoundaryView()
+			tt.mutate(&view)
+
+			assert.True(t, shouldStopRunLoop(view, true))
+		})
+	}
+}
+
+func routineRunBoundaryView() nextView {
+	return nextView{
+		CurrentState: model.StateS1Plan,
+		Advanced:     &progression.AdvanceSummary{Action: "advanced"},
+		Blockers: []model.ReasonCode{
+			model.NewReasonCode("no_skill_required", string(model.StateS1Plan)),
+			model.NewReasonCode("run_slipway_run_to_advance", string(model.StateS1Plan)),
+		},
+		ConfirmationRequirement: confirmationRequirement{
+			Required:                     false,
+			Boundary:                     "command_required",
+			FreshConfirmationRequired:    false,
+			PriorAuthorizationSufficient: true,
+			Reason:                       "run_slipway_run_to_advance",
+			NextAction:                   "run slipway run to advance",
+			NextActionKind:               "command",
+			NextCommand:                  "slipway run",
+		},
+	}
+}
+
 func TestDeriveConfirmationRequirementAutoOffNonPacingBlockerPrecedesHandoff(t *testing.T) {
 	t.Parallel()
 

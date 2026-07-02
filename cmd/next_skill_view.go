@@ -259,6 +259,10 @@ func assembleSkillViewWithOptions(
 				if len(advanceBlockers) > 0 {
 					blockers = append(blockers, advanceBlockers...)
 				} else if canAdvance {
+					// This routine run boundary must not co-occur with
+					// non-pacing blockers. Confirmation classification gives
+					// it command_required precedence, so auto-loop safety
+					// depends on emitters keeping the advertisement clean.
 					blockers = append(blockers, model.NewReasonCode("run_slipway_run_to_advance", string(view.CurrentState)))
 				}
 			}

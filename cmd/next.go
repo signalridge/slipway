@@ -682,6 +682,10 @@ func applyReadyAdvanceDiagnostics(root string, change *model.Change, view *nextV
 	if !canAdvance || len(blockers) > 0 {
 		return
 	}
+	// This routine run boundary must not co-occur with non-pacing blockers.
+	// deriveConfirmationRequirement treats it as command_required before the
+	// generic blocker check, so run/stage auto safety relies on emitters keeping
+	// this advertisement purely routine.
 	view.Blockers = model.NormalizeReasonCodes(append(
 		view.Blockers,
 		model.NewReasonCode("run_slipway_run_to_advance", string(view.CurrentState)),

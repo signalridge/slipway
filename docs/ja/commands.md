@@ -177,7 +177,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 - トップレベルの `confirmation_requirement`。これは、ハードストップに新たなユーザー確認が必要か、事前認可で十分か、人間向けの散文としての次のオペレーターアクション（`next_action`）、機械可読な `next_action_kind`（`skill_handoff` | `review_batch` | `preset_confirmation` | `command` | `blocker_resolution` | `confirmation` | `none`）、そしてそのまま実行可能な場合に実行する正確な `next_command` を報告します。`next_action_kind`/`next_command` で分岐し、`next_action` は表示用の散文としてのみ扱ってください。
 - `freshness_diagnostics`。陳腐化したソース／エビデンスの組、フィールドレベルの実行入力の不一致、パスの権威、次の再生成アクションを報告します。
 
-`run --auto` / `run --no-auto` は、1 回の呼び出しに限り `execution.auto` を上書きします。設定レベルの `execution.auto` は `intake`、`plan`、`implement` にも適用されます。これらのステージコマンドに上書きフラグはありません。auto は純粋なペーシングの境界のみを越えます。`security-review` の境界、センシティブ／ガードレールの確認、インテークの Approved Summary、エビデンスゲートは引き続き停止点です。
+`run --auto` / `run --no-auto` は、1 回の呼び出しに限り `execution.auto` を上書きします。設定レベルの `execution.auto` は `intake`、`plan`、`implement` にも適用されます。これらのステージコマンドに上書きフラグはありません。auto は、成功した前進の直後にルーティンな `run_slipway_run_to_advance` コマンド境界だけを越えます。スキルハンドオフとレビューバッチでは run/stage ループが停止し、host が作業します。非センシティブ／非ガードレールのハンドオフは `hard_stop` ではなく `evidence_continuation` として報告されることがあります。`security-review` の境界、センシティブ／ガードレールの確認、インテークの Approved Summary、done finalize、エビデンスゲートは引き続きハードストップです。
 
 `validate` はアクティブな準備状況の権威です。現在の統制状態が今すぐ前進できるかに答え、実行可能なレビューハンドオフを `actionable_next_skill` を通じてミラーします。これには、実行可能なスキルが供給すべき正確なレイヤー参照のための `required_tokens` が含まれます。`run --json` は変更を伴う遷移サーフェスです。`advanced` はこの呼び出しが何を変更したかを報告し、`blockers` は遷移後の現在の停止条件を報告します。したがって前進の成功に続いて、次の必須スキルに対するエラー重大度のブロッカーが報告されることがあります。`health --governance --json` は診断的なヘルスフィードバックです。コントロールやトレーサビリティの詳細を確認するために使い、`run` が今前進したかを判定するライフサイクルの権威としては使わないでください。
 
