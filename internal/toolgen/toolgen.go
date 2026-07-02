@@ -51,8 +51,21 @@ type ToolConfig struct {
 const (
 	settingsKindPiRegistration = "pi-registration"
 	settingsKindCodexHooks     = "codex-hooks"
-	stageAutoModeNote          = "Config-level `execution.auto` applies to this stage command; there are no per-stage `--auto`/`--no-auto` flags. Under auto, only pure-pacing boundaries may continue on prior authorization; sensitive/guardrail confirmations, the intake Approved Summary, and evidence gates still stop."
-	nextAutoModeNote           = "`slipway next` is query-only: it reflects config-level `execution.auto` in displayed confirmation requirements, has no `--auto`/`--no-auto` flags, and never mutates pending preset confirmations. Per-run `slipway run --auto` behavior is visible on `run`."
+	stageAutoModeNote          = "Config-level `execution.auto` applies to this stage command; " +
+		"there are no per-stage `--auto`/`--no-auto` flags. Under auto, the loop may continue " +
+		"routine `run_slipway_run_to_advance` command boundaries after a successful advance. " +
+		"Skill handoffs and review batches still stop the loop for host work; non-sensitive/" +
+		"non-guardrail handoffs may be reported as `evidence_continuation` instead of `hard_stop`. " +
+		"`security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, " +
+		"done finalization, and evidence gates remain hard stops."
+	nextAutoModeNote = "`slipway next` is query-only: it reflects config-level `execution.auto` " +
+		"in displayed confirmation requirements, has no `--auto`/`--no-auto` flags, and never mutates " +
+		"pending preset confirmations. Under auto, non-sensitive skill handoffs and review batches may " +
+		"be reported as `evidence_continuation` with prior authorization sufficient, but run/stage loops " +
+		"still stop for the host to run the skill or review and record evidence. `security-review` " +
+		"boundaries, sensitive/guardrail confirmations, the intake Approved Summary, done finalization, " +
+		"and evidence gates remain hard stops. Per-run `slipway run --auto` can continue only routine " +
+		"run-to-advance command boundaries."
 )
 
 var toolRegistry = map[string]ToolConfig{
@@ -288,7 +301,7 @@ var commandRegistry = []CommandDef{
 		Arguments: "[--json] [--diagnostics] [--resume] [--auto|--no-auto] [--change <slug>]",
 		Notes: []string{
 			"`slipway run` is an auto-driver shortcut. JSON output includes `delegated_to` so hosts can see the primary stage command it invoked.",
-			"`--auto`/`--no-auto` override `execution.auto` for one run: auto-advances pure-pacing pauses (review batches and non-sensitive skill handoffs) on prior authorization and auto-confirms a pending workflow-preset upgrade-only (never downgraded), while sensitive/guardrail confirmations, the intake Approved Summary, and every evidence gate still hard-stop.",
+			"`--auto`/`--no-auto` override `execution.auto` for one run: auto continues routine `run_slipway_run_to_advance` command boundaries after successful advances and auto-confirms a pending workflow-preset upgrade-only (never downgraded). Skill handoffs and review batches still stop the run loop for host work; non-sensitive/non-guardrail handoffs may be reported by `next --json` as `evidence_continuation` instead of `hard_stop`. `security-review` boundaries, sensitive/guardrail confirmations, the intake Approved Summary, done finalization, and every evidence gate remain hard stops.",
 		}},
 	{ID: "status", Class: CommandClassQuery, Description: "Show lifecycle status, blockers, and next actions", Tier: "core", HasPromptSurface: true,
 		Arguments:     "[--json] [--format text|yaml|json] [--focus <alias>] [--list-focuses] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--root] [--stats] [--change <slug>]",

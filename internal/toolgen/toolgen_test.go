@@ -2422,6 +2422,18 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	assert.Contains(t, nextEntry, "Run `slipway run --json` when evidence is ready")
 	assert.Contains(t, nextEntry, "has no `--auto`/`--no-auto` flags")
 	assert.Contains(t, nextEntry, "never mutates pending preset confirmations")
+	assert.Contains(t, normalizedNextEntry, "`evidence_continuation` with prior authorization sufficient")
+	assert.Contains(t, normalizedNextEntry, "run/stage loops still stop for the host to run the skill or review and record evidence")
+	for _, phrase := range []string{
+		"`security-review` boundaries",
+		"sensitive/guardrail confirmations",
+		"the intake Approved Summary",
+		"done finalization",
+		"evidence gates",
+	} {
+		assert.Contains(t, normalizedNextEntry, phrase,
+			"next command entry missing auto-mode redline phrase")
+	}
 
 	runEntry, err := renderCommandEntry(toolRegistry["claude"], "run")
 	require.NoError(t, err)
@@ -2435,6 +2447,8 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 	assert.Contains(t, runEntry, "`run` reuses the same `next --json` contract")
 	assert.Contains(t, normalizedRunEntry, "`--auto`/`--no-auto`: override `execution.auto` for this run",
 		"run command entry must document the override behavior")
+	assert.Contains(t, normalizedRunEntry, "Skill handoffs and review batches still stop the run loop for host work")
+	assert.Contains(t, normalizedRunEntry, "`evidence_continuation` instead of `hard_stop`")
 	assert.NotContains(t, runArguments, "--resume-response",
 		"run registry arguments must not advertise the deleted checkpoint resume surface")
 	for _, phrase := range []string{
@@ -2455,6 +2469,8 @@ func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {
 			require.NoError(t, renderErr)
 			assert.Contains(t, entry, "Config-level `execution.auto` applies to this stage command")
 			assert.Contains(t, entry, "there are no per-stage")
+			assert.Contains(t, entry, "`evidence_continuation`")
+			assert.Contains(t, entry, "skill/review handoffs still stop the loop for host work")
 			assert.Contains(t, entry, "sensitive/guardrail confirmations")
 		})
 	}

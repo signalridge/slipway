@@ -94,7 +94,7 @@ override for a single run) are inspected and changed with ` + "`slipway config`"
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
-	cmd.Flags().BoolVar(&auto, "auto", false, "Force auto-advance execution for this run, overriding execution.auto config")
+	cmd.Flags().BoolVar(&auto, "auto", false, "Force bounded auto mode for this run, overriding execution.auto config")
 	cmd.Flags().BoolVar(&noAuto, "no-auto", false, "Force manual advancement for this run, overriding execution.auto config")
 	cmd.MarkFlagsMutuallyExclusive("auto", "no-auto")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
@@ -226,12 +226,13 @@ func runGovernedLoop(
 		})
 		return view, err
 	}
-	return runGovernedLoopWithBuilder(root, ref, buildNext)
+	return runGovernedLoopWithBuilder(root, ref, auto, buildNext)
 }
 
 func runGovernedLoopWithBuilder(
 	root string,
 	ref changeRef,
+	auto bool,
 	buildNext func() (nextView, error),
 ) (nextView, error) {
 	const maxIterations = maxAutoNextIterations
@@ -252,7 +253,7 @@ func runGovernedLoopWithBuilder(
 		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
 			transitions = append(transitions, *view.Advanced)
 		}
-		if shouldStopRunLoop(view) {
+		if shouldStopRunLoop(view, auto) {
 			break
 		}
 	}
@@ -262,19 +263,58 @@ func runGovernedLoopWithBuilder(
 	return lastView, nil
 }
 
-func shouldStopRunLoop(view nextView) bool {
+func shouldStopRunLoop(view nextView, auto bool) bool {
 	switch {
 	case view.CurrentState == model.StateDone:
-		return true
-	case len(view.Blockers) > 0:
 		return true
 	case view.Advanced != nil && view.Advanced.Action == "done_ready":
 		return true
 	case view.NextSkill != nil:
 		return true
+	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
+		return true
+	case len(view.Blockers) > 0:
+		return !canAutoContinueRoutineRunBoundary(view, auto)
 	case view.Advanced == nil || view.Advanced.Action == "noop":
 		return true
 	default:
 		return false
 	}
+}
+
+func canAutoContinueRoutineRunBoundary(view nextView, auto bool) bool {
+	if !auto {
+		return false
+	}
+	if isGuardrailSensitive(view.GuardrailDomain) {
+		return false
+	}
+	if view.Advanced == nil || view.Advanced.Action != "advanced" {
+		return false
+	}
+	if view.NextSkill != nil || (view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0) {
+		return false
+	}
+	req := view.ConfirmationRequirement
+	if req.Boundary != "command_required" ||
+		req.Reason != "run_slipway_run_to_advance" ||
+		req.NextActionKind != "command" ||
+		req.NextCommand != "slipway run" ||
+		req.FreshConfirmationRequired ||
+		!req.PriorAuthorizationSufficient {
+		return false
+	}
+
+	sawRunBoundary := false
+	for _, blocker := range view.Blockers {
+		switch strings.TrimSpace(blocker.Code) {
+		case "run_slipway_run_to_advance":
+			sawRunBoundary = true
+		case "no_skill_required":
+			continue
+		default:
+			return false
+		}
+	}
+	return sawRunBoundary
 }

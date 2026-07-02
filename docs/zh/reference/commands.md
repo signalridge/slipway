@@ -121,9 +121,10 @@ slipway run --json --diagnostics
 
 ## Run 自动模式
 
-`slipway run` 可以自动越过纯节奏性的暂停，让受治理的变更持续推进，
-而不必在每次例行交接时都需要人工重新停下确认。你可以用 `execution.auto`
-配置项按仓库启用它，也可以为单次调用覆盖它：
+`slipway run` 可以在一次成功推进之后，继续越过例行的
+`run_slipway_run_to_advance` 命令边界，让受治理的变更不必只是为了再次运行
+同一个 `slipway run` 命令而停下。你可以用 `execution.auto` 配置项按仓库启用它，
+也可以为单次调用覆盖它：
 
 ```bash
 slipway run --json --auto
@@ -131,10 +132,12 @@ slipway run --json --no-auto
 ```
 
 对那一次运行而言，`--auto` 和 `--no-auto` 的优先级高于 `execution.auto` 配置。
-在自动模式下，Slipway 会基于先前的授权，自动越过纯节奏性的暂停（不含
-`security-review` 的评审批次，以及非敏感、非 security-review 的技能交接），
-并自动确认待处理的工作流预设升级（仅升级，绝不降级）。而 `security-review`
-边界、敏感与护栏确认、intake 的已批准摘要（Approved Summary），以及每一道证据门，
+在自动模式下，Slipway 只会继续越过例行的 run-to-advance 命令边界，并自动确认
+待处理的工作流预设升级（仅升级，绝不降级）。它不会执行治理技能、派发评审批次、
+记录证据、批准 intake 的已批准摘要（Approved Summary），也不会 finalize done-ready
+变更。非敏感的技能交接和评审批次可能在 `next --json` 中报告为
+`evidence_continuation`，且已有授权足够；但 run/stage 循环仍会停下，等待 host
+运行技能或评审并记录证据。`security-review` 边界、敏感与护栏确认以及每一道证据门
 仍会硬性停下，永远不会被自动越过。
 
 ## 命令面清单
