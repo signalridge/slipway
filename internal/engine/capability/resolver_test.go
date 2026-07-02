@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,6 +135,13 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			wantAvailability: "unavailable",
 		},
 		{
+			name: "unrecognized non-empty capability token is closed-world unavailable",
+			signals: Signals{
+				HostCapabilities: []string{"tools"},
+			},
+			wantAvailability: "unavailable",
+		},
+		{
 			name: "manual independent review fallback is explicit",
 			signals: Signals{
 				HostCapabilities: []string{"none"},
@@ -152,6 +160,26 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			wantAvailability: "unavailable",
 			wantFallback:     true,
 			wantFallbackMode: "same_context_degraded",
+		},
+		{
+			name: "same-context degraded fallback is matched case-insensitively and returned canonical",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"Same_Context_Degraded"},
+			},
+			wantAvailability: "unavailable",
+			wantFallback:     true,
+			wantFallbackMode: "same_context_degraded",
+		},
+		{
+			name: "fallback tokens are matched case-insensitively and returned canonical",
+			signals: Signals{
+				HostCapabilities: []string{"none"},
+				Fallbacks:        []string{"MANUAL_INDEPENDENT_REVIEW"},
+			},
+			wantAvailability: "unavailable",
+			wantFallback:     true,
+			wantFallbackMode: "manual_independent_review",
 		},
 	}
 
@@ -174,6 +202,46 @@ func TestResolveHostCapabilityRequirement(t *testing.T) {
 			assert.Contains(t, req.Remediation, "fallback:<mode>")
 		})
 	}
+}
+
+func TestEnvCatalogHostCapabilityFallbacksMirrorContracts(t *testing.T) {
+	t.Parallel()
+
+	entries := model.EnvCatalog()
+	var fallbackEntry model.EnvCatalogEntry
+	for _, entry := range entries {
+		if entry.Name == "SLIPWAY_HOST_CAPABILITY_FALLBACKS" {
+			fallbackEntry = entry
+			break
+		}
+	}
+	require.NotEmpty(t, fallbackEntry.Name)
+
+	got := map[string]bool{}
+	for _, value := range fallbackEntry.AcceptedValues {
+		got[value.Value] = true
+	}
+
+	want := map[string]bool{}
+	reg := DefaultRegistry()
+	for _, skill := range reg.All() {
+		contract, ok := resolveHostCapabilityContract(reg, skill.ID)
+		if !ok {
+			continue
+		}
+		for _, mode := range contract.FallbackModes {
+			want[mode] = true
+		}
+	}
+	for _, skillID := range []string{"plan-audit", "spec-compliance-review", "code-quality-review", "ship-verification"} {
+		contract, ok := resolveHostCapabilityContract(reg, skillID)
+		require.True(t, ok, "missing host capability contract for %s", skillID)
+		for _, mode := range contract.FallbackModes {
+			want[mode] = true
+		}
+	}
+
+	assert.Equal(t, want, got)
 }
 
 // TestResolveHostCapabilitySubagentDispatchLever covers the built-in
@@ -241,6 +309,18 @@ func TestResolveHostCapabilitySubagentDispatchLever(t *testing.T) {
 		assert.Equal(t, "unavailable", req.Availability)
 		assert.Contains(t, req.Remediation, "context_origin:stage=review=<handle>")
 		assert.Contains(t, req.Remediation, "fallback:<mode>")
+	})
+
+	t.Run("security-review same-context degraded fallback is case-insensitive", func(t *testing.T) {
+		t.Parallel()
+		req := ResolveHostCapabilityRequirement("security-review", Signals{
+			HostCapabilities: []string{"none"},
+			Fallbacks:        []string{"Same_Context_Degraded"},
+		})
+		require.NotNil(t, req, "security-review must carry a registry host-capability contract")
+		assert.Equal(t, "unavailable", req.Availability)
+		assert.True(t, req.FallbackSelected)
+		assert.Equal(t, "same_context_degraded", req.FallbackMode)
 	})
 
 	t.Run("skills without any contract still resolve to nil", func(t *testing.T) {

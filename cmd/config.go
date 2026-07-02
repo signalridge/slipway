@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -57,7 +58,8 @@ original key ordering are not preserved.
   config list --env [--json]
                            Enumerate the environment-variable surface (name,
                            scope, secret, default, file-config-key,
-                           description).
+                           description, value syntax, accepted values,
+                           examples, unset behavior).
   config get <key> [--json]
                            Print the resolved effective value for a file key.
   config set <key> <value> Validate and persist a file key to .slipway.yaml.`,
@@ -85,7 +87,8 @@ func makeConfigListCmd() *cobra.Command {
 With --env, list the environment-variable surface instead: the SLIPWAY_* (and
 ambient GitHub token) variables Slipway reads, each with its scope (repo-policy,
 runtime-host, or secret), default, the .slipway.yaml key it overrides (for
-repo-policy variables), and a description. The environment value overrides the
+repo-policy variables), value syntax, accepted values when constrained,
+examples, unset behavior, and a description. The environment value overrides the
 matching file value (env > file > default).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -180,7 +183,75 @@ func writeEnvCatalogText(cmd *cobra.Command, entries []model.EnvCatalogEntry) er
 			return err
 		}
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	if !envCatalogHasContractDetails(entries) {
+		return nil
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout()); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "CONTRACT DETAILS"); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !envCatalogEntryHasContractDetails(entry) {
+			continue
+		}
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\n", entry.Name); err != nil {
+			return err
+		}
+		if entry.ValueSyntax != "" {
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  VALUE: %s\n", entry.ValueSyntax); err != nil {
+				return err
+			}
+		}
+		if len(entry.AcceptedValues) > 0 {
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  ACCEPTED: %s\n", formatEnvAcceptedValues(entry.AcceptedValues)); err != nil {
+				return err
+			}
+		}
+		if len(entry.Examples) > 0 {
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  EXAMPLES: %s\n", strings.Join(entry.Examples, "; ")); err != nil {
+				return err
+			}
+		}
+		if entry.UnsetBehavior != "" {
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  UNSET: %s\n", entry.UnsetBehavior); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func envCatalogHasContractDetails(entries []model.EnvCatalogEntry) bool {
+	for _, entry := range entries {
+		if envCatalogEntryHasContractDetails(entry) {
+			return true
+		}
+	}
+	return false
+}
+
+func envCatalogEntryHasContractDetails(entry model.EnvCatalogEntry) bool {
+	return entry.ValueSyntax != "" ||
+		len(entry.AcceptedValues) > 0 ||
+		len(entry.Examples) > 0 ||
+		entry.UnsetBehavior != ""
+}
+
+func formatEnvAcceptedValues(values []model.EnvAcceptedValue) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		if value.Description == "" {
+			parts = append(parts, value.Value)
+			continue
+		}
+		parts = append(parts, value.Value+"="+value.Description)
+	}
+	return strings.Join(parts, "; ")
 }
 
 func writeConfigCatalogText(cmd *cobra.Command, catalog []model.ConfigCatalogEntry) error {

@@ -1,0 +1,62 @@
+version: 1
+slug: fix-runtime-host-env-wiring
+description: fix runtime host env wiring
+status: done
+current_state: DONE
+needs_discovery: true
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-07-02T07:03:27.865614Z
+guardrail_domain: external_api_contracts
+quality_mode: full
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/fix-runtime-host-env-wiring
+artifact_schema: expanded
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 65d014b1b08053dcb32ce756a13e73f6c862a86ccf75a32498ccbd439f762b64
+        updated_at: 2026-07-02T09:12:51.5820044Z
+    decision:
+        id: decision
+        path: decision.md
+        state: frozen
+        content_hash: a68d115e19117ba2dfd21eff5884cd72c805eec33ce680465522c2dbe9ea95b9
+        updated_at: 2026-07-02T07:11:01.975306849Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 6da77f75107dc4d46677094dcfb733a22bac7059dc06fa5009d10c95ed867981
+        updated_at: 2026-07-02T07:09:37.518797441Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: 2e1b0bd85bba34192bf8edb21256702282d9c81bb431f3ea9895d9182e554505
+        updated_at: 2026-07-02T07:11:01.974657649Z
+    research:
+        id: research
+        path: research.md
+        state: frozen
+        content_hash: 302eceb7b5db0e34b31ffc4267b1a57b8a5a7243047ff8f509602137f0adf5cd
+        updated_at: 2026-07-02T07:09:29.866134054Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 9730bf98be63f5281bb3a3eea227c6d67d108acab615b920a5f3381ff6af3881
+        updated_at: 2026-07-02T08:55:14.943130378Z
+evidence_refs:
+    code-quality-review: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/code-quality-review.yaml
+    independent-review: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/independent-review.yaml
+    intake-clarification: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/intake-clarification.yaml
+    plan-audit: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/plan-audit.yaml
+    research-orchestration: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/research-orchestration.yaml
+    security-review: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/security-review.yaml
+    ship-verification: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/fix-runtime-host-env-wiring/artifacts/changes/fix-runtime-host-env-wiring/verification/wave-orchestration.yaml

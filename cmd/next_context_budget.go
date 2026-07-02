@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/tmpl"
 )
 
@@ -22,7 +23,6 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 	}
 
 	const bytesPerToken = 4
-	const defaultContextWindowTokens = 200000
 	const warnRemainingPercent = 50.0
 	const stopRemainingPercent = 35.0
 
@@ -79,7 +79,7 @@ func estimateContextBudget(root string, skill *nextSkillView, inputContext nextC
 		return nil
 	}
 
-	assumedContextWindow := defaultContextWindowTokens
+	assumedContextWindow := model.DefaultContextWindowTokens
 	// Honor a valid SLIPWAY_CONTEXT_WINDOW_TOKENS override; a malformed or
 	// non-positive value falls through to the default window. Mirrors
 	// contextPressureWindowTokens.

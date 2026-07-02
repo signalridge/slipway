@@ -127,6 +127,10 @@ func TestConfigListEnvJSONShape(t *testing.T) {
 		out, errOut, err := runConfigCmd(t, root, "list", "--env", "--json")
 		require.NoError(t, err)
 		assert.Empty(t, errOut)
+		assert.Contains(t, out, `"value_syntax"`)
+		assert.Contains(t, out, `"accepted_values"`)
+		assert.Contains(t, out, `"examples"`)
+		assert.Contains(t, out, `"unset_behavior"`)
 
 		var entries []model.EnvCatalogEntry
 		require.NoError(t, json.Unmarshal([]byte(out), &entries))
@@ -141,12 +145,47 @@ func TestConfigListEnvJSONShape(t *testing.T) {
 		assert.Equal(t, model.EnvScopeRepoPolicy, apiURL.Scope)
 		assert.Equal(t, "github.api_url", apiURL.FileConfigKey)
 		assert.False(t, apiURL.Secret)
+		assert.NotEmpty(t, apiURL.ValueSyntax)
+		assert.NotEmpty(t, apiURL.UnsetBehavior)
 
 		token, ok := byName["GH_TOKEN"]
 		require.True(t, ok)
 		assert.Equal(t, model.EnvScopeSecret, token.Scope)
 		assert.True(t, token.Secret)
 		assert.Empty(t, token.FileConfigKey)
+		assert.NotEmpty(t, token.ValueSyntax)
+		assert.NotEmpty(t, token.UnsetBehavior)
+
+		hostCapabilities, ok := byName["SLIPWAY_HOST_CAPABILITIES"]
+		require.True(t, ok)
+		assert.NotEmpty(t, hostCapabilities.Examples)
+		assert.Contains(t, hostCapabilities.UnsetBehavior, "unknown")
+		accepted := map[string]string{}
+		for _, value := range hostCapabilities.AcceptedValues {
+			accepted[value.Value] = value.Description
+		}
+		assert.Contains(t, accepted["subagent"], "available")
+		assert.Contains(t, accepted["delegation"], "available")
+		assert.Contains(t, accepted["none"], "unavailable")
+	})
+}
+
+func TestConfigListEnvTextShowsWiringContractDetails(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		out, errOut, err := runConfigCmd(t, root, "list", "--env")
+		require.NoError(t, err)
+		assert.Empty(t, errOut)
+		assert.Contains(t, out, "CONTRACT DETAILS")
+		assert.Contains(t, out, "SLIPWAY_HOST_CAPABILITIES")
+		assert.Contains(t, out, "subagent=")
+		assert.Contains(t, out, "delegation=")
+		assert.Contains(t, out, "none=")
+		assert.Contains(t, out, "UNSET:")
+		assert.Contains(t, out, "SLIPWAY_HOST_CAPABILITIES=subagent")
 	})
 }
 
@@ -162,6 +201,13 @@ func TestConfigHelpDisclosesSetRewrite(t *testing.T) {
 		assert.Contains(t, out, "rewrites .slipway.yaml as deterministic YAML")
 		assert.Contains(t, out, "comments and the")
 		assert.Contains(t, out, "original key ordering are not preserved")
+
+		listOut, listErrOut, err := runConfigCmd(t, root, "list", "--help")
+		require.NoError(t, err)
+		assert.Empty(t, listErrOut)
+		assert.Contains(t, listOut, "value syntax")
+		assert.Contains(t, listOut, "accepted values")
+		assert.Contains(t, listOut, "unset behavior")
 	})
 }
 
