@@ -79,13 +79,14 @@ func scanEnvUsages(t *testing.T, root string) map[string]string {
 	return found
 }
 
-// TestEnvCatalogCoversEveryGetenv is the drift guard for the runtime env
-// surface: every SLIPWAY_* env var plus ambient token/username fallback read
-// anywhere in source must have an EnvCatalog() entry. Reading a new env var
-// without cataloguing it FAILS here and names the missing variable and the file
-// that reads it — the env-side mirror of
-// TestConfigCatalogCoversEveryStructLeaf.
-func TestEnvCatalogCoversEveryGetenv(t *testing.T) {
+// TestEnvCatalogCoversPublicEnvLiterals is the drift guard for the runtime env
+// surface: every public env-var literal in the SLIPWAY_ namespace plus ambient
+// token/username fallbacks must have an EnvCatalog() entry. Reading a new env
+// var through a string literal or shared const without cataloguing it FAILS here
+// and names the missing variable and source file. This intentionally scans
+// literals rather than only os.Getenv call arguments so const-backed reads are
+// still covered.
+func TestEnvCatalogCoversPublicEnvLiterals(t *testing.T) {
 	have := map[string]bool{}
 	for _, entry := range EnvCatalog() {
 		have[entry.Name] = true
@@ -127,6 +128,25 @@ func TestEnvCatalogEntriesAreWellFormed(t *testing.T) {
 		if strings.TrimSpace(entry.Description) == "" {
 			t.Errorf("env catalog entry %q has empty description", entry.Name)
 		}
+		if strings.TrimSpace(entry.ValueSyntax) == "" {
+			t.Errorf("env catalog entry %q has empty value_syntax", entry.Name)
+		}
+		if strings.TrimSpace(entry.UnsetBehavior) == "" {
+			t.Errorf("env catalog entry %q has empty unset_behavior", entry.Name)
+		}
+		for _, accepted := range entry.AcceptedValues {
+			if strings.TrimSpace(accepted.Value) == "" {
+				t.Errorf("env catalog entry %q has accepted value with empty value", entry.Name)
+			}
+			if strings.TrimSpace(accepted.Description) == "" {
+				t.Errorf("env catalog entry %q accepted value %q has empty description", entry.Name, accepted.Value)
+			}
+		}
+		for _, example := range entry.Examples {
+			if strings.TrimSpace(example) == "" {
+				t.Errorf("env catalog entry %q has empty example", entry.Name)
+			}
+		}
 		switch entry.Scope {
 		case EnvScopeRepoPolicy:
 			if entry.FileConfigKey == "" {
@@ -150,6 +170,58 @@ func TestEnvCatalogEntriesAreWellFormed(t *testing.T) {
 			}
 		default:
 			t.Errorf("env catalog entry %q has unknown scope %q", entry.Name, entry.Scope)
+		}
+	}
+}
+
+func TestEnvCatalogHostCapabilityWiringContract(t *testing.T) {
+	entries := EnvCatalog()
+	byName := map[string]EnvCatalogEntry{}
+	for _, entry := range entries {
+		byName[entry.Name] = entry
+	}
+
+	capabilities, ok := byName["SLIPWAY_HOST_CAPABILITIES"]
+	if !ok {
+		t.Fatal("SLIPWAY_HOST_CAPABILITIES missing from env catalog")
+	}
+	if capabilities.ValueSyntax == "" {
+		t.Fatal("SLIPWAY_HOST_CAPABILITIES must describe token syntax")
+	}
+	if capabilities.UnsetBehavior == "" {
+		t.Fatal("SLIPWAY_HOST_CAPABILITIES must describe unset behavior")
+	}
+	if !strings.Contains(capabilities.UnsetBehavior, "unrecognized") {
+		t.Fatal("SLIPWAY_HOST_CAPABILITIES must describe closed-world handling for unrecognized tokens")
+	}
+	if len(capabilities.Examples) == 0 {
+		t.Fatal("SLIPWAY_HOST_CAPABILITIES must include at least one host declaration example")
+	}
+
+	accepted := map[string]string{}
+	for _, value := range capabilities.AcceptedValues {
+		accepted[value.Value] = value.Description
+	}
+	for _, token := range []string{"subagent", "delegation", "none", "unavailable"} {
+		if strings.TrimSpace(accepted[token]) == "" {
+			t.Fatalf("SLIPWAY_HOST_CAPABILITIES accepted values missing %q with description: %#v", token, accepted)
+		}
+	}
+
+	fallbacks, ok := byName["SLIPWAY_HOST_CAPABILITY_FALLBACKS"]
+	if !ok {
+		t.Fatal("SLIPWAY_HOST_CAPABILITY_FALLBACKS missing from env catalog")
+	}
+	if !strings.Contains(fallbacks.ValueSyntax, "case-insensitive") {
+		t.Fatal("SLIPWAY_HOST_CAPABILITY_FALLBACKS must describe case-insensitive token matching")
+	}
+	fallbackTokens := map[string]bool{}
+	for _, value := range fallbacks.AcceptedValues {
+		fallbackTokens[value.Value] = true
+	}
+	for _, token := range []string{"same_context_degraded", "manual_plan_audit", "manual_security_review"} {
+		if !fallbackTokens[token] {
+			t.Fatalf("SLIPWAY_HOST_CAPABILITY_FALLBACKS accepted values missing %q: %#v", token, fallbackTokens)
 		}
 	}
 }

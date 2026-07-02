@@ -1,30 +1,16 @@
 # Concerns
 
-- Public JSON compatibility risk: route and freshness fields are public command
-  surface. The repair must add fields without removing or renaming existing
-  fields; `nextView`, `doneView`, status/validate diagnostics, and CLIError
-  therefore keep legacy `evidence_freshness` while adding split fields
-  (`cmd/next.go:55`, `cmd/done.go:32`, `cmd/errors.go:46`).
-- Lifecycle execution safety risk: diagnostic route kinds must not imply
-  executable lifecycle authority. No-active, multi-active, explicit-missing,
-  and bound-elsewhere routes explicitly set local/effective lifecycle execution
-  disabled unless the existing successful explicit route permits it
-  (`cmd/common.go:56`, `cmd/common.go:113`, `cmd/common.go:1184`).
-- Freshness truthfulness risk: host capability blockers are appended late in
-  `next` construction, so overall readiness freshness must be recomputed after
-  those blockers are added (`cmd/next.go:500`,
-  `cmd/status_view_build.go:244`). Otherwise `next`/`run` could report stale or
-  misleading readiness.
-- Human status risk: printing one line as `Evidence Freshness: fresh` can hide
-  stale governance evidence. Text output must show execution, governance, and
-  overall readiness separately (`cmd/status_render.go:145`,
-  `cmd/status_render.go:157`).
-- Host capability fail-closed risk: independent-review must continue to block
-  when the host cannot provide fresh subagent review. Registry metadata can make
-  the requirement discoverable, but fallback remains explicit and bounded
-  (`internal/engine/capability/registry_default.go:47`,
-  `internal/engine/capability/resolver.go:140`).
-- Template drift risk: generated skills are public agent contracts. The
-  independent-review source template and registry must stay mirrored through
-  `TestFrontmatterMirrorsRegistryHostCapabilities`
-  (`internal/engine/capability/gates_test.go:76`).
+- JSON compatibility: `config list --env --json` is public. Additive
+  `omitempty` fields are acceptable; removing or renaming existing fields is not.
+- Contract drift: the hidden-contract bug recurs if future env vars can be added
+  with only a one-line description. Tests should fail when scoped variables with
+  meaningful format, accepted values, or fallback semantics omit structured
+  wiring metadata.
+- Over-documentation risk: not every env var has enumerated accepted values.
+  The schema should distinguish accepted token lists from free-form value syntax
+  and unset behavior.
+- Security boundary: secret env vars must not imply values can be written to
+  `.slipway.yaml`; catalog wording and tests should preserve env-only handling.
+- Skill boundary: generated workflow skills should continue to name capability
+  prerequisites and evidence fallbacks, but host-integration wiring should stay
+  in catalog/docs surfaces to avoid duplicating host manuals across skills.

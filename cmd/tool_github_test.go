@@ -124,3 +124,20 @@ func TestAddGitHubPaginationParams(t *testing.T) {
 		})
 	}
 }
+
+func TestParseGitHubAPIAllowedBaseURLsSplitsCarriageReturn(t *testing.T) {
+	t.Parallel()
+
+	got, err := parseGitHubAPIAllowedBaseURLs("https://github.example.com/api/v3\rhttps://ghe.example.com/api/v3")
+	if err != nil {
+		t.Fatalf("parseGitHubAPIAllowedBaseURLs returned error: %v", err)
+	}
+
+	want := []string{
+		"https://github.example.com/api/v3",
+		"https://ghe.example.com/api/v3",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("parseGitHubAPIAllowedBaseURLs = %v, want %v", got, want)
+	}
+}
