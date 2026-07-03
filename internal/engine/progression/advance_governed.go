@@ -1314,6 +1314,10 @@ func EvaluatePlanGate(root string, change model.Change, passingSkills map[string
 		// rung whose other endpoint is absent at S1.
 		enforced := presetPolicy.EffectivePreset != model.WorkflowPresetLight
 		planBlockers = append(planBlockers, planAuditOriginHandleBlockers(record, enforced)...)
+		if enforced && change.CurrentState == model.StateS1Plan {
+			_, dimBlockers := model.RequiredPlanDimensionAttestationBlockers(planDimensionEvidenceRoot(root, change), record)
+			planBlockers = append(planBlockers, dimBlockers...)
+		}
 	}
 	bundleReady := CheckGovernedBundleReady(root, change)
 	checklistBlockers := ValidateTasksChecklistDetailed(root, change).Blockers
@@ -1363,6 +1367,14 @@ func planAuditOriginHandleBlockers(record model.VerificationRecord, enforced boo
 
 func planAuditOriginInvalidBlocker(detail string) model.ReasonCode {
 	return model.NewReasonCode("plan_audit_origin_invalid", strings.TrimSpace(detail))
+}
+
+func planDimensionEvidenceRoot(root string, change model.Change) string {
+	workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+	if err != nil {
+		return root
+	}
+	return workspaceRoot
 }
 
 func EvaluateShipGate(root string, change model.Change) (gate.GateEvaluation, error) {

@@ -19,6 +19,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func passingSpecComplianceReviewRefs(layers ...string) []string {
+	refs := append([]string{}, layers...)
+	refs = append(refs,
+		model.ContextOriginReferencePrefix+model.StageContextReview+"=spec-review-context",
+		"dim:decision_soundness=pass:.slipway.yaml",
+		"dim:consistency=pass:.slipway.yaml",
+	)
+	return refs
+}
+
 func TestActionableSkillViewsOmitAlreadyPassingDisplaySkillWithoutBlocker(t *testing.T) {
 	t.Parallel()
 
@@ -1211,6 +1221,7 @@ func TestNextJSONReportsActionableRequiredSkillAfterPassingReviewEvidence(t *tes
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
+			References: passingSpecComplianceReviewRefs("layer:R0=pass"),
 		})
 
 		var buf bytes.Buffer
@@ -1356,12 +1367,12 @@ func TestReviewStateActionableNextSkillConsistentAcrossCommandSurfaces(t *testin
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
-			References: []string{
+			References: passingSpecComplianceReviewRefs(
 				"layer:R0=pass",
 				"layer:R3=pass",
 				"layer:IR1=pass",
 				"layer:IR3=pass",
-			},
+			),
 		})
 		selectedReviewSkills := []string{
 			progression.SkillSpecComplianceReview,
@@ -1761,12 +1772,12 @@ func prepareReviewBatchHostCapabilityFixture(t *testing.T) (string, string) {
 		Blockers:   []model.ReasonCode{},
 		Timestamp:  time.Now().UTC(),
 		RunVersion: 1,
-		References: []string{
+		References: passingSpecComplianceReviewRefs(
 			"layer:R0=pass",
 			"layer:R3=pass",
 			"layer:IR1=pass",
 			"layer:IR3=pass",
-		},
+		),
 	})
 	return root, slug
 }
@@ -1809,10 +1820,10 @@ func TestReviewStateDocsProfileSkipsCodeQualityAcrossCommandSurfaces(t *testing.
 			Blockers:   []model.ReasonCode{},
 			Timestamp:  time.Now().UTC(),
 			RunVersion: 1,
-			References: []string{
+			References: passingSpecComplianceReviewRefs(
 				"layer:R0=pass",
 				"layer:R3=pass",
-			},
+			),
 		})
 		selectedReviewSkills := []string{
 			progression.SkillSpecComplianceReview,

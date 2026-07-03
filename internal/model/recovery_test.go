@@ -834,6 +834,45 @@ func TestBuildRecoveryPrioritizesEvidenceBeforeAttestation(t *testing.T) {
 		"the missing-evidence blocker must win the primary slot over the attestation blocker")
 }
 
+func TestPlanDimensionRecoveryUsesOwningSkillFromBlockerDetail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "unattested consistency",
+			code: "plan_dimension_consistency_unattested",
+		},
+		{
+			name: "unsound decision",
+			code: "plan_dimension_decision_unsound",
+		},
+		{
+			name: "failed consistency",
+			code: "plan_dimension_consistency_failed",
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			step, ok := recoveryStepFor(NewReasonCode(
+				tt.code,
+				"spec-compliance-review:internal/engine/progression/validation.go",
+			))
+			require.True(t, ok)
+			assert.Equal(t, "spec-compliance-review", step.Subject)
+			assert.Equal(t, "slipway evidence skill --skill spec-compliance-review --verdict pass", step.Command)
+			assert.Contains(t, step.Remediation, "spec-compliance-review")
+			assert.NotContains(t, step.Command, "plan-audit")
+			assert.NotContains(t, step.Command, "slipway run")
+		})
+	}
+}
+
 func TestBuildRecoveryPrioritizesMissingArtifactsByAuthoringOrder(t *testing.T) {
 	t.Parallel()
 

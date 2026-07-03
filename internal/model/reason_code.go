@@ -394,6 +394,42 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "A requirement has no task coverage",
 	},
+	"plan_dimension_decision_soundness_unattested": {
+		Severity: ReasonSeverityError,
+		Message:  "Owning plan-dimension review did not attest decision soundness",
+	},
+	"plan_dimension_consistency_unattested": {
+		Severity: ReasonSeverityError,
+		Message:  "Owning plan-dimension review did not attest plan consistency",
+	},
+	"plan_dimension_attestation_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan dimension attestation reference is invalid",
+	},
+	"plan_dimension_attestation_conflict": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan dimension attestation records conflicting verdicts",
+	},
+	"plan_dimension_attestation_evidence_unresolvable": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan dimension attestation evidence reference is not resolvable",
+	},
+	"plan_dimension_decision_soundness_evidence_invalid": {
+		Severity: ReasonSeverityError,
+		Message:  "Decision-soundness evidence must cite non-artifact workspace evidence",
+	},
+	"plan_dimension_decision_unsound": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan decision soundness audit failed",
+	},
+	"plan_dimension_consistency_failed": {
+		Severity: ReasonSeverityError,
+		Message:  "Plan consistency audit failed",
+	},
+	"plan_dimension_consistency_unknown_requirement_ref": {
+		Severity: ReasonSeverityError,
+		Message:  "Governed artifact prose references an unknown requirement",
+	},
 	"preset_confirmation_required": {
 		Severity: ReasonSeverityError,
 		Message:  "Workflow preset confirmation is required before continuing",
