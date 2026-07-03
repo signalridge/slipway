@@ -122,6 +122,22 @@ selected approach (the lifecycle has not yet locked the plan): treat it as
 advisory context, not a contract. Do not raise `decision_fidelity:violated`
 against a pending decision — the implementation is not yet bound to it.
 
+### Plan-Dimension Attestations
+This review owns the S3 re-check for plan-dimension semantics. Do not reuse the
+S1 `audit_origin` judgement. Under this review's own
+`context_origin:stage=review=<handle>`, decide whether:
+- `decision_soundness` still passes after implementation and review evidence:
+  the implemented approach still fits the codebase seam, lifecycle authority,
+  and blast radius. The primary evidence path for this dimension must point
+  outside `artifacts/`.
+- `consistency` still passes: artifacts, implementation, tests, and review notes
+  remain mutually consistent after S2 execution.
+
+Record both passing tokens on a pass. If either dimension fails, record the
+matching `dim:*=fail:<repo-path>` token and a concrete blocker such as
+`plan_dimension_decision_unsound:<reason>` or
+`plan_dimension_consistency_failed:<reason>`.
+
 ### Stub Detection
 Block zero-value or hardcoded production responses, TODO/FIXME/HACK in claimed
 complete code, assertion-free tests, handlers that only log, placeholder API
@@ -198,6 +214,8 @@ slipway evidence skill \
   --reference "scope_contract:pass" \
   --reference "negative_path:pass" \
   --reference "context_origin:stage=review=<handle>" \
+  --reference "dim:decision_soundness=pass:<repo-path-outside-artifacts>" \
+  --reference "dim:consistency=pass:<repo-path-or-artifact-line>" \
   --notes-file artifacts/changes/{slug}/verification/spec-compliance-review-notes.md
 ```
 

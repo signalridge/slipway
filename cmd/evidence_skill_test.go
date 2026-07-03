@@ -37,6 +37,8 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 			"--skill", progression.SkillPlanAudit,
 			"--verdict", model.VerificationVerdictPass,
 			"--reference", "plan-audit:pass",
+			"--reference", "dim:decision_soundness=pass:.slipway.yaml",
+			"--reference", "dim:consistency=pass:.slipway.yaml",
 			"--notes-file", notesRel,
 		})
 		var out bytes.Buffer
@@ -68,7 +70,11 @@ func TestEvidenceSkillRecordsPlanAuditVerification(t *testing.T) {
 		assert.Empty(t, rec.Blockers)
 		assert.False(t, rec.Timestamp.IsZero())
 		assert.Equal(t, 0, rec.RunVersion)
-		assert.Equal(t, []string{"plan-audit:pass"}, rec.References)
+		assert.Equal(t, []string{
+			"dim:consistency=pass:.slipway.yaml",
+			"dim:decision_soundness=pass:.slipway.yaml",
+			"plan-audit:pass",
+		}, rec.References)
 		assert.Equal(t, "Plan audit passed.", rec.Notes)
 
 		digests, err := state.LoadEvidenceDigestsForChange(root, change)
@@ -409,6 +415,9 @@ func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
 		notesPath := filepath.Join(worktreeRoot, filepath.FromSlash(notesRel))
 		require.NoError(t, os.MkdirAll(filepath.Dir(notesPath), 0o755))
 		require.NoError(t, os.WriteFile(notesPath, []byte("Bound worktree plan audit passed.\n"), 0o644))
+		requirementsRel := filepath.ToSlash(filepath.Join("artifacts", "changes", slug, "requirements.md"))
+		requirementsPath := filepath.Join(worktreeRoot, filepath.FromSlash(requirementsRel))
+		require.NoError(t, os.WriteFile(requirementsPath, []byte("# Requirements\n\n- REQ-001: Bound worktree artifact.\n"), 0o644))
 
 		cmd := commandForRoot(t, root, makeEvidenceCmd())
 		cmd.SetArgs([]string{
@@ -418,6 +427,8 @@ func TestEvidenceSkillNotesFileUsesBoundWorktreeWorkspace(t *testing.T) {
 			"--skill", progression.SkillPlanAudit,
 			"--verdict", model.VerificationVerdictPass,
 			"--reference", "plan-audit:pass",
+			"--reference", "dim:decision_soundness=pass:README.md",
+			"--reference", "dim:consistency=pass:" + requirementsRel,
 			"--notes-file", notesRel,
 		})
 		var out bytes.Buffer
@@ -454,6 +465,8 @@ func TestEvidenceSkillFailOverwritesPlanAuditAndPrunesDigest(t *testing.T) {
 			"--skill", progression.SkillPlanAudit,
 			"--verdict", model.VerificationVerdictPass,
 			"--reference", "plan-audit:pass",
+			"--reference", "dim:decision_soundness=pass:.slipway.yaml",
+			"--reference", "dim:consistency=pass:.slipway.yaml",
 			"--notes", "Plan audit passed.",
 		})
 		require.NoError(t, passCmd.Execute())
@@ -668,6 +681,8 @@ func TestEvidenceSkillAllowsSelectedReviewerRestampForInvalidContextOrigin(t *te
 			"--reference", "layer:R0=pass",
 			"--reference", "layer:R3=pass",
 			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-spec-review-context",
+			"--reference", "dim:decision_soundness=pass:.slipway.yaml",
+			"--reference", "dim:consistency=pass:.slipway.yaml",
 			"--notes", "Spec-compliance review rerun in fresh review context.",
 		})
 		var out bytes.Buffer
@@ -742,6 +757,8 @@ func TestEvidenceSkillRefreshCurrentSelectedReviewerWithValidContextOrigin(t *te
 				"scope_contract:pass",
 				"negative_path:pass",
 				model.ContextOriginReferencePrefix + model.StageContextReview + "=fresh-spec-compliance-review-context",
+				"dim:decision_soundness=pass:.slipway.yaml",
+				"dim:consistency=pass:.slipway.yaml",
 			},
 		},
 		{
@@ -1058,6 +1075,102 @@ func TestEvidenceSkillWrongStateForWaveEvidenceInS3RoutesToShipVerificationEvide
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_wrong_state", cliErr.ErrorCode)
 		assert.Contains(t, cliErr.Remediation, progression.SkillShipVerification)
+	})
+}
+
+func TestEvidenceSkillRejectsPassingPlanAuditWithoutDimensionAttestations(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "plan audit dimensions required")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillPlanAudit,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", model.PlanOriginReferencePrefix + "author",
+			"--reference", model.AuditOriginReferencePrefix + "auditor",
+			"--notes", "Plan audit passed without dimension tokens.",
+		})
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_plan_dimension_attestation_invalid", cliErr.ErrorCode)
+		blockers, ok := cliErr.Details["blockers"].([]string)
+		require.True(t, ok)
+		assert.Contains(t, blockers, "plan_dimension_decision_soundness_unattested")
+		assert.Contains(t, blockers, "plan_dimension_consistency_unattested")
+		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillPlanAudit+".yaml"))
+		require.Error(t, err)
+		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestEvidenceSkillRejectsPassingSpecComplianceWithoutDimensionAttestations(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "spec compliance dimensions required")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS3Review, model.PlanSubStepNone)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillSpecComplianceReview,
+			"--verdict", model.VerificationVerdictPass,
+			"--reference", "layer:R0=pass",
+			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=spec-reviewer",
+			"--notes", "Spec compliance passed without dimension tokens.",
+		})
+
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_skill_plan_dimension_attestation_invalid", cliErr.ErrorCode)
+		blockers, ok := cliErr.Details["blockers"].([]string)
+		require.True(t, ok)
+		assert.Contains(t, blockers, "plan_dimension_decision_soundness_unattested")
+		assert.Contains(t, blockers, "plan_dimension_consistency_unattested")
+		_, err := os.Stat(filepath.Join(state.VerificationDir(root, slug), progression.SkillSpecComplianceReview+".yaml"))
+		require.Error(t, err)
+		assert.True(t, os.IsNotExist(err))
+	})
+}
+
+func TestEvidenceSkillAllowsFailedDimensionAttestationWithFailVerdict(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "failed dimensions can be recorded")
+		setEvidenceSkillChangeState(t, root, slug, model.StateS1Plan, model.PlanSubStepAudit)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"skill",
+			"--change", slug,
+			"--skill", progression.SkillPlanAudit,
+			"--verdict", model.VerificationVerdictFail,
+			"--reference", "dim:decision_soundness=fail:.slipway.yaml",
+			"--blocker", "plan_dimension_decision_unsound:wrong-seam",
+			"--notes", "Decision soundness failed.",
+		})
+		require.NoError(t, cmd.Execute())
+
+		rec, err := state.LoadVerification(root, slug, progression.SkillPlanAudit)
+		require.NoError(t, err)
+		assert.Equal(t, model.VerificationVerdictFail, rec.Verdict)
+		assert.Contains(t, rec.References, "dim:decision_soundness=fail:.slipway.yaml")
+		assert.Contains(t, model.ReasonSpecs(rec.Blockers), "plan_dimension_decision_unsound:wrong-seam")
 	})
 }
 

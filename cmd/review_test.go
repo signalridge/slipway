@@ -364,6 +364,8 @@ func writePassingSelectedReviewEvidencePack(t *testing.T, root, slug string, run
 			"layer:R0=pass",
 			"layer:R3=pass",
 			model.ContextOriginReferencePrefix + model.StageContextReview + "=review-spec",
+			"dim:decision_soundness=pass:.slipway.yaml",
+			"dim:consistency=pass:.slipway.yaml",
 		},
 	})
 	writeSkillVerification(t, root, slug, progression.SkillCodeQualityReview, model.VerificationRecord{

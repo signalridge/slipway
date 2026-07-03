@@ -2,6 +2,7 @@ package progression
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -372,6 +373,142 @@ func reviewSkillContextRecords(handles map[string]string) map[string]model.Verif
 // hasReasonCode reports whether codes contains the given reason code.
 func hasReasonCode(codes []model.ReasonCode, code string) bool {
 	return slices.ContainsFunc(codes, func(c model.ReasonCode) bool { return c.Code == code })
+}
+
+func TestEvaluateReviewAuthorityRequiresSpecCompliancePlanDimensionAttestations(t *testing.T) {
+	t.Parallel()
+
+	newReviewRoot := func(t *testing.T, slug string, specRefs []string) (string, model.Change) {
+		t.Helper()
+		root := t.TempDir()
+		initGitWorkspaceForReadinessOptimizationTests(t, root)
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n"), 0o644))
+
+		change := model.NewChange(slug)
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.WorkflowProfile = model.WorkflowProfileDocs
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+		writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+		writePlanDimensionEvidenceFiles(t, root, change.Slug)
+
+		summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+		summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
+		summary.SyncDerivedFields()
+		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+		records := reviewSkillContextRecords(map[string]string{
+			SkillSpecComplianceReview: "ctx-spec-reviewer",
+			SkillIndependentReview:    "ctx-independent-reviewer",
+		})
+		for skillName, record := range records {
+			record.RunVersion = 1
+			record.Timestamp = time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC)
+			if skillName == SkillSpecComplianceReview {
+				record.References = append(record.References, "layer:R0=pass")
+				record.References = append(record.References, specRefs...)
+			}
+			writeVerificationForTest(t, root, change.Slug, skillName, record)
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
+		}
+		return root, change
+	}
+
+	t.Run("old selected spec review evidence without dim tokens fails closed", func(t *testing.T) {
+		t.Parallel()
+		root, change := newReviewRoot(t, "review-dim-missing", nil)
+
+		authority, err := EvaluateReviewAuthority(root, change)
+		require.NoError(t, err)
+		assert.True(t, hasReasonCode(authority.Blockers, "plan_dimension_decision_soundness_unattested"))
+		assert.True(t, hasReasonCode(authority.Blockers, "plan_dimension_consistency_unattested"))
+		assert.Contains(t,
+			model.ReasonSpecs(authority.Blockers),
+			"plan_dimension_consistency_unattested:spec-compliance-review",
+		)
+
+		recovery := model.BuildRecovery(authority.Blockers)
+		require.NotNil(t, recovery)
+		assert.Equal(t,
+			"slipway evidence skill --skill spec-compliance-review --verdict pass",
+			recovery.PrimaryCommand,
+		)
+		assert.NotContains(t, recovery.PrimaryCommand, "plan-audit")
+	})
+
+	t.Run("selected spec review evidence with dim tokens passes the dimension gate", func(t *testing.T) {
+		t.Parallel()
+		slug := "review-dim-pass"
+		root, change := newReviewRoot(t, slug, []string{
+			"dim:decision_soundness=pass:internal/engine/progression/advance_governed.go",
+			"dim:consistency=pass:artifacts/changes/" + slug + "/requirements.md",
+		})
+
+		authority, err := EvaluateReviewAuthority(root, change)
+		require.NoError(t, err)
+		assert.False(t, hasReasonCode(authority.Blockers, "plan_dimension_decision_soundness_unattested"), model.ReasonSpecs(authority.Blockers))
+		assert.False(t, hasReasonCode(authority.Blockers, "plan_dimension_consistency_unattested"), model.ReasonSpecs(authority.Blockers))
+		assert.False(t, hasReasonCode(authority.Blockers, "plan_dimension_attestation_evidence_unresolvable"), model.ReasonSpecs(authority.Blockers))
+	})
+
+	t.Run("selected spec review evidence resolves dim refs in bound worktree", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		initGitWorkspaceForReadinessOptimizationTests(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.go"), []byte("package main\n"), 0o644))
+		runGitForAuthorityTests(t, root, "add", ".")
+		runGitForAuthorityTests(t, root, "commit", "-m", "init")
+		require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+		slug := "review-dim-worktree-artifact"
+		worktreeRoot := filepath.Join(t.TempDir(), slug)
+		branch := "feat/" + slug
+		runGitForAuthorityTests(t, root, "worktree", "add", worktreeRoot, "-b", branch, "HEAD")
+
+		change := model.NewChange(slug)
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.WorkflowProfile = model.WorkflowProfileDocs
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.PersistScopeWorktreeMetadata(&change, worktreeRoot, branch))
+		require.NoError(t, state.SaveChange(root, change))
+		writeDigestPlanningBundle(t, root, change, uncheckedDigestTasks())
+
+		summary := digestPolicyExecutionSummary(change, []string{"tracked.go"})
+		summary.Tasks[0].ChangedFiles = []string{"tracked.go"}
+		summary.SyncDerivedFields()
+		require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
+
+		records := reviewSkillContextRecords(map[string]string{
+			SkillSpecComplianceReview: "ctx-spec-reviewer",
+			SkillIndependentReview:    "ctx-independent-reviewer",
+		})
+		for skillName, record := range records {
+			record.RunVersion = 1
+			record.Timestamp = time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC)
+			if skillName == SkillSpecComplianceReview {
+				record.References = append(record.References,
+					"layer:R0=pass",
+					"dim:decision_soundness=pass:tracked.go",
+					"dim:consistency=pass:artifacts/changes/"+slug+"/requirements.md",
+				)
+			}
+			writeVerificationForTest(t, root, change.Slug, skillName, record)
+			require.NoError(t, StampEvidenceDigestForSkill(root, change, skillName, record, summary))
+		}
+
+		authority, err := EvaluateReviewAuthority(root, change)
+		require.NoError(t, err)
+		assert.False(t, hasReasonCode(authority.Blockers, "plan_dimension_attestation_evidence_unresolvable"), model.ReasonSpecs(authority.Blockers))
+		assert.False(t, hasReasonCode(authority.Blockers, "plan_dimension_consistency_unattested"), model.ReasonSpecs(authority.Blockers))
+	})
+}
+
+func runGitForAuthorityTests(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 }
 
 func TestCrossStageContextDistinctBlockersUsesSelectedReviewSkillParticipants(t *testing.T) {

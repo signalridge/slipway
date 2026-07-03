@@ -1,0 +1,47 @@
+version: 1
+slug: implement-issue-371-extend-plan-audit-audit-scope-with-struc
+description: 'Implement issue #371: extend plan-audit audit scope with structured semantic quality and decision soundness attestations'
+status: done
+current_state: DONE
+complexity_level: complex
+base_ref: HEAD
+created_at: 2026-07-02T16:31:39.399672Z
+quality_mode: standard
+workflow_profile: code
+workflow_preset: standard
+worktree_branch: feat/implement-issue-371-extend-plan-audit-audit-scope-with-struc
+artifact_schema: core
+artifacts:
+    assurance:
+        id: assurance
+        path: assurance.md
+        state: frozen
+        content_hash: 23d67303b59bbd82fb4270a88adef863e7a379c1d151f7cab2be5f71fce76255
+        updated_at: 2026-07-03T05:49:00.002783388Z
+    intent:
+        id: intent
+        path: intent.md
+        state: frozen
+        content_hash: 4eee62598295375a92caffee2a3325374f0b1d64fb6f97130831340afbd29b8f
+        updated_at: 2026-07-02T16:34:48.586085334Z
+    requirements:
+        id: requirements
+        path: requirements.md
+        state: frozen
+        content_hash: ececcdd296c639dfb6379a7a2c0e193f25f7fca28913b4a3ddcddfb1d990b0af
+        updated_at: 2026-07-02T16:37:46.515596874Z
+    tasks:
+        id: tasks
+        path: tasks.md
+        state: frozen
+        content_hash: 3148278d28fe4ea8a6a4a1ef1ca8741d16f1902eac35944589b668931bb9c073
+        updated_at: 2026-07-02T17:25:42.379673211Z
+evidence_refs:
+    code-quality-review: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/code-quality-review.yaml
+    independent-review: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/independent-review.yaml
+    intake-clarification: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/intake-clarification.yaml
+    plan-audit: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/plan-audit.yaml
+    security-review: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/security-review.yaml
+    ship-verification: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/ship-verification.yaml
+    spec-compliance-review: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/spec-compliance-review.yaml
+    wave-orchestration: .worktrees/implement-issue-371-extend-plan-audit-audit-scope-with-struc/artifacts/changes/implement-issue-371-extend-plan-audit-audit-scope-with-struc/verification/wave-orchestration.yaml

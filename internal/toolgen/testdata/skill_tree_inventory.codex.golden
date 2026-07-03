@@ -30,6 +30,7 @@ slipway-next/SKILL.md	skill_md	non-exec
 slipway-plan-audit/SKILL.md	skill_md	non-exec
 slipway-plan-audit/references/audit-smells.md	reference	non-exec
 slipway-plan-audit/references/checklist-quality.md	reference	non-exec
+slipway-plan-audit/references/consistency-audit.md	reference	non-exec
 slipway-plan/SKILL.md	skill_md	non-exec
 slipway-preset/SKILL.md	skill_md	non-exec
 slipway-repair/SKILL.md	skill_md	non-exec
@@ -67,4 +68,4 @@ slipway-worktree-preflight/SKILL.md	skill_md	non-exec
 slipway/SKILL.md	skill_md	non-exec
 slipway/references/command-reference.md	reference	non-exec
 slipway/references/skill-index.md	reference	non-exec
-# inventory_sha256:77d075ecb77e9f75b67a2446fabbd12fb33f2f034e04496461e66e5a6d94eec7
+# inventory_sha256:62872441a44e98bc31a1c478f62eef21e17f199c616e0483482f718c73a3f620

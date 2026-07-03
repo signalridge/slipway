@@ -245,6 +245,179 @@ The system must authenticate requests.
 	}
 }
 
+func TestValidateTasksChecklist_RejectsUnknownRequirementRefsInArtifactProse(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	slug := "unknown-prose-req"
+	bundleDir := filepath.Join(dir, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Known behavior
+REQ-001: The system MUST keep known requirements traceable.
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement known behavior
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(`# Decision
+
+The selected approach claims to satisfy REQ-999.
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(dir, model.Change{
+		Slug:           slug,
+		ArtifactSchema: model.ArtifactSchemaExpanded,
+	})
+	assert.Contains(t, result.Blockers, "plan_dimension_consistency_unknown_requirement_ref:decision.md:REQ-999")
+}
+
+func TestValidateTasksChecklist_RejectsUnknownRequirementRefsInCustomArtifactProse(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	slug := "unknown-custom-prose-req"
+	bundleDir := filepath.Join(dir, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Known behavior
+REQ-001: The system MUST keep known requirements traceable.
+
+#### Scenario: Known requirement remains traceable
+GIVEN a known requirement
+WHEN governed artifacts cite it
+THEN validation accepts the reference.
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement known behavior
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "custom-notes.md"), []byte(`# Custom Notes
+
+The custom acceptance narrative claims to satisfy REQ-999.
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(dir, model.Change{
+		Slug:           slug,
+		ArtifactSchema: model.ArtifactSchemaCustom,
+		WorkflowPreset: model.WorkflowPresetStandard,
+		CustomArtifacts: []model.ArtifactDefinition{
+			{Name: "requirements.md"},
+			{Name: "tasks.md", DependsOn: []string{"requirements.md"}},
+			{Name: "custom-notes.md", DependsOn: []string{"requirements.md"}},
+		},
+	})
+	assert.Contains(t, result.Blockers, "plan_dimension_consistency_unknown_requirement_ref:custom-notes.md:REQ-999")
+}
+
+func TestValidateTasksChecklist_DoesNotOwnAssuranceProseRequirementReferences(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	slug := "assurance-owned-by-dedicated-gate"
+	bundleDir := filepath.Join(dir, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Known behavior
+REQ-001: The system MUST keep known requirements traceable.
+
+#### Scenario: Known requirement remains traceable
+GIVEN a known requirement
+WHEN governed artifacts cite it
+THEN validation accepts the reference.
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement known behavior
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "assurance.md"), []byte(`# Assurance
+
+This S3-owned closeout document cites REQ-999 while still being outside the
+task-checklist prose scanner's ownership boundary.
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(dir, model.Change{
+		Slug:           slug,
+		ArtifactSchema: model.ArtifactSchemaExpanded,
+		WorkflowPreset: model.WorkflowPresetStandard,
+		CurrentState:   model.StateS1Plan,
+		PlanSubStep:    model.PlanSubStepAudit,
+	})
+	for _, blocker := range result.Blockers {
+		assert.NotEqual(t, "plan_dimension_consistency_unknown_requirement_ref:assurance.md:REQ-999", blocker)
+	}
+}
+
+func TestValidateTasksChecklist_IgnoresLowercaseReqHyphenWordsInArtifactProse(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	slug := "lowercase-req-words"
+	bundleDir := filepath.Join(dir, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Known behavior
+REQ-001: The system MUST keep known requirements traceable.
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement known behavior
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-001]
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "decision.md"), []byte(`# Decision
+
+The selected approach handles req-timeout, req-id, and req-body prose without
+treating those ordinary lowercase API words as stable requirement references.
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(dir, model.Change{Slug: slug})
+	for _, blocker := range result.Blockers {
+		assert.NotContains(t, blocker, "plan_dimension_consistency_unknown_requirement_ref")
+	}
+}
+
+func TestValidateTasksChecklist_DoesNotDuplicateUnknownCoversAsProseConsistency(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	slug := "unknown-covers-only"
+	bundleDir := filepath.Join(dir, "artifacts", "changes", slug)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "requirements.md"), []byte(`# Requirements
+
+### Requirement: Known behavior
+REQ-001: The system MUST keep known requirements traceable.
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` implement known behavior
+  - target_files: [main.go]
+  - task_kind: code
+  - covers: [REQ-999]
+`), 0o644))
+
+	result := ValidateTasksChecklistDetailed(dir, model.Change{Slug: slug})
+	assert.Contains(t, result.Blockers, "plan_dimension_coverage_unknown_requirement:t-01->REQ-999")
+	for _, blocker := range result.Blockers {
+		assert.NotEqual(t, "plan_dimension_consistency_unknown_requirement_ref:tasks.md:REQ-999", blocker)
+	}
+}
+
 func TestValidateTasksChecklistDetailed_DowngradesOptionalFieldsAndCoverageToWarningsForLightPreset(t *testing.T) {
 	t.Parallel()
 

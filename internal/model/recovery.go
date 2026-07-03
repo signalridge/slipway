@@ -422,6 +422,51 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 	},
+	"plan_dimension_decision_soundness_unattested": {
+		Remediation:     "Re-run the owning plan-dimension audit skill and record a passing decision_soundness attestation reference.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_consistency_unattested": {
+		Remediation:     "Re-run the owning plan-dimension audit skill and record a passing consistency attestation reference.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_attestation_invalid": {
+		Remediation:     "Fix malformed dim:<name>=<verdict>:<evidence-ref> evidence references and re-record the owning skill evidence.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_attestation_conflict": {
+		Remediation:     "Remove conflicting plan-dimension verdict references and re-record a single owning skill verdict for the dimension.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_attestation_evidence_unresolvable": {
+		Remediation:     "Change the plan-dimension evidence reference to a resolvable workspace-relative path and re-record the owning skill evidence.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_decision_soundness_evidence_invalid": {
+		Remediation:     "Re-run the decision-soundness audit with codebase-grounded evidence outside artifacts/ and re-record the owning skill evidence.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_decision_unsound": {
+		Remediation:     "Repair the current plan artifacts in place to address the unsound decision, then rerun the owning plan-dimension audit skill.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_consistency_failed": {
+		Remediation:     "Repair inconsistent plan artifacts in place, then rerun the owning plan-dimension audit skill.",
+		CommandTemplate: "slipway evidence skill --skill plan-audit --verdict pass",
+		Class:           RecoveryClassRerunSkill,
+	},
+	"plan_dimension_consistency_unknown_requirement_ref": {
+		Remediation:     "Fix governed artifact prose so every REQ-* reference names a declared requirement, then re-run validation.",
+		CommandTemplate: "slipway validate",
+		Class:           RecoveryClassFixScope,
+	},
 	"required_artifact_schema_missing": {
 		Remediation:     "Fix the governed artifact schema so required artifact {subject} is defined.",
 		CommandTemplate: "slipway repair",
@@ -1004,6 +1049,9 @@ func recoveryRemediationForReason(rc ReasonCode) (blockerRemediation, bool) {
 	if !ok {
 		return blockerRemediation{}, false
 	}
+	if ownerAware, ok := planDimensionOwnerAwareRemediation(rc, remediation); ok {
+		return ownerAware, true
+	}
 	if isArchivedActiveResidueReason(rc) {
 		return blockerRemediation{
 			Remediation:     "Active-state residue for archived change {subject} remains under artifacts/changes/{subject}. Remove only that stale active-state residue with `slipway delete --change {subject}`. The archived record and source commits are not deletion targets.",
@@ -1012,6 +1060,45 @@ func recoveryRemediationForReason(rc ReasonCode) (blockerRemediation, bool) {
 		}, true
 	}
 	return remediation, true
+}
+
+func planDimensionOwnerAwareRemediation(rc ReasonCode, base blockerRemediation) (blockerRemediation, bool) {
+	owner, _ := splitSubjectDetail(rc.Detail)
+	if owner != "plan-audit" && owner != "spec-compliance-review" {
+		return blockerRemediation{}, false
+	}
+
+	owned := base
+	owned.SplitDetail = true
+	switch rc.Code {
+	case "plan_dimension_decision_soundness_unattested":
+		owned.Remediation = "Re-run {subject} and record a passing decision_soundness attestation reference."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_consistency_unattested":
+		owned.Remediation = "Re-run {subject} and record a passing consistency attestation reference."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_attestation_invalid":
+		owned.Remediation = "Fix malformed dim:<name>=<verdict>:<evidence-ref> evidence references and re-record {subject} evidence."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_attestation_conflict":
+		owned.Remediation = "Remove conflicting plan-dimension verdict references and re-record a single {subject} verdict for the dimension."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_attestation_evidence_unresolvable":
+		owned.Remediation = "Change the plan-dimension evidence reference to a resolvable workspace-relative path and re-record {subject} evidence."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_decision_soundness_evidence_invalid":
+		owned.Remediation = "Re-run the decision-soundness audit with codebase-grounded evidence outside artifacts/ and re-record {subject} evidence."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_decision_unsound":
+		owned.Remediation = "Repair the current plan artifacts in place to address the unsound decision, then rerun {subject}."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	case "plan_dimension_consistency_failed":
+		owned.Remediation = "Repair inconsistent plan artifacts in place, then rerun {subject}."
+		owned.CommandTemplate = "slipway evidence skill --skill {subject} --verdict pass"
+	default:
+		return blockerRemediation{}, false
+	}
+	return owned, true
 }
 
 // ArchivedActiveResidueMessagePrefix is the shared sentinel that marks an
