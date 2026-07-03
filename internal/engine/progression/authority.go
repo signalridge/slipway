@@ -122,6 +122,15 @@ func evaluateReviewAuthorityWithPolicyAndRecords(
 		implementationReviewEvidence := passingSkills[SkillCodeQualityReview]
 		layerBlockers := EvaluateReviewLayerBlockersFromNamedEvidence(change, artifactReviewEvidence, implementationReviewEvidence, &projection, false)
 		blockers = append(blockers, layerBlockers...)
+		if policy.EffectivePreset != model.WorkflowPresetLight &&
+			slices.Contains(normalizeReviewSkillNames(selectedReviewSkills), SkillSpecComplianceReview) {
+			_, dimBlockers := model.RequiredPlanDimensionAttestationBlockersForSkill(
+				planDimensionEvidenceRoot(root, change),
+				artifactReviewEvidence,
+				SkillSpecComplianceReview,
+			)
+			blockers = append(blockers, dimBlockers...)
+		}
 	}
 	blockers = append(blockers, model.ReasonCodesFromSpecs(executionSummaryCtx.Issues)...)
 	blockers = append(blockers, crossStageContextDistinctBlockers(

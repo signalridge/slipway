@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -16,6 +17,9 @@ import (
 	"github.com/signalridge/slipway/internal/stringutil"
 	"github.com/signalridge/slipway/internal/wave"
 )
+
+var proseRequirementReferencePattern = regexp.MustCompile(`\bREQ-([A-Z0-9_-]+)\b`)
+var proseHTMLCommentPattern = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 // ChangeSchemaResolution captures the resolved artifact schema plus
 // diagnostics/blockers produced during strict schema resolution.
@@ -161,6 +165,7 @@ func ValidateTasksChecklistDetailed(root string, change model.Change) TaskCheckl
 	// or non-substantive requirements.md cannot reach done (issue #91). Only the
 	// requirement-to-task coverage advisories follow the light-preset downgrade.
 	result.Blockers = append(result.Blockers, requirementBlockers...)
+	result.Blockers = append(result.Blockers, validateProseRequirementReferencesAgainstSpec(root, change)...)
 	if coverageAsWarning {
 		for _, issue := range coverageIssues {
 			result.Warnings = append(result.Warnings, checklistWarningToken(issue))
@@ -264,6 +269,94 @@ func validateTaskCoverageAgainstSpec(root string, change model.Change, plan wave
 		coverageIssues = append(coverageIssues, "plan_dimension_coverage_missing_requirement:"+requirementID)
 	}
 	return stringutil.UniqueSorted(coverageIssues), stringutil.UniqueSorted(requirementBlockers)
+}
+
+func validateProseRequirementReferencesAgainstSpec(root string, change model.Change) []string {
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return nil
+	}
+	requirementsPath := artifact.ResolveArtifactPath(bundleDir, "requirements.md")
+	rawRequirements, err := os.ReadFile(requirementsPath) // #nosec G304 -- path is resolved from governed artifact authority.
+	if err != nil {
+		return nil
+	}
+
+	knownRequirements := map[string]struct{}{}
+	for _, block := range artifact.ParseRequirementBlocks(string(rawRequirements)) {
+		id := artifact.NormalizeRequirementID(block.StableID)
+		if id == "" {
+			continue
+		}
+		knownRequirements[id] = struct{}{}
+	}
+	if len(knownRequirements) == 0 {
+		return nil
+	}
+
+	artifactNames := proseRequirementReferenceArtifactNames(root, change)
+	var blockers []string
+	for _, artifactName := range artifactNames {
+		path := artifact.ResolveArtifactPath(bundleDir, artifactName)
+		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from governed artifact authority.
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			continue
+		}
+		refs := proseRequirementReferences(artifactName, string(raw))
+		for _, ref := range refs {
+			if _, ok := knownRequirements[ref]; ok {
+				continue
+			}
+			blockers = append(blockers, "plan_dimension_consistency_unknown_requirement_ref:"+artifactName+":"+ref)
+		}
+	}
+	return stringutil.UniqueSorted(blockers)
+}
+
+func proseRequirementReferenceArtifactNames(root string, change model.Change) []string {
+	names := RequiredArtifactNames(root, change)
+	if len(names) == 0 {
+		return nil
+	}
+
+	scannable := make([]string, 0, len(names))
+	for _, name := range names {
+		if existenceOwnedByDedicatedGate(name) {
+			continue
+		}
+		scannable = append(scannable, name)
+	}
+	return stringutil.UniqueSorted(scannable)
+}
+
+func proseRequirementReferences(artifactName, content string) []string {
+	content = proseHTMLCommentPattern.ReplaceAllString(strings.ReplaceAll(content, "\r\n", "\n"), "")
+	seen := map[string]struct{}{}
+	var refs []string
+	for _, line := range strings.Split(content, "\n") {
+		if artifactName == "tasks.md" && strings.Contains(strings.ToLower(line), "covers:") {
+			continue
+		}
+		for _, match := range proseRequirementReferencePattern.FindAllStringSubmatch(line, -1) {
+			if len(match) != 2 {
+				continue
+			}
+			ref := artifact.NormalizeRequirementID("REQ-" + match[1])
+			if ref == "" {
+				continue
+			}
+			if _, ok := seen[ref]; ok {
+				continue
+			}
+			seen[ref] = struct{}{}
+			refs = append(refs, ref)
+		}
+	}
+	slices.Sort(refs)
+	return refs
 }
 
 // HasDependencyCycle returns true if the dependency graph contains a cycle.

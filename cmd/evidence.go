@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/signalridge/slipway/internal/engine/governance"
 	"github.com/signalridge/slipway/internal/engine/progression"
 	"github.com/signalridge/slipway/internal/engine/skill"
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -210,6 +211,9 @@ func makeEvidenceSkillCmd() *cobra.Command {
 					Notes:      notesText,
 				}
 				if err := validateSelectedReviewPassContextOrigin(root, change, def, candidateRecord); err != nil {
+					return err
+				}
+				if err := validatePlanDimensionSkillEvidence(root, change, def, candidateRecord); err != nil {
 					return err
 				}
 				references = stringutil.UniqueSorted(candidateReferences)
@@ -1568,6 +1572,70 @@ func validateSelectedReviewPassContextOrigin(
 			"state":                  string(change.CurrentState),
 			"notes_file":             notesPath,
 		},
+	)
+}
+
+func validatePlanDimensionSkillEvidence(
+	root string,
+	change model.Change,
+	def skill.Definition,
+	record model.VerificationRecord,
+) error {
+	if !record.IsPassing() {
+		return nil
+	}
+	policy, err := governance.ResolvePresetPolicy(root, change)
+	if err != nil {
+		return err
+	}
+	if policy.EffectivePreset == model.WorkflowPresetLight {
+		return nil
+	}
+
+	required := def.Name == progression.SkillPlanAudit
+	if !required && def.Name == progression.SkillSpecComplianceReview && change.CurrentState == model.StateS3Review {
+		_, selectedReviewSkills, err := selectedReviewSkillsForChange(root, change)
+		if err != nil {
+			return err
+		}
+		required = stringInSlice(selectedReviewSkills, def.Name)
+	}
+	if !required {
+		return nil
+	}
+
+	workspaceRoot, err := state.WorkspaceRootForChange(root, change)
+	if err != nil {
+		return newStateIntegrityError(
+			"evidence_skill_plan_dimension_workspace_resolve_failed",
+			fmt.Sprintf("failed to resolve plan-dimension evidence workspace for %q: %v", change.Slug, err),
+			"Repair the governed change worktree binding and retry.",
+			change.Slug,
+			map[string]any{"skill": def.Name},
+		)
+	}
+	_, blockers := model.RequiredPlanDimensionAttestationBlockers(workspaceRoot, record)
+	if len(blockers) == 0 {
+		return nil
+	}
+	return newInvalidUsageError(
+		"evidence_skill_plan_dimension_attestation_invalid",
+		fmt.Sprintf("passing %s evidence must include passing plan-dimension attestations", def.Name),
+		planDimensionEvidenceRemediation(change, def.Name),
+		map[string]any{
+			"skill":      def.Name,
+			"blockers":   model.ReasonSpecs(blockers),
+			"references": record.References,
+		},
+	)
+}
+
+func planDimensionEvidenceRemediation(change model.Change, skillName string) string {
+	notesPath := "artifacts/changes/" + change.Slug + "/verification/" + skillName + "-notes.md"
+	return fmt.Sprintf(
+		"Re-run %s and record explicit dimension evidence, for example --reference \"dim:decision_soundness=pass:<repo-path-outside-artifacts>\" --reference \"dim:consistency=pass:<repo-path-or-artifact-line>\" --notes-file %s. Use --verdict fail with matching --blocker values when a dimension fails.",
+		skillName,
+		notesPath,
 	)
 }
 

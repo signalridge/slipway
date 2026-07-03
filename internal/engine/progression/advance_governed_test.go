@@ -100,6 +100,131 @@ func TestEvaluatePlanGate_PlanAuditSelfAuditEdge(t *testing.T) {
 	})
 }
 
+func TestEvaluatePlanGate_RequiresPlanDimensionAttestationsAtS1Only(t *testing.T) {
+	t.Parallel()
+
+	standardPolicy := governance.PresetPolicy{EffectivePreset: model.WorkflowPresetStandard}
+	lightPolicy := governance.PresetPolicy{EffectivePreset: model.WorkflowPresetLight}
+
+	t.Run("missing required dim tokens blocks S1 plan audit", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		slug := "plan-dim-missing"
+		writePlanDimensionEvidenceFiles(t, root, slug)
+		change := model.Change{Slug: slug, CurrentState: model.StateS1Plan}
+		passingSkills := map[string]model.VerificationRecord{
+			SkillPlanAudit: planAuditRecordWithOrigins("author-ctx", "auditor-ctx"),
+		}
+
+		eval := EvaluatePlanGate(root, change, passingSkills, standardPolicy)
+		if !hasAdvanceReasonCode(eval.ReasonCodes, "plan_dimension_decision_soundness_unattested") {
+			t.Fatalf("expected decision_soundness unattested blocker, got %v", eval.ReasonCodes)
+		}
+		if !hasAdvanceReasonCode(eval.ReasonCodes, "plan_dimension_consistency_unattested") {
+			t.Fatalf("expected consistency unattested blocker, got %v", eval.ReasonCodes)
+		}
+	})
+
+	t.Run("passing dim tokens satisfy the S1 dimension gate", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		slug := "plan-dim-pass"
+		writePlanDimensionEvidenceFiles(t, root, slug)
+		change := model.Change{Slug: slug, CurrentState: model.StateS1Plan}
+		record := planAuditRecordWithOrigins("author-ctx", "auditor-ctx")
+		record.References = append(record.References,
+			"dim:decision_soundness=pass:internal/engine/progression/advance_governed.go",
+			"dim:consistency=pass:artifacts/changes/"+slug+"/requirements.md",
+		)
+
+		eval := EvaluatePlanGate(root, change, map[string]model.VerificationRecord{SkillPlanAudit: record}, standardPolicy)
+		for _, code := range []string{
+			"plan_dimension_decision_soundness_unattested",
+			"plan_dimension_consistency_unattested",
+			"plan_dimension_decision_soundness_evidence_invalid",
+			"plan_dimension_attestation_evidence_unresolvable",
+		} {
+			if hasAdvanceReasonCode(eval.ReasonCodes, code) {
+				t.Fatalf("did not expect %s for passing dimension tokens, got %v", code, eval.ReasonCodes)
+			}
+		}
+	})
+
+	t.Run("light preset keeps missing dim tokens advisory", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		slug := "plan-dim-light"
+		writePlanDimensionEvidenceFiles(t, root, slug)
+		change := model.Change{Slug: slug, CurrentState: model.StateS1Plan}
+		passingSkills := map[string]model.VerificationRecord{
+			SkillPlanAudit: planAuditRecordWithOrigins("author-ctx", "auditor-ctx"),
+		}
+
+		eval := EvaluatePlanGate(root, change, passingSkills, lightPolicy)
+		for _, code := range []string{
+			"plan_dimension_decision_soundness_unattested",
+			"plan_dimension_consistency_unattested",
+		} {
+			if hasAdvanceReasonCode(eval.ReasonCodes, code) {
+				t.Fatalf("light preset must not block on %s, got %v", code, eval.ReasonCodes)
+			}
+		}
+	})
+
+	t.Run("failed decision soundness token blocks S1 plan audit", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		slug := "plan-dim-fail"
+		writePlanDimensionEvidenceFiles(t, root, slug)
+		change := model.Change{Slug: slug, CurrentState: model.StateS1Plan}
+		record := planAuditRecordWithOrigins("author-ctx", "auditor-ctx")
+		record.References = append(record.References,
+			"dim:decision_soundness=fail:internal/engine/progression/advance_governed.go",
+			"dim:consistency=pass:artifacts/changes/"+slug+"/requirements.md",
+		)
+
+		eval := EvaluatePlanGate(root, change, map[string]model.VerificationRecord{SkillPlanAudit: record}, standardPolicy)
+		if !hasAdvanceReasonCode(eval.ReasonCodes, "plan_dimension_decision_unsound") {
+			t.Fatalf("expected decision unsound blocker, got %v", eval.ReasonCodes)
+		}
+	})
+
+	t.Run("past S1 does not retroactively require plan audit dim tokens", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		slug := "plan-dim-s2"
+		writePlanDimensionEvidenceFiles(t, root, slug)
+		change := model.Change{Slug: slug, CurrentState: model.StateS2Implement}
+		passingSkills := map[string]model.VerificationRecord{
+			SkillPlanAudit: planAuditRecordWithOrigins("author-ctx", "auditor-ctx"),
+		}
+
+		eval := EvaluatePlanGate(root, change, passingSkills, standardPolicy)
+		if hasAdvanceReasonCode(eval.ReasonCodes, "plan_dimension_decision_soundness_unattested") ||
+			hasAdvanceReasonCode(eval.ReasonCodes, "plan_dimension_consistency_unattested") {
+			t.Fatalf("past-S1 changes must not be blocked by S1 plan-audit dim tokens, got %v", eval.ReasonCodes)
+		}
+	})
+}
+
+func writePlanDimensionEvidenceFiles(t *testing.T, root, slug string) {
+	t.Helper()
+	requireDir := filepath.Join(root, "artifacts", "changes", slug)
+	if err := os.MkdirAll(requireDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dimension artifact evidence: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(requireDir, "requirements.md"), []byte("REQ-001: test requirement\n"), 0o644); err != nil {
+		t.Fatalf("write plan dimension artifact evidence: %v", err)
+	}
+	sourceDir := filepath.Join(root, "internal", "engine", "progression")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("mkdir plan dimension source evidence: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "advance_governed.go"), []byte("package progression\n"), 0o644); err != nil {
+		t.Fatalf("write plan dimension source evidence: %v", err)
+	}
+}
+
 // assertPlanAuditOriginBlocker requires the self-audit edge to be present as an
 // error-severity blocker that flips the gate to blocked.
 func assertPlanAuditOriginBlocker(t *testing.T, eval gate.GateEvaluation) {

@@ -1886,6 +1886,8 @@ func planAuditOriginReferences() []string {
 	return []string{
 		model.PlanOriginReferencePrefix + testPlanOriginHandle,
 		model.AuditOriginReferencePrefix + testAuditOriginHandle,
+		"dim:decision_soundness=pass:.slipway.yaml",
+		"dim:consistency=pass:.slipway.yaml",
 	}
 }
 
@@ -2116,6 +2118,8 @@ func writePassingReviewEvidencePack(t *testing.T, root, slug string, runSummaryV
 			"layer:R0=pass",
 			"layer:R3=pass",
 			model.ContextOriginReferencePrefix + model.StageContextReview + "=" + testSpecContextHandle,
+			"dim:decision_soundness=pass:.slipway.yaml",
+			"dim:consistency=pass:.slipway.yaml",
 		},
 	})
 	writeSkillVerification(t, root, slug, "code-quality-review", model.VerificationRecord{

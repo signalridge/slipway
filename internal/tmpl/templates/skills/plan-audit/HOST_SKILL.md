@@ -167,6 +167,13 @@ Apply `references/checklist-quality.md` (shipped next to this skill):
 specificity, measurability, requirement-to-intent traceability, edge cases,
 failure modes, alternatives, tradeoffs, and concrete risks.
 
+Apply `references/consistency-audit.md` for semantic consistency. The engine
+can catch mechanical coverage and unknown `REQ-*` references, but it cannot
+prove that the requirement prose, decision, tasks, and research tell one
+coherent story. You must make that judgement explicitly and record it with a
+`dim:consistency=pass:<repo-path-or-artifact-line>` reference, or fail the audit
+with a blocker.
+
 Audit tasks as execution units, not prose:
 - split by bounded outcome, not file name alone
 - require each task's acceptance criteria to name the concrete evidence that
@@ -214,6 +221,27 @@ The engine consumes the two as a pair and compares them for independence; a
 missing handle, or one uniform handle stamped as both author and auditor, is the
 degenerate single-context signature the gate rejects.
 
+## Decision Soundness Attestation
+Run an adversarial decision-soundness check before recording a passing audit.
+Default to trying to disprove the plan, not to restating `decision.md`.
+
+Check the current codebase and artifacts for concrete counter-evidence:
+- a simpler existing mechanism the plan should reuse
+- a wrong seam or boundary violation
+- lifecycle, authority, or evidence ownership that conflicts with the real
+  engine model
+- underestimated blast radius or a task split that leaves forced consumer edits
+  unowned
+- review/implementation responsibilities pulled into the wrong stage
+
+This is bounded and binary. If you find concrete codebase evidence that the
+decision is unsound, record `dim:decision_soundness=fail:<repo-path>` plus a
+`plan_dimension_decision_unsound:<reason>` blocker. If you do not find a
+specific counterexample, record `dim:decision_soundness=pass:<repo-path>` where
+the path points outside `artifacts/` to the source, docs, config, template, or
+workflow surface you inspected. `artifacts/` is not valid primary evidence for
+`decision_soundness`; that would let the plan certify itself.
+
 ## Record Verification
 Write bulky audit notes to disk, then record the verdict through the CLI so
 Slipway owns the timestamp, `run_version`, freshness inputs, and digest stamp.
@@ -226,8 +254,15 @@ slipway evidence skill \
   --reference "plan-audit:pass" \
   --reference "plan_origin:<handle>" \
   --reference "audit_origin:<handle>" \
+  --reference "dim:decision_soundness=pass:<repo-path-outside-artifacts>" \
+  --reference "dim:consistency=pass:<repo-path-or-artifact-line>" \
   --notes-file artifacts/changes/{slug}/verification/plan-audit-notes.md
 ```
+
+For a failed semantic dimension, use `--verdict fail`, record the matching
+`dim:*=fail:<repo-path>` reference, and include a concrete blocker such as
+`--blocker "plan_dimension_decision_unsound:<reason>"` or
+`--blocker "plan_dimension_consistency_failed:<reason>"`.
 
 ## Present and Advance
 Show audit results. <HARD-GATE>Wait for explicit user confirmation before advancing. Do not call `slipway run` (the advancing command) until the user approves; `slipway next` is read-only preview and never advances.</HARD-GATE>
@@ -242,6 +277,8 @@ After confirmation, advance with `slipway run`.
 ## Block If
 - A required artifact is missing, empty, or structurally invalid.
 - An 8D blocker applies for the effective preset.
+- Required `dim:decision_soundness=pass` or `dim:consistency=pass` evidence is
+  missing, invalid, self-referential, or failed.
 - Scope is still ambiguous after reading the governed bundle.
 
 See `references/audit-smells.md` for recurring audit rationalizations and

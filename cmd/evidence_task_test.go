@@ -1187,6 +1187,8 @@ func TestEvidenceSkillRecordsCLIStampedVerificationAndDigest(t *testing.T) {
 			"--reference", "layer:R0=pass",
 			"--reference", "scope_contract:pass",
 			"--reference", model.ContextOriginReferencePrefix + model.StageContextReview + "=cli-stamped-spec-review",
+			"--reference", "dim:decision_soundness=pass:.slipway.yaml",
+			"--reference", "dim:consistency=pass:.slipway.yaml",
 			"--notes-file", "review-notes.md",
 		})
 		var out bytes.Buffer
@@ -1210,6 +1212,8 @@ func TestEvidenceSkillRecordsCLIStampedVerificationAndDigest(t *testing.T) {
 		assert.Equal(t, "review notes from disk", rec.Notes)
 		assert.Equal(t, []string{
 			model.ContextOriginReferencePrefix + model.StageContextReview + "=cli-stamped-spec-review",
+			"dim:consistency=pass:.slipway.yaml",
+			"dim:decision_soundness=pass:.slipway.yaml",
 			"layer:R0=pass",
 			"scope_contract:pass",
 		}, rec.References)
