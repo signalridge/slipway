@@ -5,6 +5,19 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0](https://github.com/signalridge/slipway/compare/v0.39.0...v0.40.0) (2026-07-03)
+
+
+### Features
+
+* **governance:** add plan dimension attestations ([#405](https://github.com/signalridge/slipway/issues/405)) ([a2c5e61](https://github.com/signalridge/slipway/commit/a2c5e619135d854e528b9e686a3dfa31e0afec96))
+* **run:** bound execution auto mode ([#404](https://github.com/signalridge/slipway/issues/404)) ([a8c85c3](https://github.com/signalridge/slipway/commit/a8c85c3ddc54a6597a3cb7c70597c9ad279749af))
+
+
+### Bug Fixes
+
+* **runtime:** expose host env contracts ([#402](https://github.com/signalridge/slipway/issues/402)) ([f49f966](https://github.com/signalridge/slipway/commit/f49f9663c77f44a1bebdfea56b3ca77e680bed8c))
+
 ## [0.39.0](https://github.com/signalridge/slipway/compare/v0.38.0...v0.39.0) (2026-07-02)
 
 
