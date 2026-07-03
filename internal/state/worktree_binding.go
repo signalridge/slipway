@@ -118,8 +118,8 @@ func readWorktreeBinding(root, slug string) (worktreeBinding, bool) {
 }
 
 // FindActiveChangeByWorktreeBinding resolves the active change bound to the
-// current git worktree using only runtime binding records. Unlike
-// FindActiveChangeForWorktree, it deliberately avoids ListChanges so callers can
+// current git worktree using only runtime binding records. Unlike the
+// ListChanges-based resolvers, it deliberately avoids ListChanges so callers can
 // still prefer the current bound worktree when another workspace has stale
 // orphaned bundle residue.
 func FindActiveChangeByWorktreeBinding(root, currentWorktreePath string) (model.Change, error) {

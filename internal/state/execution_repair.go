@@ -27,10 +27,6 @@ type wavePlanRepairOutcome struct {
 	PreserveHistoricalExecutionEvidence bool
 }
 
-func RepairExecutionState(root string) (ExecutionRepairResult, error) {
-	return RepairExecutionStateAt(root, time.Time{})
-}
-
 func RepairExecutionStateAt(root string, now time.Time) (ExecutionRepairResult, error) {
 	allChanges, _, err := ListChangesBestEffortWithIssues(root)
 	if err != nil {

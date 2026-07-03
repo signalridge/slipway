@@ -66,51 +66,6 @@ func TestReadLifecycleEventsMissingLogIsEmpty(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-func TestReadLifecycleEventTailIgnoresMalformedOlderLines(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("tail-event-log")
-	require.NoError(t, SaveChange(root, change))
-
-	path, err := LifecycleEventLogPath(root, change)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	payload := "{not-json}\n" +
-		lifecycleEventLine(t, "tail-event-1", change.Slug) +
-		lifecycleEventLine(t, "tail-event-2", change.Slug) +
-		lifecycleEventLine(t, "tail-event-3", change.Slug)
-	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
-
-	tail, err := ReadLifecycleEventTail(root, change, 2)
-	require.NoError(t, err)
-	require.Len(t, tail, 2)
-	assert.Equal(t, "tail-event-2", tail[0].EventID)
-	assert.Equal(t, "tail-event-3", tail[1].EventID)
-
-	_, err = ReadLifecycleEvents(root, change)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "line 1")
-}
-
-func TestReadLifecycleEventTailFailsOnMalformedRetainedLine(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	change := model.NewChange("tail-event-log-malformed")
-	require.NoError(t, SaveChange(root, change))
-
-	path, err := LifecycleEventLogPath(root, change)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	payload := lifecycleEventLine(t, "tail-good-1", change.Slug) +
-		lifecycleEventLine(t, "tail-good-2", change.Slug) +
-		"{not-json}\n"
-	require.NoError(t, os.WriteFile(path, []byte(payload), 0o644))
-
-	_, err = ReadLifecycleEventTail(root, change, 2)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "decode lifecycle event log tail line")
-}
-
 func TestReadLifecycleEventTailWithPredecessorTransitionIncludesContext(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -204,11 +159,6 @@ func TestReadLifecycleEventTailWithPredecessorTransitionFailsOnMalformedContextL
 	_, err = ReadLifecycleEventTailWithPredecessorTransitionFromPath(path, 2)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "decode lifecycle event log context line")
-}
-
-func lifecycleEventLine(t *testing.T, eventID string, slug string) string {
-	t.Helper()
-	return lifecycleEventLineWithType(t, eventID, slug, "state.transitioned")
 }
 
 func lifecycleEventLineWithType(t *testing.T, eventID string, slug string, eventType string) string {

@@ -239,26 +239,42 @@ active_checkpoint:
 	assert.NotContains(t, err.Error(), "model.alias")
 }
 
-func TestFindActiveChangeSingle(t *testing.T) {
+func selectActiveChangeFromRuntime(root string) (model.Change, error) {
+	changes, err := ListChanges(root)
+	if err != nil {
+		return model.Change{}, err
+	}
+	return SelectActiveChange(changes)
+}
+
+func selectActiveChangeForWorktreeFromRuntime(root, currentWorktreePath string) (model.Change, error) {
+	changes, err := ListChanges(root)
+	if err != nil {
+		return model.Change{}, err
+	}
+	return SelectActiveChangeForWorktree(changes, currentWorktreePath)
+}
+
+func TestSelectActiveChangeFromLoadedChangesSingle(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 
 	st := model.NewChange("single-active")
 	require.NoError(t, SaveChange(root, st))
 
-	resolved, err := FindActiveChange(root)
+	resolved, err := selectActiveChangeFromRuntime(root)
 	require.NoError(t, err)
 	assert.Equal(t, "single-active", resolved.Slug)
 }
 
-func TestFindActiveChangeNoActive(t *testing.T) {
+func TestSelectActiveChangeFromLoadedChangesNoActive(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
-	_, err := FindActiveChange(root)
+	_, err := selectActiveChangeFromRuntime(root)
 	require.ErrorIs(t, err, ErrNoActiveChange)
 }
 
-func TestFindActiveChangeMultipleReturnsError(t *testing.T) {
+func TestSelectActiveChangeFromLoadedChangesMultipleReturnsError(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 
@@ -268,7 +284,7 @@ func TestFindActiveChangeMultipleReturnsError(t *testing.T) {
 	b := model.NewChange("change-b")
 	require.NoError(t, SaveChange(root, b))
 
-	_, err := FindActiveChange(root)
+	_, err := selectActiveChangeFromRuntime(root)
 	require.ErrorIs(t, err, ErrMultipleActiveChanges)
 }
 
@@ -285,7 +301,7 @@ func TestListChangesDiagnostics(t *testing.T) {
 	assert.Equal(t, "diag-change", changes[0].Slug)
 }
 
-func TestFindActiveChangeForWorktreeSingleMatch(t *testing.T) {
+func TestSelectActiveChangeForWorktreeSingleMatch(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeRepoLayout(t)
 	worktreeDir := addGitWorktree(t, root, "wt-match-branch")
@@ -294,12 +310,12 @@ func TestFindActiveChangeForWorktreeSingleMatch(t *testing.T) {
 	ch.WorktreePath = worktreeDir
 	require.NoError(t, SaveChange(root, ch))
 
-	resolved, err := FindActiveChangeForWorktree(root, worktreeDir)
+	resolved, err := selectActiveChangeForWorktreeFromRuntime(root, worktreeDir)
 	require.NoError(t, err)
 	assert.Equal(t, "wt-match", resolved.Slug)
 }
 
-func TestFindActiveChangeForWorktreeZeroMatchFallsBackToUnbound(t *testing.T) {
+func TestSelectActiveChangeForWorktreeZeroMatchFallsBackToUnbound(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	queryDir := t.TempDir()
@@ -308,12 +324,12 @@ func TestFindActiveChangeForWorktreeZeroMatchFallsBackToUnbound(t *testing.T) {
 	// No WorktreePath set — unbound active change.
 	require.NoError(t, SaveChange(root, ch))
 
-	resolved, err := FindActiveChangeForWorktree(root, queryDir)
+	resolved, err := selectActiveChangeForWorktreeFromRuntime(root, queryDir)
 	require.NoError(t, err)
 	assert.Equal(t, "unbound-fallback", resolved.Slug)
 }
 
-func TestFindActiveChangeForWorktreeMultipleMatchReturnsError(t *testing.T) {
+func TestSelectActiveChangeForWorktreeMultipleMatchReturnsError(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeRepoLayout(t)
 	worktreeDir := addGitWorktree(t, root, "shared-worktree-branch")
@@ -326,11 +342,11 @@ func TestFindActiveChangeForWorktreeMultipleMatchReturnsError(t *testing.T) {
 	ch2.WorktreePath = worktreeDir
 	require.NoError(t, SaveChange(root, ch2))
 
-	_, err := FindActiveChangeForWorktree(root, worktreeDir)
+	_, err := selectActiveChangeForWorktreeFromRuntime(root, worktreeDir)
 	require.ErrorIs(t, err, ErrMultipleActiveChanges)
 }
 
-func TestFindActiveChangeForWorktreeUnboundFallback(t *testing.T) {
+func TestSelectActiveChangeForWorktreeUnboundFallback(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	queryDir := t.TempDir()
@@ -340,12 +356,12 @@ func TestFindActiveChangeForWorktreeUnboundFallback(t *testing.T) {
 	// WorktreePath intentionally left empty.
 	require.NoError(t, SaveChange(root, ch))
 
-	resolved, err := FindActiveChangeForWorktree(root, queryDir)
+	resolved, err := selectActiveChangeForWorktreeFromRuntime(root, queryDir)
 	require.NoError(t, err)
 	assert.Equal(t, "unbound-change", resolved.Slug)
 }
 
-func TestFindActiveChangeForWorktreeNoMatchNoFallback(t *testing.T) {
+func TestSelectActiveChangeForWorktreeNoMatchNoFallback(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeRepoLayout(t)
 	queryDir := t.TempDir()
@@ -358,7 +374,7 @@ func TestFindActiveChangeForWorktreeNoMatchNoFallback(t *testing.T) {
 	ch2.WorktreePath = addGitWorktree(t, root, "other-b-branch")
 	require.NoError(t, SaveChange(root, ch2))
 
-	_, err := FindActiveChangeForWorktree(root, queryDir)
+	_, err := selectActiveChangeForWorktreeFromRuntime(root, queryDir)
 	var boundErr *ChangeBoundElsewhereError
 	require.ErrorAs(t, err, &boundErr)
 	require.Len(t, boundErr.BoundChanges, 2)
@@ -396,13 +412,13 @@ func TestTwoConcurrentChangesDifferentWorktreesCoexist(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, changes, 2)
 
-	// FindActiveChangeForWorktree with path A returns change A.
-	resolvedA, err := FindActiveChangeForWorktree(root, worktreeA)
+	// SelectActiveChangeForWorktree with path A returns change A.
+	resolvedA, err := selectActiveChangeForWorktreeFromRuntime(root, worktreeA)
 	require.NoError(t, err)
 	assert.Equal(t, "change-alpha", resolvedA.Slug)
 
-	// FindActiveChangeForWorktree with path B returns change B.
-	resolvedB, err := FindActiveChangeForWorktree(root, worktreeB)
+	// SelectActiveChangeForWorktree with path B returns change B.
+	resolvedB, err := selectActiveChangeForWorktreeFromRuntime(root, worktreeB)
 	require.NoError(t, err)
 	assert.Equal(t, "change-beta", resolvedB.Slug)
 

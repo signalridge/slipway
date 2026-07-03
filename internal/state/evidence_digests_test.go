@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSaveLoadEvidenceDigestsRoundTripAndListVerificationsSkipsStore(t *testing.T) {
+func TestSaveLoadEvidenceDigestsRoundTripAndListVerificationsForChangeSkipsStore(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	slug := "digest-store"
-	saveActiveChangeForTest(t, root, slug)
+	change := saveActiveChangeForTest(t, root, slug)
 
 	digests := model.EvidenceDigests{
 		Version: model.EvidenceDigestsVersion,
@@ -45,7 +45,7 @@ func TestSaveLoadEvidenceDigestsRoundTripAndListVerificationsSkipsStore(t *testi
 		Blockers:  []model.ReasonCode{},
 		Timestamp: time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
 	})
-	records, err := ListVerifications(root, slug)
+	records, err := ListVerificationsForChange(root, change)
 	require.NoError(t, err)
 	assert.Contains(t, records, "plan-audit")
 	assert.NotContains(t, records, "evidence-digests")

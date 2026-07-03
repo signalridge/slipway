@@ -676,18 +676,8 @@ func missingBundleAuthorityError(bundleDir string) error {
 	)
 }
 
-// FindActiveChange finds the single active change. Returns ErrNoActiveChange if none,
-// ErrMultipleActiveChanges if more than one.
-func FindActiveChange(root string) (model.Change, error) {
-	changes, err := ListChanges(root)
-	if err != nil {
-		return model.Change{}, err
-	}
-	return SelectActiveChange(changes)
-}
-
 // SelectActiveChange resolves the single active change from an already-loaded
-// change list. It mirrors FindActiveChange without re-running discovery.
+// change list without re-running change discovery.
 func SelectActiveChange(changes []model.Change) (model.Change, error) {
 	var active []model.Change
 	for _, c := range changes {
@@ -705,18 +695,8 @@ func SelectActiveChange(changes []model.Change) (model.Change, error) {
 	return active[0], nil
 }
 
-// FindActiveChangeForWorktree finds the active change bound to the given worktree path.
-func FindActiveChangeForWorktree(root, currentWorktreePath string) (model.Change, error) {
-	changes, err := ListChanges(root)
-	if err != nil {
-		return model.Change{}, err
-	}
-	return SelectActiveChangeForWorktree(changes, currentWorktreePath)
-}
-
 // SelectActiveChangeForWorktree resolves the active change for worktree from an
-// already-loaded change list. It mirrors FindActiveChangeForWorktree without
-// re-running discovery.
+// already-loaded change list without re-running change discovery.
 func SelectActiveChangeForWorktree(changes []model.Change, currentWorktreePath string) (model.Change, error) {
 	normalizedCurrent, err := NormalizePath(currentWorktreePath)
 	if err != nil {

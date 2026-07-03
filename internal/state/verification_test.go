@@ -184,21 +184,12 @@ func TestLoadVerificationAcceptsStructuredReasonCodes(t *testing.T) {
 	assert.Equal(t, "research.md", loaded.Blockers[0].Detail)
 }
 
-func TestListVerificationsEmpty(t *testing.T) {
-	t.Parallel()
-	root := createRuntimeLayout(t)
-
-	result, err := ListVerifications(root, "no-change")
-	require.NoError(t, err)
-	assert.Empty(t, result)
-}
-
-func TestListVerificationsMultiple(t *testing.T) {
+func TestListVerificationsForChangeMultiple(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	slug := "multi-skill"
 	now := time.Now().UTC()
-	saveActiveChangeForTest(t, root, slug)
+	change := saveActiveChangeForTest(t, root, slug)
 
 	skills := []string{"plan-audit", "research-orchestration", "wave-orchestration"}
 	for _, s := range skills {
@@ -210,7 +201,7 @@ func TestListVerificationsMultiple(t *testing.T) {
 		writeVerificationForTest(t, root, slug, s, rec)
 	}
 
-	result, err := ListVerifications(root, slug)
+	result, err := ListVerificationsForChange(root, change)
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
 	assert.Contains(t, result, "plan-audit")
@@ -218,12 +209,12 @@ func TestListVerificationsMultiple(t *testing.T) {
 	assert.Contains(t, result, "wave-orchestration")
 }
 
-func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
+func TestListVerificationsForChangeSkipsWavePlanArtifacts(t *testing.T) {
 	t.Parallel()
 
 	root := createRuntimeLayout(t)
 	slug := "skip-wave-plan"
-	saveActiveChangeForTest(t, root, slug)
+	change := saveActiveChangeForTest(t, root, slug)
 
 	writeVerificationForTest(t, root, slug, "plan-audit", model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
@@ -250,7 +241,7 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 		}},
 	}))
 
-	result, err := ListVerifications(root, slug)
+	result, err := ListVerificationsForChange(root, change)
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 	assert.Contains(t, result, "plan-audit")
@@ -258,11 +249,11 @@ func TestListVerificationsSkipsWavePlanArtifacts(t *testing.T) {
 	assert.NotContains(t, result, "wave-plan")
 }
 
-func TestListVerificationsRejectsInvalidFiles(t *testing.T) {
+func TestListVerificationsForChangeRejectsInvalidFiles(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeLayout(t)
 	slug := "skip-bad"
-	saveActiveChangeForTest(t, root, slug)
+	change := saveActiveChangeForTest(t, root, slug)
 
 	rec := model.VerificationRecord{
 		Verdict:   model.VerificationVerdictPass,
@@ -278,7 +269,7 @@ func TestListVerificationsRejectsInvalidFiles(t *testing.T) {
 		0o644,
 	))
 
-	_, err := ListVerifications(root, slug)
+	_, err := ListVerificationsForChange(root, change)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse verification broken")
 	var loadErr *VerificationLoadError
@@ -345,7 +336,7 @@ func TestSaveVerificationWithReferencesAndRunVersion(t *testing.T) {
 	assert.Equal(t, "All layers pass.", loaded.Notes)
 }
 
-func TestListVerificationsResolvesWorktreeBundleFromProjectRoot(t *testing.T) {
+func TestListVerificationsForChangeResolvesWorktreeBundleFromProjectRoot(t *testing.T) {
 	t.Parallel()
 	root := createRuntimeRepoLayout(t)
 	worktreeRoot := addGitWorktree(t, root, "worktree-verification-branch")
@@ -365,7 +356,7 @@ func TestListVerificationsResolvesWorktreeBundleFromProjectRoot(t *testing.T) {
 	// canonical governed bundle there, not under the project root.
 	writeVerificationForTest(t, worktreeRoot, slug, "plan-audit", rec)
 
-	result, err := ListVerifications(root, slug)
+	result, err := ListVerificationsForChange(root, change)
 	require.NoError(t, err)
 	require.Contains(t, result, "plan-audit")
 }
@@ -390,30 +381,6 @@ timestamp: 2026-04-06T00:00:00Z
 `), 0o644))
 
 	_, err := LoadVerification(root, slug, "plan-audit")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "authoritative bundle")
-}
-
-func TestListVerificationsRejectsHiddenSiblingWorktreeFallback(t *testing.T) {
-	t.Parallel()
-
-	root, worktreeRoot := setupRepoWithWorktree(t)
-	slug := "hidden-worktree-verification-list"
-
-	change := model.NewChange(slug)
-	change.WorktreePath = worktreeRoot
-	change.CurrentState = model.StateS2Implement
-	change.PlanSubStep = model.PlanSubStepNone
-	require.NoError(t, SaveChange(root, change))
-	require.NoError(t, os.Remove(WorkspaceScopeMarkerPath(worktreeRoot)))
-
-	staleRootDir := filepath.Join(root, "artifacts", "changes", slug, "verification")
-	require.NoError(t, os.MkdirAll(staleRootDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(staleRootDir, "plan-audit.yaml"), []byte(`verdict: pass
-timestamp: 2026-04-06T00:00:00Z
-`), 0o644))
-
-	_, err := ListVerifications(root, slug)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "authoritative bundle")
 }

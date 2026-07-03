@@ -131,29 +131,6 @@ func ReadLifecycleEvents(root string, change model.Change) ([]LifecycleEvent, er
 	return readLifecycleEventsFromPath(path)
 }
 
-// ReadLifecycleEventTail reads at most the last limit lifecycle events. It is
-// intended for display surfaces that only render recent history; full integrity
-// checks should keep using ReadLifecycleEvents.
-func ReadLifecycleEventTail(root string, change model.Change, limit int) ([]LifecycleEvent, error) {
-	if limit <= 0 {
-		return ReadLifecycleEvents(root, change)
-	}
-	path, err := lifecycleEventLogPathForRead(root, change)
-	if err != nil {
-		return nil, err
-	}
-	return ReadLifecycleEventTailFromPath(path, limit)
-}
-
-// ReadLifecycleEventTailFromPath reads at most the last limit lifecycle events
-// from a caller-resolved lifecycle event log path.
-func ReadLifecycleEventTailFromPath(path string, limit int) ([]LifecycleEvent, error) {
-	if limit <= 0 {
-		return readLifecycleEventsFromPath(path)
-	}
-	return readLifecycleEventTailFromPath(path, limit)
-}
-
 // ReadLifecycleEventTailWithPredecessorTransitionFromPath reads the bounded
 // tail plus the nearest earlier state.transitioned event when that predecessor
 // is outside the retained tail. Display surfaces use the predecessor only as
@@ -267,52 +244,6 @@ func readLifecycleEventsFromPath(path string) ([]LifecycleEvent, error) {
 		return nil, err
 	}
 	return events, nil
-}
-
-func readLifecycleEventTailFromPath(path string, limit int) ([]LifecycleEvent, error) {
-	file, err := os.Open(path) // #nosec G304 -- path is resolved from Slipway state/governance authority before this read.
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if info.Size() == 0 {
-		return nil, nil
-	}
-
-	const chunkSize int64 = 64 * 1024
-	offset := info.Size()
-	var tail []byte
-	var lines []string
-	for offset > 0 {
-		readSize := chunkSize
-		if offset < readSize {
-			readSize = offset
-		}
-		offset -= readSize
-
-		chunk := make([]byte, readSize)
-		if _, err := file.ReadAt(chunk, offset); err != nil {
-			return nil, err
-		}
-		tail = append(append([]byte(nil), chunk...), tail...)
-		lines = nonEmptyJSONLLines(tail)
-		if offset == 0 || len(lines) > limit {
-			break
-		}
-	}
-	if len(lines) > limit {
-		lines = lines[len(lines)-limit:]
-	}
-
-	return decodeLifecycleEventLines(lines, "tail")
 }
 
 func readLifecycleEventTailWithPredecessorTransitionFromPath(path string, limit int) ([]LifecycleEvent, error) {

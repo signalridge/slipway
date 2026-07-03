@@ -127,7 +127,9 @@ func TestAbortPreservesActiveChangeAndMarksInterruptedExecution(t *testing.T) {
 		assert.Equal(t, string(model.ChangeStatusActive), view.Status)
 		assert.Equal(t, string(model.StateS2Implement), view.CurrentState)
 
-		active, err := state.FindActiveChange(root)
+		changes, err := state.ListChanges(root)
+		require.NoError(t, err)
+		active, err := state.SelectActiveChange(changes)
 		require.NoError(t, err)
 		assert.Equal(t, slug, active.Slug)
 
