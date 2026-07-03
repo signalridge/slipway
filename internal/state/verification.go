@@ -273,19 +273,6 @@ func LoadVerification(root, slug, skillName string) (model.VerificationRecord, e
 	return rec, nil
 }
 
-// ListVerifications reads all verification records for a change.
-// Returns a map of skillName → VerificationRecord.
-func ListVerifications(root, slug string) (map[string]model.VerificationRecord, error) {
-	dir, err := resolveExistingVerificationDir(root, slug)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return map[string]model.VerificationRecord{}, nil
-		}
-		return nil, err
-	}
-	return listVerificationsInDir(dir)
-}
-
 // ListVerificationsForChange reads all verification records for a resolved
 // authoritative change without re-discovering bundle ownership by slug.
 func ListVerificationsForChange(root string, change model.Change) (map[string]model.VerificationRecord, error) {

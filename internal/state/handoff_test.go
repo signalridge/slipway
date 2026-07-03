@@ -1,7 +1,6 @@
 package state
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -102,16 +101,6 @@ func TestHandoffBriefIsBoundedDescriptor(t *testing.T) {
 	assert.Contains(t, brief, "Finish command tests.")
 	assert.NotContains(t, brief, "current_state")
 	assert.NotContains(t, brief, "next_skill")
-}
-
-func TestHandoffHeaderKeysExcludeLifecycleAuthorityFields(t *testing.T) {
-	keys := HandoffHeaderKeys()
-	raw, err := json.Marshal(keys)
-	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "current_state")
-	assert.NotContains(t, string(raw), "substep")
-	assert.NotContains(t, string(raw), "next_skill")
-	assert.NotContains(t, string(raw), "next_command")
 }
 
 func TestWriteHandoffBodyMergesSectionsAndPreservesOthers(t *testing.T) {

@@ -106,7 +106,7 @@ func TestFindActiveChangeFromInsideWorktreeResolves(t *testing.T) {
 	change.WorktreeBranch = "feature"
 	require.NoError(t, SaveChange(root, change))
 
-	resolved, err := FindActiveChangeForWorktree(worktreeRoot, worktreeRoot)
+	resolved, err := selectActiveChangeForWorktreeFromRuntime(worktreeRoot, worktreeRoot)
 	require.NoError(t, err)
 	assert.Equal(t, change.Slug, resolved.Slug)
 	wantWorktree, err := NormalizePath(worktreeRoot)

@@ -1070,11 +1070,9 @@ func TestLoadExecutionSummaryReadsArchivedBundleSummary(t *testing.T) {
 	assert.Equal(t, 3, loaded.RunSummaryVersion)
 	assert.Equal(t, model.ExecutionVerdictPass, loaded.OverallVerdict)
 
-	records, err := ListVerifications(root, change.Slug)
+	record, err := LoadVerification(root, change.Slug, "plan-audit")
 	require.NoError(t, err)
-	if assert.Contains(t, records, "plan-audit") {
-		assert.Equal(t, model.VerificationVerdictPass, records["plan-audit"].Verdict)
-	}
+	assert.Equal(t, model.VerificationVerdictPass, record.Verdict)
 }
 
 func TestArchiveChangeScrubsRuntimeEvidenceRefsFromArchivedExecutionSummary(t *testing.T) {

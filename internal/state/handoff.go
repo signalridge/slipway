@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -459,17 +458,4 @@ func compactHandoffLine(line string) string {
 		return line
 	}
 	return strings.TrimSpace(line[:117]) + "..."
-}
-
-func HandoffPathForDisplay(root, path string) string {
-	if rel, err := filepath.Rel(root, path); err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
-		return filepath.ToSlash(rel)
-	}
-	return filepath.ToSlash(path)
-}
-
-func HandoffHeaderKeys() []string {
-	keys := []string{"slug", "generation", "session_owner", "git_branch", "worktree", "updated_at", "staleness"}
-	slices.Sort(keys)
-	return keys
 }
