@@ -677,7 +677,7 @@ func missingBundleAuthorityError(bundleDir string) error {
 }
 
 // SelectActiveChange resolves the single active change from an already-loaded
-// change list. It mirrors FindActiveChange without re-running discovery.
+// change list without re-running change discovery.
 func SelectActiveChange(changes []model.Change) (model.Change, error) {
 	var active []model.Change
 	for _, c := range changes {
@@ -696,8 +696,7 @@ func SelectActiveChange(changes []model.Change) (model.Change, error) {
 }
 
 // SelectActiveChangeForWorktree resolves the active change for worktree from an
-// already-loaded change list. It mirrors FindActiveChangeForWorktree without
-// re-running discovery.
+// already-loaded change list without re-running change discovery.
 func SelectActiveChangeForWorktree(changes []model.Change, currentWorktreePath string) (model.Change, error) {
 	normalizedCurrent, err := NormalizePath(currentWorktreePath)
 	if err != nil {
