@@ -1,0 +1,94 @@
+name: NPM Dependency Update
+
+on:
+  schedule:
+    - cron: "0 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: npm-dependency-update
+  cancel-in-progress: true
+
+jobs:
+  update-npm:
+    name: Update website npm dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: Update direct dependency ranges
+        working-directory: website
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { execFileSync } = require('node:child_process');
+
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const sections = ['dependencies', 'devDependencies', 'optionalDependencies'];
+          let changed = false;
+
+          for (const section of sections) {
+            for (const [name, spec] of Object.entries(pkg[section] ?? {})) {
+              if (!/^[\^~]?\d/.test(spec)) continue;
+
+              const latest = execFileSync('npm', ['view', name, 'version'], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'inherit'],
+              }).trim();
+              const prefix = spec.startsWith('~') ? '~' : spec.startsWith('^') ? '^' : '';
+              const next = `${prefix}${latest}`;
+
+              if (spec !== next) {
+                pkg[section][name] = next;
+                changed = true;
+              }
+            }
+          }
+
+          if (changed) {
+            fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+          }
+          NODE
+      - name: Refresh npm lockfile
+        working-directory: website
+        run: npm update --package-lock-only --ignore-scripts
+      - name: Install refreshed dependencies
+        working-directory: website
+        run: npm ci
+      - name: Build docs site
+        working-directory: website
+        run: npm run build
+      - name: Check for dependency changes
+        id: diff
+        run: |
+          if git diff --quiet -- website/package.json website/package-lock.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          branch: chore/update-website-npm-dependencies
+          delete-branch: true
+          commit-message: "chore(deps): update website npm dependencies"
+          title: "chore(deps): update website npm dependencies"
+          body: |
+            Automated refresh of `website/package.json` and `website/package-lock.json`.
+
+            This PR was created by `.github/workflows/npm-dependency-update.yaml`.
+          labels: |
+            dependencies
+            npm
