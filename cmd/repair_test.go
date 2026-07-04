@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,6 +61,76 @@ func TestWriteRepairTextDoesNotReportNoopWhenUnrepairedDriftExists(t *testing.T)
 	assert.Contains(t, text, "Unrepaired drift:")
 	assert.Contains(t, text, state.StalePlanningEvidenceBlockerToken)
 	assert.NotContains(t, text, "No repairs were needed")
+}
+
+func TestApplyConfigRepairResultSurfacesFailureAsNonRepairableFinding(t *testing.T) {
+	t.Parallel()
+
+	// RED rationale: the pre-fix call site was
+	//   `if backupPath, err := state.RepairCorruptConfig(...); err == nil { ... }`
+	// which took the success branch and SWALLOWED a non-nil error — a config
+	// repair FAILURE produced no finding and no ConfigBackupPath, making it
+	// indistinguishable from "nothing to repair". `loadConfigAtRoot` re-reads the
+	// same config immediately after and early-returns on any on-disk state that
+	// makes RepairCorruptConfig fail, so the error branch is unreachable through
+	// the full command; this exercises the extracted seam directly. After the fix
+	// a non-nil error must surface as a non-repairable finding and must NOT record
+	// a (success-only) backup path.
+	failure := repairSummary{}
+	applyConfigRepairResult(&failure, "unused-success-backup-path", errors.New("backup write failed"))
+
+	require.Len(t, failure.NonRepairableFindings, 1)
+	assert.Contains(t, failure.NonRepairableFindings[0], "config repair failed")
+	assert.Contains(t, failure.NonRepairableFindings[0], "backup write failed")
+	assert.Empty(t, failure.ConfigBackupPath, "a failed config repair must not report a success-path backup")
+
+	// The success path is preserved: a nil error records the backup path and adds
+	// no finding (behavior-preserving guarantee for the unchanged happy path).
+	success := repairSummary{}
+	backupPath := "/backups/slipway.yaml.broken.20260704T000000Z.yaml"
+	applyConfigRepairResult(&success, backupPath, nil)
+	assert.Equal(t, backupPath, success.ConfigBackupPath)
+	assert.Empty(t, success.NonRepairableFindings)
+}
+
+// TestRepairSurfacesUnrepairableConfigInsteadOfHardFailing covers the full
+// `slipway repair --json` command path that the seam test above cannot reach: a
+// config that stays unreadable after RepairCorruptConfig fails must surface as a
+// non-repairable finding in the summary, not early-return config_parse_failure
+// with an empty stdout that tells the operator to run the command they just ran
+// (REQ-002).
+func TestRepairSurfacesUnrepairableConfigInsteadOfHardFailing(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		// Corrupt the config so it no longer parses, then block the config backup
+		// directory by planting a regular file at its path so RepairCorruptConfig
+		// cannot back up + rewrite it. The config therefore stays unreadable for
+		// the whole command.
+		require.NoError(t, os.WriteFile(state.ConfigPath(root), []byte("broken: [unterminated\n"), 0o644))
+		backupDir := state.ConfigBackupDir(root)
+		require.NoError(t, os.MkdirAll(filepath.Dir(backupDir), 0o755))
+		require.NoError(t, os.WriteFile(backupDir, []byte("blocker"), 0o644))
+
+		var out bytes.Buffer
+		cmd := makeRepairCmd()
+		cmd.SetArgs([]string{"--json"})
+		cmd.SetOut(&out)
+
+		// Must NOT hard-fail: the summary has to reach stdout so the operator sees
+		// the finding rather than a bare config_parse_failure.
+		require.NoError(t, cmd.Execute())
+
+		var summary repairSummary
+		require.NoError(t, json.Unmarshal(out.Bytes(), &summary))
+
+		joined := strings.Join(summary.NonRepairableFindings, "\n")
+		assert.Contains(t, joined, "config unreadable after repair",
+			"expected the unrepairable-config finding in the repair summary")
+		assert.Contains(t, joined, "manually",
+			"config finding must direct the operator to manual correction, not a repair re-run")
+	})
 }
 
 func TestRepairRestoresMissingBoundWorktreeScopeMetadata(t *testing.T) {

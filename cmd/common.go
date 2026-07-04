@@ -536,7 +536,7 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 						"status":       string(archived.Status),
 					},
 				)
-				cliErr.InvocationRoute = buildInvocationRouteView(root, archived, root, true)
+				cliErr.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, archived, root, true)
 				return changeRef{}, cliErr
 			}
 			// No archived record was found. Only os.ErrNotExist (no bundle at all)
@@ -573,7 +573,7 @@ func resolveExplicitChangeWithReadContext(readCtx *stateReadContext, slug string
 				"status": string(change.Status),
 			},
 		)
-		cliErr.InvocationRoute = buildInvocationRouteView(root, change, root, true)
+		cliErr.InvocationRoute = buildInvocationRouteViewWithReadContext(readCtx, change, root, true)
 		return changeRef{}, cliErr
 	}
 	if err := state.ValidateChangeSlug(change.Slug); err != nil {
@@ -702,26 +702,10 @@ func classifyOrphanBundlesWith(root string, orphans []string, match slugWorktree
 	return class
 }
 
-func unmanagedOrphanSlugs(orphans []unmanagedOrphan) []string {
+func orphanSlugs[T any](orphans []T, slug func(T) string) []string {
 	slugs := make([]string, 0, len(orphans))
 	for _, o := range orphans {
-		slugs = append(slugs, o.Slug)
-	}
-	return slugs
-}
-
-func unknownOrphanSlugs(orphans []unknownOrphan) []string {
-	slugs := make([]string, 0, len(orphans))
-	for _, o := range orphans {
-		slugs = append(slugs, o.Slug)
-	}
-	return slugs
-}
-
-func archivedResidueOrphanSlugs(orphans []archivedResidueOrphan) []string {
-	slugs := make([]string, 0, len(orphans))
-	for _, o := range orphans {
-		slugs = append(slugs, o.Slug)
+		slugs = append(slugs, slug(o))
 	}
 	return slugs
 }
@@ -793,9 +777,9 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 			remediation = unmanagedWorktreeOrphanRemediation(primary.Slug, primary.Match)
 			details["unmanaged_worktree_path"] = primary.Match.WorktreePath
 			details["unmanaged_worktree_branch"] = primary.Match.Branch
-			details["unmanaged_worktree_orphans"] = unmanagedOrphanSlugs(class.Unmanaged)
+			details["unmanaged_worktree_orphans"] = orphanSlugs(class.Unmanaged, func(o unmanagedOrphan) string { return o.Slug })
 			if len(class.Unknown) > 0 {
-				unknown := unknownOrphanSlugs(class.Unknown)
+				unknown := orphanSlugs(class.Unknown, func(o unknownOrphan) string { return o.Slug })
 				details["ownership_unknown_orphans"] = unknown
 				remediation += fmt.Sprintf(" Ownership could not be verified for: %s (git worktree cross-check failed); inspect those for live worktrees and preserve any unmerged work before discarding anything.", strings.Join(unknown, ", "))
 			}
@@ -805,7 +789,7 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 			primarySlug = primary.Slug
 			message = fmt.Sprintf("governed bundle %q lost its change.yaml authority and its git worktree ownership could not be verified", primary.Slug)
 			remediation = ownershipUnknownOrphanRemediation(primary.Slug, primary.Err)
-			details["ownership_unknown_orphans"] = unknownOrphanSlugs(class.Unknown)
+			details["ownership_unknown_orphans"] = orphanSlugs(class.Unknown, func(o unknownOrphan) string { return o.Slug })
 		}
 		if len(class.Plain) > 0 {
 			details["orphaned_change_bundles"] = class.Plain
@@ -813,7 +797,7 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 		}
 		if len(class.ArchivedResidue) > 0 {
 			archived := class.ArchivedResidue[0]
-			details["orphaned_active_residue_archived_changes"] = archivedResidueOrphanSlugs(class.ArchivedResidue)
+			details["orphaned_active_residue_archived_changes"] = orphanSlugs(class.ArchivedResidue, func(o archivedResidueOrphan) string { return o.Slug })
 			details["archive_path"] = archived.ArchivePath
 			remediation += " Separately, " + archivedActiveResidueRemediation(archived)
 		}
@@ -833,11 +817,11 @@ func orphanedChangeBundleError(root, slug string) *CLIError {
 		message := fmt.Sprintf("active-state residue for archived change %q is missing its change.yaml authority", primary.Slug)
 		remediation := archivedActiveResidueRemediation(primary)
 		if len(class.ArchivedResidue) > 1 {
-			message = "active-state residue remains for archived changes: " + strings.Join(archivedResidueOrphanSlugs(class.ArchivedResidue), ", ")
+			message = "active-state residue remains for archived changes: " + strings.Join(orphanSlugs(class.ArchivedResidue, func(o archivedResidueOrphan) string { return o.Slug }), ", ")
 			remediation = fmt.Sprintf("Discard each stale active-state residue with `slipway delete --change <slug>`; first suggested command: `slipway delete --change %s`. Archived records and source commits are not deletion targets.", primary.Slug)
 		}
 		details := map[string]any{
-			"orphaned_active_residue_archived_changes": archivedResidueOrphanSlugs(class.ArchivedResidue),
+			"orphaned_active_residue_archived_changes": orphanSlugs(class.ArchivedResidue, func(o archivedResidueOrphan) string { return o.Slug }),
 			"archive_path": primary.ArchivePath,
 		}
 		if len(class.Plain) > 0 {

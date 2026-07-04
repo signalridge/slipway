@@ -859,7 +859,15 @@ func NormalizeReasonCodes(reasons []ReasonCode) []ReasonCode {
 	if len(reasons) == 0 {
 		return nil
 	}
-	out := make([]ReasonCode, 0, len(reasons))
+	// Decorate each retained reason with the sort key already computed for
+	// deduplication so the comparator compares precomputed keys instead of
+	// recomputing Key() on every comparison. Keys are unique after dedup, so the
+	// resulting order matches the previous key-comparing comparator exactly.
+	type keyedReason struct {
+		key    string
+		reason ReasonCode
+	}
+	decorated := make([]keyedReason, 0, len(reasons))
 	seen := map[string]struct{}{}
 	for _, reason := range reasons {
 		reason.Normalize()
@@ -868,13 +876,17 @@ func NormalizeReasonCodes(reasons []ReasonCode) []ReasonCode {
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, reason)
+		decorated = append(decorated, keyedReason{key: key, reason: reason})
 	}
-	slices.SortFunc(out, func(a, b ReasonCode) int {
-		return strings.Compare(a.Key(), b.Key())
-	})
-	if len(out) == 0 {
+	if len(decorated) == 0 {
 		return nil
+	}
+	slices.SortFunc(decorated, func(a, b keyedReason) int {
+		return strings.Compare(a.key, b.key)
+	})
+	out := make([]ReasonCode, len(decorated))
+	for i := range decorated {
+		out[i] = decorated[i].reason
 	}
 	return out
 }

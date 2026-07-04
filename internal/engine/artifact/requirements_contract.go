@@ -47,8 +47,18 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 		}, nil
 	}
 
-	content := source.Content
-	requirementCount := len(ParseRequirementBlocks(content))
+	// Parse the requirement blocks once and drive every downstream check
+	// (count, missing stable IDs, substance) from the same parse.
+	// splitRequirementBlocksForSubstance yields, per block, the same name and
+	// first stable REQ-* ID that ParseRequirementBlocks and
+	// RequirementBlocksMissingStableIDs derive — both compute firstRequirementID
+	// over the identical block text of the comment-stripped content — plus the
+	// statement/scenario regions the substance check needs. One parse therefore
+	// feeds all three consumers with byte-identical data and ordering.
+	strippedContent := stripRequirementGuidanceComments(source.Content)
+	blocks := splitRequirementBlocksForSubstance(strippedContent)
+
+	requirementCount := len(blocks)
 	if requirementCount == 0 {
 		return RequirementsContractResult{
 			Status:  RequirementsContractStatusInvalid,
@@ -57,7 +67,7 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 		}, nil
 	}
 
-	missingStableIDs := RequirementBlocksMissingStableIDs(content)
+	missingStableIDs := requirementBlocksMissingStableIDs(blocks)
 	if len(missingStableIDs) > 0 {
 		return RequirementsContractResult{
 			Status: RequirementsContractStatusInvalid,
@@ -69,7 +79,7 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 		}, nil
 	}
 
-	if substanceBlockers := RequirementSubstanceBlockers(content); len(substanceBlockers) > 0 {
+	if substanceBlockers := requirementSubstanceBlockersFrom(strippedContent, blocks); len(substanceBlockers) > 0 {
 		return RequirementsContractResult{
 			Status: RequirementsContractStatusInvalid,
 			Source: source.Path,
@@ -100,13 +110,35 @@ func EvaluateRequirementsContract(bundleDir string) (RequirementsContractResult,
 // in "pending investigation" status — is not false-flagged (issue #91: avoid
 // false positives that block real work).
 func RequirementSubstanceBlockers(content string) []string {
-	content = stripRequirementGuidanceComments(content)
+	strippedContent := stripRequirementGuidanceComments(content)
+	return requirementSubstanceBlockersFrom(strippedContent, splitRequirementBlocksForSubstance(strippedContent))
+}
+
+// requirementBlocksMissingStableIDs returns the names of parsed blocks that lack a
+// stable REQ-* ID, in block order. It mirrors RequirementBlocksMissingStableIDs but
+// operates on an already-parsed block slice, so EvaluateRequirementsContract can
+// reuse a single parse across the count, missing-ID, and substance checks.
+func requirementBlocksMissingStableIDs(blocks []requirementSubstanceBlock) []string {
+	missing := make([]string, 0)
+	for _, block := range blocks {
+		if strings.TrimSpace(block.stableID) == "" {
+			missing = append(missing, block.name)
+		}
+	}
+	return missing
+}
+
+// requirementSubstanceBlockersFrom evaluates the substance problems described by
+// RequirementSubstanceBlockers from already comment-stripped content and its parsed
+// substance blocks. Separating the parse from the evaluation lets both
+// RequirementSubstanceBlockers and EvaluateRequirementsContract feed it — the latter
+// reusing the single parse it also uses for the count and missing-ID checks.
+func requirementSubstanceBlockersFrom(strippedContent string, blocks []requirementSubstanceBlock) []string {
 	var blockers []string
-	if LooksLikeRequirementsPlaceholder(content) {
+	if LooksLikeRequirementsPlaceholder(strippedContent) {
 		blockers = append(blockers,
 			"contains template/seed placeholder content; author concrete requirements")
 	}
-	blocks := splitRequirementBlocksForSubstance(content)
 	if len(blocks) == 0 {
 		blockers = append(blockers, "requirements.md declares no Requirement blocks; author concrete requirements")
 	}

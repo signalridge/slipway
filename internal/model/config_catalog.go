@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -154,7 +156,29 @@ func configDescriptions() map[string]string {
 // keys. It is derived by walking the Config struct's yaml tags (the same shape
 // strict decoding sees), so adding a struct field surfaces here automatically.
 // A completeness test asserts every strict-decoded leaf has an entry.
+//
+// The reflection walk is memoized (see configCatalogOnce) and each call returns
+// a fresh clone, so callers keep the independently-owned slice they have always
+// received while the catalog is built only once.
 func ConfigCatalog() []ConfigCatalogEntry {
+	master := configCatalogOnce()
+	out := make([]ConfigCatalogEntry, len(master))
+	for i, entry := range master {
+		// Clone the only reference-typed field so a caller mutating the returned
+		// entry's AllowedValues cannot corrupt the memoized master. slices.Clone
+		// preserves nil, keeping the nil-vs-populated distinction intact.
+		entry.AllowedValues = slices.Clone(entry.AllowedValues)
+		out[i] = entry
+	}
+	return out
+}
+
+// configCatalogOnce memoizes the reflection-built catalog so the Config struct
+// walk runs a single time; DefaultConfig() is deterministic, so the built value
+// is identical on every call.
+var configCatalogOnce = sync.OnceValue(buildConfigCatalog)
+
+func buildConfigCatalog() []ConfigCatalogEntry {
 	defaults := DefaultConfig()
 	// Normalize so Normalize()-derived effective defaults (e.g. artifact_schema
 	// => expanded) appear in the DEFAULT column instead of rendering blank.

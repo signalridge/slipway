@@ -11,6 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// usesRe and shaRe are compiled once at package load and shared across the
+// pin-actions helpers below. The patterns are identical to the previous
+// per-call regexp.MustCompile calls, and a *regexp.Regexp is safe for
+// concurrent use by multiple goroutines.
+var (
+	usesRe = regexp.MustCompile(`^(\s*-?\s*uses:\s*)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)(.*)$`)
+	shaRe  = regexp.MustCompile(`^[0-9a-f]{40}$`)
+)
+
 func makePinActionsCmd() *cobra.Command {
 	var mappingPath string
 	cmd := &cobra.Command{
@@ -69,7 +78,6 @@ func loadActionPinMapping(path string) (map[string]string, error) {
 	}
 	defer file.Close()
 
-	shaRe := regexp.MustCompile(`^[0-9a-f]{40}$`)
 	out := map[string]string{}
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -131,8 +139,6 @@ func planActionPinsRewrite(file string, mapping map[string]string) (actionPinRew
 		return actionPinRewritePlan{}, err
 	}
 
-	usesRe := regexp.MustCompile(`^(\s*-?\s*uses:\s*)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([^\s#]+)(.*)$`)
-	shaRe := regexp.MustCompile(`^[0-9a-f]{40}$`)
 	lines := strings.SplitAfter(string(raw), "\n")
 	var b strings.Builder
 	for _, lineWithEnd := range lines {

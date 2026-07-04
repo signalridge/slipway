@@ -3,6 +3,7 @@ package capability
 import (
 	"sort"
 	"strings"
+	"sync"
 )
 
 // SurfaceClass classifies a public surface record. Two classes remain:
@@ -158,16 +159,28 @@ func LookupFocus(command, alias string) (SurfaceRecord, bool) {
 	return SurfaceRecord{}, false
 }
 
-// ExplicitFocusBackingIDs returns the set of catalog skill IDs that back
-// any public `--focus` alias. Resolver uses this set to suppress hydrate
-// emission on implicit paths (route-surface plan §6: explicit-focus skills
-// hydrate only under explicit selection).
-func ExplicitFocusBackingIDs() map[string]struct{} {
+// explicitFocusBackingIDs memoizes the scan over surfacePolicy for the set of
+// catalog skill IDs backing any public `--focus` alias.
+var explicitFocusBackingIDs = sync.OnceValue(func() map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, s := range surfacePolicy {
 		if s.Class == SurfaceExplicitFocus {
 			out[s.BackingID] = struct{}{}
 		}
+	}
+	return out
+})
+
+// ExplicitFocusBackingIDs returns the set of catalog skill IDs that back
+// any public `--focus` alias. Resolver uses this set to suppress hydrate
+// emission on implicit paths (route-surface plan §6: explicit-focus skills
+// hydrate only under explicit selection). The returned map is a fresh copy the
+// caller may mutate freely.
+func ExplicitFocusBackingIDs() map[string]struct{} {
+	memo := explicitFocusBackingIDs()
+	out := make(map[string]struct{}, len(memo))
+	for id := range memo {
+		out[id] = struct{}{}
 	}
 	return out
 }

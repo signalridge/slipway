@@ -150,3 +150,49 @@ func TestDefaultSkillsDoNotUseRemovedCommandViewBindings(t *testing.T) {
 		}
 	}
 }
+
+// TestDefaultRegistryReturnsMutationIsolatedSkills guards the mutation isolation
+// that the sync.OnceValue memoization of DefaultRegistry could otherwise break:
+// every caller shares one *Registry, so Lookup and All must return skills whose
+// mutable slice fields are independent copies. Without that, a caller mutating a
+// returned skill would silently poison every later lookup in the process.
+// independent-review carries a Bindings entry plus a HostCapabilities entry with
+// a nested FallbackModes slice, so it exercises the shallow and the nested field.
+func TestDefaultRegistryReturnsMutationIsolatedSkills(t *testing.T) {
+	const id = "independent-review"
+
+	first, ok := DefaultRegistry().Lookup(id)
+	require.True(t, ok)
+	require.NotEmpty(t, first.Bindings, "fixture skill must expose a binding")
+	require.NotEmpty(t, first.HostCapabilities, "fixture skill must expose a host capability")
+	require.NotEmpty(t, first.HostCapabilities[0].FallbackModes, "fixture must expose nested fallback modes")
+
+	wantTarget := first.Bindings[0].Target
+	wantFallback := first.HostCapabilities[0].FallbackModes[0]
+
+	// Mutate the copy returned by Lookup, including the nested FallbackModes.
+	first.Bindings[0].Target = "__mutated_target__"
+	first.HostCapabilities[0].FallbackModes[0] = "__mutated_fallback__"
+
+	afterLookup, ok := DefaultRegistry().Lookup(id)
+	require.True(t, ok)
+	assert.Equal(t, wantTarget, afterLookup.Bindings[0].Target,
+		"Lookup mutation leaked into the shared registry")
+	assert.Equal(t, wantFallback, afterLookup.HostCapabilities[0].FallbackModes[0],
+		"nested FallbackModes mutation via Lookup leaked into the shared registry")
+
+	// All must isolate the same way.
+	for _, sk := range DefaultRegistry().All() {
+		if sk.ID != id {
+			continue
+		}
+		sk.Bindings[0].Target = "__mutated_via_all__"
+		sk.HostCapabilities[0].FallbackModes[0] = "__mutated_via_all__"
+	}
+	afterAll, ok := DefaultRegistry().Lookup(id)
+	require.True(t, ok)
+	assert.Equal(t, wantTarget, afterAll.Bindings[0].Target,
+		"All mutation leaked into the shared registry")
+	assert.Equal(t, wantFallback, afterAll.HostCapabilities[0].FallbackModes[0],
+		"nested FallbackModes mutation via All leaked into the shared registry")
+}

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 )
 
 // Tier names the semantic role of a catalog skill.
@@ -147,35 +148,65 @@ func NewRegistry(skills ...Skill) (*Registry, error) {
 	return reg, nil
 }
 
-// DefaultRegistry returns the shipped catalog registry in deterministic order.
-func DefaultRegistry() *Registry {
+// defaultRegistry memoizes the shipped catalog registry. Sharing one instance
+// is safe: byID is never written after NewRegistry, no method mutates it, and
+// Lookup/All hand back cloned skills so a caller cannot mutate the shared state.
+var defaultRegistry = sync.OnceValue(func() *Registry {
 	reg, err := NewRegistry(defaultSkills()...)
 	if err != nil {
 		// defaultSkills is table data, any error is a programmer bug.
 		panic(err)
 	}
 	return reg
+})
+
+// DefaultRegistry returns the shipped catalog registry in deterministic order.
+func DefaultRegistry() *Registry {
+	return defaultRegistry()
 }
 
-// Lookup returns the skill with the given id. The second return value is
-// false when the id is not registered.
+// clone returns a copy of the skill whose mutable slice fields — Bindings,
+// HydrateReferences, HostCapabilities, and each HostCapabilityContract's nested
+// FallbackModes — are independently allocated, so a caller mutating the result
+// cannot reach back into the memoized registry's stored skills. Every other
+// field is a scalar or string (EvidenceContract is a string) and needs no copy.
+func (s Skill) clone() Skill {
+	s.Bindings = slices.Clone(s.Bindings)
+	s.HydrateReferences = slices.Clone(s.HydrateReferences)
+	if s.HostCapabilities != nil {
+		caps := slices.Clone(s.HostCapabilities)
+		for i := range caps {
+			caps[i].FallbackModes = slices.Clone(caps[i].FallbackModes)
+		}
+		s.HostCapabilities = caps
+	}
+	return s
+}
+
+// Lookup returns the skill with the given id. The second return value is false
+// when the id is not registered. The returned skill is an independent copy;
+// mutating its slice fields does not affect the shared registry.
 func (r *Registry) Lookup(id string) (Skill, bool) {
 	if r == nil {
 		return Skill{}, false
 	}
 	sk, ok := r.byID[id]
-	return sk, ok
+	if !ok {
+		return Skill{}, false
+	}
+	return sk.clone(), true
 }
 
-// All returns every registered skill sorted by id. The returned slice is
-// freshly allocated and safe for the caller to mutate.
+// All returns every registered skill sorted by id. The returned slice and each
+// skill's mutable slice fields are freshly allocated, so the caller may mutate
+// the result without affecting the shared registry.
 func (r *Registry) All() []Skill {
 	if r == nil {
 		return nil
 	}
 	out := make([]Skill, 0, len(r.byID))
 	for _, sk := range r.byID {
-		out = append(out, sk)
+		out = append(out, sk.clone())
 	}
 	slices.SortFunc(out, func(a, b Skill) int {
 		switch {
