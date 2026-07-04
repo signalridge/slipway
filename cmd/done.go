@@ -120,28 +120,45 @@ func doneWorktreeDirtyState(root string, change model.Change) (string, []string)
 	return doneWorktreeDirtyWarning, files
 }
 
-func detectRemediationSources(root string, change model.Change) []model.ArchiveReference {
+func detectRemediationSources(root string, change model.Change) ([]model.ArchiveReference, error) {
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	refs := []model.ArchiveReference{}
-	_ = filepath.WalkDir(paths.GovernedBundleDir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
+	walkErr := filepath.WalkDir(paths.GovernedBundleDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
 			return nil
 		}
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			return nil
 		}
+		// Skip symlinks and other non-regular entries: ReadFileNoSymlink
+		// intentionally refuses them, and that refusal is a deliberate skip
+		// rather than an unreadable-file failure. WalkDir does not follow
+		// symlinks, so they arrive here with a nil walk error and a
+		// symlink-typed entry.
+		if !entry.Type().IsRegular() {
+			return nil
+		}
 		data, readErr := fsutil.ReadFileNoSymlink(path)
 		if readErr != nil {
-			return nil
+			return readErr
 		}
 		refs = append(refs, archiveReferencesFromText(string(data))...)
 		return nil
 	})
-	return mergeArchiveReferences(nil, existingArchiveReferences(root, refs))
+	// A missing GovernedBundleDir is tolerated (baseline behavior): there is
+	// simply nothing to detect. Genuine read/permission errors on existing
+	// files still surface (C3), so only the not-exist case is skipped.
+	if walkErr != nil && !errors.Is(walkErr, fs.ErrNotExist) {
+		return nil, walkErr
+	}
+	return mergeArchiveReferences(nil, existingArchiveReferences(root, refs)), nil
 }
 
 func archiveReferencesFromText(text string) []model.ArchiveReference {
@@ -300,20 +317,14 @@ func makeDoneCmd() *cobra.Command {
 						nil,
 					)
 				}
-				worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
-				if err := reconcileDoneFilesystemState(root, &change); err != nil {
-					return err
-				}
-				if err := validateGovernedDoneArtifacts(root, change); err != nil {
-					return err
-				}
-				shipEval, shipBlocked, err := refreshDoneShipGate(root, &change)
+				prep, _, err := prepareDoneFinalize(root, &change)
 				if err != nil {
 					return err
 				}
-				if shipBlocked {
-					return shipGateBlockedError(root, change, shipEval)
+				if prep.shipBlocked {
+					return shipGateBlockedError(root, change, prep.shipEval)
 				}
+				worktreeDirtyWarning, worktreeDirtyFiles := prep.worktreeDirtyWarning, prep.worktreeDirtyFiles
 				doneFreshnessChange := change
 				doneExecCtx, err := loadExecutionContext(root, change)
 				if err != nil {
@@ -336,9 +347,13 @@ func makeDoneCmd() *cobra.Command {
 				}
 				beforeChange := change
 				markChangeDone(&change)
+				detectedRemediation, err := detectRemediationSources(root, change)
+				if err != nil {
+					return err
+				}
 				change.RemediationSources = mergeArchiveReferences(
 					change.RemediationSources,
-					detectRemediationSources(root, change),
+					detectedRemediation,
 				)
 
 				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
@@ -497,25 +512,26 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 	if !action.CanFinalizeDone(change.CurrentState) {
 		return newDoneBulkSkipped(slug, string(change.CurrentState), "not_done_ready")
 	}
-	worktreeDirtyWarning, worktreeDirtyFiles := doneWorktreeDirtyState(root, change)
-	if err := reconcileDoneFilesystemState(root, &change); err != nil {
-		return newDoneBulkFailed(slug, "artifact_reconcile_failed", err.Error())
-	}
-	if err := validateGovernedDoneArtifacts(root, change); err != nil {
-		return newDoneBulkFailed(slug, "artifact_validation_failed", err.Error())
-	}
-	shipEval, shipBlocked, err := refreshDoneShipGate(root, &change)
+	prep, step, err := prepareDoneFinalize(root, &change)
 	if err != nil {
-		return doneBulkFailedFromError(slug, err)
+		switch step {
+		case doneFinalizeStepReconcile:
+			return newDoneBulkFailed(slug, "artifact_reconcile_failed", err.Error())
+		case doneFinalizeStepValidate:
+			return newDoneBulkFailed(slug, "artifact_validation_failed", err.Error())
+		default:
+			return doneBulkFailedFromError(slug, err)
+		}
 	}
-	if shipBlocked {
+	if prep.shipBlocked {
 		return newDoneBulkSkippedWithReasonCodes(
 			slug,
 			string(change.CurrentState),
 			"ship_gate_blocked",
-			append([]model.ReasonCode(nil), shipEval.ReasonCodes...),
+			append([]model.ReasonCode(nil), prep.shipEval.ReasonCodes...),
 		)
 	}
+	worktreeDirtyWarning, worktreeDirtyFiles := prep.worktreeDirtyWarning, prep.worktreeDirtyFiles
 	beforeChange := change
 	markChangeDone(&change)
 
@@ -566,6 +582,56 @@ func refreshDoneShipGate(root string, change *model.Change) (gate.GateEvaluation
 		return eval, false, nil
 	}
 	return eval, true, nil
+}
+
+// doneFinalizeStep identifies which step of the shared pre-archive finalize
+// sequence failed, so each caller can surface the failure in its own error
+// shape (a raw error propagated by interactive `done`, or a reason-coded bulk
+// item emitted by `--all-ready`).
+type doneFinalizeStep int
+
+const (
+	doneFinalizeStepNone doneFinalizeStep = iota
+	doneFinalizeStepReconcile
+	doneFinalizeStepValidate
+	doneFinalizeStepShipGate
+)
+
+// doneFinalizePrep carries the results of the shared pre-archive finalize
+// sequence back to each call site.
+type doneFinalizePrep struct {
+	worktreeDirtyWarning string
+	worktreeDirtyFiles   []string
+	shipEval             gate.GateEvaluation
+	shipBlocked          bool
+}
+
+// prepareDoneFinalize runs the finalize steps shared by interactive `done` and
+// bulk `--all-ready` archive: it snapshots the dirty-worktree advisory,
+// reconciles the governed bundle to the filesystem, validates governed
+// artifacts, and refreshes the ship gate. change is mutated exactly as the
+// inline sequences did (reconcile persists the reconciled bundle; ship-gate
+// refresh re-evaluates against it). On failure it returns the raw underlying
+// error together with the step that failed, leaving error-to-surface mapping to
+// each caller. On success step is doneFinalizeStepNone and prep.shipBlocked
+// reports whether the refreshed ship gate blocks finalization (prep.shipEval
+// carries the evaluation).
+func prepareDoneFinalize(root string, change *model.Change) (doneFinalizePrep, doneFinalizeStep, error) {
+	prep := doneFinalizePrep{}
+	prep.worktreeDirtyWarning, prep.worktreeDirtyFiles = doneWorktreeDirtyState(root, *change)
+	if err := reconcileDoneFilesystemState(root, change); err != nil {
+		return prep, doneFinalizeStepReconcile, err
+	}
+	if err := validateGovernedDoneArtifacts(root, *change); err != nil {
+		return prep, doneFinalizeStepValidate, err
+	}
+	shipEval, shipBlocked, err := refreshDoneShipGate(root, change)
+	if err != nil {
+		return prep, doneFinalizeStepShipGate, err
+	}
+	prep.shipEval = shipEval
+	prep.shipBlocked = shipBlocked
+	return prep, doneFinalizeStepNone, nil
 }
 
 func shipGateBlockedError(root string, change model.Change, eval gate.GateEvaluation) error {

@@ -87,9 +87,8 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.CleanedAtomicTemps = cleaned
 
-				if backupPath, err := state.RepairCorruptConfig(root, now); err == nil {
-					summary.ConfigBackupPath = backupPath
-				}
+				backupPath, configRepairErr := state.RepairCorruptConfig(root, now)
+				applyConfigRepairResult(&summary, backupPath, configRepairErr)
 				worktreeScopeRepairs, err := state.RepairBoundWorktreeScopeMetadata(root)
 				if err != nil {
 					return err
@@ -101,9 +100,24 @@ func makeRepairCmd() *cobra.Command {
 				}
 				summary.RemovedEmptyOrphanBundles = removedEmptyOrphans
 
-				cfg, err := loadConfigAtRoot(root)
-				if err != nil {
-					return err
+				cfg, cfgErr := loadConfigAtRoot(root)
+				if cfgErr != nil {
+					// The config is still unreadable after the RepairCorruptConfig
+					// attempt above. Hard-returning here would discard the whole
+					// summary — including any config-repair finding just recorded —
+					// and leave the operator with a bare config_parse_failure that
+					// says to run `slipway repair` right after they ran it (REQ-002).
+					// Surface the unreadable config as a non-repairable finding and
+					// fall back to default lock settings (as loadRepairLockConfigAtRoot
+					// already does) so the remaining repairs and the summary complete.
+					summary.NonRepairableFindings = append(
+						summary.NonRepairableFindings,
+						fmt.Sprintf(
+							"config unreadable after repair; correct or remove %s manually: %v",
+							state.ConfigPath(root), cfgErr,
+						),
+					)
+					cfg = model.DefaultConfig()
 				}
 
 				allChanges, changeIssues, err := state.ListChangesBestEffortWithIssues(root)
@@ -267,6 +281,23 @@ func makeRepairCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&listFocuses, "list-focuses", false, "List public --focus aliases for this command and exit")
 	cmd.Flags().StringVar(&discoveryFormat, "format", "text", "Output format for --list-focuses: text|json")
 	return cmd
+}
+
+// applyConfigRepairResult records the outcome of state.RepairCorruptConfig on
+// the summary. A successful repair records the backup path (empty when the
+// config was already valid or was recreated from missing). A non-nil error is a
+// config-repair FAILURE that must surface as a non-repairable finding for the
+// operator rather than being swallowed as success: the backup or rewrite did
+// not complete, so the on-disk config is still broken.
+func applyConfigRepairResult(summary *repairSummary, backupPath string, err error) {
+	if err != nil {
+		summary.NonRepairableFindings = append(
+			summary.NonRepairableFindings,
+			fmt.Sprintf("config repair failed: %v", err),
+		)
+		return
+	}
+	summary.ConfigBackupPath = backupPath
 }
 
 func writeRepairText(w io.Writer, summary repairSummary) error {

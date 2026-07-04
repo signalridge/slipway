@@ -879,14 +879,13 @@ type githubGraphQLEnvelope struct {
 	Errors []githubGraphQLError `json:"errors"`
 }
 
-// postGraphQLChecked decodes the {data, errors} envelope. A non-empty errors
-// array fails with a precondition error quoting the messages. On success the
-// raw data payload is returned for the caller to decode.
-func (c githubHTTPClient) postGraphQLChecked(query string, variables map[string]any) (json.RawMessage, error) {
-	var env githubGraphQLEnvelope
-	if err := c.postGraphQL(query, variables, &env); err != nil {
-		return nil, err
-	}
+// checkGraphQLEnvelope inspects a decoded {data, errors} GraphQL envelope. A
+// non-empty errors array fails with a precondition error quoting the messages;
+// an empty or null data payload fails with a no-data precondition error;
+// otherwise the raw data payload is returned for the caller to decode. Both the
+// HTTP and CLI clients had byte-identical baseline bodies (errors guard + no-data
+// guard), so both route through this shared helper with identical behavior.
+func checkGraphQLEnvelope(env githubGraphQLEnvelope) (json.RawMessage, error) {
 	if len(env.Errors) > 0 {
 		messages := make([]string, 0, len(env.Errors))
 		for _, e := range env.Errors {
@@ -914,6 +913,17 @@ func (c githubHTTPClient) postGraphQLChecked(query string, variables map[string]
 		)
 	}
 	return env.Data, nil
+}
+
+// postGraphQLChecked decodes the {data, errors} envelope. A non-empty errors
+// array fails with a precondition error quoting the messages. On success the
+// raw data payload is returned for the caller to decode.
+func (c githubHTTPClient) postGraphQLChecked(query string, variables map[string]any) (json.RawMessage, error) {
+	var env githubGraphQLEnvelope
+	if err := c.postGraphQL(query, variables, &env); err != nil {
+		return nil, err
+	}
+	return checkGraphQLEnvelope(env)
 }
 
 type githubCLIClient struct {
@@ -997,33 +1007,8 @@ func (c githubCLIClient) postGraphQLChecked(query string, variables map[string]a
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, err
 	}
-	if len(env.Errors) > 0 {
-		messages := make([]string, 0, len(env.Errors))
-		for _, e := range env.Errors {
-			msg := strings.TrimSpace(e.Message)
-			if msg == "" {
-				msg = "unspecified GraphQL error"
-			}
-			messages = append(messages, msg)
-		}
-		return nil, newPreconditionError(
-			"github_graphql_errors",
-			"GitHub GraphQL returned errors: "+strings.Join(messages, "; "),
-			"Resolve the GraphQL errors (permissions, ids, or schema) and retry.",
-			"",
-			map[string]any{"errors": messages},
-		)
-	}
-	if len(bytes.TrimSpace(env.Data)) == 0 || string(env.Data) == "null" {
-		return nil, newPreconditionError(
-			"github_graphql_no_data",
-			"GitHub GraphQL response carried no data payload",
-			"The mutation or query returned a null payload; verify the request and retry.",
-			"",
-			nil,
-		)
-	}
-	return env.Data, nil
+	// CLI path rejects empty/null data, matching its baseline behavior.
+	return checkGraphQLEnvelope(env)
 }
 
 func (c githubCLIClient) api(path string) ([]byte, error) {

@@ -32,14 +32,23 @@ func attemptAutoPassSequence(
 	}
 	candidate.CurrentState = startState
 
-	eligible, reason, err := autoPassReviewEligible(root, candidate, policy)
+	// Review authority is a pure function of (root, change-on-disk) and no state
+	// mutation occurs before the review-skill stamp below, so it is computed once
+	// here and threaded through both the eligibility check and the stamp rather
+	// than recomputed inside each.
+	reviewAuthority, err := EvaluateReviewAuthority(root, candidate)
+	if err != nil {
+		return AdvanceSummary{}, false, err
+	}
+
+	eligible, reason, err := autoPassReviewEligible(root, candidate, policy, reviewAuthority)
 	if err != nil {
 		return AdvanceSummary{}, false, err
 	}
 	if !eligible {
 		return AdvanceSummary{}, false, nil
 	}
-	stampResult, err := stampAutoPassedSkillDigests(root, candidate)
+	stampResult, err := stampAutoPassedSkillDigests(root, candidate, reviewAuthority)
 	if err != nil {
 		return AdvanceSummary{}, false, err
 	}
@@ -53,10 +62,15 @@ func attemptAutoPassSequence(
 		Reason: reason,
 	})
 
-	shipEligible, shipReason, err := autoPassShipEligible(root, candidate, policy)
+	// Ship authority is likewise pure. The only barrier between here and the
+	// ship-skill stamp below is the review stamp already applied above, so it is
+	// computed once and reused for both the eligibility check and the stamp.
+	shipAuthority, err := EvaluateShipAuthority(root, candidate)
 	if err != nil {
 		return AdvanceSummary{}, false, err
 	}
+
+	shipEligible, shipReason := autoPassShipEligible(policy, shipAuthority)
 	if !shipEligible {
 		candidate.CurrentState = model.StateS3Review
 		candidate.LastAutoPassedStates = autoPassed
@@ -69,10 +83,6 @@ func attemptAutoPassSequence(
 			AutoPassedStates: autoPassed,
 		})
 		return summary, true, err
-	}
-	shipAuthority, err := EvaluateShipAuthority(root, candidate)
-	if err != nil {
-		return AdvanceSummary{}, false, err
 	}
 	stampResult, err = stampPassingSkillDigests(root, candidate, shipAuthorityPassingSkills(shipAuthority))
 	if err != nil {
@@ -115,28 +125,29 @@ func AutoPassEligibility(root string, change model.Change) ([]model.AutoPassedSt
 	var eligible []model.AutoPassedState
 	candidate := change
 	candidate.CurrentState = change.CurrentState
-	ok, reason, err := autoPassReviewEligible(root, candidate, policy)
+	reviewAuthority, err := EvaluateReviewAuthority(root, candidate)
+	if err != nil {
+		return nil, err
+	}
+	ok, reason, err := autoPassReviewEligible(root, candidate, policy, reviewAuthority)
 	if err != nil {
 		return nil, err
 	}
 	if ok {
 		eligible = append(eligible, model.AutoPassedState{State: model.StateS3Review, Reason: reason})
 	}
-	ok, reason, err = autoPassShipEligible(root, candidate, policy)
+	shipAuthority, err := EvaluateShipAuthority(root, candidate)
 	if err != nil {
 		return nil, err
 	}
+	ok, reason = autoPassShipEligible(policy, shipAuthority)
 	if ok {
 		eligible = append(eligible, model.AutoPassedState{State: model.StateS3Review, Reason: reason})
 	}
 	return eligible, nil
 }
 
-func autoPassReviewEligible(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {
-	reviewAuthority, err := EvaluateReviewAuthority(root, change)
-	if err != nil {
-		return false, "", err
-	}
+func autoPassReviewEligible(root string, change model.Change, policy governance.PresetPolicy, reviewAuthority ReviewAuthority) (bool, string, error) {
 	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
 	if err != nil {
 		return false, "", err
@@ -150,26 +161,18 @@ func autoPassReviewEligible(root string, change model.Change, policy governance.
 	return true, autoPassReasonNoBlockingReviewObligations, nil
 }
 
-func autoPassShipEligible(root string, change model.Change, policy governance.PresetPolicy) (bool, string, error) {
-	shipAuthority, err := EvaluateShipAuthority(root, change)
-	if err != nil {
-		return false, "", err
-	}
+func autoPassShipEligible(policy governance.PresetPolicy, shipAuthority ShipAuthority) (bool, string) {
 	if !policy.VerifyAutoPassEnabled || hasUnsatisfiedBlockingAction(shipAuthority.Actions, model.ControlScopeRelease) {
-		return false, "", nil
+		return false, ""
 	}
 	if shipAuthority.Result.Status != model.GateStatusApproved {
-		return false, "", nil
+		return false, ""
 	}
-	return true, autoPassReasonNoBlockingReleaseObligations, nil
+	return true, autoPassReasonNoBlockingReleaseObligations
 }
 
-func stampAutoPassedSkillDigests(root string, change model.Change) (skillDigestStampResult, error) {
+func stampAutoPassedSkillDigests(root string, change model.Change, reviewAuthority ReviewAuthority) (skillDigestStampResult, error) {
 	if change.CurrentState == model.StateS3Review {
-		reviewAuthority, err := EvaluateReviewAuthority(root, change)
-		if err != nil {
-			return skillDigestStampResult{}, err
-		}
 		result, err := stampPassingSkillDigests(root, change, reviewAuthority.PassingSkills)
 		if err != nil {
 			return skillDigestStampResult{}, err

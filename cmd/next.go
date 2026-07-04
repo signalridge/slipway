@@ -476,21 +476,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 	}
 	command = strings.TrimSpace(command)
 
-	view := nextView{
-		Command:                     command,
-		Slug:                        ref.Slug,
-		Phase:                       model.PhasePlanning,
-		EvidenceFreshness:           "unknown",
-		ExecutionEvidenceFreshness:  "unknown",
-		GovernanceEvidenceFreshness: "unknown",
-		OverallReadinessFreshness:   "unknown",
-		ConfirmationRequirement:     confirmationNoBoundary("initializing"),
-		auto:                        auto,
-		config:                      cfg,
-		InputContext: nextContext{
-			WorkspaceRoot: root,
-		},
-	}
+	view := newBaseNextView(root, cfg, command, ref, auto)
 	if shouldExposeAdvancedSummaryToCaller(advanced) {
 		view.Advanced = &advanced
 	}
@@ -515,84 +501,14 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		// under auto. buildNextContextByMode does not set this field.
 		view.GuardrailDomain = strings.TrimSpace(governedChange.GuardrailDomain)
 	}
-	finalize := func() (nextView, error) {
-		applyReadyAdvanceDiagnostics(root, governedChange, &view)
-		applyHostCapabilityContractToNext(&view)
-		refreshOverallReadinessFreshnessForNext(&view)
-		view.ConfirmationRequirement = deriveConfirmationRequirement(view)
-		view.CurrentActionKind = view.ConfirmationRequirement.NextActionKind
-		view.CurrentActionCommand = view.ConfirmationRequirement.NextCommand
-		view.Recovery = model.BuildRecovery(view.Blockers)
-		return view, nil
-	}
 	view.Phase = model.PhaseFor(view.CurrentState)
 	var nextSkillEvidence map[string]model.VerificationRecord
 	var nextSkillArtifactProjection *progression.ArtifactProjection
 	if governedChange != nil {
-		presetFields, err := buildWorkflowPresetView(root, *governedChange)
+		nextSkillEvidence, nextSkillArtifactProjection, err = applyGovernedReadinessToNextView(root, readCtx, &view, ref, *governedChange, execCtx)
 		if err != nil {
 			return nextView{}, err
 		}
-		view.WorkflowPreset = presetFields.WorkflowPreset
-		view.SuggestedWorkflowPreset = presetFields.SuggestedWorkflowPreset
-		view.EffectiveWorkflowPreset = presetFields.EffectiveWorkflowPreset
-		view.PresetConfirmationPending = presetFields.PresetConfirmationPending
-		view.PresetUpgradeReasons = presetFields.PresetUpgradeReasons
-		view.GovernanceForecast = presetFields.GovernanceForecast
-
-		verificationRecords, err := readCtx.verificationRecords(*governedChange)
-		if err != nil {
-			return nextView{}, wrapGovernanceReadinessError("evaluate next skill evidence", ref.Slug, err)
-		}
-		readiness, err := progression.EvaluateGovernanceReadiness(
-			root,
-			*governedChange,
-			progression.GovernanceReadinessOptions{
-				IncludeGateEvaluations: true,
-				// Next needs projected artifact context for rendering, but keeps the
-				// reconcile read-only by requesting only the in-memory projection.
-				IncludeArtifactProjection: true,
-				VerificationRecords:       verificationRecords,
-			},
-		)
-		if err != nil {
-			return nextView{}, wrapGovernanceReadinessError("evaluate next skill evidence", ref.Slug, err)
-		}
-		view.Warnings = append(view.Warnings, readiness.Diagnostics...)
-		view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
-		// Capture the genuine dead-end reason codes of the gate that OWNS
-		// advancement out of the current (state, plan substep) when that gate is
-		// blocked. They are applied later in applyReadyAdvanceDiagnostics, bounded
-		// to the no-skill ready/run-to-advance posture, so a dead-end (e.g.
-		// plan_audit_origin_invalid) stops `next` advertising the step ready to
-		// advance while the gate that owns advancement is blocked (#382). PACING
-		// blocks (required-skill handoffs and other host-handoff ride-along codes)
-		// are filtered out here so they keep riding the normal handoff/run guidance;
-		// surfacing every blocked visible gate over-surfaced that pacing work and
-		// erased the no_skill_required / run_slipway_run_to_advance guidance.
-		if owning := progression.OwningAdvanceGateID(view.CurrentState, governedChange.PlanSubStep); owning != "" {
-			if eval, ok := readiness.GateEvaluations[gate.GateID(owning)]; ok && eval.Status == model.GateStatusBlocked {
-				for _, rc := range eval.ReasonCodes {
-					if !progression.HostHandoffBlockerCanRide(rc) {
-						view.ownedAdvanceGateDeadEndBlockers = append(view.ownedAdvanceGateDeadEndBlockers, rc)
-					}
-				}
-			}
-		}
-		view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
-		var summary *model.ExecutionSummary
-		if execCtx != nil {
-			summary = execCtx.Summary
-		}
-		applyReadinessFreshnessToNext(root, &view, *governedChange, summary, readiness)
-		if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
-			view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
-		}
-		nextSkillEvidence = readiness.PassingSkills
-		nextSkillArtifactProjection = readiness.ArtifactProjection
-		applyReadinessToNextContext(&view, readiness)
-		applyGovernanceSurfaceToNext(readiness, &view)
-		view.planLocked = planLockedFromGates(readiness)
 	}
 
 	// Attach wave plan when at S2_IMPLEMENT for governed changes.
@@ -603,7 +519,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 	if view.CurrentState == model.StateDone {
 		view.NextSkill = nil
 		view.Blockers = []model.ReasonCode{model.NewReasonCode("change_is_done", "")}
-		return finalize()
+		return finalizeNextView(root, governedChange, view)
 	}
 	if err := projectDoneReadyForReadOnlyQuery(root, governedChange, &advanced); err != nil {
 		return nextView{}, err
@@ -616,7 +532,7 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 			return nextView{}, err
 		}
 		view.Warnings = append(view.Warnings, warnings...)
-		return finalize()
+		return finalizeNextView(root, governedChange, view)
 	}
 
 	if skipAutoPass && governedChange != nil {
@@ -630,7 +546,128 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		return nextView{}, err
 	}
 
-	return finalize()
+	return finalizeNextView(root, governedChange, view)
+}
+
+// newBaseNextView constructs the initial next-view scaffold shared by every
+// build path: identity, the planning-phase default, "unknown" freshness fields,
+// the initializing confirmation requirement, and the unexported auto/config
+// carriers. Downstream steps overwrite these fields as governance context
+// resolves.
+func newBaseNextView(root string, cfg model.Config, command string, ref changeRef, auto bool) nextView {
+	return nextView{
+		Command:                     command,
+		Slug:                        ref.Slug,
+		Phase:                       model.PhasePlanning,
+		EvidenceFreshness:           "unknown",
+		ExecutionEvidenceFreshness:  "unknown",
+		GovernanceEvidenceFreshness: "unknown",
+		OverallReadinessFreshness:   "unknown",
+		ConfirmationRequirement:     confirmationNoBoundary("initializing"),
+		auto:                        auto,
+		config:                      cfg,
+		InputContext: nextContext{
+			WorkspaceRoot: root,
+		},
+	}
+}
+
+// applyGovernedReadinessToNextView evaluates governance readiness for a governed
+// change and folds the result into the view: preset fields, readiness
+// diagnostics and blockers, the owning-advance-gate dead-end capture (#382),
+// freshness diagnostics and readiness freshness, artifact amendments, the
+// readiness-derived context and governance surface, and the plan-locked flag. It
+// returns the passing-skill evidence and artifact projection the skill-view
+// assembly consumes. It performs the same reads and view mutations, in the same
+// order, as the inline block it was extracted from.
+func applyGovernedReadinessToNextView(
+	root string,
+	readCtx *stateReadContext,
+	view *nextView,
+	ref changeRef,
+	governedChange model.Change,
+	execCtx *executionContext,
+) (map[string]model.VerificationRecord, *progression.ArtifactProjection, error) {
+	presetFields, err := buildWorkflowPresetView(root, governedChange)
+	if err != nil {
+		return nil, nil, err
+	}
+	view.WorkflowPreset = presetFields.WorkflowPreset
+	view.SuggestedWorkflowPreset = presetFields.SuggestedWorkflowPreset
+	view.EffectiveWorkflowPreset = presetFields.EffectiveWorkflowPreset
+	view.PresetConfirmationPending = presetFields.PresetConfirmationPending
+	view.PresetUpgradeReasons = presetFields.PresetUpgradeReasons
+	view.GovernanceForecast = presetFields.GovernanceForecast
+
+	verificationRecords, err := readCtx.verificationRecords(governedChange)
+	if err != nil {
+		return nil, nil, wrapGovernanceReadinessError("evaluate next skill evidence", ref.Slug, err)
+	}
+	readiness, err := progression.EvaluateGovernanceReadiness(
+		root,
+		governedChange,
+		progression.GovernanceReadinessOptions{
+			IncludeGateEvaluations: true,
+			// Next needs projected artifact context for rendering, but keeps the
+			// reconcile read-only by requesting only the in-memory projection.
+			IncludeArtifactProjection: true,
+			VerificationRecords:       verificationRecords,
+		},
+	)
+	if err != nil {
+		return nil, nil, wrapGovernanceReadinessError("evaluate next skill evidence", ref.Slug, err)
+	}
+	view.Warnings = append(view.Warnings, readiness.Diagnostics...)
+	view.Blockers = appendReasonCodes(view.Blockers, readiness.Blockers)
+	// Capture the genuine dead-end reason codes of the gate that OWNS
+	// advancement out of the current (state, plan substep) when that gate is
+	// blocked. They are applied later in applyReadyAdvanceDiagnostics, bounded
+	// to the no-skill ready/run-to-advance posture, so a dead-end (e.g.
+	// plan_audit_origin_invalid) stops `next` advertising the step ready to
+	// advance while the gate that owns advancement is blocked (#382). PACING
+	// blocks (required-skill handoffs and other host-handoff ride-along codes)
+	// are filtered out here so they keep riding the normal handoff/run guidance;
+	// surfacing every blocked visible gate over-surfaced that pacing work and
+	// erased the no_skill_required / run_slipway_run_to_advance guidance.
+	if owning := progression.OwningAdvanceGateID(view.CurrentState, governedChange.PlanSubStep); owning != "" {
+		if eval, ok := readiness.GateEvaluations[gate.GateID(owning)]; ok && eval.Status == model.GateStatusBlocked {
+			for _, rc := range eval.ReasonCodes {
+				if !progression.HostHandoffBlockerCanRide(rc) {
+					view.ownedAdvanceGateDeadEndBlockers = append(view.ownedAdvanceGateDeadEndBlockers, rc)
+				}
+			}
+		}
+	}
+	view.FreshnessDiagnostics = attachFreshnessDiagnostics(readiness.FreshnessDiagnostics)
+	var summary *model.ExecutionSummary
+	if execCtx != nil {
+		summary = execCtx.Summary
+	}
+	applyReadinessFreshnessToNext(root, view, governedChange, summary, readiness)
+	if readiness.ArtifactProjection != nil && len(readiness.ArtifactProjection.Amendments) > 0 {
+		view.ArtifactAmendments = append([]artifact.AmendmentEvent(nil), readiness.ArtifactProjection.Amendments...)
+	}
+	applyReadinessToNextContext(view, readiness)
+	applyGovernanceSurfaceToNext(readiness, view)
+	view.planLocked = planLockedFromGates(readiness)
+	return readiness.PassingSkills, readiness.ArtifactProjection, nil
+}
+
+// finalizeNextView applies the terminal read-only diagnostics shared by every
+// return path — ready-advance diagnostics, the host-capability contract, overall
+// readiness freshness, the derived confirmation requirement and its mirrored
+// current-action fields, and the recovery summary — then returns the completed
+// view. It is a pure projection over the accumulated view state and carries no
+// advancement side effects.
+func finalizeNextView(root string, governedChange *model.Change, view nextView) (nextView, error) {
+	applyReadyAdvanceDiagnostics(root, governedChange, &view)
+	applyHostCapabilityContractToNext(&view)
+	refreshOverallReadinessFreshnessForNext(&view)
+	view.ConfirmationRequirement = deriveConfirmationRequirement(view)
+	view.CurrentActionKind = view.ConfirmationRequirement.NextActionKind
+	view.CurrentActionCommand = view.ConfirmationRequirement.NextCommand
+	view.Recovery = model.BuildRecovery(view.Blockers)
+	return view, nil
 }
 
 // advanceIfReadyAuto attempts state advancement unless in preview mode. When
@@ -939,10 +976,10 @@ func applyHostCapabilityContractToValidate(view *validateView, skills []string) 
 	view.HostCapabilities = hostCapabilityViewsForSkills(skills)
 	for _, req := range view.HostCapabilities {
 		if code := hostCapabilityBlockerCode(req); code != "" {
-			view.Blockers = model.NormalizeReasonCodes(append(
+			view.Blockers = appendReasonCodes(
 				view.Blockers,
-				model.NewReasonCode(code, req.SkillName+":"+req.Capability),
-			))
+				[]model.ReasonCode{model.NewReasonCode(code, req.SkillName+":"+req.Capability)},
+			)
 		}
 	}
 	view.CanAdvance = len(view.Blockers) == 0

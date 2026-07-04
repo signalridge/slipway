@@ -1,6 +1,7 @@
 package toolgen
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/signalridge/slipway/internal/engine/capability"
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -487,12 +489,19 @@ var promptSurfaceIDs = func() []string {
 	return out
 }()
 
-// commandIDs returns the prompt surface IDs that have user-facing command entries (sorted).
-func commandIDs() []string {
+// sortedCommandIDs memoizes the sorted prompt surface IDs. The sort input
+// (promptSurfaceIDs) is fixed at package init, so the ordering never changes;
+// commandIDs clones this per call so callers keep an independently mutable slice.
+var sortedCommandIDs = sync.OnceValue(func() []string {
 	out := make([]string, len(promptSurfaceIDs))
 	copy(out, promptSurfaceIDs)
 	slices.Sort(out)
 	return out
+})
+
+// commandIDs returns the prompt surface IDs that have user-facing command entries (sorted).
+func commandIDs() []string {
+	return slices.Clone(sortedCommandIDs())
 }
 
 const workflowSkillID = "workflow"
@@ -797,13 +806,7 @@ func Registry() []ToolConfig {
 		out = append(out, cfg)
 	}
 	slices.SortFunc(out, func(a, b ToolConfig) int {
-		if a.ID < b.ID {
-			return -1
-		}
-		if a.ID > b.ID {
-			return 1
-		}
-		return 0
+		return cmp.Compare(a.ID, b.ID)
 	})
 	return out
 }
@@ -1031,21 +1034,77 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 		}()
 	}
 
-	if refresh {
-		// Purge direct command prompt surfaces before rewrite (project-local only).
-		if cfg.CommandsDir != "" {
-			if err := purgeCommandPromptSurfaces(root, cfg, plan); err != nil {
-				return err
-			}
-		}
+	if err := prepareRefreshRewrite(root, cfg, refresh, hadGeneratedAdapter, plan, closure); err != nil {
+		return err
+	}
 
-		if err := cleanupStaleGeneratedArtifacts(root, cfg, hadGeneratedAdapter, plan, closure); err != nil {
+	if err := emitStaticGovernanceSkills(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	if err := emitTemplatedGovernanceSkills(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	reg := capability.DefaultRegistry()
+	if err := emitCatalogSkills(root, cfg, refresh, plan, closure, reg); err != nil {
+		return err
+	}
+
+	if err := emitStandaloneSkills(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	if err := emitTechniqueSkills(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	if err := emitRouterSkills(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	if err := emitCommandPromptSurfaces(root, cfg, refresh, plan); err != nil {
+		return err
+	}
+
+	if err := emitCommandSkillSurfaces(root, cfg, refresh, plan, closure); err != nil {
+		return err
+	}
+
+	if err := registerHostSettingsSurfaces(root, cfg, refresh, plan); err != nil {
+		return err
+	}
+
+	if err := emitWorkflowSkillIndex(root, cfg, refresh, plan, closure, reg); err != nil {
+		return err
+	}
+
+	return commitGeneratedSentinel(sentinelPath, plan)
+}
+
+// prepareRefreshRewrite purges direct command prompt surfaces and cleans up
+// stale generated artifacts before a rewrite. It is a no-op outside refresh.
+func prepareRefreshRewrite(root string, cfg ToolConfig, refresh bool, hadGeneratedAdapter bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
+	if !refresh {
+		return nil
+	}
+	// Purge direct command prompt surfaces before rewrite (project-local only).
+	if cfg.CommandsDir != "" {
+		if err := purgeCommandPromptSurfaces(root, cfg, plan); err != nil {
 			return err
 		}
 	}
 
-	// Governance skills (static content)
-	// Includes both registry governance skills and standalone governance guidance skills.
+	if err := cleanupStaleGeneratedArtifacts(root, cfg, hadGeneratedAdapter, plan, closure); err != nil {
+		return err
+	}
+	return nil
+}
+
+// emitStaticGovernanceSkills writes the static-content governance skills,
+// including both registry governance skills and standalone governance guidance
+// skills.
+func emitStaticGovernanceSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
 	allStaticGovernance := append([]string{}, GovernanceSkillNames...)
 	allStaticGovernance = append(allStaticGovernance, standaloneGovernanceNames...)
 	for _, name := range allStaticGovernance {
@@ -1068,8 +1127,12 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return fmt.Errorf("emit support files for governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
+	return nil
+}
 
-	// Templated governance skills (tool-aware host templates)
+// emitTemplatedGovernanceSkills writes the tool-aware host-templated governance
+// skills.
+func emitTemplatedGovernanceSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
 	for _, name := range TemplatedGovernanceSkillNames {
 		if !closure.includesHostSkill(name) {
 			continue
@@ -1086,10 +1149,12 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return fmt.Errorf("emit support files for templated governance skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
+	return nil
+}
 
-	// Catalog skills (registry-owned, assembled from SKILL.md plus optional
-	// typed templates in fixed order).
-	reg := capability.DefaultRegistry()
+// emitCatalogSkills writes the registry-owned catalog skills, assembled from
+// SKILL.md plus optional typed templates in fixed order.
+func emitCatalogSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure, reg *capability.Registry) error {
 	for _, id := range catalogSkillIDs {
 		if !closure.includesHostSkill(id) {
 			continue
@@ -1116,8 +1181,13 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return fmt.Errorf("emit support files for catalog skill %q (%s): %w", id, cfg.ID, err)
 		}
 	}
+	return nil
+}
 
-	// Standalone skills (static content, not governance, not technique)
+// emitStandaloneSkills writes standalone skills (static content, not governance,
+// not technique), including the special-cased workflow skill and its command
+// reference.
+func emitStandaloneSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
 	for _, name := range standaloneNames {
 		if !closure.includesHostSkill(name) {
 			continue
@@ -1162,8 +1232,11 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return fmt.Errorf("emit support files for standalone skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
+	return nil
+}
 
-	// Technique skills (static content)
+// emitTechniqueSkills writes the static-content technique skills.
+func emitTechniqueSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
 	for _, name := range techniqueNames {
 		if !closure.includesHostSkill(name) {
 			continue
@@ -1187,10 +1260,13 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return fmt.Errorf("emit support files for technique skill %q (%s): %w", name, cfg.ID, err)
 		}
 	}
+	return nil
+}
 
-	// Namespace router skills keep the eager skill list small for profile-based
-	// installs. They point agents back to command/host surfaces and never own
-	// lifecycle transitions or evidence gates.
+// emitRouterSkills writes the namespace router skills that keep the eager skill
+// list small for profile-based installs. They point agents back to
+// command/host surfaces and never own lifecycle transitions or evidence gates.
+func emitRouterSkills(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
 	for _, router := range closure.routerDefinitions() {
 		content, err := renderSurfaceRouterSkill(cfg, router)
 		if err != nil {
@@ -1200,49 +1276,62 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			return err
 		}
 	}
+	return nil
+}
 
-	// Command prompt surfaces (inline command prompts for prompt-backed adapters).
-	// Skip when CommandsDir is empty (Codex uses command skills instead).
-	if cfg.CommandsDir != "" {
-		for _, id := range commandIDs() {
-			content, err := renderCommandEntry(cfg, id)
-			if err != nil {
-				return fmt.Errorf("render command prompt %q for %s: %w", id, cfg.ID, err)
-			}
-			if err := writeDeterministicWithPlan(plan, commandEntryPath(root, cfg, id), content, refresh); err != nil {
-				return err
-			}
+// emitCommandPromptSurfaces writes the inline command prompts for prompt-backed
+// adapters. It is skipped when CommandsDir is empty (Codex uses command skills
+// instead).
+func emitCommandPromptSurfaces(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+	if cfg.CommandsDir == "" {
+		return nil
+	}
+	for _, id := range commandIDs() {
+		content, err := renderCommandEntry(cfg, id)
+		if err != nil {
+			return fmt.Errorf("render command prompt %q for %s: %w", id, cfg.ID, err)
+		}
+		if err := writeDeterministicWithPlan(plan, commandEntryPath(root, cfg, id), content, refresh); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	// Command skill surfaces (Codex): one discoverable skill per command under
-	// SkillsDir.
-	if cfg.CommandSkillSurface {
-		for _, id := range commandIDs() {
-			if !closure.includesCommandSkill(id) {
-				continue
-			}
-			content, err := renderCommandSkill(cfg, id)
-			if err != nil {
-				return fmt.Errorf("render command skill %q for %s: %w", id, cfg.ID, err)
-			}
-			if err := writeDeterministicWithPlan(plan, filepath.Join(root, SkillPath(cfg, id)), content, refresh); err != nil {
-				return err
-			}
+// emitCommandSkillSurfaces writes one discoverable command skill per command
+// under SkillsDir (Codex).
+func emitCommandSkillSurfaces(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure) error {
+	if !cfg.CommandSkillSurface {
+		return nil
+	}
+	for _, id := range commandIDs() {
+		if !closure.includesCommandSkill(id) {
+			continue
+		}
+		content, err := renderCommandSkill(cfg, id)
+		if err != nil {
+			return fmt.Errorf("render command skill %q for %s: %w", id, cfg.ID, err)
+		}
+		if err := writeDeterministicWithPlan(plan, filepath.Join(root, SkillPath(cfg, id)), content, refresh); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	// Settings registration is keyed on whether the host owns a settings.json.
-	//
-	//   - Settings-capable hosts (claude, qwen): register each hook event as a
-	//     bare inline `slipway hook <subcommand>` command directly in
-	//     settings.json. No launcher script files are written, and on refresh any
-	//     previously generated launcher files are pruned.
-	//   - Pi registers generated skills/prompts in settings.json without hook
-	//     semantics.
-	//   - Settings-less hosts (cursor, opencode): keep emitting the advisory
-	//     session-start launcher files (extensionless + .ps1 + .cmd), since they
-	//     have no settings.json to register an inline command in.
+// registerHostSettingsSurfaces registers settings-based host surfaces. Behavior
+// is keyed on whether the host owns a settings.json.
+//
+//   - Settings-capable hosts (claude, qwen): register each hook event as a
+//     bare inline `slipway hook <subcommand>` command directly in
+//     settings.json. No launcher script files are written, and on refresh any
+//     previously generated launcher files are pruned.
+//   - Pi registers generated skills/prompts in settings.json without hook
+//     semantics.
+//   - Settings-less hosts (cursor, opencode): keep emitting the advisory
+//     session-start launcher files (extensionless + .ps1 + .cmd), since they
+//     have no settings.json to register an inline command in.
+func registerHostSettingsSurfaces(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
 	if strings.TrimSpace(cfg.SettingsPath) != "" {
 		switch cfg.SettingsKind {
 		case settingsKindPiRegistration:
@@ -1283,10 +1372,14 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 			}
 		}
 	}
+	return nil
+}
 
-	// Workflow skill index (read by external agents; not consumed by the
-	// Slipway kernel). Regenerated deterministically from the Go-owned
-	// capability registry so every adapter sees direct host skill paths.
+// emitWorkflowSkillIndex writes the workflow skill index (read by external
+// agents; not consumed by the Slipway kernel). It is regenerated
+// deterministically from the Go-owned capability registry so every adapter sees
+// direct host skill paths.
+func emitWorkflowSkillIndex(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, closure skillInstallClosure, reg *capability.Registry) error {
 	exportedReg, err := exportedCapabilityRegistryForInstallClosure(reg, closure)
 	if err != nil {
 		return err
@@ -1298,8 +1391,12 @@ func generateForTool(root string, cfg ToolConfig, refresh bool, closure skillIns
 	if err := writeDeterministicWithPlan(plan, indexPath, index, refresh); err != nil {
 		return err
 	}
+	return nil
+}
 
-	// Write sentinel last — a missing sentinel means the tree is invalid.
+// commitGeneratedSentinel writes the sentinel last — a missing sentinel means
+// the tree is invalid.
+func commitGeneratedSentinel(sentinelPath string, plan *toolRefreshPlan) error {
 	if plan != nil {
 		return plan.commit(sentinelPath, []byte("generated\n"))
 	}
@@ -2421,13 +2518,10 @@ func renderSurfaceRouterSkill(cfg ToolConfig, def namespaceRouterDefinition) (st
 	return tmpl.Render(sourceSkillTemplatePath("surface", hostSkillTemplateSourceFile), data)
 }
 
-// renderCommandEntry renders an inline command prompt from the appropriate template.
-func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
-	meta, err := buildCommandRenderData(id)
-	if err != nil {
-		return "", err
-	}
-	data := map[string]any{
+// baseCommandRenderData builds the render map keys shared by renderCommandEntry
+// and renderCommandSkill. Callers add any surface-specific keys after.
+func baseCommandRenderData(cfg ToolConfig, id string, meta commandRenderData) map[string]any {
+	return map[string]any{
 		"CommandID":     meta.ID,
 		"ToolID":        cfg.ID,
 		"Trigger":       commandTrigger(cfg, meta.ID),
@@ -2437,8 +2531,17 @@ func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
 		"Arguments":     meta.Arguments,
 		"Prerequisites": meta.Prerequisites,
 		"Tier":          meta.Tier,
-		"Surface":       "adapter",
 	}
+}
+
+// renderCommandEntry renders an inline command prompt from the appropriate template.
+func renderCommandEntry(cfg ToolConfig, id string) (string, error) {
+	meta, err := buildCommandRenderData(id)
+	if err != nil {
+		return "", err
+	}
+	data := baseCommandRenderData(cfg, id, meta)
+	data["Surface"] = "adapter"
 	tmplName := "command-entry.md.tmpl"
 	if cfg.CommandFormat == "toml" {
 		tmplName = "command-entry.toml.tmpl"
@@ -2455,17 +2558,7 @@ func renderCommandSkill(cfg ToolConfig, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data := map[string]any{
-		"CommandID":     meta.ID,
-		"ToolID":        cfg.ID,
-		"Trigger":       commandTrigger(cfg, meta.ID),
-		"Class":         meta.Class,
-		"Description":   meta.Description,
-		"BodyTemplate":  "command-" + id + "-body",
-		"Arguments":     meta.Arguments,
-		"Prerequisites": meta.Prerequisites,
-		"Tier":          meta.Tier,
-	}
+	data := baseCommandRenderData(cfg, id, meta)
 	raw, err := tmpl.Render(path.Join("commands", "command-skill.md.tmpl"), data)
 	if err != nil {
 		return "", err

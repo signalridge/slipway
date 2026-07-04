@@ -252,13 +252,15 @@ func (c Change) EffectiveWorkflowProfile() WorkflowProfile {
 }
 
 func (c Change) MarshalYAML() (interface{}, error) {
-	normalized := c
-	normalized.Normalize()
+	// The value receiver already hands us a private copy of the Change, so we can
+	// normalize it in place without mutating the caller's value; no extra copy is
+	// required to keep marshaling side-effect free.
+	c.Normalize()
 	// WorktreePath carries yaml:"-", so it is dropped from every Change YAML write
 	// (active SaveChange, archive snapshot, repair rewrite) without an explicit
 	// strip here.
 	type alias Change
-	return alias(normalized), nil
+	return alias(c), nil
 }
 
 func (c *Change) UnmarshalYAML(unmarshal func(interface{}) error) error {

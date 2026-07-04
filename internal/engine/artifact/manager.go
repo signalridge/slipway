@@ -132,9 +132,18 @@ func BuildStaleGraph(schema []ArtifactSpec) map[string][]string {
 	return graph
 }
 
-// DefaultStaleGraph returns the stale graph for the expanded schema.
-func DefaultStaleGraph() map[string][]string {
+// defaultStaleGraph memoizes the expanded-schema stale graph. It is derived only
+// from the immutable expandedSchema, so it is built once and shared. Every caller
+// passes it to stalePropagationOrderFromGraph, which reads the map and copies each
+// adjacency slice before sorting, so the shared instance is never mutated.
+var defaultStaleGraph = sync.OnceValue(func() map[string][]string {
 	return BuildStaleGraph(expandedSchema)
+})
+
+// DefaultStaleGraph returns the stale graph for the expanded schema. The returned
+// map is a shared, memoized, read-only instance; callers must not mutate it.
+func DefaultStaleGraph() map[string][]string {
+	return defaultStaleGraph()
 }
 
 func requiredSectionsForArtifact(name string) []string {

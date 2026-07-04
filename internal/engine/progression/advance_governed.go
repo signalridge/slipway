@@ -61,43 +61,12 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// blocked CLI view. Under --auto, a pending preset is auto-confirmed
 	// UPGRADE-ONLY to the suggested/effective preset and advancement continues;
 	// this never downgrades and never bypasses a downstream evidence gate.
-	if blockers := PresetConfirmationBlockers(change); len(blockers) > 0 {
-		confirmed, err := autoConfirmPendingPreset(root, &change, options.Auto, presetPolicy, options.Command)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if !confirmed {
-			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
-		}
-		// The confirmed preset may change effective governance posture; re-resolve
-		// so the rest of advancement runs under the now-confirmed preset.
-		presetPolicy, err = governance.ResolvePresetPolicy(root, change)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
+	if handled, summary, err := advancePresetConfirmationGate(root, &change, &presetPolicy, options, fromState); handled {
+		return summary, err
 	}
 
-	if target, ok, err := staleEvidenceRepairTarget(root, change); err != nil {
-		return AdvanceSummary{}, err
-	} else if ok {
-		if staleEvidenceRepairDeferredToReview(change, target) {
-			// S2 owns implementation evidence. Upstream intake/planning drift is
-			// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
-			// evidence replay here creates an impossible forward-only dead end.
-		} else if fromState != model.StateS3Review {
-			// Pre-S3 (S0_INTAKE / S1_PLAN / S2_IMPLEMENT) the owning stage still
-			// holds this evidence (e.g. a stale intake-clarification or
-			// wave-orchestration authority). Surface its blockers directly — whose
-			// remediation is the state-valid `slipway run` / `slipway evidence
-			// skill` — instead of the review-alignment path, which maps to the
-			// S3-only `slipway fix` and would yield fix_state_invalid here. This
-			// only changes the recommended command; the stale-evidence gate stays
-			// fail-closed. Only S3, where review owns plan/code/evidence alignment,
-			// keeps the forward-only review-alignment path below (issues #324, #376).
-			return blockedAdvanceSummary(fromState, target.Blockers), nil
-		} else {
-			return forwardOnlyStaleEvidenceSummary(fromState, target), nil
-		}
+	if handled, summary, err := advanceStaleEvidenceGate(root, change, fromState); handled {
+		return summary, err
 	}
 
 	// 1. S0_INTAKE: lightweight path — no bundle, no worktree, no wave sync.
@@ -110,81 +79,19 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// instead of a hollow `slipway repair` dead-end. Only a pure branch mismatch on
 	// an otherwise-valid dedicated worktree is reconciled; every other authenticity
 	// failure stays fail-closed in the bundle/worktree gates below.
-	if fromState == model.StateS2Implement && strings.TrimSpace(change.WorktreePath) != "" {
-		reconciled, err := state.ReconcileWorktreeBranchBinding(root, &change)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if reconciled {
-			if err := state.SaveChange(root, change); err != nil {
-				return AdvanceSummary{}, err
-			}
-		}
+	if err := reconcileWorktreeBranchBindingIfBound(root, &change, fromState); err != nil {
+		return AdvanceSummary{}, err
 	}
 
-	// 2. Bundle precondition check.
-	// Skip at S1_PLAN/research with NeedsDiscovery — research runs before
-	// the full bundle is populated.
-	skipBundleCheck := fromState == model.StateS1Plan &&
-		change.PlanSubStep == model.PlanSubStepResearch &&
-		change.NeedsDiscovery
-	if ShouldCheckGovernedBundle(change) && !skipBundleCheck {
-		bundleBlockers := GovernedBundleBlockers(root, change)
-		if len(bundleBlockers) > 0 {
-			return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(bundleBlockers)), nil
-		}
-	}
-	assuranceBlockers := AssuranceContractBlockers(root, change)
-	if len(assuranceBlockers) > 0 {
-		return blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(assuranceBlockers)), nil
+	// 2. Bundle precondition and assurance contract checks.
+	if handled, summary := advanceBundleAndAssuranceGate(root, change, fromState); handled {
+		return summary, nil
 	}
 
-	// 3. Wave synchronization at S2_IMPLEMENT and S3_REVIEW.
-	//
-	// At S2 this is the implement-stage sync. At S3 it is the in-place review
-	// convergence path: when the author discovers more work at review and edits
-	// tasks.md (for example adds a task), the wave plan re-materializes IN PLACE
-	// from the current tasks.md at the SAME run version, folding the delta into
-	// the review instead of forcing a backward rescope re-walk. Unchanged-task
-	// evidence is preserved; a newly added or structurally changed task surfaces
-	// as still-required work and blocks S3->S4 until its evidence is recorded
-	// (fail-closed). The lifecycle state is never regressed to S1/S2.
-	runWaveSync := fromState == model.StateS2Implement
-	if fromState == model.StateS3Review {
-		// Only re-sync at review when there is genuine convergence work to absorb:
-		// either tasks.md drifted from the materialized wave plan (the author added
-		// a task at review → re-materialize), or the per-task evidence ledger
-		// advanced past the persisted execution summary (a folded-in task's
-		// evidence was just recorded → rebuild the summary so its
-		// incomplete_execution_task blocker clears). A settled review keeps the
-		// existing read-only S3 behavior so done-ready, light-preset, and other
-		// settled review flows are not perturbed by an unconditional re-sync.
-		pending, err := reviewConvergencePending(root, change)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		runWaveSync = pending
-	}
-	if runWaveSync {
-		syncResult, err := SyncGovernedWaveExecution(root, change)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		blockers := syncResult.Blockers
-		if fromState == model.StateS3Review {
-			// S3 absorbs the re-materialized plan delta in place: plan/evidence
-			// drift on already-evidenced tasks is realigned through the diff-scoped
-			// reviewers (who re-certify against the current plan), not replayed as a
-			// backward gate — the same drift tokens blockingExecutionSummaryIssues
-			// treats as review input. Genuinely missing or non-passing work
-			// (incomplete tasks, failed verdicts, safety-net violations) still fails
-			// closed here, so a task newly discovered at review cannot reach S4
-			// without its own evidence.
-			blockers = absorbedAtReviewWaveBlockers(blockers)
-		}
-		if len(blockers) > 0 {
-			return blockedAdvanceSummary(fromState, blockers), nil
-		}
+	// 3. Wave synchronization at S2_IMPLEMENT and S3_REVIEW (in-place review
+	// convergence). See advanceWaveSyncGate for the S3 fold-in rationale.
+	if handled, summary, err := advanceWaveSyncGate(root, change, fromState); handled {
+		return summary, err
 	}
 
 	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
@@ -384,20 +291,9 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	}
 
 	// G_scope gate: validates research.md structure and discovery evidence at
-	// S1_PLAN/research before allowing progression to bundle. Without this,
-	// discovery changes could skip research validation entirely.
-	isResearchGate := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepResearch && change.NeedsDiscovery
-	if isResearchGate {
-		scopeResult, err := EvaluateScopeGate(root, change, passingSkills, researchDiscoveryEvidence)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if scopeResult.Status == model.GateStatusBlocked {
-			summary := blockedAdvanceSummary(fromState, scopeResult.ReasonCodes)
-			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
-			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
-			return saveChangeAndReturn(root, change, summary)
-		}
+	// S1_PLAN/research before allowing progression to bundle.
+	if handled, summary, err := advanceScopeGate(root, change, fromState, passingSkills, researchDiscoveryEvidence, preTransitionSideEffects, preTransitionSkillEvidence); handled {
+		return summary, err
 	}
 
 	isPlanAuditGate := fromState == model.StateS1Plan && change.PlanSubStep == model.PlanSubStepAudit
@@ -420,30 +316,240 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		preTransitionSideEffects = append(preTransitionSideEffects, sideEffects...)
 	}
 
-	if fromState == model.StateS3Review {
-		shipAuthority, err := EvaluateShipAuthority(root, change)
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if shipAuthority.Result.Status == model.GateStatusBlocked {
-			summary := blockedAdvanceSummary(fromState, shipAuthority.Result.ReasonCodes)
-			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
-			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
-			return saveChangeAndReturn(root, change, summary)
-		}
-		stampResult, err := stampPassingSkillDigests(root, change, shipAuthorityPassingSkills(shipAuthority))
-		if err != nil {
-			return AdvanceSummary{}, err
-		}
-		if len(stampResult.Blockers) > 0 {
-			summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
-			summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
-			summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
-			return saveChangeAndReturn(root, change, summary)
-		}
+	if handled, summary, err := advanceShipAuthorityGate(root, change, fromState, preTransitionSideEffects, preTransitionSkillEvidence); handled {
+		return summary, err
 	}
 
-	// 7. State transition
+	// 7. State transition.
+	return advanceGovernedTransition(root, &change, fromState, toState, passingSkills, preTransitionSideEffects, preTransitionSkillEvidence)
+}
+
+// advancePresetConfirmationGate runs the preset-confirmation gate that must
+// precede all advancement. When a preset confirmation is pending it is
+// auto-confirmed UPGRADE-ONLY under --auto (re-resolving presetPolicy so the
+// rest of advancement runs under the confirmed preset) or otherwise blocks. It
+// reports handled=true when the caller must return the given summary/err; on the
+// confirmed path it reports handled=false and advancement continues.
+func advancePresetConfirmationGate(
+	root string,
+	change *model.Change,
+	presetPolicy *governance.PresetPolicy,
+	options AdvanceOptions,
+	fromState model.WorkflowState,
+) (bool, AdvanceSummary, error) {
+	blockers := PresetConfirmationBlockers(*change)
+	if len(blockers) == 0 {
+		return false, AdvanceSummary{}, nil
+	}
+	confirmed, err := autoConfirmPendingPreset(root, change, options.Auto, *presetPolicy, options.Command)
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	if !confirmed {
+		return true, blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(blockers)), nil
+	}
+	// The confirmed preset may change effective governance posture; re-resolve
+	// so the rest of advancement runs under the now-confirmed preset.
+	resolved, err := governance.ResolvePresetPolicy(root, *change)
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	*presetPolicy = resolved
+	return false, AdvanceSummary{}, nil
+}
+
+// advanceStaleEvidenceGate routes stale skill evidence discovered before the
+// primary gates. S2-owned implementation drift is deferred to S3 review
+// alignment (fall through); pre-S3 the owning stage surfaces its blockers
+// directly (state-valid `slipway run` / `slipway evidence skill`); only S3 keeps
+// the forward-only review-alignment path. It reports handled=true when the
+// caller must return the given summary/err.
+func advanceStaleEvidenceGate(root string, change model.Change, fromState model.WorkflowState) (bool, AdvanceSummary, error) {
+	target, ok, err := staleEvidenceRepairTarget(root, change)
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	if !ok {
+		return false, AdvanceSummary{}, nil
+	}
+	if staleEvidenceRepairDeferredToReview(change, target) {
+		// S2 owns implementation evidence. Upstream intake/planning drift is
+		// reviewed at S3 as plan/code/evidence alignment; requiring an S0/S1
+		// evidence replay here creates an impossible forward-only dead end.
+		return false, AdvanceSummary{}, nil
+	}
+	if fromState != model.StateS3Review {
+		// Pre-S3 the owning stage still holds this evidence; its remediation is the
+		// state-valid `slipway run` / `slipway evidence skill`, not the S3-only
+		// `slipway fix`. Only the recommended command differs; the stale-evidence
+		// gate stays fail-closed (issues #324, #376).
+		return true, blockedAdvanceSummary(fromState, target.Blockers), nil
+	}
+	return true, forwardOnlyStaleEvidenceSummary(fromState, target), nil
+}
+
+// reconcileWorktreeBranchBindingIfBound reconciles a bound S2 worktree whose
+// recorded branch drifted from its actual git branch (no git mutation), so a
+// branch mismatch resolves via `slipway run` instead of a hollow repair
+// dead-end. Only a pure branch mismatch on an otherwise-valid dedicated worktree
+// is reconciled; every other authenticity failure stays fail-closed downstream.
+func reconcileWorktreeBranchBindingIfBound(root string, change *model.Change, fromState model.WorkflowState) error {
+	if fromState != model.StateS2Implement || strings.TrimSpace(change.WorktreePath) == "" {
+		return nil
+	}
+	reconciled, err := state.ReconcileWorktreeBranchBinding(root, change)
+	if err != nil {
+		return err
+	}
+	if reconciled {
+		if err := state.SaveChange(root, *change); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// advanceBundleAndAssuranceGate runs the bundle precondition and assurance
+// contract checks. The bundle check is skipped at S1_PLAN/research with
+// NeedsDiscovery — research runs before the full bundle is populated. It reports
+// handled=true when the caller must return the given blocked summary.
+func advanceBundleAndAssuranceGate(root string, change model.Change, fromState model.WorkflowState) (bool, AdvanceSummary) {
+	skipBundleCheck := fromState == model.StateS1Plan &&
+		change.PlanSubStep == model.PlanSubStepResearch &&
+		change.NeedsDiscovery
+	if ShouldCheckGovernedBundle(change) && !skipBundleCheck {
+		bundleBlockers := GovernedBundleBlockers(root, change)
+		if len(bundleBlockers) > 0 {
+			return true, blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(bundleBlockers))
+		}
+	}
+	assuranceBlockers := AssuranceContractBlockers(root, change)
+	if len(assuranceBlockers) > 0 {
+		return true, blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(assuranceBlockers))
+	}
+	return false, AdvanceSummary{}
+}
+
+// advanceWaveSyncGate runs wave synchronization at S2_IMPLEMENT and, when there
+// is genuine convergence work to absorb, at S3_REVIEW (in-place review
+// convergence: a tasks.md delta re-materializes the wave plan at the SAME run
+// version, folding the delta into review instead of a backward rescope re-walk;
+// unchanged-task evidence is preserved and the lifecycle state is never
+// regressed). At S3 the in-place-absorbed plan/evidence drift tokens are dropped
+// while hard blockers (incomplete tasks, non-pass verdicts, safety-net
+// violations) still fail closed. It reports handled=true when the caller must
+// return the given summary/err.
+func advanceWaveSyncGate(root string, change model.Change, fromState model.WorkflowState) (bool, AdvanceSummary, error) {
+	runWaveSync := fromState == model.StateS2Implement
+	if fromState == model.StateS3Review {
+		pending, err := reviewConvergencePending(root, change)
+		if err != nil {
+			return true, AdvanceSummary{}, err
+		}
+		runWaveSync = pending
+	}
+	if runWaveSync {
+		syncResult, err := SyncGovernedWaveExecution(root, change)
+		if err != nil {
+			return true, AdvanceSummary{}, err
+		}
+		blockers := syncResult.Blockers
+		if fromState == model.StateS3Review {
+			blockers = absorbedAtReviewWaveBlockers(blockers)
+		}
+		if len(blockers) > 0 {
+			return true, blockedAdvanceSummary(fromState, blockers), nil
+		}
+	}
+	return false, AdvanceSummary{}, nil
+}
+
+// advanceScopeGate evaluates G_scope at S1_PLAN/research (discovery), validating
+// research.md structure and discovery evidence before progression to bundle. A
+// blocked gate persists the change and returns; otherwise it falls through. It
+// reports handled=true when the caller must return the given summary/err.
+func advanceScopeGate(
+	root string,
+	change model.Change,
+	fromState model.WorkflowState,
+	passingSkills map[string]model.VerificationRecord,
+	researchDiscoveryEvidence gate.DiscoveryEvidenceState,
+	preTransitionSideEffects []SideEffect,
+	preTransitionSkillEvidence []SkillEvidenceTrace,
+) (bool, AdvanceSummary, error) {
+	if fromState != model.StateS1Plan || change.PlanSubStep != model.PlanSubStepResearch || !change.NeedsDiscovery {
+		return false, AdvanceSummary{}, nil
+	}
+	scopeResult, err := EvaluateScopeGate(root, change, passingSkills, researchDiscoveryEvidence)
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	if scopeResult.Status == model.GateStatusBlocked {
+		summary := blockedAdvanceSummary(fromState, scopeResult.ReasonCodes)
+		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+		summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+		s, err := saveChangeAndReturn(root, change, summary)
+		return true, s, err
+	}
+	return false, AdvanceSummary{}, nil
+}
+
+// advanceShipAuthorityGate evaluates ship authority at S3_REVIEW and stamps the
+// passing ship-skill digests. A blocked authority or a stamp blocker persists
+// the change and returns a blocked summary; otherwise it falls through. It
+// reports handled=true when the caller must return the given summary/err. The
+// ship-authority computation here is intentionally independent of the
+// EvaluateShipGate path and is left recomputed.
+func advanceShipAuthorityGate(
+	root string,
+	change model.Change,
+	fromState model.WorkflowState,
+	preTransitionSideEffects []SideEffect,
+	preTransitionSkillEvidence []SkillEvidenceTrace,
+) (bool, AdvanceSummary, error) {
+	if fromState != model.StateS3Review {
+		return false, AdvanceSummary{}, nil
+	}
+	shipAuthority, err := EvaluateShipAuthority(root, change)
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	if shipAuthority.Result.Status == model.GateStatusBlocked {
+		summary := blockedAdvanceSummary(fromState, shipAuthority.Result.ReasonCodes)
+		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+		summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+		s, err := saveChangeAndReturn(root, change, summary)
+		return true, s, err
+	}
+	stampResult, err := stampPassingSkillDigests(root, change, shipAuthorityPassingSkills(shipAuthority))
+	if err != nil {
+		return true, AdvanceSummary{}, err
+	}
+	if len(stampResult.Blockers) > 0 {
+		summary := blockedAdvanceSummary(fromState, model.ReasonCodesFromSpecs(stampResult.Blockers))
+		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
+		summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
+		s, err := saveChangeAndReturn(root, change, summary)
+		return true, s, err
+	}
+	return false, AdvanceSummary{}, nil
+}
+
+// advanceGovernedTransition performs the terminal state-transition phase of
+// AdvanceGoverned: S1_PLAN substep progression, the post-audit inline validation
+// edge, the done-ready hand-off, wave-plan materialization on entry to
+// S2_IMPLEMENT, and the final state transition. It always returns the advance
+// result (or an error) and mutates change in place so the caller's deferred
+// lifecycle-event recording observes the transitioned change.
+func advanceGovernedTransition(
+	root string,
+	change *model.Change,
+	fromState model.WorkflowState,
+	toState model.WorkflowState,
+	passingSkills map[string]model.VerificationRecord,
+	preTransitionSideEffects []SideEffect,
+	preTransitionSkillEvidence []SkillEvidenceTrace,
+) (AdvanceSummary, error) {
 	// S1_PLAN substep progression: advance within planning before leaving to S2_IMPLEMENT.
 	if fromState == model.StateS1Plan {
 		fromSub := string(change.PlanSubStep)
@@ -454,7 +560,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 			var sideEffects []SideEffect
 			transactionOps := make([]fsutil.FileTransactionOp, 0, 2)
 			if nextSub == model.PlanSubStepBundle {
-				scaffoldOps, err := governedBundleScaffoldTransactionOps(root, &change)
+				scaffoldOps, err := governedBundleScaffoldTransactionOps(root, change)
 				if err != nil {
 					return AdvanceSummary{}, err
 				}
@@ -464,7 +570,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 					Detail: "governed bundle artifacts created or verified",
 				})
 			}
-			if err := applyGovernedChangeTransaction(root, change, transactionOps); err != nil {
+			if err := applyGovernedChangeTransaction(root, *change, transactionOps); err != nil {
 				return AdvanceSummary{}, err
 			}
 			sideEffects = append(append([]SideEffect(nil), preTransitionSideEffects...), sideEffects...)
@@ -487,10 +593,10 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		// inline before entering S2_IMPLEMENT. If validation fails, the change
 		// persists at S1_PLAN/validate as a recovery-only substep.
 		if change.PlanSubStep == model.PlanSubStepAudit {
-			planResult := ValidatePlanningReadiness(root, change)
+			planResult := ValidatePlanningReadiness(root, *change)
 			if len(planResult.Blockers) > 0 {
 				change.AdvancePlanSubStep(model.PlanSubStepValidate)
-				if err := state.SaveChange(root, change); err != nil {
+				if err := state.SaveChange(root, *change); err != nil {
 					return AdvanceSummary{}, err
 				}
 				summary := blockedAdvanceSummary(fromState, planResult.Blockers)
@@ -511,7 +617,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		summary := doneReadyAdvanceSummary(fromState, "All governance gates passed. Run `slipway done` to finalize.")
 		summary.SideEffects = append(summary.SideEffects, preTransitionSideEffects...)
 		summary.SkillEvidence = append(summary.SkillEvidence, preTransitionSkillEvidence...)
-		return saveChangeAndReturn(root, change, summary)
+		return saveChangeAndReturn(root, *change, summary)
 	}
 
 	sideEffects := append([]SideEffect(nil), preTransitionSideEffects...)
@@ -521,7 +627,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		if planAudit, ok := passingSkills[SkillPlanAudit]; ok && !planAudit.Timestamp.IsZero() {
 			generatedAt = planAudit.Timestamp
 		}
-		_, wavePlanOp, err := state.MaterializeWavePlanTransactionOpAt(root, change, generatedAt)
+		_, wavePlanOp, err := state.MaterializeWavePlanTransactionOpAt(root, *change, generatedAt)
 		if err != nil {
 			return AdvanceSummary{}, err
 		}
@@ -542,11 +648,11 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		cleared = append(cleared, "last_auto_passed_states")
 	}
 	if len(transactionOps) > 0 {
-		if err := applyGovernedChangeTransaction(root, change, transactionOps); err != nil {
+		if err := applyGovernedChangeTransaction(root, *change, transactionOps); err != nil {
 			return AdvanceSummary{}, err
 		}
 	} else {
-		if err := state.SaveChange(root, change); err != nil {
+		if err := state.SaveChange(root, *change); err != nil {
 			return AdvanceSummary{}, err
 		}
 	}

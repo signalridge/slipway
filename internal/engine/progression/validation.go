@@ -579,26 +579,9 @@ func GovernedBundleBlockers(root string, change model.Change) []string {
 	for _, spec := range resolution.Schema {
 		specByName[spec.Name] = spec
 	}
-	eligibleByLevel := map[string]struct{}{}
 	for _, name := range required {
-		eligibleByLevel[name] = struct{}{}
-	}
-	requiredSet := map[string]struct{}{}
-	for _, name := range required {
-		requiredSet[name] = struct{}{}
-	}
-	for _, name := range required {
-		spec, ok := specByName[name]
-		if !ok {
+		if _, ok := specByName[name]; !ok {
 			return []string{"required_artifact_schema_missing:" + name}
-		}
-		for _, dep := range spec.DependsOn {
-			if _, inLevel := eligibleByLevel[dep]; !inLevel {
-				continue
-			}
-			if _, exists := requiredSet[dep]; !exists {
-				return []string{fmt.Sprintf("required_artifact_dependency_missing:%s->%s", name, dep)}
-			}
 		}
 	}
 

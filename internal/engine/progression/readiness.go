@@ -3,7 +3,6 @@ package progression
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -689,28 +688,9 @@ func evaluateArtifactReadinessWithContext(root string, change model.Change, ctx 
 	for _, spec := range ctx.resolution.Schema {
 		specByName[spec.Name] = spec
 	}
-	eligibleByLevel := map[string]struct{}{}
 	for _, name := range required {
-		eligibleByLevel[name] = struct{}{}
-	}
-	requiredSet := map[string]struct{}{}
-	for _, name := range required {
-		requiredSet[name] = struct{}{}
-	}
-	for _, name := range required {
-		spec, ok := specByName[name]
-		if !ok {
+		if _, ok := specByName[name]; !ok {
 			result.Blockers = append(result.Blockers, model.NewReasonCode("required_artifact_schema_missing", name))
-			continue
-		}
-		for _, dep := range spec.DependsOn {
-			if _, inLevel := eligibleByLevel[dep]; !inLevel {
-				continue
-			}
-			if _, ok := requiredSet[dep]; ok {
-				continue
-			}
-			result.Blockers = append(result.Blockers, model.NewReasonCode("required_artifact_dependency_missing", fmt.Sprintf("%s->%s", name, dep)))
 		}
 	}
 

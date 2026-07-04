@@ -397,36 +397,40 @@ func staleEvidenceAuthorityLabel(workflowState model.WorkflowState, subStep mode
 // ready, the change has not yet reached S2_IMPLEMENT, evaluation errors are
 // surfaced elsewhere, or the contract passes.
 func scopeContractRepairTarget(root string, change model.Change, summary *model.ExecutionSummary) (EvidenceRepairTarget, error) {
-	if !state.ExecutionSummaryReady(summary) {
-		return EvidenceRepairTarget{}, nil
-	}
-	if compareStaleEvidencePosition(
-		currentStaleEvidencePosition(change),
-		staleEvidencePositionFor(model.StateS2Implement, model.PlanSubStepNone),
-	) < 0 {
-		return EvidenceRepairTarget{}, nil
-	}
-	paths, err := state.ResolveChangePaths(root, change)
-	if err != nil {
-		return EvidenceRepairTarget{}, err
-	}
-	report, err := scopecontract.EvaluateBundleWithChangedFiles(
-		paths.GovernedBundleDir,
-		summary,
-		scopeContractWorkspaceChangedFiles(paths),
-	)
-	if err != nil || len(report.Blockers) == 0 {
-		return EvidenceRepairTarget{}, nil
-	}
-	return EvidenceRepairTarget{
-		SkillName:   SkillWaveOrchestration,
-		State:       model.StateS2Implement,
-		PlanSubStep: model.PlanSubStepNone,
-		Blockers:    report.Blockers,
-	}, nil
+	return executionSummaryRepairTarget(root, change, summary, func(paths state.ResolvedChangePaths) []model.ReasonCode {
+		report, err := scopecontract.EvaluateBundleWithChangedFiles(
+			paths.GovernedBundleDir,
+			summary,
+			scopeContractWorkspaceChangedFiles(paths),
+		)
+		if err != nil {
+			return nil
+		}
+		return report.Blockers
+	})
 }
 
 func sensitiveEvidenceRepairTarget(root string, change model.Change, summary *model.ExecutionSummary) (EvidenceRepairTarget, error) {
+	return executionSummaryRepairTarget(root, change, summary, func(paths state.ResolvedChangePaths) []model.ReasonCode {
+		return sensitiveevidence.Evaluate(summary, scopeContractWorkspaceChangedFiles(paths)).Blockers
+	})
+}
+
+// executionSummaryRepairTarget factors the shared S2_IMPLEMENT repair-target
+// sequence used by scopeContractRepairTarget and sensitiveEvidenceRepairTarget:
+// require a ready execution summary, require the change to have reached
+// S2_IMPLEMENT, resolve the change paths, then build a wave-orchestration repair
+// target from the blockers the supplied evaluator reports. evaluate is the only
+// behavioral difference between the two callers; it receives the resolved paths
+// (closing over the summary) and returns the blockers to repair, empty when there
+// is nothing to repair. A non-nil error is returned only when path resolution
+// fails; a non-zero target only when evaluate yields at least one blocker.
+func executionSummaryRepairTarget(
+	root string,
+	change model.Change,
+	summary *model.ExecutionSummary,
+	evaluate func(paths state.ResolvedChangePaths) []model.ReasonCode,
+) (EvidenceRepairTarget, error) {
 	if !state.ExecutionSummaryReady(summary) {
 		return EvidenceRepairTarget{}, nil
 	}
@@ -440,14 +444,14 @@ func sensitiveEvidenceRepairTarget(root string, change model.Change, summary *mo
 	if err != nil {
 		return EvidenceRepairTarget{}, err
 	}
-	report := sensitiveevidence.Evaluate(summary, scopeContractWorkspaceChangedFiles(paths))
-	if len(report.Blockers) == 0 {
+	blockers := evaluate(paths)
+	if len(blockers) == 0 {
 		return EvidenceRepairTarget{}, nil
 	}
 	return EvidenceRepairTarget{
 		SkillName:   SkillWaveOrchestration,
 		State:       model.StateS2Implement,
 		PlanSubStep: model.PlanSubStepNone,
-		Blockers:    report.Blockers,
+		Blockers:    blockers,
 	}, nil
 }

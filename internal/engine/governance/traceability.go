@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/engine/artifact"
@@ -424,30 +425,67 @@ func extractRequirementBlocks(content string, reqIDs []string) map[string]string
 // extractBlocksByID splits content into per-ID blocks using the given prefix.
 // Each block spans from the matching marker to the next marker with the same prefix or end of content.
 func extractBlocksByID(content string, ids []string, prefix string) map[string]string {
+	// Index every requested marker's occurrences in one up-front pass, then
+	// resolve each block from that index instead of re-scanning the text for
+	// every id pair (which was O(ids^2) string searches).
+	//
+	// Semantics preserved exactly: a block runs from the first occurrence of its
+	// own marker to the nearest following occurrence of a *different* requested
+	// id's marker that begins at or after the end of the own marker, or to the
+	// end of content. Occurrences of the id's own marker never delimit it, and
+	// only requested ids act as boundaries. All occurrences (not just the first)
+	// are indexed so a boundary marker whose first occurrence precedes the own
+	// marker is still found via its later occurrence.
+	type occurrence struct {
+		pos int
+		id  string
+	}
+	var occurrences []occurrence
+	firstPos := make(map[string]int, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		marker := prefix + id
+		first := -1
+		for start := 0; start <= len(content); {
+			rel := strings.Index(content[start:], marker)
+			if rel < 0 {
+				break
+			}
+			pos := start + rel
+			if first < 0 {
+				first = pos
+			}
+			occurrences = append(occurrences, occurrence{pos: pos, id: id})
+			start = pos + 1
+		}
+		firstPos[id] = first
+	}
+	sort.Slice(occurrences, func(i, j int) bool { return occurrences[i].pos < occurrences[j].pos })
+
 	blocks := make(map[string]string, len(ids))
 	for _, id := range ids {
-		marker := prefix + id
-		idx := strings.Index(content, marker)
-		if idx < 0 {
+		idx, ok := firstPos[id]
+		if !ok || idx < 0 {
 			blocks[id] = ""
 			continue
 		}
-		// Find the extent: from this marker to the next marker with the same prefix or end.
-		rest := content[idx:]
-		endIdx := len(rest)
-		for _, otherID := range ids {
-			if otherID == id {
-				continue
-			}
-			otherMarker := prefix + otherID
-			if pos := strings.Index(rest[len(marker):], otherMarker); pos >= 0 {
-				candidate := len(marker) + pos
-				if candidate < endIdx {
-					endIdx = candidate
-				}
+		// Boundary: the first occurrence of any *other* requested id's marker at
+		// or after the end of this id's own marker (matching the original search
+		// that started past the current marker), else end of content.
+		threshold := idx + len(prefix) + len(id)
+		end := len(content)
+		lo := sort.Search(len(occurrences), func(i int) bool { return occurrences[i].pos >= threshold })
+		for i := lo; i < len(occurrences); i++ {
+			if occurrences[i].id != id {
+				end = occurrences[i].pos
+				break
 			}
 		}
-		blocks[id] = rest[:endIdx]
+		blocks[id] = content[idx:end]
 	}
 	return blocks
 }

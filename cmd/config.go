@@ -280,14 +280,7 @@ func writeConfigCatalogText(cmd *cobra.Command, catalog []model.ConfigCatalogEnt
 }
 
 func joinConfigAllowed(values []string) string {
-	out := ""
-	for i, v := range values {
-		if i > 0 {
-			out += "|"
-		}
-		out += v
-	}
-	return out
+	return strings.Join(values, "|")
 }
 
 func runConfigGet(cmd *cobra.Command, key string, jsonFlag bool) error {

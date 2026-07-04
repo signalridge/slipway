@@ -269,8 +269,9 @@ func collectSupports(reg *Registry, sig Signals, route *RouteSelection) []Attach
 		skill Skill
 		mode  AttachmentMode
 	}
-	var matches []match
-	for _, sk := range reg.All() {
+	all := reg.All()
+	matches := make([]match, 0, len(all))
+	for _, sk := range all {
 		if sk.ID == routeID {
 			continue
 		}
