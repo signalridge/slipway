@@ -44,47 +44,28 @@ func resetNormalizePathTestState(t *testing.T) {
 	})
 }
 
-func TestNormalizePathDoesNotCacheFallbackOnEvalSymlinksError(t *testing.T) {
+func TestNormalizePathCachesFallbackOnEvalSymlinksError(t *testing.T) {
 	resetNormalizePathTestState(t)
 
 	path := filepath.Join(t.TempDir(), "missing", "path")
 	abs, err := filepath.Abs(path)
 	require.NoError(t, err)
 
-	resolved := filepath.Clean(filepath.Join(abs, "resolved"))
 	var calls int
-	fail := true
 	normalizePathEvalSymlinks = func(got string) (string, error) {
 		calls++
 		assert.Equal(t, abs, got)
-		if fail {
-			return "", os.ErrNotExist
-		}
-		return resolved, nil
+		return "", os.ErrNotExist
 	}
 
-	// While EvalSymlinks fails, NormalizePath returns the cleaned absolute
-	// fallback but must not cache it: every call re-resolves.
 	first, err := NormalizePath(path)
 	require.NoError(t, err)
 	second, err := NormalizePath(path)
 	require.NoError(t, err)
+
 	assert.Equal(t, filepath.Clean(abs), first)
-	assert.Equal(t, filepath.Clean(abs), second)
-	assert.Equal(t, 2, calls)
-
-	// Once the path becomes resolvable, the next call picks up the real value
-	// (proving no stale unresolved entry was cached) and caches it thereafter.
-	fail = false
-	third, err := NormalizePath(path)
-	require.NoError(t, err)
-	assert.Equal(t, resolved, third)
-	assert.Equal(t, 3, calls)
-
-	fourth, err := NormalizePath(path)
-	require.NoError(t, err)
-	assert.Equal(t, resolved, fourth)
-	assert.Equal(t, 3, calls)
+	assert.Equal(t, first, second)
+	assert.Equal(t, 1, calls)
 }
 
 func TestNormalizePathDeduplicatesConcurrentFirstCallers(t *testing.T) {
