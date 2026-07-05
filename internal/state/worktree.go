@@ -786,6 +786,15 @@ func cloneWorktreeRecords(in []gitWorktreeRecord) []gitWorktreeRecord {
 	return out
 }
 
+// normalizePathCache memoizes successful filepath.EvalSymlinks resolutions so
+// NormalizePath performs the syscall at most once per distinct absolute path
+// per process. The key is the post-filepath.Abs absolute path (cwd-independent)
+// and the value is the cleaned resolved path (a string). Only successful
+// resolutions are cached: on EvalSymlinks failure NormalizePath falls back to
+// the absolute path exactly as before and caches nothing, so a path that later
+// becomes resolvable is still re-resolved. sync.Map is safe for concurrent use.
+var normalizePathCache sync.Map
+
 // NormalizePath resolves a path to its canonical absolute form with symlink resolution.
 // Used for worktree path comparison across the codebase.
 func NormalizePath(path string) (string, error) {
@@ -793,8 +802,13 @@ func NormalizePath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if cached, ok := normalizePathCache.Load(abs); ok {
+		return cached.(string), nil
+	}
 	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
+		resolved := filepath.Clean(real)
+		normalizePathCache.Store(abs, resolved)
+		return resolved, nil
 	}
 	return filepath.Clean(abs), nil
 }

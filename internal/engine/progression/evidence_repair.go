@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/signalridge/slipway/internal/engine/action"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -388,6 +389,28 @@ func staleEvidenceAuthorityLabel(workflowState model.WorkflowState, subStep mode
 	return string(workflowState)
 }
 
+// sharedWorkspaceChangedFilesScan returns a memoized workspace changed-file scan
+// shared by the scope-contract and sensitive-evidence repair evaluators so a
+// single AdvanceGoverned pass forks git at most once instead of once per
+// evaluator. The scan runs lazily on first call — which happens inside an
+// evaluator closure, after executionSummaryRepairTarget's ExecutionSummaryReady
+// and S2-position guards — so a not-ready summary, or a scope-contract evaluator
+// that early-returns before the sensitive-evidence evaluator runs, still never
+// forks git. Both evaluators resolve identical paths (same root+change), so
+// memoizing on the paths supplied by the first call is equivalent to the
+// per-evaluator scan it replaces; only the git fork is shared, and it returns the
+// same changed slice scopeContractWorkspaceChangedFiles yields today.
+func sharedWorkspaceChangedFilesScan() func(state.ResolvedChangePaths) []string {
+	var once sync.Once
+	var changed []string
+	return func(paths state.ResolvedChangePaths) []string {
+		once.Do(func() {
+			changed = scopeContractWorkspaceChangedFiles(paths)
+		})
+		return changed
+	}
+}
+
 // scopeContractRepairTarget returns an S2_IMPLEMENT repair target when a
 // satisfied execution summary nonetheless fails the Scope Contract. The Scope
 // Contract is owned by S2_IMPLEMENT because it scores wave-execution evidence,
@@ -395,13 +418,14 @@ func staleEvidenceAuthorityLabel(workflowState model.WorkflowState, subStep mode
 // callers use this target as a blocker/review-alignment hint; this helper does not
 // mutate lifecycle state. It returns the zero target when the summary is not
 // ready, the change has not yet reached S2_IMPLEMENT, evaluation errors are
-// surfaced elsewhere, or the contract passes.
-func scopeContractRepairTarget(root string, change model.Change, summary *model.ExecutionSummary) (EvidenceRepairTarget, error) {
+// surfaced elsewhere, or the contract passes. changedFiles is the shared memoized
+// workspace scan (see sharedWorkspaceChangedFilesScan).
+func scopeContractRepairTarget(root string, change model.Change, summary *model.ExecutionSummary, changedFiles func(state.ResolvedChangePaths) []string) (EvidenceRepairTarget, error) {
 	return executionSummaryRepairTarget(root, change, summary, func(paths state.ResolvedChangePaths) []model.ReasonCode {
 		report, err := scopecontract.EvaluateBundleWithChangedFiles(
 			paths.GovernedBundleDir,
 			summary,
-			scopeContractWorkspaceChangedFiles(paths),
+			changedFiles(paths),
 		)
 		if err != nil {
 			return nil
@@ -410,9 +434,9 @@ func scopeContractRepairTarget(root string, change model.Change, summary *model.
 	})
 }
 
-func sensitiveEvidenceRepairTarget(root string, change model.Change, summary *model.ExecutionSummary) (EvidenceRepairTarget, error) {
+func sensitiveEvidenceRepairTarget(root string, change model.Change, summary *model.ExecutionSummary, changedFiles func(state.ResolvedChangePaths) []string) (EvidenceRepairTarget, error) {
 	return executionSummaryRepairTarget(root, change, summary, func(paths state.ResolvedChangePaths) []model.ReasonCode {
-		return sensitiveevidence.Evaluate(summary, scopeContractWorkspaceChangedFiles(paths)).Blockers
+		return sensitiveevidence.Evaluate(summary, changedFiles(paths)).Blockers
 	})
 }
 

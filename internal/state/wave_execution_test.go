@@ -44,6 +44,79 @@ task_runs:
 	assert.Equal(t, "task-b", runs[0].TaskRuns[0].TaskID)
 }
 
+// TestLoadWaveRunsStrictFirstMixedVersionClassification pins the strict-decode-first
+// classification order: a clean non-matching-version file (and a foreign
+// unknown-field file at a non-matching version) is skipped without surfacing a
+// strict decode error, while a matching-version file with an unknown field still
+// errors, and a run_summary_version < 1 file still hard-errors with the same
+// "classify wave run ...: run_summary_version is required" wrapping.
+func TestLoadWaveRunsStrictFirstMixedVersionClassification(t *testing.T) {
+	t.Parallel()
+
+	const runVersion = 2
+
+	newDir := func(t *testing.T, slug string) (string, string) {
+		t.Helper()
+		root := t.TempDir()
+		dir := WaveEvidenceDir(root, slug)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		return root, dir
+	}
+	writeRun := func(t *testing.T, dir, name, body string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+
+	t.Run("clean non-matching-version file is skipped not errored", func(t *testing.T) {
+		t.Parallel()
+		root, dir := newDir(t, "wave-strict-skip-clean")
+		// Clean, known-fields-only file at a different run version: it strict-decodes
+		// fine and MUST be skipped, never included alongside the matching run.
+		writeRun(t, dir, "wave-old.yaml", "wave_index: 1\nrun_summary_version: 1\nverdict: pass\n")
+		writeRun(t, dir, "wave-01.yaml", "wave_index: 1\nrun_summary_version: 2\nverdict: pass\n")
+
+		runs, err := LoadWaveRuns(root, "wave-strict-skip-clean", runVersion)
+		require.NoError(t, err)
+		require.Len(t, runs, 1)
+		assert.Equal(t, runVersion, runs[0].RunSummaryVersion)
+	})
+
+	t.Run("foreign non-matching-version file is skipped without surfacing strict error", func(t *testing.T) {
+		t.Parallel()
+		root, dir := newDir(t, "wave-strict-skip-foreign")
+		// Unknown-field ("foreign") run at a non-matching version: the strict decode
+		// fails, but the lenient version probe skips it just as the previous
+		// probe-first classification did. The strict error must NOT surface.
+		writeRun(t, dir, "wave-foreign.yaml", "wave_index: 1\nrun_summary_version: 1\nverdict: pass\nunknown_field: nope\n")
+
+		runs, err := LoadWaveRuns(root, "wave-strict-skip-foreign", runVersion)
+		require.NoError(t, err)
+		require.Empty(t, runs)
+	})
+
+	t.Run("matching-version file with unknown field still errors", func(t *testing.T) {
+		t.Parallel()
+		root, dir := newDir(t, "wave-strict-unknown-field")
+		writeRun(t, dir, "wave-01.yaml", "wave_index: 1\nrun_summary_version: 2\nverdict: pass\nunknown_field: nope\n")
+
+		_, err := LoadWaveRuns(root, "wave-strict-unknown-field", runVersion)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parse wave run")
+		assert.Contains(t, err.Error(), "unknown_field", "a matching-version unknown field surfaces the strict decode error")
+	})
+
+	t.Run("run_summary_version below one hard-errors with classify wrapping", func(t *testing.T) {
+		t.Parallel()
+		root, dir := newDir(t, "wave-strict-version-zero")
+		writeRun(t, dir, "wave-01.yaml", "wave_index: 1\nrun_summary_version: 0\nverdict: pass\n")
+
+		_, err := LoadWaveRuns(root, "wave-strict-version-zero", runVersion)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "classify wave run")
+		assert.Contains(t, err.Error(), "run_summary_version is required")
+	})
+}
+
 func TestOrphanTaskEvidenceIgnoresPreviousRunVersionEvidence(t *testing.T) {
 	t.Parallel()
 
