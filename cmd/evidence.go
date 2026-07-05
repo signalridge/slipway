@@ -727,11 +727,12 @@ func normalizeEvidenceTaskResultFileArgs(resultFiles []string) []string {
 	return normalized
 }
 
-// loadActiveChangeWithReadContext mirrors loadActiveChange but resolves the
-// change through the shared read-context, reusing the change already loaded
-// during active-ref resolution instead of reading change.yaml again uncached.
+// loadActiveChangeWithReadContext mirrors loadActiveChange but keeps the shared
+// read-context authoritative after active-ref resolution. Callers that acquire a
+// state lock after resolving the active ref must reload change.yaml here instead
+// of reusing a pre-lock cache entry.
 func loadActiveChangeWithReadContext(readCtx *stateReadContext, slug, inactiveMessage, remediation string) (model.Change, error) {
-	change, err := readCtx.loadChange(slug)
+	change, err := readCtx.reloadChange(slug)
 	if err != nil {
 		return model.Change{}, newChangeStateLoadFailedError(slug, err)
 	}
