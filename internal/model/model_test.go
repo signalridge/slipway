@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -722,4 +723,33 @@ func TestChangeAuthorityIncludesRuntimeFields(t *testing.T) {
 	assert.Contains(t, string(b), "evidence_refs:")
 	assert.Contains(t, string(b), "last_auto_passed_states:")
 	assert.Contains(t, string(b), "review_intent_drift_failures:")
+}
+
+func TestGateRecordMarshalJSONOmitsZeroUpdatedAt(t *testing.T) {
+	t.Parallel()
+
+	// Gate status is derived on the fly and carries no persisted transition time.
+	// A zero UpdatedAt must be omitted rather than serialized as the misleading
+	// "0001-01-01T00:00:00Z" (time.Time's zero value defeats omitempty).
+	record := GateRecord{GateID: "G_ship", Status: GateStatusApproved}
+	b, err := json.Marshal(record)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(b, &payload))
+
+	assert.Equal(t, "G_ship", payload["gate_id"])
+	assert.Equal(t, string(GateStatusApproved), payload["status"])
+	_, hasUpdatedAt := payload["updated_at"]
+	assert.False(t, hasUpdatedAt, "zero UpdatedAt must be omitted from JSON")
+	// reason_codes stays omitted when empty, matching the struct-tag behavior.
+	_, hasReasonCodes := payload["reason_codes"]
+	assert.False(t, hasReasonCodes)
+
+	// A real transition time is still emitted in RFC3339 form when present.
+	stamp := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	record.UpdatedAt = stamp
+	b, err = json.Marshal(record)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &payload))
+	assert.Equal(t, stamp.Format(time.RFC3339), payload["updated_at"])
 }
