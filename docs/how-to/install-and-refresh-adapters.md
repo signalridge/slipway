@@ -56,7 +56,7 @@ Inspect the diff before committing generated files:
 
 ```bash
 git status --short
-git diff -- .slipway.yaml .claude .codex .cursor .opencode
+git diff -- .slipway.yaml .claude .codex .cursor .opencode .pi
 ```
 
 Commit `.slipway.yaml` when the repo should share Slipway defaults. Commit
@@ -83,14 +83,14 @@ slipway init --tools all --refresh
 ```
 
 Refresh detects Slipway generated markers. It does not treat a bare `.claude`,
-`.codex`, `.cursor`, or `.opencode` directory as owned by Slipway.
+`.codex`, `.cursor`, `.opencode`, or `.pi` directory as owned by Slipway.
 
 ## Preserve User-Owned Files
 
 Before accepting a refresh diff, check adjacent host config:
 
 ```bash
-git status --short .claude .codex .cursor .opencode
+git status --short .claude .codex .cursor .opencode .pi
 ```
 
 Generated files route to the CLI. User-owned host settings, local prompts,
@@ -102,6 +102,12 @@ live under:
 
 ```text
 .codex/skills/slipway-<command>/SKILL.md
+```
+
+Pi's session-start bridge is generated as:
+
+```text
+.pi/extensions/slipway-hooks.ts
 ```
 
 ## After Changing Command Or Skill Surfaces

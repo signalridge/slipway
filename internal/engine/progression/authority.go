@@ -60,7 +60,7 @@ func EvaluateReviewAuthority(root string, change model.Change) (ReviewAuthority,
 }
 
 func evaluateReviewAuthorityWithPolicy(root string, change model.Change, policy governance.PresetPolicy) (ReviewAuthority, error) {
-	return evaluateReviewAuthorityWithPolicyAndRecords(root, change, policy, nil)
+	return evaluateReviewAuthorityWithPolicyAndRecords(root, change, policy, nil, nil)
 }
 
 func evaluateReviewAuthorityWithPolicyAndRecords(
@@ -68,12 +68,13 @@ func evaluateReviewAuthorityWithPolicyAndRecords(
 	change model.Change,
 	policy governance.PresetPolicy,
 	verificationRecords map[string]model.VerificationRecord,
+	prebuiltSnapshot *prebuiltGovernanceSnapshot,
 ) (ReviewAuthority, error) {
 	executionSummaryCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
 	if err != nil {
 		return ReviewAuthority{}, err
 	}
-	reviewSelection, err := reviewSkillSelectionForAuthority(root, change)
+	reviewSelection, err := reviewSkillSelectionForAuthority(root, change, prebuiltSnapshot)
 	if err != nil {
 		return ReviewAuthority{}, err
 	}
@@ -169,7 +170,41 @@ func filterReviewAuthorityS3TaskPlanDriftBlockers(blockers []model.ReasonCode) [
 	return out
 }
 
-func reviewSkillSelectionForAuthority(root string, change model.Change) (engineskill.ReviewSkillSelection, error) {
+// prebuiltGovernanceSnapshot carries a governance snapshot already materialized by
+// a readiness evaluation, tagged with the change identity it was built for. The
+// review-authority path reuses it — instead of rebuilding the identical governance
+// snapshot the readiness pass already produced — only when that identity matches
+// the change being evaluated. A mismatch (a future caller threading a snapshot
+// built for a different change or lifecycle state) falls back to a fresh rebuild
+// rather than silently reusing a wrong snapshot.
+type prebuiltGovernanceSnapshot struct {
+	change   model.Change
+	snapshot model.GovernanceSnapshot
+}
+
+// reviewSelectionFor returns the review-skill selection derived from the prebuilt
+// snapshot's active controls and whether it is safe to reuse for change. Reuse is
+// gated on change identity (non-empty matching slug and identical current state);
+// a nil receiver, an untagged snapshot, or any identity mismatch reports false so
+// the caller rebuilds.
+func (p *prebuiltGovernanceSnapshot) reviewSelectionFor(change model.Change) (engineskill.ReviewSkillSelection, bool) {
+	if p == nil {
+		return engineskill.ReviewSkillSelection{}, false
+	}
+	slug := strings.TrimSpace(p.change.Slug)
+	if slug == "" || slug != strings.TrimSpace(change.Slug) {
+		return engineskill.ReviewSkillSelection{}, false
+	}
+	if p.change.CurrentState != change.CurrentState {
+		return engineskill.ReviewSkillSelection{}, false
+	}
+	return ReviewSkillSelectionFromControls(p.snapshot.ActiveControls), true
+}
+
+func reviewSkillSelectionForAuthority(root string, change model.Change, prebuiltSnapshot *prebuiltGovernanceSnapshot) (engineskill.ReviewSkillSelection, error) {
+	if selection, ok := prebuiltSnapshot.reviewSelectionFor(change); ok {
+		return selection, nil
+	}
 	paths, err := state.ResolveChangePaths(root, change)
 	if err != nil {
 		return engineskill.ReviewSkillSelection{}, err

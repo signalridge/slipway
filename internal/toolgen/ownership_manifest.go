@@ -224,8 +224,13 @@ func (plan *toolRefreshPlan) ensureGeneratedWriteAllowed(path, rel string, data 
 	}
 	// Bootstrap: when no previous manifest exists but a pre-existing adapter
 	// sentinel proves Slipway generated the tree, allow overwriting so the
-	// adapter can be brought into manifest tracking.
+	// adapter can be brought into manifest tracking. Hook extension bridges are
+	// the exception: they live in host extension directories where user-owned
+	// files may predate Slipway's claim.
 	if plan.isManifestlessBootstrap() {
+		if plan.isManifestlessBootstrapHookExtensionPath(rel) && currentHash != hashBytes(data) {
+			return fmt.Errorf("refusing to overwrite unknown file %s", rel)
+		}
 		return nil
 	}
 	if currentHash == hashBytes(data) {
@@ -380,6 +385,14 @@ func (plan *toolRefreshPlan) classifyExistingRelPath(rel string, allowManifestle
 
 func (plan *toolRefreshPlan) isManifestlessBootstrap() bool {
 	return plan.manifestlessBootstrapAllowed && len(plan.previousIndex) == 0
+}
+
+func (plan *toolRefreshPlan) isManifestlessBootstrapHookExtensionPath(rel string) bool {
+	if strings.TrimSpace(plan.cfg.HookExtensionPath) == "" {
+		return false
+	}
+	hookExtensionRel, err := normalizeOwnershipPath(plan.cfg.HookExtensionPath)
+	return err == nil && hookExtensionRel == rel
 }
 
 func (plan *toolRefreshPlan) commit(sentinelPath string, sentinelContent []byte) error {

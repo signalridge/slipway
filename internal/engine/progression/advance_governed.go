@@ -127,7 +127,13 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 	// --changed-file, or record it as a verification/investigation kind, which is
 	// exempt). This fails closed: the block is kept, only the masking wipe is
 	// removed.
-	if target, err := scopeContractRepairTarget(root, change, executionSummaryCtx.Summary); err != nil {
+	// A single memoized workspace changed-file scan is shared by the scope-contract
+	// and sensitive-evidence repair evaluators below so this advance pass forks git
+	// at most once. The scan stays lazy: it runs only when an evaluator first needs
+	// it (inside the ExecutionSummaryReady-gated closure), so a not-ready summary or
+	// a scope-contract early-return never forks git.
+	changedFilesScan := sharedWorkspaceChangedFilesScan()
+	if target, err := scopeContractRepairTarget(root, change, executionSummaryCtx.Summary, changedFilesScan); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
 		if fromState == model.StateS2Implement {
@@ -141,7 +147,7 @@ func AdvanceGoverned(root, slug string, opts ...AdvanceOptions) (summary Advance
 		// Do not force implement/wave-orchestration to replay after review has
 		// started.
 	}
-	if target, err := sensitiveEvidenceRepairTarget(root, change, executionSummaryCtx.Summary); err != nil {
+	if target, err := sensitiveEvidenceRepairTarget(root, change, executionSummaryCtx.Summary, changedFilesScan); err != nil {
 		return AdvanceSummary{}, err
 	} else if target.SkillName != "" {
 		if fromState == model.StateS2Implement {

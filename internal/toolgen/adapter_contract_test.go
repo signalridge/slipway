@@ -35,17 +35,18 @@ type frozenHookContract struct {
 }
 
 type frozenToolContract struct {
-	OwnershipRoot string
-	CommandBase   frozenSurfaceBase
-	CommandRoot   string
-	CommandStyle  string
-	CommandExt    string
-	TriggerPrefix string
-	TriggerStyle  string
-	SettingsPath  string
-	SettingsKind  string
-	SessionHook   frozenHookContract
-	PostToolHook  frozenHookContract
+	OwnershipRoot     string
+	CommandBase       frozenSurfaceBase
+	CommandRoot       string
+	CommandStyle      string
+	CommandExt        string
+	TriggerPrefix     string
+	TriggerStyle      string
+	SettingsPath      string
+	SettingsKind      string
+	HookExtensionPath string
+	SessionHook       frozenHookContract
+	PostToolHook      frozenHookContract
 }
 
 var frozenAdapterCommandIDs = []string{
@@ -178,15 +179,16 @@ var frozenToolContracts = map[string]frozenToolContract{
 		},
 	},
 	"pi": {
-		OwnershipRoot: ".pi",
-		CommandBase:   frozenSurfaceRoot,
-		CommandRoot:   ".pi/prompts",
-		CommandStyle:  "flat",
-		CommandExt:    ".md",
-		TriggerPrefix: "/slipway-",
-		TriggerStyle:  "slash-hyphen",
-		SettingsPath:  ".pi/settings.json",
-		SettingsKind:  settingsKindPiRegistration,
+		OwnershipRoot:     ".pi",
+		CommandBase:       frozenSurfaceRoot,
+		CommandRoot:       ".pi/prompts",
+		CommandStyle:      "flat",
+		CommandExt:        ".md",
+		TriggerPrefix:     "/slipway-",
+		TriggerStyle:      "slash-hyphen",
+		SettingsPath:      ".pi/settings.json",
+		SettingsKind:      settingsKindPiRegistration,
+		HookExtensionPath: ".pi/extensions/slipway-hooks.ts",
 	},
 	"qwen": {
 		OwnershipRoot: ".qwen",
@@ -414,6 +416,8 @@ func assertFrozenSettingsContract(t *testing.T, root string, contract frozenTool
 	case settingsKindPiRegistration:
 		require.NotEmpty(t, contract.SettingsPath, "Pi registration settings require a settings path")
 		assertPiRegistrationSettings(t, filepath.Join(root, filepath.FromSlash(contract.SettingsPath)))
+		require.NotEmpty(t, contract.HookExtensionPath, "Pi registration requires a hook extension bridge path")
+		assertPiHooksExtension(t, filepath.Join(root, filepath.FromSlash(contract.HookExtensionPath)))
 	case settingsKindCodexHooks:
 		require.NotEmpty(t, contract.SettingsPath, "Codex hook settings require a config path")
 		assertCodexHooksConfig(t, filepath.Join(root, filepath.FromSlash(contract.SettingsPath)))

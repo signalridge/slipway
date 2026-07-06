@@ -230,7 +230,7 @@ Slipway 用广度换取权威。它支持的一等公民适配器比那些覆盖
 | Copilot | `.github/skills/slipway-*/SKILL.md`、`.github/prompts/slipway-*.prompt.md`、`.github/copilot/slipway` 受管状态 |
 | Kilo | `.kilocode/skills/slipway-*/SKILL.md`、`.kilocode/workflows/slipway-*.md` |
 | Kiro | `.kiro/skills/slipway-*/SKILL.md` 入口、命令和治理 skill |
-| Pi | `.pi/skills/slipway-*/SKILL.md`、`.pi/prompts/slipway-*.md`、`.pi/settings.json` skill/prompt 注册 |
+| Pi | `.pi/skills/slipway-*/SKILL.md`、`.pi/prompts/slipway-*.md`、`.pi/settings.json` skill/prompt 注册、`.pi/extensions/slipway-hooks.ts` 会话启动桥接 |
 | Qwen | `.qwen/skills/slipway-*/SKILL.md` 命令 skill、`.qwen/settings.json` 钩子条目 |
 | Windsurf | `.windsurf/skills/slipway-*/SKILL.md`、`.windsurf/workflows/slipway-*.md` |
 

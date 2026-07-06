@@ -51,7 +51,7 @@ slipway init --tools none
 
 ```bash
 git status --short
-git diff -- .slipway.yaml .claude .codex .cursor .opencode
+git diff -- .slipway.yaml .claude .codex .cursor .opencode .pi
 ```
 
 リポジトリで Slipway のデフォルトを共有すべきなら `.slipway.yaml` をコミットします。生成されたアダプターファイルは、リポジトリのポリシーに従ってのみコミットしてください。
@@ -76,14 +76,14 @@ slipway init --tools codex,opencode --refresh
 slipway init --tools all --refresh
 ```
 
-更新は Slipway が生成したマーカーを検出します。素の `.claude`、`.codex`、`.cursor`、`.opencode` ディレクトリを Slipway 所有とは見なしません。
+更新は Slipway が生成したマーカーを検出します。素の `.claude`、`.codex`、`.cursor`、`.opencode`、`.pi` ディレクトリを Slipway 所有とは見なしません。
 
 ## ユーザー所有ファイルの保護
 
 更新の差分を受け入れる前に、隣接するホスト設定を確認してください。
 
 ```bash
-git status --short .claude .codex .cursor .opencode
+git status --short .claude .codex .cursor .opencode .pi
 ```
 
 生成されたファイルは CLI が管理します。ユーザー所有のホスト設定、ローカルプロンプト、手動コマンド、Slipway 以外のフックはそのまま保持されるべきです。
@@ -92,6 +92,12 @@ git status --short .claude .codex .cursor .opencode
 
 ```text
 .codex/skills/slipway-<command>/SKILL.md
+```
+
+Pi の session-start ブリッジは次の場所に生成されます。
+
+```text
+.pi/extensions/slipway-hooks.ts
 ```
 
 ## コマンドまたはスキルのサーフェスを変更した後

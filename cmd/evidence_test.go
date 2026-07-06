@@ -141,3 +141,34 @@ func TestEvidenceTaskWrongStateBeforeImplement(t *testing.T) {
 		assert.Contains(t, cliErr.Remediation, "S3_REVIEW")
 	})
 }
+
+func TestEvidenceTaskActiveChangeReloadsAfterCachedRefResolution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+
+		readCtx := newStateReadContext(root)
+		ref, err := resolveActiveChangeRefWithReadContext(readCtx, "")
+		require.NoError(t, err)
+		require.Equal(t, slug, ref.Slug)
+
+		change.Status = model.ChangeStatusDone
+		change.CurrentState = model.StateDone
+		require.NoError(t, state.SaveChange(root, change))
+
+		_, err = loadActiveChangeWithReadContext(
+			readCtx,
+			ref.Slug,
+			"cannot record task evidence for governed status %q",
+			"Task evidence can only be recorded for an active governed change.",
+		)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "not_active", cliErr.ErrorCode)
+		assert.Equal(t, string(model.ChangeStatusDone), cliErr.Details["status"])
+		assert.Equal(t, model.ChangeStatusDone, readCtx.changes[slug].Status)
+	})
+}

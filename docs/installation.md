@@ -359,8 +359,12 @@ receive native launcher files for POSIX, PowerShell, and `cmd.exe` under their
 `hooks/` directory. Settings-capable hook hosts (Claude and Qwen)
 instead register bare inline `slipway hook ...` commands directly in
 `settings.json` and get no launcher file. Pi settings register skills and
-prompts, not hooks. Either way, no generated hook requires bash, Python, `jq`,
-`gh`, or a Go runtime.
+prompts, not hooks; Pi's session-start bridge is generated as the project-local
+`.pi/extensions/slipway-hooks.ts` extension and loads only after the project is
+trusted in Pi. Generated hooks do not require bash, Python, `jq`, or `gh`.
+Release-mode generation resolves the `slipway` binary from `PATH`; when
+`slipway init` runs inside a Slipway source checkout, managed hook commands may
+intentionally use `go -C <checkout> run .` so dogfooding tracks that checkout.
 
 Generated skill helpers run through `slipway tool ...` rather than generated
 script payloads. Manual helpers may still require explicit authenticated
@@ -388,4 +392,5 @@ project-local `.codex/` adapter tree; it does not touch host-global
 `--refresh` removes Slipway-owned retired hook launchers. Settings-capable
 hosts migrate retired launcher-path settings entries to bare inline
 `slipway hook ...` commands; Cursor and OpenCode keep their file-by-path
-session-start launchers.
+session-start launchers; Pi keeps its project-local `.pi/extensions/`
+session-start bridge.

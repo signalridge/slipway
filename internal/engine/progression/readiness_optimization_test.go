@@ -784,3 +784,99 @@ func gitForReadinessOptimizationTests(t *testing.T, root string, args ...string)
 	out, err := cmd.CombinedOutput()
 	require.NoErrorf(t, err, "git %v failed: %s", args, string(out))
 }
+
+// installSnapshotBuildCounter wraps the package-level governance-snapshot builder
+// seam with a counter and returns a pointer to the count. The original builder is
+// restored on cleanup. Callers must NOT run in parallel: swapping the shared seam
+// is only race-free during the sequential (non-parallel) test phase.
+func installSnapshotBuildCounter(t *testing.T) *int {
+	t.Helper()
+
+	original := previewGovernanceSnapshotForReadiness
+	t.Cleanup(func() { previewGovernanceSnapshotForReadiness = original })
+
+	var builds int
+	previewGovernanceSnapshotForReadiness = func(root string, change model.Change, bundleDir string) (model.GovernanceSnapshot, error) {
+		builds++
+		return original(root, change, bundleDir)
+	}
+	return &builds
+}
+
+func TestEvaluateGovernanceReadinessBuildsGovernanceSnapshotOnceThroughReviewAuthority(t *testing.T) {
+	// No t.Parallel(): this test swaps the package-level snapshot-builder seam to
+	// count materializations, so it must run in the non-parallel phase.
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("readiness-authority-snapshot-once")
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+
+	builds := installSnapshotBuildCounter(t)
+
+	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, *builds,
+		"S3 readiness must build the governance snapshot exactly once and thread it into the review-authority path instead of rebuilding it")
+
+	reused, ok := readiness.cachedReviewAuthority()
+	require.True(t, ok, "S3 readiness must cache the review authority built from the threaded snapshot")
+
+	// The autopass path (EvaluateReviewAuthority, nil prebuilt) must still rebuild
+	// the snapshot and produce an identical authority outcome, proving the reuse
+	// optimization is observably behavior-preserving.
+	*builds = 0
+	rebuilt, err := EvaluateReviewAuthority(root, change)
+	require.NoError(t, err)
+	assert.Positive(t, *builds,
+		"EvaluateReviewAuthority (autopass path) must rebuild the snapshot when no prebuilt snapshot is threaded (nil => rebuild)")
+
+	assert.ElementsMatch(t, rebuilt.SelectedReviewSkills, reused.SelectedReviewSkills,
+		"reused-snapshot selected review skills must match the rebuilt selection")
+	assert.ElementsMatch(t, rebuilt.Blockers, reused.Blockers,
+		"reused-snapshot review authority outcome must match the rebuilt outcome")
+}
+
+func TestReviewAuthorityReusesPrebuiltSnapshotOnlyOnChangeIdentityMatch(t *testing.T) {
+	// No t.Parallel(): swaps the package-level snapshot-builder seam.
+	root := t.TempDir()
+	initGitWorkspaceForReadinessOptimizationTests(t, root)
+	require.NoError(t, bootstrap.InitWorkspace(root, nil, false))
+
+	change := model.NewChange("review-authority-prebuilt-identity-guard")
+	change.CurrentState = model.StateS3Review
+	require.NoError(t, state.SaveChange(root, change))
+
+	policy, err := governance.ResolvePresetPolicy(root, change)
+	require.NoError(t, err)
+	paths, err := state.ResolveChangePaths(root, change)
+	require.NoError(t, err)
+	snap, err := governance.PreviewGovernanceSnapshot(root, change, paths.GovernedBundleDir)
+	require.NoError(t, err)
+
+	builds := installSnapshotBuildCounter(t)
+
+	// Matching change identity => reuse, no rebuild.
+	*builds = 0
+	matched, err := evaluateReviewAuthorityWithPolicyAndRecords(root, change, policy, nil,
+		&prebuiltGovernanceSnapshot{change: change, snapshot: snap})
+	require.NoError(t, err)
+	assert.Zero(t, *builds,
+		"a prebuilt snapshot matching the change identity must be reused without rebuilding the governance snapshot")
+
+	// Mismatched change identity => fall back to a rebuild rather than silently
+	// reusing a snapshot built for a different change.
+	*builds = 0
+	fallback, err := evaluateReviewAuthorityWithPolicyAndRecords(root, change, policy, nil,
+		&prebuiltGovernanceSnapshot{change: model.NewChange("some-other-change"), snapshot: model.GovernanceSnapshot{}})
+	require.NoError(t, err)
+	assert.Positive(t, *builds,
+		"a prebuilt snapshot for a different change must fall back to a rebuild, not be silently reused")
+
+	assert.ElementsMatch(t, fallback.SelectedReviewSkills, matched.SelectedReviewSkills,
+		"reused-snapshot selection must equal the rebuilt selection")
+	assert.ElementsMatch(t, fallback.Blockers, matched.Blockers,
+		"reused-snapshot review authority outcome must equal the rebuilt outcome")
+}

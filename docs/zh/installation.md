@@ -339,7 +339,7 @@ Slipway 是否已经在 PATH 上。优先使用文档列出的、由 Slipway 项
 
 OpenCode 命令采用斜杠加连字符的写法，例如 `/slipway-new`、`/slipway-next` 和 `/slipway-run`。某些 OpenCode 版本会在命令选择器里给项目命令加上项目前缀；生成的文件路径才是稳定的契约。
 
-使用生成 hook 启动器的适配器（包括 Cursor 和 OpenCode）会在各自的 `hooks/` 目录下收到针对 POSIX、PowerShell 和 `cmd.exe` 的原生启动器文件。支持 settings 的 hook 宿主（Claude 和 Qwen）则改为在 `settings.json` 中直接注册裸的内联 `slipway hook ...` 命令，不生成启动器文件。Pi 的 settings 注册的是 skill 和提示词，而非 hook。无论哪种方式，生成的 hook 都不需要 bash、Python、`jq`、`gh` 或 Go 运行时。
+使用生成 hook 启动器的适配器（包括 Cursor 和 OpenCode）会在各自的 `hooks/` 目录下收到针对 POSIX、PowerShell 和 `cmd.exe` 的原生启动器文件。支持 settings 的 hook 宿主（Claude 和 Qwen）则改为在 `settings.json` 中直接注册裸的内联 `slipway hook ...` 命令，不生成启动器文件。Pi 的 settings 注册的是 skill 和提示词，而非 hook；它的会话启动桥接生成在项目本地 `.pi/extensions/slipway-hooks.ts`，并且只会在 Pi 信任该项目后加载。生成的 hook 不需要 bash、Python、`jq` 或 `gh`。发布模式生成会从 `PATH` 解析 `slipway` 二进制；当 `slipway init` 在 Slipway 源码 checkout 内运行时，受管 hook 命令可能会刻意使用 `go -C <checkout> run .`，让 dogfood 跟随该 checkout。
 
 生成的 skill 辅助命令通过 `slipway tool ...` 运行，而不是生成的脚本载荷。手动辅助命令可能仍需要明确的已认证后端或领域工具，例如用于 GitHub 辅助的 `gh`，或用于 Go 测试污染追踪的 `go`，当这些不可用时会失败即停并给出补救建议。
 
@@ -357,4 +357,4 @@ git status --short --branch
 find .claude .codex .github/skills .github/prompts .github/copilot .cursor .kilocode .kiro .opencode .pi .qwen .windsurf -maxdepth 3 -type f 2>/dev/null
 ```
 
-Codex 的命令接入面会作为 skill 生成在 `.codex/skills/slipway-<command>/SKILL.md` 下。Codex 刷新只管理项目本地的 `.codex/` 适配器树；它不会触碰宿主全局的 `$CODEX_HOME/prompts/` 或 `~/.codex/prompts/` 文件。对于支持 hook 的适配器，`--refresh` 会移除 Slipway 自有的、已退役的 hook 启动器。支持 settings 的宿主会把已退役的启动器路径 settings 条目迁移为裸的内联 `slipway hook ...` 命令；Cursor 和 OpenCode 则保留按文件路径的 session-start 启动器。
+Codex 的命令接入面会作为 skill 生成在 `.codex/skills/slipway-<command>/SKILL.md` 下。Codex 刷新只管理项目本地的 `.codex/` 适配器树；它不会触碰宿主全局的 `$CODEX_HOME/prompts/` 或 `~/.codex/prompts/` 文件。对于支持 hook 的适配器，`--refresh` 会移除 Slipway 自有的、已退役的 hook 启动器。支持 settings 的宿主会把已退役的启动器路径 settings 条目迁移为裸的内联 `slipway hook ...` 命令；Cursor 和 OpenCode 则保留按文件路径的 session-start 启动器；Pi 保留项目本地 `.pi/extensions/` 会话启动桥接。

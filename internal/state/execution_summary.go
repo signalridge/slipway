@@ -624,9 +624,13 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 
 	sources := []stalePlanningSource{}
 	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	// One tasks.md read+parse yields both hashes; the scope value is still only
+	// consulted under the !tasksPlanDrift branch below, unchanged. currentErr is
+	// the same error either public accessor would have returned.
+	currentStructuralHash, currentScopeHash, currentErr := currentTasksPlanStructuralAndScopeState(root, change)
 	tasksPlanDrift := false
-	if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil {
-		if strings.TrimSpace(summary.TasksPlanHash) != "" && currentHash != strings.TrimSpace(summary.TasksPlanHash) {
+	if currentErr == nil {
+		if strings.TrimSpace(summary.TasksPlanHash) != "" && currentStructuralHash != strings.TrimSpace(summary.TasksPlanHash) {
 			tasksPlanDrift = true
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,
@@ -641,14 +645,13 @@ func stalePlanningPairs(root string, change model.Change, summary *model.Executi
 		})
 	}
 	if !tasksPlanDrift {
-		currentScopeHash, currentScopeErr := CurrentTasksPlanScopeState(root, change)
 		storedScopeHash, hasStoredScopeHash, storedScopeErr := storedTasksPlanScopeHash(root, change)
-		if currentScopeErr == nil && storedScopeErr == nil && hasStoredScopeHash && currentScopeHash != storedScopeHash {
+		if currentErr == nil && storedScopeErr == nil && hasStoredScopeHash && currentScopeHash != storedScopeHash {
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,
 				nextAction: "rerun wave-orchestration so Slipway derives the current wave projection and refreshes execution-summary.yaml",
 			})
-		} else if currentScopeErr != nil && storedScopeErr == nil && hasStoredScopeHash {
+		} else if currentErr != nil && storedScopeErr == nil && hasStoredScopeHash {
 			sources = append(sources, stalePlanningSource{
 				path:       tasksPath,
 				nextAction: "restore readable tasks.md, then rerun wave-orchestration to refresh execution-summary.yaml",

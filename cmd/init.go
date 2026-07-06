@@ -51,8 +51,11 @@ func makeInitCmd() *cobra.Command {
 					continue
 				}
 				writer.Writeln(fmt.Sprintf("  %s: %s", toolID, cfg.InvocationSummary()))
-				if toolID == "codex" {
+				switch toolID {
+				case "codex":
 					writer.Writeln("    codex hooks: generated in .codex/config.toml but inert until Codex trusts this repo and each hook; Slipway never edits global Codex trust")
+				case "pi":
+					writer.Writeln("    pi hooks: generated in .pi/extensions/slipway-hooks.ts but inert until Pi trusts this project; Slipway never edits global Pi trust")
 				}
 			}
 			return writer.Err()
