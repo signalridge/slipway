@@ -2171,6 +2171,29 @@ func TestGenerateRefreshWithoutOwnershipManifestBootstrapsIntoTrackedState(t *te
 	})
 }
 
+func TestGenerateRefreshWithoutOwnershipManifestRefusesUserOwnedPiHookExtension(t *testing.T) {
+	root := t.TempDir()
+	cfg := toolRegistry["pi"]
+	writeGeneratedAdapterMarker(t, root, cfg)
+
+	extensionPath := filepath.Join(root, ".pi", "extensions", "slipway-hooks.ts")
+	require.NoError(t, os.MkdirAll(filepath.Dir(extensionPath), 0o755))
+	userContent := "export default function userOwnedPiExtension() { return \"keep me\"; }\n"
+	require.NoError(t, os.WriteFile(extensionPath, []byte(userContent), 0o644))
+
+	err := Generate(root, []string{"pi"}, true)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "refusing to overwrite unknown file .pi/extensions/slipway-hooks.ts")
+
+	got, readErr := os.ReadFile(extensionPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, userContent, string(got))
+
+	manifestPath := filepath.Join(root, generatedOwnershipManifestPath(cfg))
+	_, statErr := os.Stat(manifestPath)
+	assert.True(t, os.IsNotExist(statErr), "failed refresh must not create an ownership manifest")
+}
+
 func TestGenerateRefreshWithoutOwnershipManifestRequiresBootstrapAuthority(t *testing.T) {
 	t.Run("missing sentinel refuses unknown generated path collision", func(t *testing.T) {
 		root := t.TempDir()
