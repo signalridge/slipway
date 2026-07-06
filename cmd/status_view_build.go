@@ -14,6 +14,16 @@ import (
 	"github.com/signalridge/slipway/internal/state"
 )
 
+// reasonRunSlipwayDoneToFinalize is the terminal next-action prompt appended in
+// the done-ready projection. It is a Warning-severity "run `slipway done`"
+// pointer, not a real gate or evidence failure, so overall readiness reports it
+// as awaiting_finalize rather than blocked.
+const reasonRunSlipwayDoneToFinalize = "run_slipway_done_to_finalize"
+
+// readinessAwaitingFinalize is the overall-readiness value used when the only
+// outstanding blocker is the terminal finalize prompt.
+const readinessAwaitingFinalize = "awaiting_finalize"
+
 func buildStatusViewFromChangeWithReadContext(readCtx *stateReadContext, change model.Change) (statusView, error) {
 	readCtx.rememberChange(change)
 	return buildGovernedStatusViewWithReadContext(readCtx, change)
@@ -324,7 +334,10 @@ func projectGovernanceEvidenceFreshness(readiness progression.GovernanceReadines
 }
 
 func projectOverallReadinessFreshness(executionFreshness, governanceFreshness string, blockers []model.ReasonCode) string {
-	if len(model.NormalizeReasonCodes(blockers)) > 0 {
+	if normalized := model.NormalizeReasonCodes(blockers); len(normalized) > 0 {
+		if reasonCodesAreSolelyFinalizePrompt(normalized) {
+			return readinessAwaitingFinalize
+		}
 		return "blocked"
 	}
 	if executionFreshness == "stale" || governanceFreshness == "stale" {
@@ -334,6 +347,22 @@ func projectOverallReadinessFreshness(executionFreshness, governanceFreshness st
 		return "unknown"
 	}
 	return "fresh"
+}
+
+// reasonCodesAreSolelyFinalizePrompt reports whether the normalized blocker set
+// is non-empty and every entry is the terminal finalize prompt. When true, the
+// change is done-ready and only awaiting `slipway done`; any other coexisting
+// blocker means a real gate/evidence failure and readiness stays blocked.
+func reasonCodesAreSolelyFinalizePrompt(normalized []model.ReasonCode) bool {
+	if len(normalized) == 0 {
+		return false
+	}
+	for _, reason := range normalized {
+		if reason.Code != reasonRunSlipwayDoneToFinalize {
+			return false
+		}
+	}
+	return true
 }
 
 func projectCurrentActionContract(change model.Change, readiness progression.GovernanceReadiness) (string, string) {
@@ -592,7 +621,7 @@ func applyDoneReadyProjection(change model.Change, evaluations map[gate.GateID]g
 	view.DoneReady = true
 	view.Blockers = appendReasonCodes(
 		view.Blockers,
-		[]model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
+		[]model.ReasonCode{model.NewReasonCode(reasonRunSlipwayDoneToFinalize, "")},
 	)
 }
 

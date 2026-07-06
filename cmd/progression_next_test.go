@@ -2519,6 +2519,9 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.Equal(t, model.StateS3Review, view.CurrentState)
 	assert.Nil(t, view.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
+	// The only outstanding blocker is the terminal finalize prompt, so overall
+	// readiness must read as awaiting_finalize rather than blocked.
+	assert.Equal(t, "awaiting_finalize", view.OverallReadinessFreshness)
 	// ship-verification is the single always-required terminal gate; once it
 	// passes there is no optional-closeout advisory to surface.
 	assert.NotContains(t, strings.Join(view.Warnings, "\n"), "optional_closeout_available")
@@ -2533,6 +2536,7 @@ func TestNextReturnsDoneReadyWithoutNextSkillAfterGovernedShipPasses(t *testing.
 	assert.Nil(t, handoff.NextSkill)
 	assert.Contains(t, model.ReasonSpecs(handoff.Blockers), "run_slipway_done_to_finalize")
 	assert.NotContains(t, model.ReasonSpecs(handoff.Blockers), "no_skill_required:S3_REVIEW")
+	assert.Equal(t, "awaiting_finalize", handoff.OverallReadinessFreshness)
 }
 
 func TestNextReturnsDoneReadyWithShipVerificationAttestationForStandardRequestPath(t *testing.T) {
@@ -2622,6 +2626,68 @@ func TestNextDiagnosticsSkillEvidenceRoutesToShipVerificationAfterReviewSet(t *t
 		assert.Equal(t, "passing", statusBySkill[progression.SkillSpecComplianceReview].Status)
 		assert.False(t, statusBySkill[progression.SkillShipVerification].HasEvidence)
 		assert.Equal(t, "missing", statusBySkill[progression.SkillShipVerification].Status)
+	})
+}
+
+// TestNextRoutesNameToShipVerificationWhenOnlyShipVerificationStale is the #412
+// regression lock: in S3 with every selected review peer fresh/passing and only
+// ship-verification stale (a passing record whose digest is not fresh),
+// next_skill.name must point at ship-verification (the authoritative next
+// action), not at the head-of-batch review peer. display_name legitimately
+// stays the head of the review batch; only name must advance to the real next
+// action.
+func TestNextRoutesNameToShipVerificationWhenOnlyShipVerificationStale(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "stale ship-verification name routing contract")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+
+		change.WorkflowPreset = model.WorkflowPresetStandard
+		change.QualityMode = model.QualityModeStandard
+		change.CurrentState = model.StateS3Review
+		change.PlanSubStep = model.PlanSubStepNone
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", change.Slug)
+		require.NoError(t, os.MkdirAll(bundlePath, 0o755))
+		writeShipReadyGovernedBundle(t, root, change)
+		writeAssuranceMD(t, root, change.Slug, validAssuranceContent())
+		// Current execution is run version 2; wave and every review peer are fresh
+		// at run version 2.
+		writePassingExecutionSummary(t, root, slug, 2, "t-01")
+		writePassingWaveEvidence(t, root, slug, 2)
+		writePassingReviewEvidencePack(t, root, slug, 2)
+		// ship-verification carries a passing record stamped at the OLDER run
+		// version 1, so it is stale relative to the current run version 2 — the
+		// exact #412 scenario (all peers fresh, only ship-verification stale).
+		writeSkillVerification(t, root, slug, progression.SkillShipVerification, model.VerificationRecord{
+			Verdict:    model.VerificationVerdictPass,
+			Blockers:   []model.ReasonCode{},
+			Timestamp:  time.Now().UTC(),
+			RunVersion: 1,
+			References: []string{
+				"verification:pass",
+				"closeout:assurance_complete=pass",
+				"closeout:reviewer_independence=pass",
+			},
+		})
+
+		cmd := commandForRoot(t, root, makeNextCmd())
+		cmd.SetArgs([]string{"--json", "--diagnostics", "--change", slug})
+		var out bytes.Buffer
+		cmd.SetOut(&out)
+		require.NoError(t, cmd.Execute())
+
+		var view nextView
+		require.NoError(t, json.Unmarshal(out.Bytes(), &view))
+		require.NotNil(t, view.NextSkill, "advanced=%+v blockers=%v warnings=%v", view.Advanced, model.ReasonSpecs(view.Blockers), view.Warnings)
+		// The authoritative next action is ship-verification, not a passing peer.
+		assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
 	})
 }
 

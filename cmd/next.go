@@ -745,7 +745,7 @@ func projectDoneReadyForReadOnlyQuery(root string, change *model.Change, advance
 		FromState: model.StateS3Review,
 		Reason:    "governance_gates_passed",
 		Message:   "Governance gates passed; run `slipway done` to finalize.",
-		Blockers:  []model.ReasonCode{model.NewReasonCode("run_slipway_done_to_finalize", "")},
+		Blockers:  []model.ReasonCode{model.NewReasonCode(reasonRunSlipwayDoneToFinalize, "")},
 	}
 	return nil
 }

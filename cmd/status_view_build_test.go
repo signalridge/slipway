@@ -156,10 +156,37 @@ func TestBuildGovernedStatusViewExposesDoneReadyReadiness(t *testing.T) {
 
 	assert.Equal(t, true, payload["done_ready"])
 	assert.Equal(t, "active", payload["lifecycle_status"])
+	// The terminal finalize prompt is a next-action pointer, not a real gate or
+	// evidence failure, so overall readiness must read as awaiting_finalize rather
+	// than blocked even though a Warning-severity blocker is present.
+	assert.Equal(t, "awaiting_finalize", payload["overall_readiness_freshness"])
+	assert.Equal(t, "awaiting_finalize", view.OverallReadinessFreshness)
 	assert.Contains(t, model.ReasonSpecs(view.Blockers), "run_slipway_done_to_finalize")
 	assert.Contains(t, view.Narrative, "Done-ready")
 	assert.Contains(t, view.Narrative, "slipway done")
 	assert.Contains(t, renderStatusText(view), "slipway done")
+}
+
+func TestProjectOverallReadinessFreshnessFinalizePrompt(t *testing.T) {
+	t.Parallel()
+
+	finalize := model.NewReasonCode(reasonRunSlipwayDoneToFinalize, "")
+	realBlocker := model.NewReasonCode("required_skill_missing", "ship-verification")
+
+	// Sole finalize prompt is a done-ready next-action pointer, not a blocker.
+	assert.Equal(t, "awaiting_finalize", projectOverallReadinessFreshness(
+		"fresh", "fresh", []model.ReasonCode{finalize},
+	))
+
+	// A real coexisting blocker wins: readiness stays blocked.
+	assert.Equal(t, "blocked", projectOverallReadinessFreshness(
+		"fresh", "fresh", []model.ReasonCode{finalize, realBlocker},
+	))
+
+	// No blockers with fresh evidence stays fresh.
+	assert.Equal(t, "fresh", projectOverallReadinessFreshness(
+		"fresh", "fresh", nil,
+	))
 }
 
 func TestLoadStatusChangeBySlugFallsBackToArchivedForMissingActiveAuthority(t *testing.T) {
