@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -168,6 +169,30 @@ type GateRecord struct {
 	Status      GateStatus   `yaml:"status" json:"status"`
 	ReasonCodes []ReasonCode `yaml:"reason_codes,omitempty" json:"reason_codes,omitempty"`
 	UpdatedAt   time.Time    `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
+}
+
+// MarshalJSON omits updated_at when it is the zero time. Gate status is derived
+// on the fly from current evidence and carries no persisted transition
+// timestamp, so a zero UpdatedAt must not serialize as the misleading
+// "0001-01-01T00:00:00Z" (time.Time's zero value is not skipped by omitempty).
+// A non-zero UpdatedAt is still emitted in RFC3339 form so a real transition
+// time remains forward compatible if one is ever plumbed through.
+func (r GateRecord) MarshalJSON() ([]byte, error) {
+	type gateRecordAlias struct {
+		GateID      string       `json:"gate_id"`
+		Status      GateStatus   `json:"status"`
+		ReasonCodes []ReasonCode `json:"reason_codes,omitempty"`
+		UpdatedAt   *time.Time   `json:"updated_at,omitempty"`
+	}
+	alias := gateRecordAlias{
+		GateID:      r.GateID,
+		Status:      r.Status,
+		ReasonCodes: r.ReasonCodes,
+	}
+	if !r.UpdatedAt.IsZero() {
+		alias.UpdatedAt = &r.UpdatedAt
+	}
+	return json.Marshal(alias)
 }
 
 type TaskVerdict string
