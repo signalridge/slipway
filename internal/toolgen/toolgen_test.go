@@ -627,9 +627,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 
 		// Hook emission is keyed on whether the host owns hook settings.
 		// Settings-capable hook hosts (claude, qwen) register a bare
-		// inline command and emit NO launcher files. Pi has settings registration
-		// without hook semantics. File-by-path hosts (cursor, opencode) still emit
-		// the session-start launcher family. Skill-only/no-hook hosts emit none.
+		// inline command and emit NO launcher files. Pi registers skills/prompts
+		// in settings and uses a managed extension bridge instead of launcher
+		// files. File-by-path hosts (cursor, opencode) still emit the
+		// session-start launcher family. Skill-only/no-hook hosts emit none.
 		switch {
 		case cfg.SettingsPath != "" && cfg.SettingsKind != settingsKindPiRegistration:
 			// Settings-capable hosts must not write any launcher file for either
@@ -662,6 +663,8 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		switch {
 		case cfg.SettingsKind == settingsKindPiRegistration:
 			assertPiRegistrationSettings(t, filepath.Join(root, cfg.SettingsPath))
+			require.NotEmpty(t, cfg.HookExtensionPath, "%s: pi registration must name a hook extension bridge", toolID)
+			assertPiHooksExtension(t, filepath.Join(root, filepath.FromSlash(cfg.HookExtensionPath)))
 		case cfg.SettingsKind == settingsKindCodexHooks:
 			settingsPath := filepath.Join(root, cfg.SettingsPath)
 			content, err := os.ReadFile(settingsPath)
@@ -3032,6 +3035,96 @@ func TestGeneratedAdapterAndStandaloneSkillsHaveFrontmatterDescriptions(t *testi
 	}
 }
 
+func TestPiHooksExtensionRuntimeBehaviorWithNode(t *testing.T) {
+	t.Parallel()
+
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node unavailable; skipping Pi TypeScript extension runtime check")
+	}
+
+	root := t.TempDir()
+	probePath := filepath.Join(root, "probe.ts")
+	require.NoError(t, os.WriteFile(
+		probePath,
+		[]byte(`export default function (value: { message?: string }) { return value.message ?? ""; }`+"\n"),
+		0o644,
+	))
+	probe := exec.Command(node, "--check", probePath)
+	if out, err := probe.CombinedOutput(); err != nil {
+		t.Skipf("node --check cannot parse TypeScript in this environment: %s", out)
+	}
+
+	require.NoError(t, Generate(root, []string{"pi"}, true))
+	extensionPath := filepath.Join(root, ".pi", "extensions", "slipway-hooks.ts")
+	check := exec.Command(node, "--check", extensionPath)
+	out, err := check.CombinedOutput()
+	require.NoErrorf(t, err, "node --check %s failed:\n%s", extensionPath, out)
+
+	harnessPath := filepath.Join(root, "pi-extension-harness.mjs")
+	require.NoError(t, os.WriteFile(harnessPath, []byte(`
+import { pathToFileURL } from "node:url";
+
+const extensionPath = process.argv[2];
+const payload = '<slipway-session-start tool="pi">ready</slipway-session-start>';
+const handlers = new Map();
+let execCalls = 0;
+const pi = {
+  on(name, handler) {
+    handlers.set(name, handler);
+  },
+  async exec(_command, _args, _options) {
+    execCalls += 1;
+    return { stdout: execCalls === 1 ? "" : payload, stderr: "", code: 0, killed: false };
+  },
+};
+
+const mod = await import(pathToFileURL(extensionPath).href);
+mod.default(pi);
+
+const sessionStart = handlers.get("session_start");
+const beforeAgentStart = handlers.get("before_agent_start");
+if (!sessionStart || !beforeAgentStart) {
+  throw new Error("extension did not register required handlers");
+}
+
+sessionStart();
+const failedFirstTurn = await beforeAgentStart({ systemPrompt: "base" }, { cwd: process.cwd() });
+if (failedFirstTurn !== undefined) {
+  throw new Error("empty first hook output must not inject a prompt");
+}
+if (execCalls !== 1) {
+  throw new Error("expected one failed hook attempt, got " + execCalls);
+}
+
+const retriedSecondTurn = await beforeAgentStart({ systemPrompt: "base" }, { cwd: process.cwd() });
+if (retriedSecondTurn?.systemPrompt !== "base\n\n" + payload) {
+  throw new Error("second turn did not inject cached payload: " + retriedSecondTurn?.systemPrompt);
+}
+if (execCalls !== 2) {
+  throw new Error("expected retry after empty hook output, got " + execCalls + " exec calls");
+}
+
+const idempotentThirdTurn = await beforeAgentStart(
+  { systemPrompt: retriedSecondTurn.systemPrompt },
+  { cwd: process.cwd() },
+);
+if (idempotentThirdTurn?.systemPrompt !== retriedSecondTurn.systemPrompt) {
+  throw new Error("already-injected prompt must stay unchanged");
+}
+const count = idempotentThirdTurn.systemPrompt.split(payload).length - 1;
+if (count !== 1) {
+  throw new Error("expected one injected payload, got " + count);
+}
+if (execCalls !== 2) {
+  throw new Error("cached successful payload should not rerun hook, got " + execCalls + " exec calls");
+}
+`), 0o644))
+	harness := exec.Command(node, harnessPath, extensionPath)
+	out, err = harness.CombinedOutput()
+	require.NoErrorf(t, err, "Pi extension runtime harness failed:\n%s", out)
+}
+
 func TestDoneSkillDocumentsAllReadyAcrossActiveExecutions(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -3089,6 +3182,70 @@ func assertPiRegistrationSettings(t *testing.T, settingsPath string) {
 	assertJSONSettingArrayContains(t, settings, "prompts", "./prompts")
 	assert.NotContains(t, settings, "hooks", "Pi settings register skills/prompts, not hooks")
 	assert.NotContains(t, string(content), "slipway hook", "Pi settings must not register hook commands")
+}
+
+func assertPiHooksExtension(t *testing.T, extensionPath string) {
+	t.Helper()
+
+	require.True(t, strings.HasSuffix(extensionPath, ".ts"),
+		"Pi hooks extension must be a TypeScript module (pi loads .pi/extensions via jiti), got %s", extensionPath)
+
+	content, err := os.ReadFile(extensionPath)
+	require.NoError(t, err, "missing Pi hooks extension bridge file")
+
+	ts := string(content)
+	assert.Contains(t, ts, "Generated by Slipway", "Pi hooks extension must carry the generated-file header")
+	assert.Contains(t, ts, "export default function", "Pi hooks extension must have a default export factory")
+	assert.Contains(t, ts, `pi.on("session_start"`, "Pi hooks extension must register session_start")
+	assert.Contains(t, ts, `pi.on("before_agent_start"`, "Pi hooks extension must register before_agent_start")
+
+	// The session-start argv must be the exact hook invocation for this tool,
+	// JSON-encoded (json.Marshal emits no spaces between elements).
+	assert.Contains(t, ts, `"hook","session-start","--tool","pi"`,
+		"Pi hooks extension must bridge the session-start hook for the pi tool")
+	assert.Contains(t, ts, "pi.exec", "Pi hooks extension must shell out via pi.exec")
+
+	// A hung or slow hook must not block the turn: exec is bounded by a timeout,
+	// follows the before_agent_start abort signal, and killed/timed-out/non-zero
+	// execs collapse to empty.
+	assert.Contains(t, ts, "timeout: HOOK_TIMEOUT_MS", "Pi hooks extension exec must pass a bounded timeout")
+	assert.Contains(t, ts, "signal: ctx.signal", "Pi hooks extension exec must follow the turn abort signal")
+	assert.Contains(t, ts, "result.killed", "Pi hooks extension must treat a killed/timed-out exec as empty output")
+	assert.Contains(t, ts, `typeof result.code === "number"`,
+		"Pi hooks extension must only treat documented numeric exit codes as authoritative")
+	assert.Contains(t, ts, "hasNumericExitCode && result.code !== 0",
+		"Pi hooks extension must treat non-zero numeric exec exits as empty output")
+
+	// Injection contract: session_start marks the session hook cache stale, then
+	// before_agent_start retries until it gets a non-empty payload, caches that
+	// content, and appends it to every per-turn system prompt. This keeps the
+	// governance bridge visible after the first user prompt without storing
+	// persistent messages that would duplicate on reload/resume.
+	assert.Contains(t, ts, "sessionHookPending", "Pi hooks extension must track whether the session cache is stale")
+	assert.Contains(t, ts, "sessionHookContent", "Pi hooks extension must cache the session-start hook output")
+	assert.Contains(t, ts, "const content = await runHook(SESSION_ARGV, ctx);",
+		"Pi hooks extension must retry from the session-start hook while the cache is stale")
+	assert.Regexp(t, regexp.MustCompile(`if \(content\) \{\s+sessionHookContent = content;\s+sessionHookPending = false;\s+\}`), ts,
+		"Pi hooks extension must clear the stale marker only after a non-empty hook output")
+	assert.Contains(t, ts, "systemPrompt:", "Pi hooks extension must inject through the per-turn system prompt")
+	assert.Contains(t, ts, "event.systemPrompt", "Pi hooks extension must preserve Pi's current system prompt")
+	assert.Contains(t, ts, "event.systemPrompt?.includes(sessionHookContent)",
+		"Pi hooks extension must avoid appending duplicate governance blocks")
+	assert.Contains(t, ts, "[event.systemPrompt, sessionHookContent]",
+		"Pi hooks extension must append cached session hook content on every agent start")
+	assert.NotContains(t, ts, "shouldInjectSessionHook",
+		"Pi hooks extension must not gate system prompt injection to the first prompt only")
+	assert.NotContains(t, ts, `customType: "slipway-hook"`, "Pi hooks extension must not store persistent custom messages")
+	assert.NotContains(t, ts, "display: false", "Pi hooks extension must not rely on hidden persistent messages")
+
+	// context-pressure cannot be bridged through pi.exec (it reads its metric from
+	// stdin, which pi.exec has no channel for); the dead argv and branch must stay
+	// removed. Target the JSON argv fragment and stashed constant, not prose, so
+	// the header may still explain the omission.
+	assert.NotContains(t, ts, `"hook","context-pressure"`,
+		"Pi hooks extension must not carry a context-pressure argv (pi.exec has no stdin channel)")
+	assert.NotContains(t, ts, "PRESSURE_ARGV",
+		"Pi hooks extension must not stash a context-pressure argv constant")
 }
 
 func assertJSONSettingArrayContains(t *testing.T, settings map[string]any, name, want string) {

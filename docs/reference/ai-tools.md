@@ -90,7 +90,11 @@ hand-edit generated files:
 
 - Claude registers bare inline `slipway hook ...` settings commands.
 - Pi writes `.pi/settings.json` with `enableSkillCommands=true` and registers
-  `./skills` and `./prompts`.
+  `./skills` and `./prompts`. It also generates `.pi/extensions/slipway-hooks.ts`,
+  which bridges the `session-start` hook into pi's `session_start` /
+  `before_agent_start` extension events. pi auto-discovers `.pi/extensions/` but
+  loads project-local extensions only after the project is trusted; the
+  `context-pressure` hook is not bridged (pi's extension `exec` has no stdin).
 - Qwen writes `.qwen/settings.json` to register the session-start hook.
 - Codex writes `.codex/config.toml` hooks for `SessionStart` and
   `UserPromptSubmit`; those hooks are inert until the repo and each hook are

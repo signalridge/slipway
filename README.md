@@ -331,7 +331,7 @@ customizations.
 | Copilot | `.github/skills/slipway-*/SKILL.md`, `.github/prompts/slipway-*.prompt.md`, `.github/copilot/slipway` managed state |
 | Kilo | `.kilocode/skills/slipway-*/SKILL.md`, `.kilocode/workflows/slipway-*.md` |
 | Kiro | `.kiro/skills/slipway-*/SKILL.md` entry, command, and governance skills |
-| Pi | `.pi/skills/slipway-*/SKILL.md`, `.pi/prompts/slipway-*.md`, `.pi/settings.json` skill/prompt registration |
+| Pi | `.pi/skills/slipway-*/SKILL.md`, `.pi/prompts/slipway-*.md`, `.pi/settings.json` skill/prompt registration, `.pi/extensions/slipway-hooks.ts` session-start bridge |
 | Qwen | `.qwen/skills/slipway-*/SKILL.md` command skills, `.qwen/settings.json` hook entries |
 | Windsurf | `.windsurf/skills/slipway-*/SKILL.md`, `.windsurf/workflows/slipway-*.md` |
 

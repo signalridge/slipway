@@ -45,9 +45,17 @@ type ToolConfig struct {
 	SessionHook         string
 	PostToolEvent       string
 	PostToolHook        string
-	TriggerPrefix       string
-	TriggerStyle        string
-	AutoDetectPath      []string
+	// HookExtensionPath, when non-empty, names a project-local extension file
+	// that bridges Slipway's session-start hook into a host event API that has no
+	// declarative settings.json hooks field (pi). It is a managed generated file
+	// tracked in the ownership manifest. If a descriptor ever retires this path,
+	// stop generating it and add an explicit targeted prune in the same change,
+	// like the launcher cleanup; the manifest proves ownership but does not itself
+	// discover no-longer-emitted files.
+	HookExtensionPath string
+	TriggerPrefix     string
+	TriggerStyle      string
+	AutoDetectPath    []string
 }
 
 const (
@@ -185,17 +193,18 @@ var toolRegistry = map[string]ToolConfig{
 		},
 	},
 	"pi": {
-		ID:            "pi",
-		SkillsDir:     ".pi/skills",
-		CommandsDir:   ".pi/prompts",
-		CommandStyle:  "flat",
-		CommandFormat: "md",
-		SettingsPath:  ".pi/settings.json",
-		SettingsKind:  settingsKindPiRegistration,
-		SessionEvent:  "",
-		SessionHook:   "",
-		TriggerPrefix: "/slipway-",
-		TriggerStyle:  "slash-hyphen",
+		ID:                "pi",
+		SkillsDir:         ".pi/skills",
+		CommandsDir:       ".pi/prompts",
+		CommandStyle:      "flat",
+		CommandFormat:     "md",
+		SettingsPath:      ".pi/settings.json",
+		SettingsKind:      settingsKindPiRegistration,
+		SessionEvent:      "",
+		SessionHook:       "",
+		HookExtensionPath: ".pi/extensions/slipway-hooks.ts",
+		TriggerPrefix:     "/slipway-",
+		TriggerStyle:      "slash-hyphen",
 		AutoDetectPath: []string{
 			".pi",
 		},
@@ -1326,8 +1335,8 @@ func emitCommandSkillSurfaces(root string, cfg ToolConfig, refresh bool, plan *t
 //     bare inline `slipway hook <subcommand>` command directly in
 //     settings.json. No launcher script files are written, and on refresh any
 //     previously generated launcher files are pruned.
-//   - Pi registers generated skills/prompts in settings.json without hook
-//     semantics.
+//   - Pi registers generated skills/prompts in settings.json and bridges
+//     session-start through a managed project-local extension file.
 //   - Settings-less hosts (cursor, opencode): keep emitting the advisory
 //     session-start launcher files (extensionless + .ps1 + .cmd), since they
 //     have no settings.json to register an inline command in.
@@ -1336,6 +1345,9 @@ func registerHostSettingsSurfaces(root string, cfg ToolConfig, refresh bool, pla
 		switch cfg.SettingsKind {
 		case settingsKindPiRegistration:
 			if err := mergePiRegistrationSettingsJSONWithPlan(root, cfg, refresh, plan); err != nil {
+				return err
+			}
+			if err := writePiHooksExtensionWithPlan(root, cfg, refresh, plan); err != nil {
 				return err
 			}
 		case settingsKindCodexHooks:
@@ -2825,6 +2837,125 @@ func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refres
 		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
 	}
 	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project artifact where operator-readable mode is intentional.
+}
+
+// writePiHooksExtensionWithPlan writes the pi extension bridge file when the
+// descriptor names one. pi has no declarative hooks field in settings.json, but
+// auto-discovers project-local extensions at .pi/extensions/*.ts and exposes an
+// in-process event API; this file wires Slipway's session-start hook into that
+// API. It is written as a managed generated file so the ownership manifest
+// tracks ownership for future overwrites or targeted deletion.
+func writePiHooksExtensionWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+	if strings.TrimSpace(cfg.HookExtensionPath) == "" {
+		return nil
+	}
+	path := filepath.Join(root, filepath.FromSlash(cfg.HookExtensionPath))
+	content := renderPiHooksExtension(cfg, root)
+	return writeDeterministicModeWithPlan(plan, path, content, refresh, 0o644)
+}
+
+// renderPiHooksExtension renders the pi extension bridge as a TypeScript module.
+// pi loads project-local .pi/extensions via jiti, so TypeScript needs no build
+// step. The session-start argv is computed at generation time from the
+// hookLaunch prefix (in-repo go-run, else the bare PATH `slipway`) so a
+// dogfooding checkout tracks its own HEAD.
+//
+// Only the session-start hook is bridged. context-pressure is deliberately not:
+// `slipway hook context-pressure` derives its metric from stdin JSON, and pi's
+// extension exec API has no stdin channel, so that path could never carry data;
+// pi manages context pressure natively through its own compaction.
+//
+// The extension is fully fail-silent: any exec error, non-zero exit, timeout, or
+// abort collapses to an empty string and never escapes a handler, matching
+// Slipway's hook fail-silent floor.
+func renderPiHooksExtension(cfg ToolConfig, root string) string {
+	prefix, _ := hookLaunch(root)
+	base := strings.Fields(prefix)
+	sessionArgv := append(append([]string{}, base...), "hook", "session-start", "--tool", cfg.ID)
+	sessionJSON, _ := json.Marshal(sessionArgv)
+	return fmt.Sprintf(`// Generated by Slipway. Do not edit -- `+"`slipway init --tools pi --refresh`"+` overwrites this file.
+//
+// Bridges Slipway's session-start governance hook into pi's in-process extension
+// event API. pi has no declarative hooks field in settings.json, but
+// auto-discovers project-local extensions at .pi/extensions/ (loaded via jiti,
+// so TypeScript needs no build step) once the project is trusted, and exposes a
+// session_start / before_agent_start event API.
+// Contract reference: https://pi.dev/docs/latest/extensions (`+"`before_agent_start`"+`,
+// `+"`event.systemPrompt`"+`, and `+"`pi.exec`"+` result `+"`code`"+` / `+"`killed`"+`).
+//
+// session_start cannot inject context, so it marks the session hook cache stale.
+// Each before_agent_start retries the hook with turn-scoped context until a
+// successful, non-empty session-start payload is cached, then appends that
+// cached output to each per-turn system prompt. This keeps the hook abortable by
+// pi's turn signal, keeps the governance bridge visible on every user prompt in
+// the session, and avoids writing duplicate persistent messages when pi reloads
+// or resumes a session.
+//
+// The context-pressure hook is intentionally not bridged: it derives its metric
+// from stdin JSON and pi's exec API has no stdin channel, so the data could
+// never reach it; pi manages context pressure natively.
+//
+// Every exec is fail-silent (errors, non-zero exits, timeouts, and aborts all
+// collapse to an empty string; handlers never throw), matching Slipway's hook
+// fail-silent floor.
+
+const SESSION_ARGV = %s;
+const HOOK_TIMEOUT_MS = 10000;
+
+export default function (pi) {
+  let sessionHookPending = true;
+  let sessionHookContent: string | undefined;
+
+  async function runHook(
+    argv: string[],
+    ctx: { signal?: AbortSignal },
+  ): Promise<string> {
+    try {
+      const result = await pi.exec(argv[0], argv.slice(1), {
+        signal: ctx.signal,
+        timeout: HOOK_TIMEOUT_MS,
+      });
+      if (!result || result.killed) {
+        return "";
+      }
+      const hasNumericExitCode = typeof result.code === "number";
+      if (hasNumericExitCode && result.code !== 0) {
+        return "";
+      }
+      return result.stdout ? String(result.stdout).trim() : "";
+    } catch {
+      return "";
+    }
+  }
+
+  pi.on("session_start", () => {
+    sessionHookPending = true;
+    sessionHookContent = undefined;
+  });
+
+  pi.on("before_agent_start", async (event, ctx) => {
+    if (sessionHookPending) {
+      const content = await runHook(SESSION_ARGV, ctx);
+      if (content) {
+        sessionHookContent = content;
+        sessionHookPending = false;
+      }
+    }
+
+    if (!sessionHookContent) {
+      return;
+    }
+    if (event.systemPrompt?.includes(sessionHookContent)) {
+      return {
+        systemPrompt: event.systemPrompt,
+      };
+    }
+    return {
+      systemPrompt: [event.systemPrompt, sessionHookContent].filter(Boolean).join("\n\n"),
+    };
+  });
+}
+`, sessionJSON)
 }
 
 func mergeCodexHooksTOMLWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
