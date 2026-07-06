@@ -51,7 +51,7 @@ slipway init --tools none
 
 ```bash
 git status --short
-git diff -- .slipway.yaml .claude .codex .cursor .opencode
+git diff -- .slipway.yaml .claude .codex .cursor .opencode .pi
 ```
 
 当希望整个仓库共享 Slipway 的默认配置时，提交 `.slipway.yaml`。生成的适配器文件是否提交，请按仓库自身的策略决定。
@@ -76,14 +76,14 @@ slipway init --tools codex,opencode --refresh
 slipway init --tools all --refresh
 ```
 
-刷新依据 Slipway 生成的标记来识别目标。它不会把一个空的 `.claude`、`.codex`、`.cursor` 或 `.opencode` 目录当作归 Slipway 所有。
+刷新依据 Slipway 生成的标记来识别目标。它不会把一个空的 `.claude`、`.codex`、`.cursor`、`.opencode` 或 `.pi` 目录当作归 Slipway 所有。
 
 ## 保留用户自有文件
 
 接受刷新差异之前，先检查相邻的工具配置：
 
 ```bash
-git status --short .claude .codex .cursor .opencode
+git status --short .claude .codex .cursor .opencode .pi
 ```
 
 生成的文件由 CLI 负责。用户自有的工具设置、本地 prompt、手写命令以及非 Slipway 的 hook 都应保持原样。
@@ -92,6 +92,12 @@ git status --short .claude .codex .cursor .opencode
 
 ```text
 .codex/skills/slipway-<command>/SKILL.md
+```
+
+Pi 的 session-start 桥接文件生成在：
+
+```text
+.pi/extensions/slipway-hooks.ts
 ```
 
 ## 改动命令或技能接口之后

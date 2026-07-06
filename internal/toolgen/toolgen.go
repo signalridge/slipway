@@ -2945,13 +2945,14 @@ export default function (pi) {
     if (!sessionHookContent) {
       return;
     }
-    if (event.systemPrompt?.includes(sessionHookContent)) {
+    const currentSystemPrompt = typeof event.systemPrompt === "string" ? event.systemPrompt : "";
+    if (currentSystemPrompt.includes(sessionHookContent)) {
       return {
-        systemPrompt: event.systemPrompt,
+        systemPrompt: currentSystemPrompt,
       };
     }
     return {
-      systemPrompt: [event.systemPrompt, sessionHookContent].filter(Boolean).join("\n\n"),
+      systemPrompt: [currentSystemPrompt, sessionHookContent].filter(Boolean).join("\n\n"),
     };
   });
 }

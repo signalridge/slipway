@@ -3119,6 +3119,17 @@ if (count !== 1) {
 if (execCalls !== 2) {
   throw new Error("cached successful payload should not rerun hook, got " + execCalls + " exec calls");
 }
+
+const objectSystemPromptTurn = await beforeAgentStart(
+  { systemPrompt: { segments: ["base"] } },
+  { cwd: process.cwd() },
+);
+if (objectSystemPromptTurn?.systemPrompt !== payload) {
+  throw new Error("non-string systemPrompt must not be stringified: " + objectSystemPromptTurn?.systemPrompt);
+}
+if (execCalls !== 2) {
+  throw new Error("non-string systemPrompt should use cached payload, got " + execCalls + " exec calls");
+}
 `), 0o644))
 	harness := exec.Command(node, harnessPath, extensionPath)
 	out, err = harness.CombinedOutput()
@@ -3229,10 +3240,14 @@ func assertPiHooksExtension(t *testing.T, extensionPath string) {
 		"Pi hooks extension must clear the stale marker only after a non-empty hook output")
 	assert.Contains(t, ts, "systemPrompt:", "Pi hooks extension must inject through the per-turn system prompt")
 	assert.Contains(t, ts, "event.systemPrompt", "Pi hooks extension must preserve Pi's current system prompt")
-	assert.Contains(t, ts, "event.systemPrompt?.includes(sessionHookContent)",
+	assert.Contains(t, ts, `typeof event.systemPrompt === "string"`,
+		"Pi hooks extension must not stringify non-string system prompt shapes")
+	assert.Contains(t, ts, "currentSystemPrompt.includes(sessionHookContent)",
 		"Pi hooks extension must avoid appending duplicate governance blocks")
-	assert.Contains(t, ts, "[event.systemPrompt, sessionHookContent]",
+	assert.Contains(t, ts, "[currentSystemPrompt, sessionHookContent]",
 		"Pi hooks extension must append cached session hook content on every agent start")
+	assert.NotContains(t, ts, "event.systemPrompt?.includes(sessionHookContent)",
+		"Pi hooks extension must guard the system prompt shape before duplicate checks")
 	assert.NotContains(t, ts, "shouldInjectSessionHook",
 		"Pi hooks extension must not gate system prompt injection to the first prompt only")
 	assert.NotContains(t, ts, `customType: "slipway-hook"`, "Pi hooks extension must not store persistent custom messages")
@@ -4002,7 +4017,7 @@ func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
 	writeSlipwayGoMod(t, root)
 	abs, err := filepath.Abs(root)
 	require.NoError(t, err)
-	require.NoError(t, Generate(root, []string{"codex", "claude", "cursor"}, true))
+	require.NoError(t, Generate(root, []string{"codex", "claude", "cursor", "pi"}, true))
 
 	// Codex inline TOML hooks launch the worktree source via go run. The command
 	// is stored as a TOML basic string, so backslashes in a Windows path are
@@ -4029,6 +4044,20 @@ func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
 	l := string(launcher)
 	assert.Contains(t, l, "command -v go >/dev/null 2>&1 || exit 0")
 	assert.Contains(t, l, "go -C "+abs+` run . hook session-start --tool "cursor"`)
+
+	// Pi uses a TypeScript extension instead of host hook settings or launcher
+	// files. In a source checkout, its JSON argv must still dispatch through the
+	// checked-out source tree and be tracked as managed generated content.
+	piExtension, err := os.ReadFile(filepath.Join(root, ".pi", "extensions", "slipway-hooks.ts"))
+	require.NoError(t, err)
+	piArgv, err := json.Marshal([]string{"go", "-C", abs, "run", ".", "hook", "session-start", "--tool", "pi"})
+	require.NoError(t, err)
+	assert.Contains(t, string(piExtension), "const SESSION_ARGV = "+string(piArgv)+";")
+	piManifest, found, err := loadOwnershipManifest(root, toolRegistry["pi"])
+	require.NoError(t, err)
+	require.True(t, found, "pi generation must write an ownership manifest")
+	assert.Contains(t, piManifest.index(), ".pi/extensions/slipway-hooks.ts",
+		"pi hook extension must be tracked as a managed generated file")
 }
 
 func TestNonRepoGenerationKeepsBareSlipwayHookCommands(t *testing.T) {
