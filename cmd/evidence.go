@@ -416,8 +416,8 @@ func makeEvidenceTaskCmd() *cobra.Command {
 			}
 
 			return withChangeStateLock(root, ref.Slug, "evidence task", func() error {
-				change, err := loadActiveChange(
-					root,
+				change, err := loadActiveChangeWithReadContext(
+					readCtx,
 					ref.Slug,
 					"cannot record task evidence for governed status %q",
 					"Task evidence can only be recorded for an active governed change.",
@@ -425,7 +425,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				route := commandInvocationRoute(cmd, root, change, strings.TrimSpace(changeSlug) != "")
+				route := commandInvocationRouteWithReadContext(cmd, readCtx, change, strings.TrimSpace(changeSlug) != "")
 				if change.CurrentState != model.StateS2Implement && change.CurrentState != model.StateS3Review {
 					remediation := evidenceTaskWrongStateRemediation(root, change)
 					return newInvalidUsageError(
@@ -727,6 +727,29 @@ func normalizeEvidenceTaskResultFileArgs(resultFiles []string) []string {
 	return normalized
 }
 
+// loadActiveChangeWithReadContext mirrors loadActiveChange but keeps the shared
+// read-context authoritative after active-ref resolution. Callers that acquire a
+// state lock after resolving the active ref must reload change.yaml here instead
+// of reusing a pre-lock cache entry.
+func loadActiveChangeWithReadContext(readCtx *stateReadContext, slug, inactiveMessage, remediation string) (model.Change, error) {
+	change, err := readCtx.reloadChange(slug)
+	if err != nil {
+		return model.Change{}, newChangeStateLoadFailedError(slug, err)
+	}
+	if change.Status != model.ChangeStatusActive {
+		return model.Change{}, newPreconditionError(
+			"not_active",
+			fmt.Sprintf(inactiveMessage, change.Status),
+			remediation,
+			slug,
+			map[string]any{
+				"status": string(change.Status),
+			},
+		)
+	}
+	return change, nil
+}
+
 func recordEvidenceTaskResultFiles(
 	cmd *cobra.Command,
 	root string,
@@ -765,7 +788,7 @@ func recordEvidenceTaskResultFiles(
 			map[string]any{"path": state.WavePlanPathForRead(root, change.Slug)},
 		)
 	}
-	runSummary, err := deriveEvidenceTaskRunSummaryVersion(root, change, wavePlan)
+	runSummary, existingTaskEvidencePaths, err := deriveEvidenceTaskRunSummaryVersion(root, change, wavePlan)
 	if err != nil {
 		return err
 	}
@@ -773,7 +796,7 @@ func recordEvidenceTaskResultFiles(
 		return err
 	}
 
-	prepared, err := prepareEvidenceTaskResultFiles(root, change, wavePlan, runSummary, resultFiles, time.Now().UTC())
+	prepared, err := prepareEvidenceTaskResultFiles(root, change, wavePlan, runSummary, resultFiles, time.Now().UTC(), existingTaskEvidencePaths)
 	if err != nil {
 		return err
 	}
@@ -873,6 +896,7 @@ func prepareEvidenceTaskResultFiles(
 	runSummary int,
 	resultFiles []string,
 	commandCapturedAt time.Time,
+	existingTaskEvidencePaths []string,
 ) ([]preparedEvidenceTaskResult, error) {
 	seenTasks := map[string]string{}
 	prepared := make([]preparedEvidenceTaskResult, 0, len(resultFiles))
@@ -1039,7 +1063,7 @@ func prepareEvidenceTaskResultFiles(
 			},
 		})
 	}
-	if err := rejectDuplicateEvidenceTaskResultSessions(root, change, runSummary, prepared); err != nil {
+	if err := rejectDuplicateEvidenceTaskResultSessions(root, change, runSummary, prepared, existingTaskEvidencePaths); err != nil {
 		return nil, err
 	}
 	return prepared, nil
@@ -1050,13 +1074,13 @@ type evidenceTaskResultSessionOwner struct {
 	resultFile string
 }
 
-func rejectDuplicateEvidenceTaskResultSessions(root string, change model.Change, runSummary int, prepared []preparedEvidenceTaskResult) error {
+func rejectDuplicateEvidenceTaskResultSessions(root string, change model.Change, runSummary int, prepared []preparedEvidenceTaskResult, existingTaskEvidencePaths []string) error {
 	replacedTasks := map[string]struct{}{}
 	for _, item := range prepared {
 		replacedTasks[item.payload.TaskID] = struct{}{}
 	}
 
-	sessionOwners, err := existingEvidenceTaskResultSessionOwners(root, change, runSummary, replacedTasks)
+	sessionOwners, err := existingEvidenceTaskResultSessionOwners(root, change, runSummary, replacedTasks, existingTaskEvidencePaths)
 	if err != nil {
 		return err
 	}
@@ -1092,28 +1116,10 @@ func existingEvidenceTaskResultSessionOwners(
 	change model.Change,
 	runSummary int,
 	replacedTasks map[string]struct{},
+	paths []string,
 ) (map[string]evidenceTaskResultSessionOwner, error) {
-	dir := state.EvidenceTasksDir(root, change.Slug)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return map[string]evidenceTaskResultSessionOwner{}, nil
-		}
-		return nil, newStateIntegrityError(
-			"evidence_task_existing_evidence_load_failed",
-			fmt.Sprintf("failed to read existing task evidence %q: %v", state.DisplayPath(root, dir), err),
-			"Repair the runtime task evidence before importing task result evidence.",
-			change.Slug,
-			map[string]any{"path": state.DisplayPath(root, dir)},
-		)
-	}
-
 	sessionOwners := map[string]evidenceTaskResultSessionOwner{}
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		path := filepath.Join(dir, entry.Name())
+	for _, path := range paths {
 		task, _, sessionID, err := progression.ParseTaskEvidence(root, path, runSummary)
 		if err != nil {
 			var versionMismatch progression.TaskEvidenceRunVersionMismatchError
@@ -2075,9 +2081,9 @@ func resolveEvidenceTaskResultPath(root string, change model.Change, resultFile 
 	return resolvedPath, nil
 }
 
-func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, wavePlan model.WavePlan) (int, error) {
+func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, wavePlan model.WavePlan) (int, []string, error) {
 	if wavePlan.RunSummaryVersion < 1 {
-		return 0, newStateIntegrityError(
+		return 0, nil, newStateIntegrityError(
 			"evidence_task_run_summary_version_unavailable",
 			fmt.Sprintf("current wave plan for %q has invalid run_summary_version %d", change.Slug, wavePlan.RunSummaryVersion),
 			"Rematerialize the S2 wave plan before importing task result evidence.",
@@ -2085,12 +2091,12 @@ func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, waveP
 			map[string]any{"run_summary_version": wavePlan.RunSummaryVersion},
 		)
 	}
-	versions, err := existingEvidenceTaskRunSummaryVersions(root, change.Slug)
+	versions, paths, err := existingEvidenceTaskRunSummaryVersions(root, change.Slug)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if len(versions) > 1 {
-		return 0, newInvalidUsageError(
+		return 0, nil, newInvalidUsageError(
 			"evidence_task_run_summary_version_ambiguous",
 			"task evidence contains multiple run_summary_version values",
 			"Clear, repair, or re-record task evidence so every task belongs to the active execution run before importing more results.",
@@ -2103,7 +2109,7 @@ func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, waveP
 	}
 	for version := range versions {
 		if version > wavePlan.RunSummaryVersion {
-			return 0, newInvalidUsageError(
+			return 0, nil, newInvalidUsageError(
 				"evidence_task_run_summary_version_ambiguous",
 				"task evidence contains a run_summary_version newer than the active wave plan",
 				"Clear, repair, or re-record task evidence so every task belongs to the active execution run before importing more results.",
@@ -2116,17 +2122,34 @@ func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, waveP
 			)
 		}
 	}
-	return wavePlan.RunSummaryVersion, nil
+	return wavePlan.RunSummaryVersion, paths, nil
 }
 
-func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}, error) {
-	versions, scanErr := scanEvidenceTaskRunSummaryVersions(root, slug)
+// existingEvidenceTaskRunSummaryVersions enumerates the evidence-tasks directory
+// once, returning both the set of existing run_summary_version values and the
+// sorted list of task-evidence file paths it walked so the same listing can feed
+// the session-owner scan without walking the directory a second time.
+func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}, []string, error) {
+	dir := state.EvidenceTasksDir(root, slug)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil, nil
+		}
+		return nil, nil, newStateIntegrityError(
+			"evidence_task_existing_evidence_load_failed",
+			fmt.Sprintf("failed to read existing task evidence %q: %v", state.DisplayPath(root, dir), err),
+			"Repair the runtime task evidence before importing task result evidence.",
+			slug,
+			map[string]any{"path": state.DisplayPath(root, dir)},
+		)
+	}
+	paths := evidenceTaskJSONPaths(dir, entries)
+	versions, scanErr := runSummaryVersionsFromPaths(paths)
 	if scanErr != nil {
 		switch scanErr.Kind {
-		case evidenceTaskRunSummaryVersionsMissingDir:
-			return nil, nil
-		case evidenceTaskRunSummaryVersionsReadDir, evidenceTaskRunSummaryVersionsReadFile:
-			return nil, newStateIntegrityError(
+		case evidenceTaskRunSummaryVersionsReadFile:
+			return nil, nil, newStateIntegrityError(
 				"evidence_task_existing_evidence_load_failed",
 				fmt.Sprintf("failed to read existing task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
 				"Repair the runtime task evidence before importing task result evidence.",
@@ -2134,7 +2157,7 @@ func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}
 				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
 			)
 		case evidenceTaskRunSummaryVersionsParseFile:
-			return nil, newStateIntegrityError(
+			return nil, nil, newStateIntegrityError(
 				"evidence_task_existing_evidence_invalid",
 				fmt.Sprintf("failed to parse existing task evidence %q: %v", state.DisplayPath(root, scanErr.Path), scanErr.Err),
 				"Repair or remove malformed task evidence before importing task result evidence.",
@@ -2142,7 +2165,7 @@ func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}
 				map[string]any{"path": state.DisplayPath(root, scanErr.Path)},
 			)
 		case evidenceTaskRunSummaryVersionsInvalidVersion:
-			return nil, newStateIntegrityError(
+			return nil, nil, newStateIntegrityError(
 				"evidence_task_existing_evidence_invalid",
 				fmt.Sprintf("existing task evidence %q has invalid run_summary_version %d", state.DisplayPath(root, scanErr.Path), scanErr.RunSummaryVersion),
 				"Repair or remove invalid task evidence before importing task result evidence.",
@@ -2151,7 +2174,7 @@ func existingEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}
 			)
 		}
 	}
-	return versions, nil
+	return versions, paths, nil
 }
 
 const (
@@ -2186,13 +2209,29 @@ func scanEvidenceTaskRunSummaryVersions(root, slug string) (map[int]struct{}, *e
 			Err:  err,
 		}
 	}
+	return runSummaryVersionsFromPaths(evidenceTaskJSONPaths(dir, entries))
+}
 
-	versions := map[int]struct{}{}
+// evidenceTaskJSONPaths projects the already-enumerated directory entries into the
+// sorted list of task-evidence file paths, preserving os.ReadDir ordering and the
+// directory/.json filtering both evidence-tasks scans applied independently before.
+func evidenceTaskJSONPaths(dir string, entries []os.DirEntry) []string {
+	paths := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 			continue
 		}
-		path := filepath.Join(dir, entry.Name())
+		paths = append(paths, filepath.Join(dir, entry.Name()))
+	}
+	return paths
+}
+
+// runSummaryVersionsFromPaths collects the set of run_summary_version values from
+// the given task-evidence file paths. It is the per-file version scan shared by the
+// wave-orchestration path and the single-walk result-import path.
+func runSummaryVersionsFromPaths(paths []string) (map[int]struct{}, *evidenceTaskRunSummaryVersionsError) {
+	versions := map[int]struct{}{}
+	for _, path := range paths {
 		raw, err := os.ReadFile(path) // #nosec G304 -- path is resolved from Slipway runtime evidence authority.
 		if err != nil {
 			return nil, &evidenceTaskRunSummaryVersionsError{

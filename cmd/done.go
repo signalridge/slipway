@@ -97,6 +97,47 @@ func markChangeDone(change *model.Change) {
 	change.CurrentState = model.StateDone
 }
 
+// doneArchiveStep identifies which step of the shared done-archive helper failed,
+// so each caller can surface the failure in its own shape: interactive `done`
+// propagates the raw error, while `--all-ready` maps the step to a distinct
+// reason-coded bulk item.
+type doneArchiveStep int
+
+const (
+	doneArchiveStepNone doneArchiveStep = iota
+	doneArchiveStepLifecycleEvent
+	doneArchiveStepArchive
+)
+
+// finalizeDoneArchive performs the terminal done transition shared by interactive
+// `done` and bulk `--all-ready`: it marks the change done, emits the canonical
+// `done.marked` lifecycle event (snapshotting the pre-mark state for BeforeState),
+// and archives the change, returning the archived snapshot. Callers own their own
+// surrounding concerns — remediation merge, display-path resolution, and
+// error-to-surface mapping — before and after this call. On failure it returns the
+// raw underlying error together with the step that failed.
+func finalizeDoneArchive(root string, change *model.Change) (model.Change, doneArchiveStep, error) {
+	beforeState := change.CurrentState
+	markChangeDone(change)
+	if err := appendCLILifecycleEvent(root, *change, state.LifecycleEvent{
+		Command:     "done",
+		EventType:   "done.marked",
+		Action:      "archived",
+		Reason:      "operator_finalized_done_ready",
+		Result:      string(model.ChangeStatusDone),
+		GateID:      string(gate.GateShip),
+		BeforeState: beforeState,
+		AfterState:  change.CurrentState,
+	}); err != nil {
+		return model.Change{}, doneArchiveStepLifecycleEvent, err
+	}
+	archived, err := state.ArchiveChange(root, *change, model.ChangeStatusDone)
+	if err != nil {
+		return model.Change{}, doneArchiveStepArchive, err
+	}
+	return archived, doneArchiveStepNone, nil
+}
+
 const doneWorktreeDirtyWarning = "worktree has uncommitted non-bundle changes; commit them together with the archived bundle before removing the worktree"
 
 // doneWorktreeDirtyState reports uncommitted non-bundle worktree changes as a
@@ -345,8 +386,6 @@ func makeDoneCmd() *cobra.Command {
 				if err != nil {
 					return wrapGovernanceReadinessError("evaluate done freshness", change.Slug, err)
 				}
-				beforeChange := change
-				markChangeDone(&change)
 				detectedRemediation, err := detectRemediationSources(root, change)
 				if err != nil {
 					return err
@@ -355,24 +394,11 @@ func makeDoneCmd() *cobra.Command {
 					change.RemediationSources,
 					detectedRemediation,
 				)
-
-				if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
-					Command:     "done",
-					EventType:   "done.marked",
-					Action:      "archived",
-					Reason:      "operator_finalized_done_ready",
-					Result:      string(model.ChangeStatusDone),
-					GateID:      string(gate.GateShip),
-					BeforeState: beforeChange.CurrentState,
-					AfterState:  change.CurrentState,
-				}); err != nil {
-					return err
-				}
 				archivePaths, err := state.ResolveChangePaths(root, change)
 				if err != nil {
 					return err
 				}
-				archived, err := state.ArchiveChange(root, change, model.ChangeStatusDone)
+				archived, _, err := finalizeDoneArchive(root, &change)
 				if err != nil {
 					return err
 				}
@@ -532,22 +558,10 @@ func archiveSingleDoneReady(root, slug string, change model.Change) doneBulkItem
 		)
 	}
 	worktreeDirtyWarning, worktreeDirtyFiles := prep.worktreeDirtyWarning, prep.worktreeDirtyFiles
-	beforeChange := change
-	markChangeDone(&change)
-
-	if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
-		Command:     "done",
-		EventType:   "done.marked",
-		Action:      "archived",
-		Reason:      "operator_finalized_done_ready",
-		Result:      string(model.ChangeStatusDone),
-		GateID:      string(gate.GateShip),
-		BeforeState: beforeChange.CurrentState,
-		AfterState:  change.CurrentState,
-	}); err != nil {
-		return newDoneBulkFailed(slug, "lifecycle_event_write_failed", err.Error())
-	}
-	if _, err := state.ArchiveChange(root, change, model.ChangeStatusDone); err != nil {
+	if _, step, err := finalizeDoneArchive(root, &change); err != nil {
+		if step == doneArchiveStepLifecycleEvent {
+			return newDoneBulkFailed(slug, "lifecycle_event_write_failed", err.Error())
+		}
 		return newDoneBulkFailed(slug, "archive_failed", err.Error())
 	}
 	item := newDoneBulkArchived(slug)

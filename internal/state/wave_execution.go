@@ -256,6 +256,19 @@ func CurrentTasksPlanScopeState(root string, change model.Change) (string, error
 	return hashes.Scope, err
 }
 
+// currentTasksPlanStructuralAndScopeState returns both the structural and scope
+// state from a single tasks.md read+parse. In-package callers that need both
+// (execution-repair drift, stale-planning diagnostics) use this instead of
+// calling CurrentTasksPlanStructuralState and CurrentTasksPlanScopeState
+// back-to-back, which would read and parse tasks.md twice. The public
+// single-value accessors are unchanged for external callers. On failure the
+// error is identical to what either public accessor returns, since both derive
+// from currentTaskPlanHashesAndNodes.
+func currentTasksPlanStructuralAndScopeState(root string, change model.Change) (structural, scope string, err error) {
+	hashes, _, err := currentTaskPlanHashesAndNodes(root, change)
+	return hashes.Structural, hashes.Scope, err
+}
+
 // CurrentTasksPlanTaskIDs returns the task IDs declared by the current tasks.md,
 // in dependency-projected order. It is the authority for "what tasks does the
 // plan name now", independent of the last-materialized wave-plan.yaml cache, so
@@ -349,19 +362,42 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 		if err != nil {
 			return nil, err
 		}
-		evidenceRunVersion, err := waveEvidenceRunVersion(raw)
-		if err != nil {
-			return nil, fmt.Errorf("classify wave run %q: %w", path, err)
+		// Single decode on the common path: strict known-fields decode FIRST, then
+		// classify by the decoded run_summary_version. yaml.v3 KnownFields is a
+		// decoder-level setting and cannot be re-applied after a lenient decode, so
+		// strict-first is the only order that preserves the previous
+		// probe-then-strict behavior without reading the file twice for every
+		// well-formed run.
+		var run model.WaveRun
+		strictErr := decodeYAMLKnownFields(raw, &run)
+		if strictErr == nil {
+			// Clean, known-fields file: the decoded version drives classification,
+			// reproducing the run_summary_version<1 hard error and the
+			// non-matching-version skip exactly as the removed version probe did. A
+			// clean non-matching-version file MUST be skipped, never included.
+			if run.RunSummaryVersion < 1 {
+				return nil, fmt.Errorf("classify wave run %q: %w", path, errWaveRunSummaryVersionRequired)
+			}
+			if run.RunSummaryVersion != runVersion {
+				continue
+			}
+			run.Normalize()
+			runs = append(runs, run)
+			continue
+		}
+		// Strict decode failed. Fall back to a lenient one-field version probe to
+		// decide skip-vs-surface: a foreign/non-matching-version run is skipped
+		// without surfacing the strict error, while a matching-version run with an
+		// unknown field still surfaces it. A probe error (unparseable YAML or
+		// run_summary_version<1) reproduces the previous classify-stage error.
+		evidenceRunVersion, probeErr := waveEvidenceRunVersion(raw)
+		if probeErr != nil {
+			return nil, fmt.Errorf("classify wave run %q: %w", path, probeErr)
 		}
 		if evidenceRunVersion != runVersion {
 			continue
 		}
-		var run model.WaveRun
-		if err := decodeYAMLKnownFields(raw, &run); err != nil {
-			return nil, fmt.Errorf("parse wave run %q: %w", path, err)
-		}
-		run.Normalize()
-		runs = append(runs, run)
+		return nil, fmt.Errorf("parse wave run %q: %w", path, strictErr)
 	}
 	for i := range runs {
 		if err := runs[i].Validate(i + 1); err != nil {
@@ -371,6 +407,12 @@ func LoadWaveRuns(root, slug string, runVersion int) ([]model.WaveRun, error) {
 	return runs, nil
 }
 
+// errWaveRunSummaryVersionRequired is the shared classification error for a wave
+// run whose run_summary_version is absent or < 1. LoadWaveRuns reproduces it on
+// both the strict-decode-success path and the lenient version-probe fallback so
+// the two paths surface an identical wrapped error.
+var errWaveRunSummaryVersionRequired = errors.New("run_summary_version is required")
+
 func waveEvidenceRunVersion(raw []byte) (int, error) {
 	var payload struct {
 		RunSummaryVersion int `yaml:"run_summary_version"`
@@ -379,7 +421,7 @@ func waveEvidenceRunVersion(raw []byte) (int, error) {
 		return 0, fmt.Errorf("parse wave run: %w", err)
 	}
 	if payload.RunSummaryVersion < 1 {
-		return 0, fmt.Errorf("run_summary_version is required")
+		return 0, errWaveRunSummaryVersionRequired
 	}
 	return payload.RunSummaryVersion, nil
 }

@@ -1638,248 +1638,6 @@ func isGeneratedCommandSkillContent(content string, cfg ToolConfig, commandID st
 	return false, nil
 }
 
-const legacyGeneratedCommandSkillTrigger = "<legacy-command-trigger>"
-
-type legacyGeneratedCommandSkillSignature struct {
-	commandID              string
-	description            string
-	class                  string
-	tier                   string
-	includeInstallMetadata bool
-	body                   string
-}
-
-// legacyGeneratedCommandSkillSignatures is a generated-content signature set for
-// pre-manifest command-skill residue. Names alone are never deletion authority:
-// callers only reach these signatures after parsing a command_id, confirming it
-// is absent from the current command registry, and checking the full file body.
-var legacyGeneratedCommandSkillSignatures = []legacyGeneratedCommandSkillSignature{
-	{
-		commandID:              "stats",
-		description:            "Show repo-wide governance freshness and workflow statistics",
-		class:                  string(CommandClassQuery),
-		tier:                   "diagnostics",
-		includeInstallMetadata: true,
-		body: legacyGeneratedCommandSkillBody(
-			"# Stats",
-			"",
-			"Show repo-wide governance freshness and workflow statistics across every change.",
-			"",
-			"## Invocation",
-			"```bash",
-			"slipway stats --json",
-			"```",
-			"",
-			"## Contract",
-			"- Read-only repo-wide observability: active/archived counts, freshness summaries,",
-			"  and workflow statistics. It is not scoped to a single change — use",
-			"  `slipway status` for the active change.",
-			"",
-			"## Flags",
-			"- `--json`: JSON output",
-			"",
-			"## Arguments",
-			"```text",
-			"[--json]",
-			"```",
-			"",
-			"## Prerequisites",
-			"- `.slipway.yaml` must exist (run `slipway init` first)",
-		),
-	},
-	{
-		commandID:              "learn",
-		description:            "Preview governance learning proposals from lifecycle evidence",
-		class:                  string(CommandClassQuery),
-		tier:                   "diagnostics",
-		includeInstallMetadata: true,
-		body: legacyGeneratedCommandSkillBody(
-			"# Learn",
-			"",
-			"Preview read-only governance learning proposals derived from accumulated",
-			"lifecycle evidence.",
-			"",
-			"## Invocation",
-			"```bash",
-			"slipway learn --preview --json",
-			"```",
-			"",
-			"## Contract",
-			"- Read-only and non-mutating: it surfaces *proposed* governance adjustments for",
-			"  human review; it never applies them. Proposals are advisory only.",
-			"- `--preview` is the default. This is a maintainer/observability surface, not a",
-			"  step in driving a single change.",
-			"",
-			"## Flags",
-			"- `--preview`: generate read-only governance learning proposals (default true)",
-			"- `--json`: JSON output",
-			"",
-			"## Arguments",
-			"```text",
-			"[--preview] [--json]",
-			"```",
-			"",
-			"## Prerequisites",
-			"- `.slipway.yaml` must exist (run `slipway init` first)",
-		),
-	},
-	{
-		commandID:              "checkpoint",
-		description:            "Set an active checkpoint to pause wave execution and request user input",
-		class:                  string(CommandClassMutation),
-		tier:                   "situational",
-		includeInstallMetadata: true,
-		body: legacyGeneratedCommandSkillBody(
-			"# Checkpoint",
-			"",
-			"Pause wave execution and request user input for a specific task.",
-			"",
-			"## Invocation",
-			"```bash",
-			"slipway checkpoint --task-id <task_id> [--type <type>] [--allowed-responses <responses>] --json",
-			"```",
-			"",
-			"## Contract",
-			"- Sets an active checkpoint on the current governed change.",
-			"- Only valid during `S2_IMPLEMENT` state.",
-			"- Only one checkpoint can be active at a time.",
-			"- Resume with `slipway run --resume-response \"<response>\"`.",
-			"- After checkpoint resume, a **fresh subagent MUST be spawned** — do NOT continue in the same context.",
-			"",
-			"## When to Use",
-			"- Task encounters a blocker requiring human judgment (architectural decision, ambiguous requirement).",
-			"- Task encounters deviation that requires user decision.",
-			"- Retry budget exhausted — surface failure to user for decision.",
-			"",
-			"## Flags",
-			"- `--task-id <id>`: ID of the paused task (required)",
-			"- `--type <type>`: Checkpoint type — `human_verify` (default), `decision`, `human_action`",
-			"- `--allowed-responses <responses>`: Comma-separated allowed response values (required for `type=decision`)",
-			"- `--json`: JSON output",
-			"- `--change <slug>`: target a specific active change",
-			"",
-			"## Arguments",
-			"```text",
-			"--task-id <id> [--type human_verify|decision|human_action] [--allowed-responses <value> ...] [--json] [--change <slug>]",
-			"```",
-			"",
-			"## Prerequisites",
-			"- `.slipway.yaml` must exist (run `slipway init` first)",
-			"- An active governed change must be in S2_IMPLEMENT with a materialized wave plan (run `slipway repair` if `wave-plan.yaml` is missing).",
-		),
-	},
-	{
-		commandID:   "pivot",
-		description: "Reroute or rescope an active change",
-		class:       string(CommandClassMutation),
-		tier:        "situational",
-		body: legacyGeneratedCommandSkillBody(
-			"# Pivot",
-			"",
-			"Reroute (re-evaluate the routing/discovery decision) or rescope (reopen intake to",
-			"amend scope) an active change. Both set `needs_discovery=true` and clear",
-			"execution residue.",
-			"",
-			"## Invocation",
-			"```bash",
-			"slipway pivot --reroute",
-			"slipway pivot --rescope",
-			"```",
-			"",
-			"## Contract",
-			"- Show pivot summary with before/after state.",
-			"- Confirm pivot action with user before executing.",
-			"- `--reroute` (the default when no flag is given) is valid in `S1_PLAN`,",
-			"  `S2_IMPLEMENT`, or `S3_REVIEW`; it returns the change to `S1_PLAN`",
-			"  with discovery forced on. An invalid state is blocked (`pivot_state_invalid`).",
-			"- `--rescope` is valid in `S2_IMPLEMENT` or `S3_REVIEW`; it returns",
-			"  the change to `S0_INTAKE` (intake/clarify) and clears the intent",
-			"  `## Approved Summary` so it must be re-confirmed. Before execution",
-			"  (`S0_INTAKE`/`S1_PLAN`) and terminal states are blocked",
-			"  (`rescope_state_invalid`).",
-			"",
-			"## Flags",
-			"- `--reroute`: Re-evaluate routing/discovery and re-enter `S1_PLAN` (valid in S1_PLAN/S2_IMPLEMENT/S3_REVIEW).",
-			"- `--rescope`: Reopen intake — return to `S0_INTAKE` to amend scope, clearing the Approved Summary (valid in S2_IMPLEMENT/S3_REVIEW).",
-			"- `--json`: JSON output",
-			"- `--change <slug>`: target a specific active change",
-			"",
-			"## Arguments",
-			"```text",
-			"[--reroute|--rescope] [--json] [--change <slug>]",
-			"```",
-			"",
-			"## Prerequisites",
-			"- `.slipway.yaml` must exist (run `slipway init` first)",
-			"- an active change must exist, or pass `--change <slug>` when supported.",
-		),
-	},
-}
-
-func legacyGeneratedCommandSkillBody(lines ...string) string {
-	return strings.Join(lines, "\n")
-}
-
-func matchesLegacyGeneratedCommandSkillSignature(content string, cfg ToolConfig, commandID string) bool {
-	content, ok := normalizeLegacyGeneratedCommandSkillTrigger(content, cfg, commandID)
-	if !ok {
-		return false
-	}
-	for _, signature := range legacyGeneratedCommandSkillSignatures {
-		if signature.commandID != commandID {
-			continue
-		}
-		if content == signature.content() {
-			return true
-		}
-	}
-	return false
-}
-
-func normalizeLegacyGeneratedCommandSkillTrigger(content string, cfg ToolConfig, commandID string) (string, bool) {
-	triggerLine := "trigger: \"" + commandTrigger(cfg, commandID) + "\"\n"
-	if strings.Count(content, triggerLine) != 1 {
-		return "", false
-	}
-	normalized := "trigger: \"" + legacyGeneratedCommandSkillTrigger + "\"\n"
-	return strings.Replace(content, triggerLine, normalized, 1), true
-}
-
-func (s legacyGeneratedCommandSkillSignature) content() string {
-	var b strings.Builder
-	b.WriteString("---\n")
-	b.WriteString("name: ")
-	b.WriteString(adapterSkillName(s.commandID))
-	b.WriteByte('\n')
-	b.WriteString("description: ")
-	b.WriteString(yamlDoubleQuoted(s.description))
-	b.WriteByte('\n')
-	if s.includeInstallMetadata {
-		b.WriteString("install_profiles:\n")
-		b.WriteString("  - full\n")
-		b.WriteString("requires: []\n")
-	}
-	b.WriteString("command_id: \"")
-	b.WriteString(s.commandID)
-	b.WriteString("\"\n")
-	b.WriteString("trigger: \"")
-	b.WriteString(legacyGeneratedCommandSkillTrigger)
-	b.WriteString("\"\n")
-	b.WriteString("class: \"")
-	b.WriteString(s.class)
-	b.WriteString("\"\n")
-	b.WriteString("tier: \"")
-	b.WriteString(s.tier)
-	b.WriteString("\"\n")
-	b.WriteString("surface: \"skill\"\n")
-	b.WriteString("---\n")
-	b.WriteString(strings.TrimRight(s.body, "\n"))
-	b.WriteString("\n\n")
-	b.WriteString(commandSkillFooter(s.commandID))
-	b.WriteByte('\n')
-	return b.String()
-}
-
 func renderedCommandSkillAsRetiredCommand(cfg ToolConfig, sourceID, retiredID string) (string, error) {
 	content, err := renderCommandSkill(cfg, sourceID)
 	if err != nil {
@@ -2799,7 +2557,12 @@ func defaultFileModeForPath(path string) os.FileMode {
 	return 0o644
 }
 
-func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+// mergeSettingsJSONWithPlan applies the shared settings.json read-modify-write
+// scaffold: it honors the non-refresh skip guard, loads any existing settings
+// object, invokes mutate to apply the caller's changes, then marshals and writes
+// the result (respecting the refresh plan when present). mutate edits the decoded
+// settings map in place.
+func mergeSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan, mutate func(settings map[string]any) error) error {
 	settingsPath := filepath.Join(root, cfg.SettingsPath)
 	if !refresh {
 		if _, err := os.Stat(settingsPath); err == nil {
@@ -2817,15 +2580,11 @@ func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refres
 		return err
 	}
 
-	settings["enableSkillCommands"] = true
-	if err := mergeStringArraySetting(settings, "skills", "./skills"); err != nil {
-		return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
-	}
-	if err := mergeStringArraySetting(settings, "prompts", "./prompts"); err != nil {
-		return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
+	if err := mutate(settings); err != nil {
+		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where searchable mode is intentional.
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
 		return err
 	}
 	content, err := json.MarshalIndent(settings, "", "  ")
@@ -2836,7 +2595,20 @@ func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refres
 	if refresh && plan != nil {
 		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
 	}
-	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project artifact where operator-readable mode is intentional.
+	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
+}
+
+func mergePiRegistrationSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
+	return mergeSettingsJSONWithPlan(root, cfg, refresh, plan, func(settings map[string]any) error {
+		settings["enableSkillCommands"] = true
+		if err := mergeStringArraySetting(settings, "skills", "./skills"); err != nil {
+			return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
+		}
+		if err := mergeStringArraySetting(settings, "prompts", "./prompts"); err != nil {
+			return fmt.Errorf("%s: %w", cfg.SettingsPath, err)
+		}
+		return nil
+	})
 }
 
 // writePiHooksExtensionWithPlan writes the pi extension bridge file when the
@@ -3068,63 +2840,36 @@ func mergeStringArraySetting(settings map[string]any, key, value string) error {
 }
 
 func mergeHookSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, plan *toolRefreshPlan) error {
-	settingsPath := filepath.Join(root, cfg.SettingsPath)
-	if !refresh {
-		if _, err := os.Stat(settingsPath); err == nil {
-			return nil
+	return mergeSettingsJSONWithPlan(root, cfg, refresh, plan, func(settings map[string]any) error {
+		var hooks map[string]any
+		switch existingHooks := settings["hooks"].(type) {
+		case nil:
+			hooks = map[string]any{}
+		case map[string]any:
+			hooks = existingHooks
+		default:
+			return fmt.Errorf("%s contains a non-object hooks field", cfg.SettingsPath)
 		}
-	}
 
-	settings := map[string]any{}
-	existing, err := os.ReadFile(settingsPath) // #nosec G304 -- path is resolved from repository or governed artifact authority before this read.
-	if err == nil {
-		if err := json.Unmarshal(existing, &settings); err != nil {
-			return fmt.Errorf("parse %s: %w", cfg.SettingsPath, err)
+		// Inside the Slipway source tree these inline commands are rewritten to the
+		// in-repo go-run launch (see hookLaunch / renderCodexHooksBlock) so a
+		// dogfooding checkout runs its own HEAD instead of a stale PATH release that
+		// may predate the current `--tool` flag. settings.json is per-machine, so the
+		// rewrite is rendered for the local host. pruneStaleSlipwayHookCommands still
+		// recognizes both the bare and the go-run forms across refreshes.
+		sessionCmd := applyHookLaunchPrefix(sessionStartHookCommand, root)
+		promptCmd := applyHookLaunchPrefix(contextPressureHookCommand, root)
+		if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
+			pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionCmd)
+			mergeHookEventCommand(hooks, cfg.SessionEvent, sessionCmd)
 		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-
-	var hooks map[string]any
-	switch existingHooks := settings["hooks"].(type) {
-	case nil:
-		hooks = map[string]any{}
-	case map[string]any:
-		hooks = existingHooks
-	default:
-		return fmt.Errorf("%s contains a non-object hooks field", cfg.SettingsPath)
-	}
-
-	// Inside the Slipway source tree these inline commands are rewritten to the
-	// in-repo go-run launch (see hookLaunch / renderCodexHooksBlock) so a
-	// dogfooding checkout runs its own HEAD instead of a stale PATH release that
-	// may predate the current `--tool` flag. settings.json is per-machine, so the
-	// rewrite is rendered for the local host. pruneStaleSlipwayHookCommands still
-	// recognizes both the bare and the go-run forms across refreshes.
-	sessionCmd := applyHookLaunchPrefix(sessionStartHookCommand, root)
-	promptCmd := applyHookLaunchPrefix(contextPressureHookCommand, root)
-	if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
-		pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionCmd)
-		mergeHookEventCommand(hooks, cfg.SessionEvent, sessionCmd)
-	}
-	if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-		pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, promptCmd)
-		mergeHookEventCommand(hooks, cfg.PostToolEvent, promptCmd)
-	}
-	settings["hooks"] = hooks
-
-	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil { // #nosec G301 -- directory is a user-facing project or governance artifact location where executable/searchable mode is intentional.
-		return err
-	}
-	content, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return err
-	}
-	content = append(content, '\n')
-	if refresh && plan != nil {
-		return plan.writeUnmanagedFile(settingsPath, content, 0o644)
-	}
-	return os.WriteFile(settingsPath, content, 0o644) // #nosec G306 -- file is a user-facing project or governance artifact where operator-readable mode is intentional.
+		if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
+			pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, promptCmd)
+			mergeHookEventCommand(hooks, cfg.PostToolEvent, promptCmd)
+		}
+		settings["hooks"] = hooks
+		return nil
+	})
 }
 
 func legacyShellHookPath(basePath string) string {
@@ -3310,34 +3055,27 @@ func firstShellScriptArg(fields []string) (string, bool) {
 	return "", false
 }
 
+func hookCommandEntry(command string) map[string]any {
+	return map[string]any{
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": command,
+			},
+		},
+	}
+}
+
 func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
 	rawEntries, ok := hooks[eventName]
 	if !ok {
-		hooks[eventName] = []any{
-			map[string]any{
-				"hooks": []any{
-					map[string]any{
-						"type":    "command",
-						"command": command,
-					},
-				},
-			},
-		}
+		hooks[eventName] = []any{hookCommandEntry(command)}
 		return
 	}
 
 	entries, ok := rawEntries.([]any)
 	if !ok {
-		hooks[eventName] = []any{
-			map[string]any{
-				"hooks": []any{
-					map[string]any{
-						"type":    "command",
-						"command": command,
-					},
-				},
-			},
-		}
+		hooks[eventName] = []any{hookCommandEntry(command)}
 		return
 	}
 
@@ -3361,14 +3099,7 @@ func mergeHookEventCommand(hooks map[string]any, eventName, command string) {
 		}
 	}
 
-	hooks[eventName] = append(entries, map[string]any{
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": command,
-			},
-		},
-	})
+	hooks[eventName] = append(entries, hookCommandEntry(command))
 }
 
 func commandTrigger(cfg ToolConfig, commandID string) string {

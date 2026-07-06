@@ -786,6 +786,24 @@ func cloneWorktreeRecords(in []gitWorktreeRecord) []gitWorktreeRecord {
 	return out
 }
 
+type normalizePathCacheEntry struct {
+	once     sync.Once
+	value    string
+	resolved bool
+}
+
+// normalizePathCache memoizes successful filepath.EvalSymlinks resolutions so
+// NormalizePath performs the syscall at most once per distinct absolute path per
+// process invocation. The key is the post-filepath.Abs absolute path
+// (cwd-independent) and the value is the cleaned resolved path. Only successful
+// resolutions are retained: on EvalSymlinks failure NormalizePath falls back to
+// the cleaned absolute path and drops the entry, so a path that later becomes
+// resolvable is still re-resolved. sync.Map is safe for concurrent use; sync.Once
+// on each entry deduplicates concurrent first callers for the same path.
+var normalizePathCache sync.Map
+
+var normalizePathEvalSymlinks = filepath.EvalSymlinks
+
 // NormalizePath resolves a path to its canonical absolute form with symlink resolution.
 // Used for worktree path comparison across the codebase.
 func NormalizePath(path string) (string, error) {
@@ -793,8 +811,21 @@ func NormalizePath(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if real, err := filepath.EvalSymlinks(abs); err == nil {
-		abs = real
+	entryAny, _ := normalizePathCache.LoadOrStore(abs, &normalizePathCacheEntry{})
+	entry := entryAny.(*normalizePathCacheEntry)
+	entry.once.Do(func() {
+		if real, err := normalizePathEvalSymlinks(abs); err == nil {
+			entry.value = filepath.Clean(real)
+			entry.resolved = true
+			return
+		}
+		entry.value = filepath.Clean(abs)
+	})
+	if !entry.resolved {
+		// EvalSymlinks failed: don't retain the unresolved fallback, so a path
+		// that later becomes resolvable (e.g. a worktree created after this
+		// call) is re-resolved instead of returning a stale unresolved value.
+		normalizePathCache.CompareAndDelete(abs, entry)
 	}
-	return filepath.Clean(abs), nil
+	return entry.value, nil
 }

@@ -53,7 +53,7 @@ func TestScopeContractRepairTargetReturnsS2RepairWhenChangedFilesMissing(t *test
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractRepairTarget(root, change, codeTaskSummary(nil))
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary(nil), sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 
 	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
@@ -74,7 +74,7 @@ func TestScopeContractRepairTargetEmptyWhenContractSatisfied(t *testing.T) {
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"cmd/next.go"}))
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"cmd/next.go"}), sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 	assert.Empty(t, target.SkillName, "a satisfied scope contract must not trigger a repair")
 }
@@ -84,7 +84,7 @@ func TestScopeContractRepairTargetEmptyWhenSummaryNotReady(t *testing.T) {
 	t.Parallel()
 	root, change := seedScopeContractChange(t, model.StateS3Review)
 
-	target, err := scopeContractRepairTarget(root, change, nil)
+	target, err := scopeContractRepairTarget(root, change, nil, sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 	assert.Empty(t, target.SkillName, "no repair without a ready execution summary")
 }
@@ -101,7 +101,7 @@ func TestScopeContractRepairTargetRoutesDriftToS2Repair(t *testing.T) {
 
 	// task-a is planned for cmd/next.go but records a changed file outside that
 	// scope, so the only contract failure is out-of-scope drift.
-	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"scratch.txt"}))
+	target, err := scopeContractRepairTarget(root, change, codeTaskSummary([]string{"scratch.txt"}), sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 
 	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
@@ -121,7 +121,7 @@ func TestSensitiveEvidenceRepairTargetReturnsS2RepairWhenMarkerMissing(t *testin
 
 	root, change := seedSensitiveEvidenceExecution(t, model.StateS3Review, "go-test:./...")
 
-	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("go-test:./..."))
+	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("go-test:./..."), sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 
 	assert.Equal(t, SkillWaveOrchestration, target.SkillName)
@@ -182,7 +182,7 @@ func TestSensitiveEvidenceRepairTargetEmptyWhenMarkerPresent(t *testing.T) {
 
 	root, change := seedSensitiveEvidenceExecution(t, model.StateS3Review, "migration-applied:goose up")
 
-	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("migration-applied:goose up"))
+	target, err := sensitiveEvidenceRepairTarget(root, change, sensitiveMigrationSummary("migration-applied:goose up"), sharedWorkspaceChangedFilesScan())
 	require.NoError(t, err)
 	assert.Empty(t, target.SkillName, "matching sensitive evidence must not trigger a repair")
 }

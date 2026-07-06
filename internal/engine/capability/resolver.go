@@ -265,31 +265,21 @@ func collectSupports(reg *Registry, sig Signals, route *RouteSelection) []Attach
 		routeID = route.BackingID
 	}
 
-	type match struct {
-		skill Skill
-		mode  AttachmentMode
-	}
-	all := reg.All()
-	matches := make([]match, 0, len(all))
-	for _, sk := range all {
+	out := make([]Attachment, 0, 3)
+	for _, sk := range reg.All() {
+		if len(out) >= 3 {
+			break
+		}
 		if sk.ID == routeID {
 			continue
 		}
 		if mode, ok := pickSupportAttachment(sk, sig); ok {
-			matches = append(matches, match{skill: sk, mode: mode})
+			out = append(out, Attachment{
+				SkillID: sk.ID,
+				Kind:    mode,
+				Reason:  sk.Summary,
+			})
 		}
-	}
-
-	out := make([]Attachment, 0, 3)
-	for _, m := range matches {
-		if len(out) >= 3 {
-			break
-		}
-		out = append(out, Attachment{
-			SkillID: m.skill.ID,
-			Kind:    m.mode,
-			Reason:  m.skill.Summary,
-		})
 	}
 	return out
 }
