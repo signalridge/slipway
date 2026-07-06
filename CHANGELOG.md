@@ -5,6 +5,20 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0](https://github.com/signalridge/slipway/compare/v0.40.0...v0.41.0) (2026-07-06)
+
+
+### Features
+
+* **toolgen:** bridge Slipway session-start into Pi ([#418](https://github.com/signalridge/slipway/issues/418)) ([02e54ce](https://github.com/signalridge/slipway/commit/02e54ce5ed671f6434774c86bbfd497ef50e0c54))
+
+
+### Refactoring
+
+* behavior-preserving optimization and correctness hardening ([#414](https://github.com/signalridge/slipway/issues/414)) ([384a226](https://github.com/signalridge/slipway/commit/384a2269def4548ac3938b991d11e1238c39a912))
+* complete deferred optimization residual from PR [#414](https://github.com/signalridge/slipway/issues/414) ([#415](https://github.com/signalridge/slipway/issues/415)) ([7846c39](https://github.com/signalridge/slipway/commit/7846c397af5022a6560b62eefbdbc0175a439277))
+* remove safe dead code ([#406](https://github.com/signalridge/slipway/issues/406)) ([e4a54c3](https://github.com/signalridge/slipway/commit/e4a54c3ba6f9750ddffd3f79d94fda6dcc625a36))
+
 ## [0.40.0](https://github.com/signalridge/slipway/compare/v0.39.0...v0.40.0) (2026-07-03)
 
 
