@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,120 @@ func recordsContainPath(records []gitWorktreeRecord, path string) bool {
 		}
 	}
 	return false
+}
+
+func resetNormalizePathTestState(t *testing.T) {
+	t.Helper()
+
+	oldEvalSymlinks := normalizePathEvalSymlinks
+	normalizePathCache = sync.Map{}
+	normalizePathEvalSymlinks = filepath.EvalSymlinks
+	t.Cleanup(func() {
+		normalizePathCache = sync.Map{}
+		normalizePathEvalSymlinks = oldEvalSymlinks
+	})
+}
+
+func TestNormalizePathDoesNotCacheFallbackOnEvalSymlinksError(t *testing.T) {
+	resetNormalizePathTestState(t)
+
+	path := filepath.Join(t.TempDir(), "missing", "path")
+	abs, err := filepath.Abs(path)
+	require.NoError(t, err)
+
+	resolved := filepath.Clean(filepath.Join(abs, "resolved"))
+	var calls int
+	fail := true
+	normalizePathEvalSymlinks = func(got string) (string, error) {
+		calls++
+		assert.Equal(t, abs, got)
+		if fail {
+			return "", os.ErrNotExist
+		}
+		return resolved, nil
+	}
+
+	// While EvalSymlinks fails, NormalizePath returns the cleaned absolute
+	// fallback but must not cache it: every call re-resolves.
+	first, err := NormalizePath(path)
+	require.NoError(t, err)
+	second, err := NormalizePath(path)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(abs), first)
+	assert.Equal(t, filepath.Clean(abs), second)
+	assert.Equal(t, 2, calls)
+
+	// Once the path becomes resolvable, the next call picks up the real value
+	// (proving no stale unresolved entry was cached) and caches it thereafter.
+	fail = false
+	third, err := NormalizePath(path)
+	require.NoError(t, err)
+	assert.Equal(t, resolved, third)
+	assert.Equal(t, 3, calls)
+
+	fourth, err := NormalizePath(path)
+	require.NoError(t, err)
+	assert.Equal(t, resolved, fourth)
+	assert.Equal(t, 3, calls)
+}
+
+func TestNormalizePathDeduplicatesConcurrentFirstCallers(t *testing.T) {
+	resetNormalizePathTestState(t)
+
+	path := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, os.MkdirAll(path, 0o755))
+	abs, err := filepath.Abs(path)
+	require.NoError(t, err)
+
+	var calls atomic.Int64
+	var startedOnce sync.Once
+	started := make(chan struct{})
+	release := make(chan struct{})
+	normalizePathEvalSymlinks = func(got string) (string, error) {
+		calls.Add(1)
+		if got != abs {
+			return "", os.ErrInvalid
+		}
+		startedOnce.Do(func() {
+			close(started)
+		})
+		<-release
+		return got, nil
+	}
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	results := make(chan string, workers)
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			got, err := NormalizePath(path)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- got
+		}()
+	}
+
+	<-started
+	close(release)
+	wg.Wait()
+	close(errs)
+	close(results)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	count := 0
+	for got := range results {
+		assert.Equal(t, filepath.Clean(abs), got)
+		count++
+	}
+	assert.Equal(t, workers, count)
+	assert.Equal(t, int64(1), calls.Load())
 }
 
 func TestPersistScopeWorktreeMetadata(t *testing.T) {

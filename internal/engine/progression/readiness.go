@@ -339,11 +339,17 @@ func evaluateGovernanceReadinessBaseWithReaders(
 	}
 
 	if opts.IncludeReviewSurface || effectiveState == model.StateS3Review {
+		// Thread the governance snapshot already built above (snap) into the
+		// review-authority path so it reuses the same ActiveControls/review
+		// selection instead of rebuilding an identical snapshot. It is tagged with
+		// evaluationChange — the exact change/bundle the authority path would
+		// otherwise re-resolve — so reuse only happens on an identity match.
 		reviewSurface, err := evaluateReviewAuthorityWithPolicyAndRecords(
 			root,
 			evaluationChange,
 			policy,
 			verificationRecords,
+			&prebuiltGovernanceSnapshot{change: evaluationChange, snapshot: snap},
 		)
 		if err != nil {
 			return GovernanceReadiness{}, err
@@ -485,7 +491,12 @@ func (r GovernanceReadiness) cachedReviewAuthority() (ReviewAuthority, bool) {
 	return ReviewAuthority{}, false
 }
 
-func previewGovernanceSnapshotForReadiness(
+// previewGovernanceSnapshotForReadiness materializes the read-only governance
+// snapshot shared across the readiness surfaces. It is a package-level var (like
+// the applyGovernedFileTransaction/appendLifecycleEvent seams) so tests can count
+// how many times a single readiness evaluation builds the snapshot and assert the
+// readiness->review-authority path reuses it rather than rebuilding.
+var previewGovernanceSnapshotForReadiness = func(
 	root string,
 	change model.Change,
 	bundleDir string,

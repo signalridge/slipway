@@ -178,11 +178,7 @@ func wavePlanRepairHint() string {
 }
 
 func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, summary *model.ExecutionSummary) (bool, bool, error) {
-	currentStructuralHash, err := CurrentTasksPlanStructuralState(root, change)
-	if err != nil {
-		return false, false, err
-	}
-	currentScopeHash, err := CurrentTasksPlanScopeState(root, change)
+	currentStructuralHash, currentScopeHash, err := currentTasksPlanStructuralAndScopeState(root, change)
 	if err != nil {
 		return false, false, err
 	}
