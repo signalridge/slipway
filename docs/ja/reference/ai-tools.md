@@ -90,7 +90,11 @@ $slipway-init
 
 - Claude は、インラインの素の `slipway hook ...` 設定コマンドを登録します。
 - Pi は `.pi/settings.json` を `enableSkillCommands=true` で書き込み、`./skills` と
-  `./prompts` を登録します。
+  `./prompts` を登録します。さらに `.pi/extensions/slipway-hooks.ts` を生成し、
+  `session-start` フックを pi の `session_start` / `before_agent_start` 拡張イベントへ
+  ブリッジします。pi は `.pi/extensions/` を自動検出しますが、プロジェクトが信頼された後にだけ
+  プロジェクトローカル拡張を読み込みます。`context-pressure` フックはブリッジされません
+  （pi の拡張 `exec` には stdin がありません）。
 - Qwen は `.qwen/settings.json` を書き込み、セッション開始フックを登録します。
 - Codex は `SessionStart` と `UserPromptSubmit` 向けの `.codex/config.toml` フックを
   書き込みます。これらのフックは、リポジトリと各フックがユーザーによって信頼されるまでは

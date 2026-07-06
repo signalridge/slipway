@@ -358,6 +358,21 @@ func TestInitCommandCodexPrintsInvocationSurface(t *testing.T) {
 	})
 }
 
+func TestInitCommandPiPrintsTrustCaveat(t *testing.T) {
+	root := t.TempDir()
+	withWorkspace(t, root, func() {
+		stdout, stderr, err := runRootCommand([]string{"init", "--tools", "pi"})
+		require.NoError(t, err, "stderr: %s", stderr)
+
+		cfg, ok := toolgen.LookupTool("pi")
+		require.True(t, ok)
+		assert.Contains(t, stdout, "pi: "+cfg.InvocationSummary())
+		assert.Contains(t, stdout, ".pi/extensions/slipway-hooks.ts")
+		assert.Contains(t, stdout, "inert until Pi trusts this project")
+		assert.Contains(t, stdout, "never edits global Pi trust")
+	})
+}
+
 func writeGeneratedAdapterMarkerForTest(t *testing.T, root, toolID string) {
 	t.Helper()
 

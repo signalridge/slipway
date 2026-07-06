@@ -296,7 +296,7 @@ Slipway は幅を犠牲にして権威を取ります。広範なプロンプト
 | Copilot | `.github/skills/slipway-*/SKILL.md`、`.github/prompts/slipway-*.prompt.md`、`.github/copilot/slipway` の管理状態 |
 | Kilo | `.kilocode/skills/slipway-*/SKILL.md`、`.kilocode/workflows/slipway-*.md` |
 | Kiro | `.kiro/skills/slipway-*/SKILL.md` の入口・コマンド・ガバナンススキル |
-| Pi | `.pi/skills/slipway-*/SKILL.md`、`.pi/prompts/slipway-*.md`、`.pi/settings.json` のスキル／プロンプト登録 |
+| Pi | `.pi/skills/slipway-*/SKILL.md`、`.pi/prompts/slipway-*.md`、`.pi/settings.json` のスキル／プロンプト登録、`.pi/extensions/slipway-hooks.ts` のセッション開始ブリッジ |
 | Qwen | `.qwen/skills/slipway-*/SKILL.md` のコマンドスキル、`.qwen/settings.json` のフックエントリ |
 | Windsurf | `.windsurf/skills/slipway-*/SKILL.md`、`.windsurf/workflows/slipway-*.md` |
 
