@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.1](https://github.com/signalridge/slipway/compare/v0.41.0...v0.41.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* **status:** honest done-ready and gate JSON surfaces ([#411](https://github.com/signalridge/slipway/issues/411), [#413](https://github.com/signalridge/slipway/issues/413)) ([#420](https://github.com/signalridge/slipway/issues/420)) ([b01b435](https://github.com/signalridge/slipway/commit/b01b435656c8161d12cbd77b56583b99a35ff392))
+
+
+### Dependencies
+
+* **actions:** bump the actions group with 8 updates ([#419](https://github.com/signalridge/slipway/issues/419)) ([90d96bb](https://github.com/signalridge/slipway/commit/90d96bbdccff374ccc233a1794b3b8581953aa9a))
+
 ## [0.41.0](https://github.com/signalridge/slipway/compare/v0.40.0...v0.41.0) (2026-07-06)
 
 
