@@ -1926,6 +1926,70 @@ func TestRunJSONRoutesToShipVerificationAfterReviewSetWithoutDisplayPromotion(t 
 	assert.Empty(t, view.NextSkill.BlockingName)
 }
 
+// Regression for #412: when every selected review peer is fresh and the only
+// stale gate is the terminal ship-verification gate (surfaced as a digest-drift
+// required_skill_stale blocker), next_skill.name must route to ship-verification
+// and not fall through to the static head-of-batch review peer. The #420 test
+// above locks the ship_gate_blocked variant, which never enters the
+// review-alignment resolver; the required_skill_stale variant does, and used to
+// be redirected to selectedReviewSkills[0] (spec-compliance-review),
+// contradicting the correct blockers[]/recovery steps.
+func TestRunJSONRoutesToShipVerificationWhenStaleGateIsTheOnlyBlocker(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("ship-verification-stale-gate")
+	change.QualityMode = model.QualityModeStandard
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+
+	view := nextView{
+		Slug:         change.Slug,
+		CurrentState: model.StateS3Review,
+		InputContext: nextContext{WorkspaceRoot: root},
+	}
+	err := assembleSkillViewWithOptions(
+		root,
+		&view,
+		changeRef{Slug: change.Slug},
+		progression.AdvanceSummary{
+			Action:    "blocked",
+			FromState: model.StateS3Review,
+			Blockers:  []model.ReasonCode{model.NewReasonCode("required_skill_stale", "ship-verification:run_version")},
+		},
+		&change,
+		nil,
+		passingSelectedReviewEvidenceForNextSkillTests(1),
+		nil,
+		assembleSkillViewOptions{
+			IncludeReviewContext: true,
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	// The terminal ship gate is owned by nextS3ShipAuthoritySkill, not the
+	// review-alignment fallback; a stale ship gate must not be redirected to a
+	// review peer.
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+
+	// next_skill must agree with the (already correct) recovery steps, which the
+	// command layer derives from view.Blockers. Mirror that here and assert the
+	// recovery targets re-recording ship-verification, not a fresh review peer.
+	view.Recovery = model.BuildRecovery(view.Blockers)
+	require.NotNil(t, view.Recovery)
+	var recoveryCommands []string
+	for _, step := range view.Recovery.Steps {
+		recoveryCommands = append(recoveryCommands, step.Command)
+	}
+	joinedRecovery := strings.Join(recoveryCommands, "\n")
+	assert.Contains(t, joinedRecovery, progression.SkillShipVerification,
+		"recovery steps should target ship-verification")
+	assert.NotContains(t, joinedRecovery, progression.SkillSpecComplianceReview,
+		"a stale ship gate must not steer recovery at a fresh review peer")
+}
+
 func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

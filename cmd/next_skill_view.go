@@ -789,6 +789,13 @@ func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []m
 
 func reviewAlignmentSkillForTarget(selectedReviewSkills []string, target string) string {
 	target = strings.TrimSpace(target)
+	// The terminal ship-verification gate is not a selected review peer; it is
+	// owned by nextS3ShipAuthoritySkill. A stale/blocked ship gate must fall
+	// through to that resolver rather than be redirected to the head-of-batch
+	// review peer by the fallback below (#412).
+	if target == progression.SkillShipVerification {
+		return ""
+	}
 	if stringInSlice(selectedReviewSkills, target) {
 		return target
 	}
