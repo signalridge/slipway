@@ -111,6 +111,7 @@ func TestWaveOrchestrationDispatchReferenceDefinesRuntimeAdapters(t *testing.T) 
 		"`task_id`",
 		"`verdict`",
 		"`changed_files`",
+		"`no_op_justification`",
 		"`test_summary`",
 		"`evidence_ref`",
 		"`blockers`",

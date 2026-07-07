@@ -109,7 +109,7 @@ coordinator context.
 ### Shared Executor Checklist
 - Inputs: task ID, acceptance criteria, changed-file scope, locked decisions, technique references.
 - Inputs for map-aware tasks: `input_context.codebase_map_dir`, relevant `input_context.codebase_map_docs`, and `codebase_map_doc_states`.
-- Outputs: `task_id`, `verdict`, `changed_files`, `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
+- Outputs: `task_id`, `verdict`, `changed_files`, optional `no_op_justification` (only for a pass code task that changed zero files), `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
 - Executor result acceptance requires a matching `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` dispatch reference.
 - Enforce TDD for `task_kind=code`, then run post-execution self-check before accepting the task.
 - Executors may report evidence refs, but `slipway evidence task` remains the only supported task evidence ledger writer. Executor agents must not self-stamp `captured_at`, freshness inputs, or governed verification YAML.

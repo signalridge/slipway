@@ -5,6 +5,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/model"
@@ -39,10 +40,35 @@ type Report struct {
 	// exemption is preserved (these files stay out of ChangedFiles /
 	// OutOfScopeFiles and never affect Status); this field only makes the
 	// otherwise-silent exemption observable.
-	ExemptContextFiles []string           `json:"exempt_context_files,omitempty"`
-	Blockers           []model.ReasonCode `json:"blockers,omitempty"`
+	ExemptContextFiles []string `json:"exempt_context_files,omitempty"`
+	// NoOpJustifiedTasks discloses the pass code tasks that the Scope Contract
+	// exempted from the changed-files requirement because they carry a
+	// no_op_justification and changed zero files (an honest behavior-preserving
+	// no-op). Like ExemptContextFiles, this exemption is otherwise silent — the
+	// task simply never appears in MissingChangedFileTasks — so this field makes
+	// the justification observable to a reviewer without reading raw evidence. It
+	// is observational only and never affects Status.
+	NoOpJustifiedTasks []NoOpJustifiedTask `json:"no_op_justified_tasks,omitempty"`
+	Blockers           []model.ReasonCode  `json:"blockers,omitempty"`
 }
 
+// NoOpJustifiedTask pairs a task with the no_op_justification that earned its
+// changed-files exemption, for observable disclosure in the scope-contract
+// Report.
+type NoOpJustifiedTask struct {
+	TaskID            string `json:"task_id"`
+	NoOpJustification string `json:"no_op_justification"`
+}
+
+// EvaluateWithChangedFiles scores a plan/summary pair against the Scope Contract.
+//
+// Precondition: summary must already be Load-validated (each task has passed
+// ExecutionTaskSummary.Validate). Evaluate trusts the no_op_justification
+// envelope enforced at that load boundary and does not re-validate it here — the
+// only production callers reach this through LoadExecutionSummary, which fails
+// closed on an out-of-envelope justification before a summary can arrive. A new
+// caller that constructs a summary in memory must Validate it first rather than
+// rely on Evaluate to catch a contradictory or inert justification.
 func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummary, extraChangedFiles []string) Report {
 	report := Report{Status: StatusNotApplicable}
 	if summary == nil || summary.RunSummaryVersion < 1 {
@@ -61,6 +87,7 @@ func EvaluateWithChangedFiles(plan wave.TaskPlan, summary *model.ExecutionSummar
 	report.MissingContractTasks = tasksMissingContract(plan)
 	report.MissingChangedFileTasks = tasksMissingChangedFiles(plan, summary)
 	report.OutOfScopeFiles = outOfScopeFiles(report.PlannedTargets, report.ChangedFiles)
+	report.NoOpJustifiedTasks = noOpJustifiedTasks(summary)
 
 	if len(report.MissingContractTasks) > 0 {
 		report.Blockers = append(report.Blockers, model.NewReasonCode(ReasonScopeContractMissing, strings.Join(report.MissingContractTasks, ",")))
@@ -185,15 +212,43 @@ func plannedTaskRequiresChangedFiles(task wave.TaskNode) bool {
 }
 
 func requiresChangedFiles(task model.ExecutionTaskSummary) bool {
-	if task.Verdict != model.TaskVerdictPass {
-		return false
+	// Normalize the changed-file count exactly as tasksMissingChangedFiles does
+	// (drop empty/duplicate entries) so an empty-but-justified task is not
+	// flagged, then defer the verdict/kind/justification decision to the shared
+	// model authority that the evidence record-time gates also use.
+	hasFiles := len(changedFiles(&model.ExecutionSummary{Tasks: []model.ExecutionTaskSummary{task}})) > 0
+	return task.RequiresChangedFiles(hasFiles)
+}
+
+// noOpJustifiedTasks returns, sorted by task ID, the tasks whose
+// no_op_justification is load-bearing: a pass code task that changed zero files,
+// which RequiresChangedFiles would otherwise require files from. It mirrors the
+// ValidateNoOpJustification envelope so a contradictory or out-of-envelope
+// justification (which the load boundary already rejects) is never disclosed as
+// a valid exemption.
+func noOpJustifiedTasks(summary *model.ExecutionSummary) []NoOpJustifiedTask {
+	if summary == nil {
+		return nil
 	}
-	switch task.TaskKind {
-	case model.TaskKindVerification, model.TaskKindInvestigation:
-		return false
-	default:
-		return true
+	var out []NoOpJustifiedTask
+	for _, task := range summary.Tasks {
+		justification := strings.TrimSpace(task.NoOpJustification)
+		if justification == "" {
+			continue
+		}
+		hasFiles := len(changedFiles(&model.ExecutionSummary{Tasks: []model.ExecutionTaskSummary{task}})) > 0
+		if hasFiles || task.Verdict != model.TaskVerdictPass || task.TaskKind != model.TaskKindCode {
+			continue
+		}
+		out = append(out, NoOpJustifiedTask{
+			TaskID:            strings.TrimSpace(task.TaskID),
+			NoOpJustification: justification,
+		})
 	}
+	slices.SortFunc(out, func(a, b NoOpJustifiedTask) int {
+		return strings.Compare(a.TaskID, b.TaskID)
+	})
+	return out
 }
 
 func outOfScopeFiles(targets, files []string) []string {

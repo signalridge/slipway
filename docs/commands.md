@@ -321,13 +321,20 @@ not trip scope-contract drift. To keep that filtering visible rather than
 inferred from a `git diff` disagreement, the exempted files are disclosed
 explicitly in the `scope_contract.exempt_context_files` field, surfaced by
 `slipway validate`, `slipway status --json`, and `slipway review --json`.
+A pass code task that honestly changed zero files carries a
+`no_op_justification`; the scope contract exempts it from the changed-files
+requirement and discloses it — task id and justification — in the
+`scope_contract.no_op_justified_tasks` field on the same three surfaces, so a
+reviewer sees why a zero-change task passed without reading raw evidence.
 
 `slipway evidence task` writes the flat runtime task JSON under
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration
 sync. The default S2 coordinator path is `--result-file <path>`, repeated when
 the coordinator wants one atomic batch import. Each executor result JSON
-contains `task_id`, `verdict`, `evidence_ref`, `changed_files`, `blockers`, and
-optional `session_id`. A batch preflights every file, rejects duplicate
+contains `task_id`, `verdict`, `evidence_ref`, `changed_files`, optional
+`no_op_justification` (only for a pass code task that changed zero files),
+`blockers`, and optional `session_id`. A batch preflights every file, rejects
+duplicate
 `task_id` entries, and writes no task evidence if any member is invalid.
 Executor result files must not include ledger-owned fields
 (`run_summary_version`, `task_kind`, `target_files`, `captured_at`,
@@ -374,7 +381,7 @@ which runs it once, after the peers converge, and never from a peer-shared
 record. There is no `slipway evidence suite-result` subcommand: ship-verification
 runs and records the suite itself as part of its single terminal evidence pass.
 
-`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task --result-file <path> --json`, and the compact result schema: `task_id,verdict,evidence_ref,changed_files,blockers,session_id`; repeat `--result-file` for atomic batch import. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
+`repair --json` separates `applied_repairs` from `unrepaired_drift`. Applied repairs are bounded local fixes that were actually performed; unrepaired drift includes a target, reason, and `next_action` for evidence or artifact work that Slipway did not mutate automatically. Ready execution summaries that are stale only because runtime task evidence is newer can be rebuilt from current wave-backed task evidence; stale planning-source drift remains unrepaired. Empty orphan active-bundle directories left behind after archive cleanup are removed as `empty_orphan_bundle` applied repairs; non-empty orphan bundles remain operator-reviewed integrity findings. Legacy repo-level handoff files such as `.git/slipway/runtime/handoff.md` are reported for manual migration to `.git/slipway/runtime/changes/<slug>/handoff.md`. Empty unheld lock anchors are reported as `cleaned_lock_anchor`; `change-create.lock` and `repair.lock` remain workspace/scope-level coordination locks rather than per-change locks. Missing task-evidence blockers include the runtime task evidence path, `record_command=slipway evidence task --result-file <path> --json`, and the compact result schema: `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`; repeat `--result-file` for atomic batch import. `health --json` findings include `active_change_blocking` and `active_change_impact`; advisory codebase-map warnings are marked non-blocking for the active change.
 
 `done` archives done-ready worktree-bound changes even when source files
 or non-active governance artifacts are still uncommitted, returning a

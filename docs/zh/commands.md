@@ -278,12 +278,16 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `scope_contract.out_of_scope_files`，而 `scope_contract.status` 保持 `pass`——单单刷新一次
 codebase map 不会触发 scope-contract 漂移。为了让这种过滤是可见的、而不是从 Git 差异输出的不一致
 里去推断，被豁免的文件会在 `scope_contract.exempt_context_files` 字段里显式披露，由
-`slipway validate`、`slipway status --json` 和 `slipway review --json` 呈现。
+`slipway validate`、`slipway status --json` 和 `slipway review --json` 呈现。诚实地零改动的
+pass code 任务会带上 `no_op_justification`；范围契约将其豁免于变更文件要求，并在同样这三个面上以
+`scope_contract.no_op_justified_tasks` 字段披露（任务 id 与其理由），这样审查者无需读取原始证据即可
+看到一个零改动任务为何通过。
 
 `slipway evidence task` 把扁平的运行时任务 JSON 写到
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。默认的 S2
 协调器路径是 `--result-file <path>`，当协调器想要一次原子的批量导入时可重复该标志。每个执行器结果
-JSON 包含 `task_id`、`verdict`、`evidence_ref`、`changed_files`、`blockers` 和可选的
+JSON 包含 `task_id`、`verdict`、`evidence_ref`、`changed_files`、可选的
+`no_op_justification`（仅用于零变更的 pass code 任务）、`blockers` 和可选的
 `session_id`。一个批次会预检每个文件、拒绝重复的 `task_id` 条目，并且只要有任何成员无效就不写入任何
 任务证据。执行器结果文件不得包含由 ledger 拥有的字段（`run_summary_version`、`task_kind`、
 `target_files`、`captured_at`、`freshness_inputs` 或 `input_hash`）；Slipway 会从当前活动 wave
@@ -325,7 +329,7 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 `cleaned_lock_anchor`；`change-create.lock` 和 `repair.lock` 仍是工作区/scope 级的协调锁，而不是
 逐变更锁。缺失任务证据的阻塞项包含运行时任务证据路径、
 `record_command=slipway evidence task --result-file <path> --json`，以及紧凑的结果 schema：
-`task_id,verdict,evidence_ref,changed_files,blockers,session_id`；重复 `--result-file` 可做原子
+`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`；重复 `--result-file` 可做原子
 批量导入。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 

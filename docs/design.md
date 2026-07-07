@@ -43,7 +43,7 @@ The wave planner buckets tasks into dependency-ordered, file-disjoint waves with
 
 ### 4. Scope containment
 
-Each task's declared `target_files` in `tasks.md` is a scope contract, evaluated with the same `TargetCoversPath` predicate the wave planner uses for conflict detection, so "covers" and "conflicts" share one implementation. Recorded changes outside the contract fail closed (`scope_contract_drift` and siblings), each mapped to an actionable remediation. The durable codebase map under `artifacts/codebase/` is the one disclosed exemption: when only those context files are dirty, they stay out of `scope_contract.changed_files` and are surfaced as `scope_contract.exempt_context_files` on `validate`/`status`/`review --json` rather than silently filtered.
+Each task's declared `target_files` in `tasks.md` is a scope contract, evaluated with the same `TargetCoversPath` predicate the wave planner uses for conflict detection, so "covers" and "conflicts" share one implementation. Recorded changes outside the contract fail closed (`scope_contract_drift` and siblings), each mapped to an actionable remediation. The scope contract has two disclosed exemptions, each surfaced on `validate`/`status`/`review --json` rather than silently applied. The durable codebase map under `artifacts/codebase/`: when only those context files are dirty, they stay out of `scope_contract.changed_files` and are surfaced as `scope_contract.exempt_context_files`. And a pass code task that honestly changed zero files, when it carries a `no_op_justification`, is exempted from the changed-files requirement and surfaced as `scope_contract.no_op_justified_tasks`.
 
 ### 5. Drift-aware forward recovery
 

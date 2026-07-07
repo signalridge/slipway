@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -26,13 +27,18 @@ func (v ExecutionVerdict) IsValid() bool {
 }
 
 type ExecutionTaskSummary struct {
-	TaskID          string                       `yaml:"task_id" json:"task_id"`
-	Verdict         TaskVerdict                  `yaml:"verdict" json:"verdict"`
-	TaskKind        TaskKind                     `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
-	ChangedFiles    []string                     `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
-	TargetFiles     []string                     `yaml:"target_files,omitempty" json:"target_files,omitempty"`
-	EvidenceRef     string                       `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
-	FreshnessInputs ExecutionTaskFreshnessInputs `yaml:"freshness_inputs,omitempty" json:"freshness_inputs,omitempty"`
+	TaskID       string      `yaml:"task_id" json:"task_id"`
+	Verdict      TaskVerdict `yaml:"verdict" json:"verdict"`
+	TaskKind     TaskKind    `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
+	ChangedFiles []string    `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
+	TargetFiles  []string    `yaml:"target_files,omitempty" json:"target_files,omitempty"`
+	EvidenceRef  string      `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
+	// NoOpJustification legitimizes a pass code task that changed zero files
+	// because honest investigation concluded no safe behavior-preserving change
+	// exists. It lives on evidence (never on the tasks-plan hash), so recording
+	// it introduces no wave-execution staleness cascade.
+	NoOpJustification string                       `yaml:"no_op_justification,omitempty" json:"no_op_justification,omitempty"`
+	FreshnessInputs   ExecutionTaskFreshnessInputs `yaml:"freshness_inputs,omitempty" json:"freshness_inputs,omitempty"`
 	// EvidenceInputHash is retained only so legacy hash-only summaries can be
 	// diagnosed as stale instead of failing to parse. It is no longer a
 	// freshness authority and new generated summaries should leave it empty.
@@ -105,6 +111,7 @@ func (t *ExecutionTaskSummary) Normalize() {
 	if !t.CapturedAt.IsZero() {
 		t.CapturedAt = t.CapturedAt.Round(0).UTC()
 	}
+	t.NoOpJustification = strings.TrimSpace(t.NoOpJustification)
 	t.FreshnessInputs.Normalize()
 	slices.Sort(t.ChangedFiles)
 	slices.Sort(t.TargetFiles)
@@ -125,10 +132,96 @@ func (t ExecutionTaskSummary) Validate() error {
 	if t.TaskKind != "" && !t.TaskKind.IsValid() {
 		return fmt.Errorf("invalid task_kind %q", t.TaskKind)
 	}
+	// Enforce the no_op_justification validity envelope on every task that reaches
+	// Validate, not only at the evidence write gates. This closes the summary
+	// read/save boundary: a hand-edited execution-summary.yaml cannot smuggle a
+	// contradictory or out-of-envelope justification into durable state that
+	// scope-contract then trusts for its changed-files exemption. It routes
+	// through the same ValidateNoOpJustification authority as the record gates and
+	// the task-evidence read boundary, so every boundary agrees.
+	//
+	// The raw len(t.ChangedFiles) is intentionally at least as strict as the
+	// scope-contract normalized count: an empty or duplicate entry that would
+	// normalize away still trips the contradiction check here. That is the
+	// fail-closed direction (reject a malformed justification+file combination),
+	// so do not "harmonize" this to a normalized count — legitimate generated
+	// paths never produce such entries, and the strict read only rejects malformed
+	// hand-edits.
+	if err := t.ValidateNoOpJustification(len(t.ChangedFiles) > 0); err != nil {
+		return err
+	}
 	for i, blocker := range t.Blockers {
 		if err := blocker.Validate(); err != nil {
 			return fmt.Errorf("blockers[%d]: %w", i, err)
 		}
+	}
+	return nil
+}
+
+// RequiresChangedFiles reports whether this task must record at least one
+// changed file to be a valid, scope-contract-consistent pass. It is the single
+// authority shared by the scope-contract evaluation boundary and the evidence
+// record-time gates, so every boundary agrees on which tasks may honestly
+// change zero files.
+//
+// hasChangedFiles is the caller's normalized view of whether the task recorded
+// any changed file. Callers that normalize paths (dropping empty or duplicate
+// entries) pass their normalized count so an entry that normalizes away is not
+// mistaken for a real change.
+//
+// Non-pass verdicts and verification/investigation kinds never require changed
+// files. A code task is additionally exempt when it carries a no_op_justification
+// and changed zero files (an honest behavior-preserving no-op); an unjustified
+// empty code task stays required (fail-closed).
+func (t ExecutionTaskSummary) RequiresChangedFiles(hasChangedFiles bool) bool {
+	if t.Verdict != TaskVerdictPass {
+		return false
+	}
+	switch t.TaskKind {
+	case TaskKindVerification, TaskKindInvestigation:
+		return false
+	default:
+		if t.TaskKind == TaskKindCode &&
+			strings.TrimSpace(t.NoOpJustification) != "" && !hasChangedFiles {
+			return false
+		}
+		return true
+	}
+}
+
+// Sentinel errors returned by ValidateNoOpJustification so callers can map each
+// failure mode to their own error surface (CLI error code, plain parser error).
+var (
+	// ErrNoOpJustificationWithChangedFiles reports the contradiction of a
+	// no_op_justification riding alongside recorded changed files.
+	ErrNoOpJustificationWithChangedFiles = errors.New("no_op_justification must not be combined with changed_files")
+	// ErrNoOpJustificationInvalidTask reports a no_op_justification on a task
+	// outside its only legitimate shape: a pass code task that changed zero files.
+	ErrNoOpJustificationInvalidTask = errors.New("no_op_justification is valid only for a pass code task that changed zero files")
+)
+
+// ValidateNoOpJustification enforces that a no_op_justification rides only on the
+// evidence shape it legitimizes — a pass code task that changed zero files. It is
+// the single authority shared by the evidence record-time gates (manual and
+// batch) and the persisted-evidence parser, so every write and read boundary
+// agrees on the field's validity envelope and no boundary silently stores a
+// contradictory or inert justification.
+//
+// hasChangedFiles is the caller's normalized view of whether the task recorded
+// any changed file, matching the RequiresChangedFiles convention.
+//
+// An empty justification is always valid. A non-empty justification is rejected
+// fail-closed when the task recorded changed files (contradiction) or when the
+// task is not a pass code task (the field would be meaningless there).
+func (t ExecutionTaskSummary) ValidateNoOpJustification(hasChangedFiles bool) error {
+	if strings.TrimSpace(t.NoOpJustification) == "" {
+		return nil
+	}
+	if hasChangedFiles {
+		return ErrNoOpJustificationWithChangedFiles
+	}
+	if t.Verdict != TaskVerdictPass || t.TaskKind != TaskKindCode {
+		return ErrNoOpJustificationInvalidTask
 	}
 	return nil
 }
@@ -156,6 +249,7 @@ func (t ExecutionTaskSummary) Equal(other ExecutionTaskSummary) bool {
 		left.Verdict == right.Verdict &&
 		left.TaskKind == right.TaskKind &&
 		left.EvidenceRef == right.EvidenceRef &&
+		left.NoOpJustification == right.NoOpJustification &&
 		left.FreshnessInputs.Equal(right.FreshnessInputs) &&
 		left.EvidenceInputHash == right.EvidenceInputHash &&
 		left.CapturedAt.Equal(right.CapturedAt) &&

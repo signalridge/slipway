@@ -194,7 +194,7 @@ gate unless a task owns a genuinely isolated command.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
 - Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the codebase-map relevance/staleness self-check.
-- Outputs: `task_id`, `verdict`, `changed_files`, `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
+- Outputs: `task_id`, `verdict`, `changed_files`, optional `no_op_justification` (only for a pass code task that changed zero files), `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
 - For test-bearing work, isolate the `task_kind=test` test-authoring step from
   the `task_kind=code` implementation step: give the test-authoring executor
@@ -220,8 +220,11 @@ multiple task results in one atomic batch; Slipway preflights every file,
 rejects duplicate `task_id` entries, and writes no task evidence if any member
 is invalid. Blockers belong in executor result JSON. Slipway computes
 `freshness_inputs` and `captured_at`; executor result JSON contains only
-`task_id`, `verdict`, `evidence_ref`, `changed_files`, `blockers`, and optional
-`session_id`. Do not include ledger-owned fields such as `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
+`task_id`, `verdict`, `evidence_ref`, `changed_files`, optional
+`no_op_justification`, `blockers`, and optional `session_id`. Set
+`no_op_justification` only for a pass code task that honestly changed zero files
+(explaining why no safe behavior-preserving change exists); never combine it with
+non-empty `changed_files`. Do not include ledger-owned fields such as `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
 `freshness_inputs`, or `input_hash`. For host-internal or recovery fallback
 details, use `slipway evidence task --help`. A passing wave-orchestration record
 without task evidence blocks execution-summary generation.

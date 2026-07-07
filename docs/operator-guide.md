@@ -104,7 +104,7 @@ values, authoritative bundle and runtime paths, and a safe next action.
 Missing task evidence blockers include the runtime task evidence directory,
 `record_command=slipway evidence task --result-file <path> --json`, and the
 compact executor result schema:
-`task_id,verdict,evidence_ref,changed_files,blockers,session_id`.
+`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`.
 Repeat `--result-file` to import multiple task result files atomically; Slipway
 preflights the whole batch and writes no task evidence if any file is invalid or
 duplicates another task ID.

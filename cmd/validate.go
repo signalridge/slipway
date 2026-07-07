@@ -77,14 +77,15 @@ type artifactContractView struct {
 }
 
 type scopeContractView struct {
-	Status                  string             `json:"status"`
-	PlannedTargets          []string           `json:"planned_targets,omitempty"`
-	ChangedFiles            []string           `json:"changed_files,omitempty"`
-	ExemptContextFiles      []string           `json:"exempt_context_files,omitempty"`
-	OutOfScopeFiles         []string           `json:"out_of_scope_files,omitempty"`
-	MissingContractTasks    []string           `json:"missing_contract_tasks,omitempty"`
-	MissingChangedFileTasks []string           `json:"missing_changed_file_tasks,omitempty"`
-	Blockers                []model.ReasonCode `json:"blockers,omitempty"`
+	Status                  string                            `json:"status"`
+	PlannedTargets          []string                          `json:"planned_targets,omitempty"`
+	ChangedFiles            []string                          `json:"changed_files,omitempty"`
+	ExemptContextFiles      []string                          `json:"exempt_context_files,omitempty"`
+	OutOfScopeFiles         []string                          `json:"out_of_scope_files,omitempty"`
+	MissingContractTasks    []string                          `json:"missing_contract_tasks,omitempty"`
+	MissingChangedFileTasks []string                          `json:"missing_changed_file_tasks,omitempty"`
+	NoOpJustifiedTasks      []scopecontract.NoOpJustifiedTask `json:"no_op_justified_tasks,omitempty"`
+	Blockers                []model.ReasonCode                `json:"blockers,omitempty"`
 }
 
 func diagnosticValidateView(message string) validateView {
@@ -374,6 +375,7 @@ func buildScopeContractView(report *scopecontract.Report) *scopeContractView {
 		OutOfScopeFiles:         append([]string(nil), report.OutOfScopeFiles...),
 		MissingContractTasks:    append([]string(nil), report.MissingContractTasks...),
 		MissingChangedFileTasks: append([]string(nil), report.MissingChangedFileTasks...),
+		NoOpJustifiedTasks:      append([]scopecontract.NoOpJustifiedTask(nil), report.NoOpJustifiedTasks...),
 		Blockers:                append([]model.ReasonCode(nil), report.Blockers...),
 	}
 }

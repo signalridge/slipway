@@ -338,6 +338,33 @@ func TestEvidenceTaskResultFileBatchLifecycleEventRecordsMixedVerdict(t *testing
 	})
 }
 
+func TestEvidenceTaskResultFileAcceptsZeroFileVerificationTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		// t-01 in the default fixture is a verification task, which
+		// scopecontract exempts from the changed-file requirement. The batch
+		// record gate must agree with that authority and accept zero changed
+		// files without a no_op_justification, rather than falsely rejecting it.
+		slug, _ := createEvidenceTaskFixture(t, root)
+		writeTaskResultFilePayload(t, filepath.Join(root, "task-result.json"), map[string]any{
+			"task_id":       "t-01",
+			"verdict":       "pass",
+			"evidence_ref":  "test:zero-file-verification",
+			"changed_files": []string{},
+			"blockers":      []string{},
+		})
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result.json"})
+		cmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, cmd.Execute())
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
 func TestEvidenceTaskResultFileBatchRejectsDuplicateTaskWithoutWritingEvidence(t *testing.T) {
 	t.Parallel()
 
@@ -437,6 +464,206 @@ func TestEvidenceTaskResultFileBatchInvalidMemberWritesNoEvidence(t *testing.T) 
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_task_changed_file_required", cliErr.ErrorCode)
 		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
+func TestEvidenceTaskResultFileRecordsJustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-01.json"),
+			[]byte(`{"task_id":"t-01","verdict":"pass","evidence_ref":"test:no-op","changed_files":[],"no_op_justification":"honest investigation found no safe behavior-preserving change"}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		cmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, cmd.Execute())
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsUnjustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-01.json"),
+			[]byte(`{"task_id":"t-01","verdict":"pass","evidence_ref":"test:no-op-missing","changed_files":[]}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_changed_file_required", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskManualRejectsNoOpJustificationWithChangedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "code",
+			"--verdict", "pass",
+			"--evidence-ref", "test:contradiction",
+			"--changed-file", "cmd/evidence.go",
+			"--target-file", "cmd/evidence.go",
+			"--no-op-justification", "must not combine with changed files",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		// The manual path rejects the contradiction before any file is written,
+		// so the caller sees a usage error rather than a post-write state defect.
+		assert.Equal(t, "evidence_task_no_op_justification_conflict", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskManualRejectsUnjustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "code",
+			"--verdict", "pass",
+			"--evidence-ref", "test:manual-no-op-missing",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		// The manual fallback must fail closed at record time on the same boundary
+		// the result-file path enforces, not defer to a later scope-contract flag.
+		assert.Equal(t, "evidence_task_changed_file_required", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskManualRecordsJustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "code",
+			"--verdict", "pass",
+			"--evidence-ref", "test:manual-no-op",
+			"--no-op-justification", "honest investigation found no safe behavior-preserving change",
+		})
+		cmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, cmd.Execute())
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+
+		taskEvidencePath := filepath.Join(state.EvidenceTasksDir(root, slug), "t-01.json")
+		raw, err := os.ReadFile(taskEvidencePath)
+		require.NoError(t, err)
+		var persisted struct {
+			NoOpJustification string `json:"no_op_justification"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &persisted))
+		assert.Equal(t, "honest investigation found no safe behavior-preserving change", persisted.NoOpJustification)
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsNoOpJustificationWithChangedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-01.json"),
+			[]byte(`{"task_id":"t-01","verdict":"pass","evidence_ref":"test:batch-contradiction","changed_files":["cmd/evidence.go"],"no_op_justification":"must not combine with changed files"}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		// The batch prepare gate rejects the contradiction before any file is
+		// written -- result-file JSON can encode both fields, so the guard cannot
+		// rely on the mutually-exclusive manual flags.
+		assert.Equal(t, "evidence_task_no_op_justification_conflict", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskManualRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		// t-02 is a test-kind task; a no_op_justification is only valid on a code
+		// task, so the manual gate rejects it fail-closed before any file is written.
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-02",
+			"--run-summary-version", "1",
+			"--task-kind", "test",
+			"--verdict", "pass",
+			"--evidence-ref", "test:manual-out-of-envelope",
+			"--no-op-justification", "no safe behavior-preserving change exists",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_no_op_justification_invalid", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		// t-02 is a test-kind task in the fixture; a no_op_justification is only
+		// valid on a code task, so the batch prepare gate rejects it fail-closed
+		// before the missing-changed-file check and before any file is written.
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-02.json"),
+			[]byte(`{"task_id":"t-02","verdict":"pass","evidence_ref":"test:out-of-envelope","changed_files":[],"no_op_justification":"no safe behavior-preserving change exists"}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-02.json"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_no_op_justification_invalid", cliErr.ErrorCode)
 		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
 	})
 }
@@ -683,6 +910,9 @@ func TestEvidenceTaskResultFileRejectsInvalidPayloadsWithoutWritingEvidence(t *t
 			errorCode: "evidence_task_unknown",
 		},
 		{
+			// t-01 is a code task in the multi-task fixture, so a pass with zero
+			// changed files and no no_op_justification is a required-but-empty
+			// task that must fail closed before any evidence is written.
 			name:      "empty changed files",
 			payload:   `{"task_id":"t-01","verdict":"pass","evidence_ref":"test:empty-changed-files","changed_files":[]}`,
 			errorCode: "evidence_task_changed_file_required",
@@ -697,7 +927,7 @@ func TestEvidenceTaskResultFileRejectsInvalidPayloadsWithoutWritingEvidence(t *t
 			root := t.TempDir()
 			withCommandWorkspace(t, root, func() {
 				initTestWorkspace(t, root)
-				slug, _ := createEvidenceTaskFixture(t, root)
+				slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
 				require.NoError(t, os.WriteFile(filepath.Join(root, "task-result.json"), []byte(tt.payload), 0o644))
 
 				cmd := commandForRoot(t, root, makeEvidenceCmd())
@@ -705,6 +935,12 @@ func TestEvidenceTaskResultFileRejectsInvalidPayloadsWithoutWritingEvidence(t *t
 				cliErr := asCLIError(cmd.Execute())
 				require.NotNil(t, cliErr)
 				assert.Equal(t, tt.errorCode, cliErr.ErrorCode)
+				if tt.errorCode == "evidence_task_result_file_invalid" {
+					// The schema-teaching remediation must advertise the full compact
+					// schema, including no_op_justification, so a malformed payload does
+					// not train the executor back into the pre-#410 schema.
+					assert.Contains(t, cliErr.Remediation, "no_op_justification")
+				}
 				assertTaskEvidenceNotWritten(t, root, slug, "t-01")
 				assertTaskEvidenceNotWritten(t, root, slug, "t-missing")
 			})

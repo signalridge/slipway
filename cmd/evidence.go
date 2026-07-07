@@ -53,10 +53,35 @@ type evidenceSkillView struct {
 }
 
 const (
-	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id; repeat --result-file to import multiple task results atomically."
+	// compactExecutorResultSchema is the single source of truth for the fields an
+	// executor result JSON file may contain. Every remediation and help string
+	// that teaches the schema references it, so none drift from the
+	// evidenceTaskResultFile struct or the no_op_justification validity envelope.
+	compactExecutorResultSchema = "task_id, verdict, evidence_ref, changed_files, optional no_op_justification (only for a pass code task that changed zero files), blockers, and optional session_id"
+
+	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with " + compactExecutorResultSchema + "; repeat --result-file to import multiple task results atomically."
 	maxEvidenceTaskResultFileBytes    = int64(1 << 20)
 	maxEvidenceTaskResultFiles        = 256
 )
+
+// manualChangedFileRemediation returns the record-time remediation for a pass
+// task that recorded zero changed files. Only a code task may substitute a
+// no-op justification; every other required kind must record a changed file.
+func manualChangedFileRemediation(kind model.TaskKind) string {
+	if kind == model.TaskKindCode {
+		return "Pass --changed-file for each file the task changed, or --no-op-justification explaining why no safe behavior-preserving change exists."
+	}
+	return "Pass --changed-file for each file the task changed."
+}
+
+// resultFileChangedFileRemediation is the result-file (batch) analogue of
+// manualChangedFileRemediation.
+func resultFileChangedFileRemediation(kind model.TaskKind) string {
+	if kind == model.TaskKindCode {
+		return "Write executor result JSON with changed_files containing the workspace-relative files changed by the task, or a no_op_justification explaining why no safe behavior-preserving change exists."
+	}
+	return "Write executor result JSON with changed_files containing the workspace-relative files changed by the task."
+}
 
 func makeEvidenceCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -385,19 +410,20 @@ func makeEvidenceSkillCmd() *cobra.Command {
 
 func makeEvidenceTaskCmd() *cobra.Command {
 	var (
-		jsonOutput    bool
-		changeSlug    string
-		taskID        string
-		runSummary    int
-		taskKindRaw   string
-		verdictRaw    string
-		evidenceRef   string
-		resultFiles   []string
-		changedFiles  []string
-		targetFiles   []string
-		blockerSpecs  []string
-		capturedAtRaw string
-		sessionID     string
+		jsonOutput        bool
+		changeSlug        string
+		taskID            string
+		runSummary        int
+		taskKindRaw       string
+		verdictRaw        string
+		evidenceRef       string
+		resultFiles       []string
+		changedFiles      []string
+		targetFiles       []string
+		blockerSpecs      []string
+		capturedAtRaw     string
+		sessionID         string
+		noOpJustification string
 	)
 
 	cmd := &cobra.Command{
@@ -628,6 +654,41 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					}
 				}
 
+				// Fail closed at record time on the same boundary the result-file
+				// (batch) path enforces, so the manual fallback cannot mint evidence
+				// that scope-contract will only reject later. The contradiction and
+				// the honest-no-op requirement mirror scopecontract.requiresChangedFiles
+				// (code + pass + zero files needs an explicit justification;
+				// verification/investigation stay exempt).
+				noOpJustificationValue := strings.TrimSpace(noOpJustification)
+				gateTask := model.ExecutionTaskSummary{Verdict: verdict, TaskKind: taskKind, NoOpJustification: noOpJustificationValue}
+				if err := gateTask.ValidateNoOpJustification(len(changedFiles) > 0); err != nil {
+					switch {
+					case errors.Is(err, model.ErrNoOpJustificationWithChangedFiles):
+						return newInvalidUsageError(
+							"evidence_task_no_op_justification_conflict",
+							"--no-op-justification must not be combined with --changed-file",
+							"Pass --changed-file for a task that changed files, or --no-op-justification for a pass code task that changed zero files -- never both.",
+							map[string]any{"task_id": taskID},
+						)
+					default:
+						return newInvalidUsageError(
+							"evidence_task_no_op_justification_invalid",
+							fmt.Sprintf("--no-op-justification is valid only for a pass code task that changed zero files, not a %s %s task", verdict, taskKind),
+							"Drop --no-op-justification unless the task is a pass code task that changed zero files; record a non-pass or non-code task without it.",
+							map[string]any{"task_id": taskID},
+						)
+					}
+				}
+				if len(changedFiles) == 0 && gateTask.RequiresChangedFiles(false) {
+					return newInvalidUsageError(
+						"evidence_task_changed_file_required",
+						fmt.Sprintf("a pass %s task that changed zero files requires at least one --changed-file", taskKind),
+						manualChangedFileRemediation(taskKind),
+						map[string]any{"task_id": taskID},
+					)
+				}
+
 				payload := progression.TaskEvidencePayload{
 					TaskID:            taskID,
 					RunSummaryVersion: runSummary,
@@ -636,6 +697,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					ChangedFiles:      changedFiles,
 					TargetFiles:       targetFiles,
 					EvidenceRef:       evidenceRef,
+					NoOpJustification: noOpJustificationValue,
 					Blockers:          blockers,
 					CapturedAt:        capturedAt.Format(time.RFC3339Nano),
 					FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
@@ -700,8 +762,9 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Manual flag mode only: task kind: code, test, doc, ops, verification, investigation, other")
 	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Manual flag mode only: task verdict: pass, fail, blocked, incomplete, timeout")
 	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Manual flag mode only: stable transcript, command, artifact, or note reference")
-	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id; may be repeated for atomic batch import; cannot be combined with manual task flags")
+	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with "+compactExecutorResultSchema+"; may be repeated for atomic batch import; cannot be combined with manual task flags")
 	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Manual flag mode only: changed file path for this task; may be repeated")
+	cmd.Flags().StringVar(&noOpJustification, "no-op-justification", "", "Manual flag mode only: justification for a pass code task that changed zero files because no safe behavior-preserving change exists; must not be combined with --changed-file")
 	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Manual flag mode only: target file path for this task; may be repeated")
 	cmd.Flags().StringArrayVar(&blockerSpecs, "blocker", nil, "Manual flag mode only: task blocker as code or code:detail; may be repeated")
 	cmd.Flags().StringVar(&capturedAtRaw, "captured-at", "", "Manual flag mode only: evidence timestamp in RFC3339Nano; defaults to now")
@@ -1015,11 +1078,34 @@ func prepareEvidenceTaskResultFiles(
 				map[string]any{"task_id": taskID, "result_file": resultFile},
 			)
 		}
-		if len(changedFiles) == 0 {
+		noOpJustification := strings.TrimSpace(result.NoOpJustification)
+		gateTask := model.ExecutionTaskSummary{Verdict: verdict, TaskKind: taskKind, NoOpJustification: noOpJustification}
+		// Enforce the no_op_justification envelope in the prepare gate so a whole
+		// batch fails closed with a usage error before any file is written, rather
+		// than leaving a written-then-invalid orphan for the post-write parser.
+		if err := gateTask.ValidateNoOpJustification(len(changedFiles) > 0); err != nil {
+			switch {
+			case errors.Is(err, model.ErrNoOpJustificationWithChangedFiles):
+				return nil, newInvalidUsageError(
+					"evidence_task_no_op_justification_conflict",
+					"result-file task evidence must not combine no_op_justification with changed_files",
+					"Write executor result JSON with either changed_files (the files the task changed) or a no_op_justification for a pass code task that changed zero files -- never both.",
+					map[string]any{"task_id": taskID, "result_file": resultFile},
+				)
+			default:
+				return nil, newInvalidUsageError(
+					"evidence_task_no_op_justification_invalid",
+					fmt.Sprintf("no_op_justification is valid only for a pass code task that changed zero files, not a %s %s task", verdict, taskKind),
+					"Remove no_op_justification unless the task is a pass code task that changed zero files; record a non-pass or non-code task without it.",
+					map[string]any{"task_id": taskID, "result_file": resultFile},
+				)
+			}
+		}
+		if len(changedFiles) == 0 && gateTask.RequiresChangedFiles(false) {
 			return nil, newInvalidUsageError(
 				"evidence_task_changed_file_required",
-				"result-file task evidence requires at least one changed_files entry",
-				"Write executor result JSON with changed_files containing the workspace-relative files changed by the task.",
+				fmt.Sprintf("a pass %s task that changed zero files requires at least one changed_files entry", taskKind),
+				resultFileChangedFileRemediation(taskKind),
 				map[string]any{"task_id": taskID, "result_file": resultFile},
 			)
 		}
@@ -1043,6 +1129,7 @@ func prepareEvidenceTaskResultFiles(
 			ChangedFiles:      changedFiles,
 			TargetFiles:       targetFiles,
 			EvidenceRef:       evidenceRef,
+			NoOpJustification: noOpJustification,
 			Blockers:          blockers,
 			CapturedAt:        commandCapturedAt.Format(time.RFC3339Nano),
 			FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
@@ -1866,12 +1953,13 @@ func parseEvidenceTaskCapturedAt(raw string, commandCapturedAt time.Time) (time.
 }
 
 type evidenceTaskResultFile struct {
-	TaskID       string            `json:"task_id"`
-	Verdict      model.TaskVerdict `json:"verdict"`
-	EvidenceRef  string            `json:"evidence_ref"`
-	ChangedFiles []string          `json:"changed_files"`
-	Blockers     []string          `json:"blockers"`
-	SessionID    string            `json:"session_id"`
+	TaskID            string            `json:"task_id"`
+	Verdict           model.TaskVerdict `json:"verdict"`
+	EvidenceRef       string            `json:"evidence_ref"`
+	ChangedFiles      []string          `json:"changed_files"`
+	NoOpJustification string            `json:"no_op_justification"`
+	Blockers          []string          `json:"blockers"`
+	SessionID         string            `json:"session_id"`
 }
 
 func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
@@ -1882,6 +1970,7 @@ func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
 		"verdict",
 		"evidence-ref",
 		"changed-file",
+		"no-op-justification",
 		"target-file",
 		"blocker",
 		"captured-at",
@@ -1891,7 +1980,7 @@ func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
 			return newInvalidUsageError(
 				"evidence_task_result_file_mixed_mode",
 				fmt.Sprintf("--result-file cannot be combined with --%s", flagName),
-				"Use --result-file by itself for compact executor results; Slipway derives ledger fields from the current wave plan and reads task-owned verdict, evidence_ref, changed_files, blockers, and session_id from each result file.",
+				"Use --result-file by itself for compact executor results; Slipway derives ledger fields from the current wave plan and reads task-owned verdict, evidence_ref, changed_files, optional no_op_justification, blockers, and session_id from each result file.",
 				map[string]any{"flag": "--" + flagName},
 			)
 		}
@@ -1941,7 +2030,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_too_large",
 			fmt.Sprintf("task result file %q is too large: %d bytes exceeds %d bytes", resultFile, info.Size(), maxEvidenceTaskResultFileBytes),
-			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write a compact executor result JSON file with only "+compactExecutorResultSchema+".",
 			map[string]any{
 				"path":      resultFile,
 				"size":      info.Size(),
@@ -1963,7 +2052,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_too_large",
 			fmt.Sprintf("task result file %q is too large: exceeds %d bytes", resultFile, maxEvidenceTaskResultFileBytes),
-			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write a compact executor result JSON file with only "+compactExecutorResultSchema+".",
 			map[string]any{
 				"path":      resultFile,
 				"max_bytes": maxEvidenceTaskResultFileBytes,
@@ -1977,7 +2066,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_invalid",
 			fmt.Sprintf("task result file is not valid JSON: %v", err),
-			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write executor result JSON with "+compactExecutorResultSchema+".",
 			map[string]any{"path": resultFile},
 		)
 	}
@@ -2004,12 +2093,13 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_invalid",
 			fmt.Sprintf("task result file has invalid schema: %v", err),
-			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write executor result JSON with "+compactExecutorResultSchema+".",
 			map[string]any{"path": resultFile},
 		)
 	}
 	result.TaskID = strings.TrimSpace(result.TaskID)
 	result.EvidenceRef = strings.TrimSpace(result.EvidenceRef)
+	result.NoOpJustification = strings.TrimSpace(result.NoOpJustification)
 	result.SessionID = strings.TrimSpace(result.SessionID)
 	return result, nil
 }

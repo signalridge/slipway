@@ -310,6 +310,66 @@ func TestParseTaskEvidenceRejectsCompatibilityFallbacks(t *testing.T) {
 	}
 }
 
+func TestParseTaskEvidenceRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("noop-envelope")
+	require.NoError(t, state.SaveChange(root, change))
+
+	cases := []struct {
+		name     string
+		taskKind string
+		verdict  string
+		changed  []string
+		wantErr  string
+	}{
+		{
+			name:     "justification-with-changed-files",
+			taskKind: "code",
+			verdict:  "pass",
+			changed:  []string{"cmd/evidence.go"},
+			wantErr:  "must not be combined with changed_files",
+		},
+		{
+			name:     "justification-on-non-pass-task",
+			taskKind: "code",
+			verdict:  "fail",
+			wantErr:  "valid only for a pass code task",
+		},
+		{
+			name:     "justification-on-non-code-task",
+			taskKind: "verification",
+			verdict:  "pass",
+			wantErr:  "valid only for a pass code task",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			payload := map[string]any{
+				"task_id":             "task-a",
+				"run_summary_version": 1,
+				"task_kind":           tc.taskKind,
+				"verdict":             tc.verdict,
+				"evidence_ref":        "test:task-a",
+				"changed_files":       tc.changed,
+				"no_op_justification": "hand-written justification bypassing the write gates",
+				"captured_at":         time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC).Format(time.RFC3339Nano),
+				"freshness_inputs":    state.ExpectedExecutionTaskFreshnessInputs(change, 1, "task-a"),
+			}
+			raw, err := json.Marshal(payload)
+			require.NoError(t, err)
+			path := filepath.Join(root, tc.name+".json")
+			require.NoError(t, os.WriteFile(path, raw, 0o644))
+
+			_, _, _, err = ParseTaskEvidence(root, path, 1)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
 func TestLoadExecutionTasksFromEvidenceRejectsFreshnessInputMismatch(t *testing.T) {
 	t.Parallel()
 
