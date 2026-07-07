@@ -539,12 +539,10 @@ func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (mo
 		CapturedAt:        capturedAt,
 	}
 	task.Normalize()
-	// Fail closed at the read boundary on the same envelope the record-time gates
-	// enforce, so hand-written evidence that bypassed the write gates cannot smuggle
-	// a contradictory or out-of-envelope justification into durable task state.
-	if err := task.ValidateNoOpJustification(len(task.ChangedFiles) > 0); err != nil {
-		return model.ExecutionTaskSummary{}, time.Time{}, "", err
-	}
+	// Fail closed at the read boundary: Validate enforces the no_op_justification
+	// envelope (via ValidateNoOpJustification) alongside its other invariants, so
+	// hand-written evidence that bypassed the write gates cannot smuggle a
+	// contradictory or out-of-envelope justification into durable task state.
 	if err := task.Validate(); err != nil {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}

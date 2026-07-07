@@ -321,6 +321,11 @@ not trip scope-contract drift. To keep that filtering visible rather than
 inferred from a `git diff` disagreement, the exempted files are disclosed
 explicitly in the `scope_contract.exempt_context_files` field, surfaced by
 `slipway validate`, `slipway status --json`, and `slipway review --json`.
+A pass code task that honestly changed zero files carries a
+`no_op_justification`; the scope contract exempts it from the changed-files
+requirement and discloses it — task id and justification — in the
+`scope_contract.no_op_justified_tasks` field on the same three surfaces, so a
+reviewer sees why a zero-change task passed without reading raw evidence.
 
 `slipway evidence task` writes the flat runtime task JSON under
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration

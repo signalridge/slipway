@@ -139,6 +139,14 @@ func (t ExecutionTaskSummary) Validate() error {
 	// scope-contract then trusts for its changed-files exemption. It routes
 	// through the same ValidateNoOpJustification authority as the record gates and
 	// the task-evidence read boundary, so every boundary agrees.
+	//
+	// The raw len(t.ChangedFiles) is intentionally at least as strict as the
+	// scope-contract normalized count: an empty or duplicate entry that would
+	// normalize away still trips the contradiction check here. That is the
+	// fail-closed direction (reject a malformed justification+file combination),
+	// so do not "harmonize" this to a normalized count — legitimate generated
+	// paths never produce such entries, and the strict read only rejects malformed
+	// hand-edits.
 	if err := t.ValidateNoOpJustification(len(t.ChangedFiles) > 0); err != nil {
 		return err
 	}

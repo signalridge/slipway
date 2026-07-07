@@ -146,6 +146,12 @@ func TestEvaluateDoesNotRequireChangedFilesForJustifiedNoOpCodeTask(t *testing.T
 
 	assert.Equal(t, StatusPass, report.Status)
 	assert.Empty(t, report.MissingChangedFileTasks)
+	// The exemption is disclosed so a reviewer sees why a zero-file code task
+	// passed the Scope Contract, without reading raw evidence.
+	assert.Equal(t, []NoOpJustifiedTask{{
+		TaskID:            "t-01",
+		NoOpJustification: "honest investigation found no safe behavior-preserving change",
+	}}, report.NoOpJustifiedTasks)
 }
 
 func TestEvaluateFlagsUnjustifiedNoOpCodeTask(t *testing.T) {
@@ -162,6 +168,8 @@ func TestEvaluateFlagsUnjustifiedNoOpCodeTask(t *testing.T) {
 	assert.Equal(t, StatusFail, report.Status)
 	assert.Equal(t, []string{"t-01"}, report.MissingChangedFileTasks)
 	assert.Contains(t, model.ReasonSpecs(report.Blockers), "scope_contract_changed_files_missing:t-01")
+	// An unjustified no-op is not an exemption, so nothing is disclosed.
+	assert.Empty(t, report.NoOpJustifiedTasks)
 }
 
 func TestEvaluateSkipsBeforeExecutionSummaryExists(t *testing.T) {

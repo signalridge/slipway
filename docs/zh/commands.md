@@ -278,7 +278,10 @@ error 级阻塞项。`health --governance --json` 是诊断性的健康反馈；
 `scope_contract.out_of_scope_files`，而 `scope_contract.status` 保持 `pass`——单单刷新一次
 codebase map 不会触发 scope-contract 漂移。为了让这种过滤是可见的、而不是从 Git 差异输出的不一致
 里去推断，被豁免的文件会在 `scope_contract.exempt_context_files` 字段里显式披露，由
-`slipway validate`、`slipway status --json` 和 `slipway review --json` 呈现。
+`slipway validate`、`slipway status --json` 和 `slipway review --json` 呈现。诚实地零改动的
+pass code 任务会带上 `no_op_justification`；范围契约将其豁免于变更文件要求，并在同样这三个面上以
+`scope_contract.no_op_justified_tasks` 字段披露（任务 id 与其理由），这样审查者无需读取原始证据即可
+看到一个零改动任务为何通过。
 
 `slipway evidence task` 把扁平的运行时任务 JSON 写到
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。默认的 S2
