@@ -225,7 +225,7 @@ func commandSourcePath(commandID string) string {
 	case "implement", "intake", "plan":
 		return "cmd/stage.go"
 	case "hook":
-		return "cmd/context_pressure_hook.go"
+		return "cmd/session_start_hook.go"
 	}
 	return "cmd/" + strings.ReplaceAll(commandID, "-", "_") + ".go"
 }

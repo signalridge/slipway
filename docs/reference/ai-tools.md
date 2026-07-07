@@ -93,12 +93,11 @@ hand-edit generated files:
   `./skills` and `./prompts`. It also generates `.pi/extensions/slipway-hooks.ts`,
   which bridges the `session-start` hook into pi's `session_start` /
   `before_agent_start` extension events. pi auto-discovers `.pi/extensions/` but
-  loads project-local extensions only after the project is trusted; the
-  `context-pressure` hook is not bridged (pi's extension `exec` has no stdin).
+  loads project-local extensions only after the project is trusted.
 - Qwen writes `.qwen/settings.json` to register the session-start hook.
-- Codex writes `.codex/config.toml` hooks for `SessionStart` and
-  `UserPromptSubmit`; those hooks are inert until the repo and each hook are
-  trusted by the user, and Slipway never edits global Codex trust settings.
+- Codex writes `.codex/config.toml` hooks for `SessionStart`; those hooks are
+  inert until the repo and each hook are trusted by the user, and Slipway never
+  edits global Codex trust settings.
 
 Each adapter is tracked by a Slipway generated sentinel and ownership manifest
 under the adapter root's `slipway/` directory. Copilot stores that managed

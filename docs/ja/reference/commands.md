@@ -73,8 +73,8 @@ slipway instructions <artifact> --json
 slipway config list --json
 ```
 
-ブロッカーの詳細、アーティファクトのレディネスの詳細、トランジショントレース、
-コンテキスト予算の診断が必要なときは、`next` や `run` に `--diagnostics` を付けて
+ブロッカーの詳細、アーティファクトのレディネスの詳細、トランジショントレースが
+必要なときは、`next` や `run` に `--diagnostics` を付けて
 ください。
 
 ## サブコマンドとモードの要点
@@ -87,7 +87,7 @@ slipway config list --json
 - `slipway status --stats --json` は、廃止されたトップレベルの `stats` コマンドを戻さずにワークスペース診断を報告します。
 - `slipway health --doctor --json` は、ヘルスレポートに修復向けの診断を追加します。
 - `slipway tool <helper>` は生成されたスキルから直接呼び出され、生成されたアダプターのプロンプトサーフェスはありません。
-- `slipway hook session-start` と `slipway hook context-pressure` は生成されたホストフック設定から直接呼び出されます。フックヘルパーは、ホストの自動フックがユーザーをブロックしないよう静かに失敗します。
+- `slipway hook session-start` は生成されたホストフック設定から直接呼び出されます。フックヘルパーは、ホストの自動フックがユーザーをブロックしないよう静かに失敗します。
 - `slipway config`、`slipway config list --json`、`slipway config list --env [--json]`、`slipway config get <key> --json`、`slipway config set <key> <value>` は `.slipway.yaml` キーとランタイム/シークレット環境変数サーフェスを確認します。更新できるのはファイル設定キーだけです。`config` は意図的に CLI 専用であり、生成されたアダプターのプロンプトサーフェスはありません。
 - `subagents.*` config は `plan_audit`、`executor`、`review`、`fix`、`verify` の slot-based delegation target を制御します。詳しくは [Subagent 設定](subagents.md) を参照してください。
 

@@ -290,7 +290,7 @@ Slipway は幅を犠牲にして権威を取ります。広範なプロンプト
 | ツール | 生成されるサーフェス |
 | --- | --- |
 | Claude | `.claude/skills/slipway-*/SKILL.md`、`.claude/commands/slipway/*.md`、`.claude/settings.json` のフックエントリ |
-| Codex | `.codex/skills/slipway-*/SKILL.md` の入口・コマンド・ガバナンススキル、`.codex/config.toml` の SessionStart および UserPromptSubmit フックエントリ |
+| Codex | `.codex/skills/slipway-*/SKILL.md` の入口・コマンド・ガバナンススキル、`.codex/config.toml` の SessionStart フックエントリ |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`、`.cursor/commands/*.md`、セッション開始フックのランチャー |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`、`.opencode/commands/slipway-*.md`、セッション開始フックのランチャー |
 | Copilot | `.github/skills/slipway-*/SKILL.md`、`.github/prompts/slipway-*.prompt.md`、`.github/copilot/slipway` の管理状態 |
@@ -315,10 +315,11 @@ Slipway は幅を犠牲にして権威を取ります。広範なプロンプト
 `slipway-wave-orchestration/SKILL.md`、
 `slipway-worktree-preflight/SKILL.md` です。
 
-Codex は、境界づけられた SessionStart のハンドオフポインタと、陳腐化を条件とする
-UserPromptSubmit の書き込みナッジに、リポジトリローカルの `.codex/config.toml`
-フックを使います。これらのフックは、リポジトリと各フックがユーザーに信頼される
-までは不活性です。Slipway がグローバルな Codex の信頼設定を編集することはありません。
+Codex は、Slipway の入口スキルへのルーティングポインタと、Slipway がコンテキスト
+ウィンドウを監視しないという静的な注記（圧縮するか新しいセッションを開始するかの判断
+はホストが行う）を出力する、リポジトリローカルの `.codex/config.toml` の SessionStart
+フックを使います。このフックは、リポジトリとフックがユーザーに信頼されるまでは不活性
+です。Slipway がグローバルな Codex の信頼設定を編集することはありません。
 
 正確なコマンドとスキルのインベントリは、[AI Tool Adapters](docs/reference/ai-tools.md)
 および生成された [Surface Manifest](docs/SURFACE-MANIFEST.json) を参照してください。

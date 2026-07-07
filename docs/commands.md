@@ -139,7 +139,7 @@ a change is abandoned, broken, or bound to another worktree, `slipway status`/
 | Command | Class | Purpose |
 | --- | --- | --- |
 | `slipway tool <helper>` | mutation | Run helper tools used by generated skills; helpers fail closed on missing explicit backends or domain tools. |
-| `slipway hook <event>` | mutation | Run generated host hook helpers such as `session-start` and `context-pressure`; hooks fail silent so they cannot block host automation. |
+| `slipway hook <event>` | mutation | Run generated host hook helpers such as `session-start`; hooks fail silent so they cannot block host automation. |
 
 `slipway tool` and `slipway hook` are intentionally CLI-only. They have no
 `$slipway-tool`, `$slipway-hook`, or generated host prompt wrappers; generated
@@ -214,8 +214,7 @@ aligned with the CLI by a reverse flag-contract test:
   `mutation`, `spec-trace`; `repair` currently exposes none.
 - `status --root` prints the canonical Slipway scope root; `status --stats`
   shows workspace diagnostics (active count, stale summaries, integrity issues).
-- `next --no-auto-pass` reports skill eligibility instead of auto-passing;
-  `next --context-guard` emits context-budget guard messages in hook format.
+- `next --no-auto-pass` reports skill eligibility instead of auto-passing.
 - `done --all-ready` archives every active change that is currently done-ready.
 - Same-intent scope changes are handled as change amendments by the current
   stage command: update the owning artifacts and evidence, then continue

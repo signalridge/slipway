@@ -87,10 +87,9 @@ $slipway-init
 - Pi 写入 `.pi/settings.json`，设置 `enableSkillCommands=true` 并注册 `./skills`
   和 `./prompts`。它还会生成 `.pi/extensions/slipway-hooks.ts`，把
   `session-start` hook 桥接到 pi 的 `session_start` / `before_agent_start` 扩展事件。
-  pi 会自动发现 `.pi/extensions/`，但只有项目被信任后才加载项目本地扩展；`context-pressure`
-  hook 不会桥接（pi 的扩展 `exec` 没有 stdin）。
+  pi 会自动发现 `.pi/extensions/`，但只有项目被信任后才加载项目本地扩展。
 - Qwen 写入 `.qwen/settings.json` 以注册会话启动钩子。
-- Codex 写入 `.codex/config.toml`，为 `SessionStart` 和 `UserPromptSubmit` 注册
+- Codex 写入 `.codex/config.toml`，为 `SessionStart` 注册
   钩子；在用户信任该仓库及每个钩子之前，这些钩子处于不生效状态，且 Slipway 绝不
   会修改全局的 Codex 信任设置。
 

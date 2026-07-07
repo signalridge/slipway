@@ -46,7 +46,6 @@ type frozenToolContract struct {
 	SettingsKind      string
 	HookExtensionPath string
 	SessionHook       frozenHookContract
-	PostToolHook      frozenHookContract
 }
 
 var frozenAdapterCommandIDs = []string{
@@ -102,13 +101,6 @@ var frozenToolContracts = map[string]frozenToolContract{
 			Path:          ".claude/hooks/slipway-session-start",
 			Registered:    true,
 			InlineCommand: sessionStartHookCommand,
-			EmitsLauncher: false,
-		},
-		PostToolHook: frozenHookContract{
-			Event:         "PostToolUse",
-			Path:          ".claude/hooks/slipway-context-pressure-post-tool-use",
-			Registered:    true,
-			InlineCommand: contextPressureHookCommand,
 			EmitsLauncher: false,
 		},
 	},
@@ -230,7 +222,6 @@ func TestAdapterContractsRemainStable(t *testing.T) {
 			assertFrozenOwnershipContract(t, root, toolID, contract)
 			assertFrozenCommandSet(t, root, toolID, contract)
 			assertFrozenHookContract(t, root, contract.SettingsPath, contract.SessionHook)
-			assertFrozenHookContract(t, root, contract.SettingsPath, contract.PostToolHook)
 			assertFrozenSettingsContract(t, root, contract)
 		})
 	}
@@ -434,8 +425,10 @@ func assertCodexHooksConfig(t *testing.T, settingsPath string) {
 	settings := string(content)
 	assert.Contains(t, settings, "[[hooks.SessionStart]]")
 	assert.Contains(t, settings, `slipway hook session-start --tool codex`)
-	assert.Contains(t, settings, "[[hooks.UserPromptSubmit]]")
-	assert.Contains(t, settings, `slipway hook context-pressure --tool codex`)
+	// The context-pressure PostToolUse hook was retired: the managed block must no
+	// longer register a UserPromptSubmit hook or the context-pressure command.
+	assert.NotContains(t, settings, "[[hooks.UserPromptSubmit]]")
+	assert.NotContains(t, settings, "context-pressure")
 	assert.Contains(t, settings, "inert until Codex trusts this repo and each hook")
 	assert.Contains(t, settings, "Slipway never edits global Codex trust")
 }

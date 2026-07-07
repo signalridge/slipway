@@ -45,7 +45,6 @@ type nextView struct {
 	NextSkill                   *nextSkillView                       `json:"next_skill"`
 	ReviewBatch                 *reviewBatchView                     `json:"review_batch,omitempty"`
 	InputContext                nextContext                          `json:"input_context"`
-	ContextBudget               *contextBudget                       `json:"context_budget,omitempty"`
 	Constraints                 *agentConstraints                    `json:"constraints,omitempty"`
 	GovernanceSignals           *governanceSignalView                `json:"governance_signals,omitempty"`
 	ActiveControls              []governanceControlView              `json:"active_controls,omitempty"`
@@ -118,30 +117,6 @@ type agentConstraints struct {
 	RequiredOutputs   []string `json:"required_outputs"`
 	MaxRetries        int      `json:"max_retries"`
 	HardGate          string   `json:"hard_gate,omitempty"`
-}
-
-type contextBudget struct {
-	EstimatedTokens      int                     `json:"estimated_tokens"`
-	AssumedContextWindow int                     `json:"assumed_context_window_tokens"`
-	UtilizationPercent   float64                 `json:"utilization_percent"`
-	RemainingPercent     float64                 `json:"remaining_percent"`
-	Health               string                  `json:"health"`
-	QualityCurve         string                  `json:"quality_curve"`
-	GuardAction          string                  `json:"guard_action"`
-	Thresholds           contextBudgetThresholds `json:"thresholds"`
-	Breakdown            contextBudgetBreakdown  `json:"breakdown"`
-}
-
-type contextBudgetThresholds struct {
-	WarnBelowRemainingPercent float64 `json:"warn_below_remaining_percent"`
-	StopBelowRemainingPercent float64 `json:"stop_below_remaining_percent"`
-}
-
-type contextBudgetBreakdown struct {
-	SkillPrompt int `json:"skill_prompt"`
-
-	ArtifactContext int `json:"artifact_context"`
-	StateContext    int `json:"state_context"`
 }
 
 type nextSkillView struct {
@@ -234,28 +209,29 @@ type nextContext struct {
 	WavePlan               *wavePlanView              `json:"wave_plan,omitempty"`
 }
 
+// handoffContextView is the diagnostic-only bounded-reference projection surfaced
+// as input_context.handoff_context on `slipway next --json --diagnostics`. It
+// curates the durable paths a resuming or handing-off agent should read (change
+// authority, config, lifecycle log, policy packs) plus parsed advisory policy
+// content, under a bounded_references_only context policy. It is orthogonal to
+// the retired context-pressure estimator: it never measures or estimates context
+// usage (the former context_budget hint field was dropped with that removal).
 type handoffContextView struct {
-	WorkflowProfile   string                 `json:"workflow_profile"`
-	ContextPolicy     string                 `json:"context_policy"`
-	Trace             *handoffTraceView      `json:"trace,omitempty"`
-	ContextBudget     *handoffBudgetHintView `json:"context_budget,omitempty"`
-	ReadRefs          []handoffReadRef       `json:"read_refs,omitempty"`
-	PolicyPacks       []handoffPolicyPack    `json:"policy_packs,omitempty"`
-	Risk              *handoffRiskView       `json:"risk,omitempty"`
-	ChangeAuthority   string                 `json:"change_authority"`
-	LifecycleEventLog string                 `json:"lifecycle_event_log,omitempty"`
-	ConfigPath        string                 `json:"config_path,omitempty"`
-	RequiredReads     []string               `json:"required_reads,omitempty"`
+	WorkflowProfile   string              `json:"workflow_profile"`
+	ContextPolicy     string              `json:"context_policy"`
+	Trace             *handoffTraceView   `json:"trace,omitempty"`
+	ReadRefs          []handoffReadRef    `json:"read_refs,omitempty"`
+	PolicyPacks       []handoffPolicyPack `json:"policy_packs,omitempty"`
+	Risk              *handoffRiskView    `json:"risk,omitempty"`
+	ChangeAuthority   string              `json:"change_authority"`
+	LifecycleEventLog string              `json:"lifecycle_event_log,omitempty"`
+	ConfigPath        string              `json:"config_path,omitempty"`
+	RequiredReads     []string            `json:"required_reads,omitempty"`
 }
 
 type handoffTraceView struct {
 	CorrelationID string `json:"correlation_id"`
 	EventLog      string `json:"event_log,omitempty"`
-}
-
-type handoffBudgetHintView struct {
-	Mode           string `json:"mode"`
-	MaxInlineBytes int    `json:"max_inline_bytes"`
 }
 
 type handoffReadRef struct {
@@ -333,7 +309,6 @@ type executionResumeContext struct {
 
 func makeNextCmd() *cobra.Command {
 	var jsonOutput bool
-	var contextGuard bool
 	var noAutoPass bool
 	var diagnostics bool
 	var changeSlug string
@@ -341,17 +316,8 @@ func makeNextCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "next",
 		Short: desc("next"),
-		Long: desc("next") + `
-
-Environment variables:
-  SLIPWAY_CONTEXT_WINDOW_TOKENS  Override the assumed context-window size (in
-                                 tokens) used to compute the context budget's
-                                 utilization, remaining percent, and guard
-                                 action (the same window the --context-guard
-                                 hook messages report). Must be a positive
-                                 integer; a malformed or non-positive value is
-                                 ignored and the built-in default window is used.`,
-		Args: cobra.NoArgs,
+		Long:  desc("next"),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			root, err := projectRootFromCommand(cmd)
 			if err != nil {
@@ -378,7 +344,7 @@ Environment variables:
 					return err
 				}
 				ref := changeRef{Slug: lockedChange.Slug}
-				if jsonOutput && !diagnostics && !contextGuard {
+				if jsonOutput && !diagnostics {
 					view, err := buildNextViewForCommandWithReadContext(readCtx, ref, nextViewOptions{
 						Preview:          true,
 						AutoSkipEvidence: false,
@@ -408,10 +374,6 @@ Environment variables:
 				applyNextInvocationWorkspacePathWithReadContext(cmd, readCtx, &view)
 				applyNextInvocationRouteWithReadContext(cmd, readCtx, lockedChange, strings.TrimSpace(changeSlug) != "", &view)
 
-				if contextGuard {
-					return writeContextGuardHookMessages(cmd.OutOrStdout(), view)
-				}
-
 				if jsonOutput {
 					if diagnostics {
 						return encodeJSONResponse(cmd, view)
@@ -427,7 +389,6 @@ Environment variables:
 	}
 
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().BoolVar(&contextGuard, "context-guard", false, "Output context budget guard messages in hook format")
 	cmd.Flags().BoolVar(&noAutoPass, "no-auto-pass", false, "Skip auto-pass and report eligibility instead")
 	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
 	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
