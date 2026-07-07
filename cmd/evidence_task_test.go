@@ -618,6 +618,56 @@ func TestEvidenceTaskResultFileRejectsNoOpJustificationWithChangedFiles(t *testi
 	})
 }
 
+func TestEvidenceTaskManualRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		// t-02 is a test-kind task; a no_op_justification is only valid on a code
+		// task, so the manual gate rejects it fail-closed before any file is written.
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-02",
+			"--run-summary-version", "1",
+			"--task-kind", "test",
+			"--verdict", "pass",
+			"--evidence-ref", "test:manual-out-of-envelope",
+			"--no-op-justification", "no safe behavior-preserving change exists",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_no_op_justification_invalid", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		// t-02 is a test-kind task in the fixture; a no_op_justification is only
+		// valid on a code task, so the batch prepare gate rejects it fail-closed
+		// before the missing-changed-file check and before any file is written.
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-02.json"),
+			[]byte(`{"task_id":"t-02","verdict":"pass","evidence_ref":"test:out-of-envelope","changed_files":[],"no_op_justification":"no safe behavior-preserving change exists"}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-02.json"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_no_op_justification_invalid", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+	})
+}
+
 func TestEvidenceTaskResultFileRejectsExecutorOwnedLedgerFields(t *testing.T) {
 	t.Parallel()
 

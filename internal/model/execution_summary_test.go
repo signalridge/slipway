@@ -125,6 +125,69 @@ func TestExecutionTaskSummaryNormalizeTrimsNoOpJustification(t *testing.T) {
 	assert.Equal(t, "spaced justification", task.NoOpJustification)
 }
 
+func TestValidateNoOpJustificationEnforcesEnvelope(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name            string
+		task            ExecutionTaskSummary
+		hasChangedFiles bool
+		wantErr         error
+	}{
+		{
+			name: "empty justification always valid",
+			task: ExecutionTaskSummary{Verdict: TaskVerdictFail, TaskKind: TaskKindCode},
+		},
+		{
+			name:            "empty justification valid even with changed files",
+			task:            ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindCode},
+			hasChangedFiles: true,
+		},
+		{
+			name: "pass code zero files is the legitimate shape",
+			task: ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindCode, NoOpJustification: "no safe behavior-preserving change exists"},
+		},
+		{
+			name:            "justification with changed files is a contradiction",
+			task:            ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindCode, NoOpJustification: "j"},
+			hasChangedFiles: true,
+			wantErr:         ErrNoOpJustificationWithChangedFiles,
+		},
+		{
+			name:    "justification on a non-pass code task is out of envelope",
+			task:    ExecutionTaskSummary{Verdict: TaskVerdictFail, TaskKind: TaskKindCode, NoOpJustification: "j"},
+			wantErr: ErrNoOpJustificationInvalidTask,
+		},
+		{
+			name:    "justification on a pass verification task is out of envelope",
+			task:    ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindVerification, NoOpJustification: "j"},
+			wantErr: ErrNoOpJustificationInvalidTask,
+		},
+		{
+			name:    "justification on a pass investigation task is out of envelope",
+			task:    ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindInvestigation, NoOpJustification: "j"},
+			wantErr: ErrNoOpJustificationInvalidTask,
+		},
+		{
+			name:    "justification on a pass doc task is out of envelope",
+			task:    ExecutionTaskSummary{Verdict: TaskVerdictPass, TaskKind: TaskKindDoc, NoOpJustification: "j"},
+			wantErr: ErrNoOpJustificationInvalidTask,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := tc.task.ValidateNoOpJustification(tc.hasChangedFiles)
+			if tc.wantErr == nil {
+				assert.NoError(t, err)
+				return
+			}
+			assert.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
 func TestExecutionSummaryValidateRejectsNonPassTaskSetMismatch(t *testing.T) {
 	t.Parallel()
 

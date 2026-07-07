@@ -655,15 +655,25 @@ func makeEvidenceTaskCmd() *cobra.Command {
 				// (code + pass + zero files needs an explicit justification;
 				// verification/investigation stay exempt).
 				noOpJustificationValue := strings.TrimSpace(noOpJustification)
-				if noOpJustificationValue != "" && len(changedFiles) > 0 {
-					return newInvalidUsageError(
-						"evidence_task_no_op_justification_conflict",
-						"--no-op-justification must not be combined with --changed-file",
-						"Pass --changed-file for a task that changed files, or --no-op-justification for a pass code task that changed zero files -- never both.",
-						map[string]any{"task_id": taskID},
-					)
-				}
 				gateTask := model.ExecutionTaskSummary{Verdict: verdict, TaskKind: taskKind, NoOpJustification: noOpJustificationValue}
+				if err := gateTask.ValidateNoOpJustification(len(changedFiles) > 0); err != nil {
+					switch {
+					case errors.Is(err, model.ErrNoOpJustificationWithChangedFiles):
+						return newInvalidUsageError(
+							"evidence_task_no_op_justification_conflict",
+							"--no-op-justification must not be combined with --changed-file",
+							"Pass --changed-file for a task that changed files, or --no-op-justification for a pass code task that changed zero files -- never both.",
+							map[string]any{"task_id": taskID},
+						)
+					default:
+						return newInvalidUsageError(
+							"evidence_task_no_op_justification_invalid",
+							fmt.Sprintf("--no-op-justification is valid only for a pass code task that changed zero files, not a %s %s task", verdict, taskKind),
+							"Drop --no-op-justification unless the task is a pass code task that changed zero files; record a non-pass or non-code task without it.",
+							map[string]any{"task_id": taskID},
+						)
+					}
+				}
 				if len(changedFiles) == 0 && gateTask.RequiresChangedFiles(false) {
 					return newInvalidUsageError(
 						"evidence_task_changed_file_required",
@@ -1064,22 +1074,32 @@ func prepareEvidenceTaskResultFiles(
 		}
 		noOpJustification := strings.TrimSpace(result.NoOpJustification)
 		gateTask := model.ExecutionTaskSummary{Verdict: verdict, TaskKind: taskKind, NoOpJustification: noOpJustification}
+		// Enforce the no_op_justification envelope in the prepare gate so a whole
+		// batch fails closed with a usage error before any file is written, rather
+		// than leaving a written-then-invalid orphan for the post-write parser.
+		if err := gateTask.ValidateNoOpJustification(len(changedFiles) > 0); err != nil {
+			switch {
+			case errors.Is(err, model.ErrNoOpJustificationWithChangedFiles):
+				return nil, newInvalidUsageError(
+					"evidence_task_no_op_justification_conflict",
+					"result-file task evidence must not combine no_op_justification with changed_files",
+					"Write executor result JSON with either changed_files (the files the task changed) or a no_op_justification for a pass code task that changed zero files -- never both.",
+					map[string]any{"task_id": taskID, "result_file": resultFile},
+				)
+			default:
+				return nil, newInvalidUsageError(
+					"evidence_task_no_op_justification_invalid",
+					fmt.Sprintf("no_op_justification is valid only for a pass code task that changed zero files, not a %s %s task", verdict, taskKind),
+					"Remove no_op_justification unless the task is a pass code task that changed zero files; record a non-pass or non-code task without it.",
+					map[string]any{"task_id": taskID, "result_file": resultFile},
+				)
+			}
+		}
 		if len(changedFiles) == 0 && gateTask.RequiresChangedFiles(false) {
 			return nil, newInvalidUsageError(
 				"evidence_task_changed_file_required",
 				fmt.Sprintf("a pass %s task that changed zero files requires at least one changed_files entry", taskKind),
 				resultFileChangedFileRemediation(taskKind),
-				map[string]any{"task_id": taskID, "result_file": resultFile},
-			)
-		}
-		// Reject the contradiction in the prepare gate so a whole batch fails
-		// closed with a usage error before any file is written, rather than
-		// leaving a written-then-invalid orphan for the post-write parser to flag.
-		if noOpJustification != "" && len(changedFiles) > 0 {
-			return nil, newInvalidUsageError(
-				"evidence_task_no_op_justification_conflict",
-				"result-file task evidence must not combine no_op_justification with changed_files",
-				"Write executor result JSON with either changed_files (the files the task changed) or a no_op_justification for a pass code task that changed zero files -- never both.",
 				map[string]any{"task_id": taskID, "result_file": resultFile},
 			)
 		}

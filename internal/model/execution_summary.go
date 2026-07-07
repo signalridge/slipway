@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -168,6 +169,43 @@ func (t ExecutionTaskSummary) RequiresChangedFiles(hasChangedFiles bool) bool {
 		}
 		return true
 	}
+}
+
+// Sentinel errors returned by ValidateNoOpJustification so callers can map each
+// failure mode to their own error surface (CLI error code, plain parser error).
+var (
+	// ErrNoOpJustificationWithChangedFiles reports the contradiction of a
+	// no_op_justification riding alongside recorded changed files.
+	ErrNoOpJustificationWithChangedFiles = errors.New("no_op_justification must not be combined with changed_files")
+	// ErrNoOpJustificationInvalidTask reports a no_op_justification on a task
+	// outside its only legitimate shape: a pass code task that changed zero files.
+	ErrNoOpJustificationInvalidTask = errors.New("no_op_justification is valid only for a pass code task that changed zero files")
+)
+
+// ValidateNoOpJustification enforces that a no_op_justification rides only on the
+// evidence shape it legitimizes — a pass code task that changed zero files. It is
+// the single authority shared by the evidence record-time gates (manual and
+// batch) and the persisted-evidence parser, so every write and read boundary
+// agrees on the field's validity envelope and no boundary silently stores a
+// contradictory or inert justification.
+//
+// hasChangedFiles is the caller's normalized view of whether the task recorded
+// any changed file, matching the RequiresChangedFiles convention.
+//
+// An empty justification is always valid. A non-empty justification is rejected
+// fail-closed when the task recorded changed files (contradiction) or when the
+// task is not a pass code task (the field would be meaningless there).
+func (t ExecutionTaskSummary) ValidateNoOpJustification(hasChangedFiles bool) error {
+	if strings.TrimSpace(t.NoOpJustification) == "" {
+		return nil
+	}
+	if hasChangedFiles {
+		return ErrNoOpJustificationWithChangedFiles
+	}
+	if t.Verdict != TaskVerdictPass || t.TaskKind != TaskKindCode {
+		return ErrNoOpJustificationInvalidTask
+	}
+	return nil
 }
 
 func (t ExecutionTaskSummary) ToTaskRun(runSummaryVersion int) TaskRun {
