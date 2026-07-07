@@ -43,8 +43,6 @@ type ToolConfig struct {
 	SettingsKind        string
 	SessionEvent        string
 	SessionHook         string
-	PostToolEvent       string
-	PostToolHook        string
 	// HookExtensionPath, when non-empty, names a project-local extension file
 	// that bridges Slipway's session-start hook into a host event API that has no
 	// declarative settings.json hooks field (pi). It is a managed generated file
@@ -88,8 +86,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsPath:  ".claude/settings.json",
 		SessionEvent:  "SessionStart",
 		SessionHook:   ".claude/hooks/slipway-session-start",
-		PostToolEvent: "PostToolUse",
-		PostToolHook:  ".claude/hooks/slipway-context-pressure-post-tool-use",
 		TriggerPrefix: "/slipway",
 		TriggerStyle:  "slash-colon",
 		AutoDetectPath: []string{
@@ -122,8 +118,6 @@ var toolRegistry = map[string]ToolConfig{
 		SettingsKind:        settingsKindCodexHooks,
 		SessionEvent:        "SessionStart",
 		SessionHook:         "slipway hook session-start --tool codex",
-		PostToolEvent:       "UserPromptSubmit",
-		PostToolHook:        "slipway hook context-pressure --tool codex",
 		TriggerPrefix:       "$slipway-",
 		TriggerStyle:        "dollar-mention",
 		AutoDetectPath: []string{
@@ -304,7 +298,7 @@ var commandRegistry = []CommandDef{
 			"After the repair subagent edits code/artifacts, rerun and record the affected reviewer evidence, then run `slipway review`.",
 		}},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
-		Arguments: "[--json] [--diagnostics] [--context-guard] [--no-auto-pass] [--change <slug>]",
+		Arguments: "[--json] [--diagnostics] [--no-auto-pass] [--change <slug>]",
 		Notes: []string{
 			nextAutoModeNote,
 		}},
@@ -324,7 +318,7 @@ var commandRegistry = []CommandDef{
 			"`write` reads the handoff narrative from stdin; pipe a full section-headed body or use `--section <canonical-name>` to update one canonical section.",
 			"Non-interactive `write` with empty stdin fails with `handoff_body_empty`; oversized stdin fails with `handoff_body_too_large` before any handoff is written.",
 			"`--section` accepts only canonical advisory sections; unknown sections fail with `handoff_section_unknown` instead of creating non-canonical headings.",
-			"Write at meaningful moments: task completion, before stopping, before a review split, or when a context-pressure nudge asks for continuity.",
+			"You own the timing: Slipway does not measure host context. Write at moments you choose — task completion, before stopping, before a review split, or when your host judges its own context is running low and you are about to compact or start a fresh session.",
 			"Read on resume with `slipway handoff show`; use `show --brief` for a bounded descriptor.",
 			"This generated surface is hook-agnostic: run write/show yourself and never assume SessionStart, PreCompact, or any host hook fired.",
 			"The handoff is advisory only; `slipway status` and `slipway next` remain lifecycle authority.",
@@ -376,7 +370,7 @@ var commandRegistry = []CommandDef{
 			"`tool` is intentionally CLI-only: generated skills call `slipway tool ...` directly, but Slipway does not export `$slipway-tool` or host command prompt wrappers.",
 		}},
 	{ID: "hook", Class: CommandClassMutation, Description: "Run internal host hook helpers", Tier: "helpers", HasPromptSurface: false,
-		Arguments:     "[session-start|context-pressure] [--tool <id>]",
+		Arguments:     "[session-start] [--tool <id>]",
 		Prerequisites: []string{"None — public CLI-only helper namespace used by generated host hook configuration."},
 		Notes: []string{
 			"`hook` is intentionally CLI-only: generated host configuration invokes `slipway hook ...` directly, but Slipway does not export `$slipway-hook` or host command prompt wrappers.",
@@ -1359,7 +1353,11 @@ func registerHostSettingsSurfaces(root string, cfg ToolConfig, refresh bool, pla
 				if err := pruneHookLauncherFiles(root, cfg.SessionHook, plan); err != nil {
 					return err
 				}
-				if err := pruneHookLauncherFiles(root, cfg.PostToolHook, plan); err != nil {
+				// The context-pressure PostToolUse hook was retired. Prune any
+				// launcher files a prior install generated even though no
+				// descriptor emits them now (the settings.json inline command is
+				// pruned inside mergeHookSettingsJSONWithPlan).
+				if err := pruneHookLauncherFiles(root, retiredContextPressureLauncherBase, plan); err != nil {
 					return err
 				}
 			}
@@ -2368,10 +2366,22 @@ func hookLauncherOutputs(basePath, hookTemplateBase string) []hookLauncherOutput
 // settings.json. They are intentionally launcher-free and shell-operator-free so
 // the same string is portable across `/bin/sh -c`, `cmd /c`, and PowerShell.
 const (
-	sessionStartHookCommand    = "slipway hook session-start"
-	contextPressureHookCommand = "slipway hook context-pressure"
-	codexHooksBlockStart       = "# BEGIN SLIPWAY MANAGED CODEX HOOKS"
-	codexHooksBlockEnd         = "# END SLIPWAY MANAGED CODEX HOOKS"
+	sessionStartHookCommand = "slipway hook session-start"
+	codexHooksBlockStart    = "# BEGIN SLIPWAY MANAGED CODEX HOOKS"
+	codexHooksBlockEnd      = "# END SLIPWAY MANAGED CODEX HOOKS"
+)
+
+// Retired context-pressure PostToolUse hook surfaces. Slipway no longer measures
+// context-window pressure (an outside-the-loop host hook cannot see the model's
+// token counts), so no descriptor emits these anymore. They are retained only as
+// refresh-time prune targets so `slipway init --refresh` removes any launcher
+// files and the inline settings.json PostToolUse command left by an older
+// install; the codex managed block is fully regenerated, so it needs no separate
+// prune target here.
+const (
+	retiredContextPressureLauncherBase  = ".claude/hooks/slipway-context-pressure-post-tool-use"
+	retiredContextPressureInlineCommand = "slipway hook context-pressure"
+	retiredContextPressurePostToolEvent = "PostToolUse"
 )
 
 // hookLaunch returns the command prefix and existence-probe binary that
@@ -2632,11 +2642,6 @@ func writePiHooksExtensionWithPlan(root string, cfg ToolConfig, refresh bool, pl
 // hookLaunch prefix (in-repo go-run, else the bare PATH `slipway`) so a
 // dogfooding checkout tracks its own HEAD.
 //
-// Only the session-start hook is bridged. context-pressure is deliberately not:
-// `slipway hook context-pressure` derives its metric from stdin JSON, and pi's
-// extension exec API has no stdin channel, so that path could never carry data;
-// pi manages context pressure natively through its own compaction.
-//
 // The extension is fully fail-silent: any exec error, non-zero exit, timeout, or
 // abort collapses to an empty string and never escapes a handler, matching
 // Slipway's hook fail-silent floor.
@@ -2662,10 +2667,6 @@ func renderPiHooksExtension(cfg ToolConfig, root string) string {
 // pi's turn signal, keeps the governance bridge visible on every user prompt in
 // the session, and avoids writing duplicate persistent messages when pi reloads
 // or resumes a session.
-//
-// The context-pressure hook is intentionally not bridged: it derives its metric
-// from stdin JSON and pi's exec API has no stdin channel, so the data could
-// never reach it; pi manages context pressure natively.
 //
 // Every exec is fail-silent (errors, non-zero exits, timeouts, and aborts all
 // collapse to an empty string; handlers never throw), matching Slipway's hook
@@ -2782,21 +2783,13 @@ func renderCodexHooksBlock(cfg ToolConfig, root string) string {
 	if sessionCommand == "" {
 		sessionCommand = "slipway hook session-start --tool codex"
 	}
-	promptCommand := strings.TrimSpace(cfg.PostToolHook)
-	if promptCommand == "" {
-		promptCommand = "slipway hook context-pressure --tool codex"
-	}
 	sessionCommand = applyHookLaunchPrefix(sessionCommand, root)
-	promptCommand = applyHookLaunchPrefix(promptCommand, root)
 	return strings.TrimSpace(fmt.Sprintf(`%s
 # Generated by Slipway. Hooks are inert until Codex trusts this repo and each hook; Slipway never edits global Codex trust.
 [[hooks.SessionStart]]
 hooks = [{ type = "command", command = %q }]
-
-[[hooks.UserPromptSubmit]]
-hooks = [{ type = "command", command = %q }]
 %s
-`, codexHooksBlockStart, sessionCommand, promptCommand, codexHooksBlockEnd)) + "\n"
+`, codexHooksBlockStart, sessionCommand, codexHooksBlockEnd)) + "\n"
 }
 
 func mergeManagedCodexHooksBlock(existing, block string) string {
@@ -2858,14 +2851,19 @@ func mergeHookSettingsJSONWithPlan(root string, cfg ToolConfig, refresh bool, pl
 		// rewrite is rendered for the local host. pruneStaleSlipwayHookCommands still
 		// recognizes both the bare and the go-run forms across refreshes.
 		sessionCmd := applyHookLaunchPrefix(sessionStartHookCommand, root)
-		promptCmd := applyHookLaunchPrefix(contextPressureHookCommand, root)
 		if strings.TrimSpace(cfg.SessionEvent) != "" && strings.TrimSpace(cfg.SessionHook) != "" {
 			pruneStaleSlipwayHookCommands(hooks, cfg.SessionEvent, cfg.SessionHook, sessionCmd)
 			mergeHookEventCommand(hooks, cfg.SessionEvent, sessionCmd)
 		}
-		if strings.TrimSpace(cfg.PostToolEvent) != "" && strings.TrimSpace(cfg.PostToolHook) != "" {
-			pruneStaleSlipwayHookCommands(hooks, cfg.PostToolEvent, cfg.PostToolHook, promptCmd)
-			mergeHookEventCommand(hooks, cfg.PostToolEvent, promptCmd)
+		// The context-pressure PostToolUse hook was retired. On refresh, prune any
+		// inline command a prior install registered so the event does not linger;
+		// no descriptor emits it now, so nothing re-adds it.
+		if refresh {
+			retiredCmd := applyHookLaunchPrefix(retiredContextPressureInlineCommand, root)
+			pruneStaleSlipwayHookCommands(hooks, retiredContextPressurePostToolEvent, retiredContextPressureLauncherBase, retiredCmd)
+			if entries, ok := hooks[retiredContextPressurePostToolEvent].([]any); ok && len(entries) == 0 {
+				delete(hooks, retiredContextPressurePostToolEvent)
+			}
 		}
 		settings["hooks"] = hooks
 		return nil

@@ -155,8 +155,8 @@ surfaces:
   dotted file keys. Subagent delegation policy lives under `subagents`; see
   [Subagent Configuration](docs/reference/subagents.md).
 - Runtime/host environment variables describe the current AI host session:
-  context-window size, host capabilities, handoff owner identity, and similar
-  facts. Discover them with `slipway config list --env`; see
+  host capabilities, handoff owner identity, and similar facts. Discover them
+  with `slipway config list --env`; see
   [Host Environment Variables](docs/reference/host-environment.md) for the
   concrete host capability tokens, fallback modes, and unset behavior.
 - Secret environment variables, including GitHub tokens, are environment-only
@@ -325,7 +325,7 @@ customizations.
 | Tool | Generated surfaces |
 | --- | --- |
 | Claude | `.claude/skills/slipway-*/SKILL.md`, `.claude/commands/slipway/*.md`, `.claude/settings.json` hook entries |
-| Codex | `.codex/skills/slipway-*/SKILL.md` entry, command, and governance skills; `.codex/config.toml` SessionStart and UserPromptSubmit hook entries |
+| Codex | `.codex/skills/slipway-*/SKILL.md` entry, command, and governance skills; `.codex/config.toml` SessionStart hook entries |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`, `.cursor/commands/*.md`, session-start hook launchers |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`, `.opencode/commands/slipway-*.md`, session-start hook launchers |
 | Copilot | `.github/skills/slipway-*/SKILL.md`, `.github/prompts/slipway-*.prompt.md`, `.github/copilot/slipway` managed state |
@@ -350,9 +350,10 @@ Exported generated skill rows are pinned by public skill directory:
 `slipway-wave-orchestration/SKILL.md`, and
 `slipway-worktree-preflight/SKILL.md`.
 
-Codex uses repo-local `.codex/config.toml` hooks for bounded SessionStart
-handoff pointers and staleness-conditioned UserPromptSubmit write nudges. These
-hooks are inert until the repo and each hook are trusted by the user; Slipway
+Codex uses a repo-local `.codex/config.toml` SessionStart hook that emits the
+Slipway entry-skill routing pointer and a static note that Slipway does not
+watch your context window (the host owns the compact-or-fresh-session decision).
+The hook is inert until the repo and the hook are trusted by the user; Slipway
 never edits global Codex trust configuration.
 
 See [AI Tool Adapters](docs/reference/ai-tools.md) and the generated

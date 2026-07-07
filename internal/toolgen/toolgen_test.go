@@ -227,7 +227,7 @@ func TestSurfaceManifestRegistersHookAsCLIOnlyImplementationSurface(t *testing.T
 	assert.Equal(t, "slipway hook", hookRow.Token)
 
 	require.NotNil(t, hookImplementationRow, "surface manifest must include the hook implementation source")
-	assert.Equal(t, "cmd/context_pressure_hook.go", hookImplementationRow.Source)
+	assert.Equal(t, "cmd/session_start_hook.go", hookImplementationRow.Source)
 	assert.Equal(t, "docs/reference/commands.md", hookImplementationRow.Docs)
 	assert.Equal(t, "slipway hook", hookImplementationRow.Token)
 }
@@ -633,9 +633,10 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 		// session-start launcher family. Skill-only/no-hook hosts emit none.
 		switch {
 		case cfg.SettingsPath != "" && cfg.SettingsKind != settingsKindPiRegistration:
-			// Settings-capable hosts must not write any launcher file for either
-			// hook (the extensionless POSIX entry or its .ps1/.cmd/.sh variants).
-			for _, base := range []string{cfg.SessionHook, cfg.PostToolHook} {
+			// Settings-capable hosts must not write any launcher file for the
+			// session-start hook (the extensionless POSIX entry or its
+			// .ps1/.cmd/.sh variants).
+			for _, base := range []string{cfg.SessionHook} {
 				if base == "" {
 					continue
 				}
@@ -672,8 +673,8 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			settings := string(content)
 			assert.Contains(t, settings, "[[hooks.SessionStart]]", "%s: missing Codex SessionStart hook", toolID)
 			assert.Contains(t, settings, `slipway hook session-start --tool codex`, "%s: missing Codex session-start command", toolID)
-			assert.Contains(t, settings, "[[hooks.UserPromptSubmit]]", "%s: missing Codex UserPromptSubmit hook", toolID)
-			assert.Contains(t, settings, `slipway hook context-pressure --tool codex`, "%s: missing Codex prompt-submit command", toolID)
+			assert.NotContains(t, settings, "[[hooks.UserPromptSubmit]]", "%s: retired context-pressure hook must not register UserPromptSubmit", toolID)
+			assert.NotContains(t, settings, "context-pressure", "%s: retired context-pressure command must not appear", toolID)
 			assert.Contains(t, settings, "inert until Codex trusts this repo and each hook", "%s: missing trust caveat", toolID)
 		case cfg.SettingsPath != "":
 			settingsPath := filepath.Join(root, cfg.SettingsPath)
@@ -692,15 +693,11 @@ func TestGenerateProducesAllExpectedFiles(t *testing.T) {
 			assert.NotContains(t, settings, "--tool", "%s: settings must use the bare inline command", toolID)
 			assert.NotContains(t, settings, "||", "%s: settings command must parse in Windows PowerShell 5.1", toolID)
 			assert.NotContains(t, settings, "bash", "%s: settings must not require bash", toolID)
-			if cfg.PostToolEvent != "" && cfg.PostToolHook != "" {
-				assert.Contains(t, settings, "PostToolUse", "%s: missing post-tool registration", toolID)
-				assert.Contains(t, settings, contextPressureHookCommand,
-					"%s: missing inline context-pressure command", toolID)
-			} else {
-				assert.NotContains(t, settings, "PostToolUse", "%s: unexpected post-tool registration", toolID)
-				assert.NotContains(t, settings, contextPressureHookCommand,
-					"%s: unexpected context-pressure registration", toolID)
-			}
+			// The context-pressure PostToolUse hook was retired: no settings-capable
+			// host registers a PostToolUse event or the context-pressure command.
+			assert.NotContains(t, settings, "PostToolUse", "%s: unexpected post-tool registration", toolID)
+			assert.NotContains(t, settings, retiredContextPressureInlineCommand,
+				"%s: unexpected context-pressure registration", toolID)
 		default:
 			settingsPath := filepath.Join(root, "."+toolID, "settings.json")
 			_, err := os.Stat(settingsPath)
@@ -801,14 +798,16 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.NotContains(t, s, "`next_skill.agent_hint`", "%s: stale agent hint contract leaked", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.prompt_path`", "%s: stale prompt_path contract leaked", cfg.ID)
 		assert.NotContains(t, s, "`next_skill.resolved_tool_id`", "%s: stale resolved_tool_id contract leaked", cfg.ID)
-		assert.Contains(t, s, "## Runtime Session Handoff", "%s: missing runtime handoff contract", cfg.ID)
-		assert.Contains(t, s, "`slipway-handoff`", "%s: missing owned handoff surface pointer", cfg.ID)
-		assert.Contains(t, s, "`slipway handoff write`", "%s: missing handoff writer command", cfg.ID)
-		assert.Contains(t, s, "`slipway handoff show`", "%s: missing handoff reader command", cfg.ID)
-		assert.Contains(t, sText, "The handoff remains advisory only: it is not lifecycle authority, governed evidence, freshness input, or a gate.", "%s: missing handoff non-authority boundary", cfg.ID)
-		assert.Contains(t, sText, "A fresh session must still run `slipway status --json` and", "%s: missing status refresh requirement", cfg.ID)
-		assert.Contains(t, sText, "`slipway next --json`, obey lifecycle gates, and rely on CLI-owned freshness and", "%s: missing next/freshness requirement", cfg.ID)
-		assert.Contains(t, sText, "evidence checks before advancing", "%s: missing evidence-check requirement", cfg.ID)
+		assert.Contains(t, s, "## Session Continuity", "%s: missing session-continuity contract", cfg.ID)
+		assert.Contains(t, sText, "Governed continuity comes ONLY from `slipway status --json` and `slipway next --json`", "%s: missing status/next continuity authority", cfg.ID)
+		assert.Contains(t, sText, "are informal context only and are NEVER governance authority", "%s: missing host-summary non-authority boundary", cfg.ID)
+		assert.Contains(t, sText, "MUST run `slipway status` / `slipway next` and MUST NOT infer the governed position from a host summary", "%s: missing resume-must-run requirement", cfg.ID)
+		// Slipway no longer measures host context; the handoff mechanism is present
+		// and host-invoked, but stays advisory (never lifecycle authority).
+		assert.Contains(t, sText, "Slipway does not measure your context window", "%s: missing host-owns-context principle", cfg.ID)
+		assert.Contains(t, s, "slipway handoff write", "%s: missing handoff write mechanism", cfg.ID)
+		assert.Contains(t, s, "slipway handoff show", "%s: missing handoff show mechanism", cfg.ID)
+		assert.Contains(t, sText, "it is NOT lifecycle authority, governed evidence, freshness input, or a gate", "%s: missing handoff advisory boundary", cfg.ID)
 		assert.NotContains(t, s, "handoff.md is lifecycle authority", "%s: stale handoff authority wording leaked", cfg.ID)
 		assert.NotContains(t, s, "handoff.md is governed evidence", "%s: stale handoff evidence wording leaked", cfg.ID)
 		assert.NotContains(t, s, "handoff.md is freshness input", "%s: stale handoff freshness wording leaked", cfg.ID)
@@ -822,7 +821,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		assert.Contains(t, s, "## Continuing A Change In A Fresh Session", "%s: missing fresh-session resume protocol section", cfg.ID)
 		assert.Contains(t, sText, "Run `slipway status --json` to discover the active change", "%s: resume protocol missing status --json step", cfg.ID)
 		assert.Contains(t, sText, "select the one you are resuming and pass `--change <slug>`", "%s: resume protocol missing multi-change --change selection step", cfg.ID)
-		assert.Contains(t, sText, "Run `slipway handoff show --change <slug>` and read the advisory narrative first", "%s: resume protocol missing handoff show step", cfg.ID)
+		assert.Contains(t, sText, "Run `slipway handoff show --change <slug>` to read the prior session's advisory", "%s: resume protocol missing handoff show step", cfg.ID)
 		assert.Contains(t, sText, "Then run `slipway next`", "%s: resume protocol missing next step", cfg.ID)
 		assert.Contains(t, s, "`references/command-reference.md`", "%s: missing workflow reference handoff", cfg.ID)
 		assert.Contains(t, s, filepath.ToSlash(SkillIndexPath(cfg)), "%s: missing workflow skill index path", cfg.ID)
@@ -857,13 +856,7 @@ func TestWorkflowSkillGenerationAndReference(t *testing.T) {
 		situationalSection := referenceSectionFor(ref, "## Situational Commands")
 		assert.Contains(t, situationalSection, "### `slipway repair`", "%s: repair must be situational", cfg.ID)
 		assert.NotContains(t, situationalSection, "### `slipway init`", "%s: init must not be situational", cfg.ID)
-		handoffSection := referenceSectionFor(ref, "### `slipway handoff`")
-		assert.NotEmpty(t, handoffSection, "%s: missing handoff command entry", cfg.ID)
-		assert.Contains(t, handoffSection, "[--section <canonical-name>] < stdin", "%s: handoff reference missing stdin write form", cfg.ID)
-		assert.Contains(t, handoffSection, "`write` reads the handoff narrative from stdin", "%s: handoff reference missing stdin contract", cfg.ID)
-		assert.Contains(t, handoffSection, "empty stdin fails with `handoff_body_empty`", "%s: handoff reference missing empty-body failure contract", cfg.ID)
-		assert.Contains(t, handoffSection, "oversized stdin fails with `handoff_body_too_large`", "%s: handoff reference missing oversized-body failure contract", cfg.ID)
-		assert.Contains(t, handoffSection, "unknown sections fail with `handoff_section_unknown`", "%s: handoff reference missing unknown-section failure contract", cfg.ID)
+		assert.Contains(t, ref, "### `slipway handoff`", "%s: missing handoff command entry in reference", cfg.ID)
 		diagnosticsSection := referenceSectionFor(ref, "## Diagnostics")
 		assert.Contains(t, diagnosticsSection, "### `slipway instructions`", "%s: instructions must remain diagnostic", cfg.ID)
 		assert.NotContains(t, diagnosticsSection, "### `slipway codebase-map`", "%s: codebase-map must not be diagnostic", cfg.ID)
@@ -2253,8 +2246,8 @@ func TestCodexGenerationCreatesHandoffHooksConfigWithoutAgents(t *testing.T) {
 	s := string(config)
 	assert.Contains(t, s, "[[hooks.SessionStart]]")
 	assert.Contains(t, s, `slipway hook session-start --tool codex`)
-	assert.Contains(t, s, "[[hooks.UserPromptSubmit]]")
-	assert.Contains(t, s, `slipway hook context-pressure --tool codex`)
+	assert.NotContains(t, s, "[[hooks.UserPromptSubmit]]")
+	assert.NotContains(t, s, "context-pressure")
 	assert.Contains(t, s, "inert until Codex trusts this repo and each hook")
 	assert.Contains(t, s, "never edits global Codex trust")
 }
@@ -2281,6 +2274,7 @@ func TestCodexGenerationFromLinkedWorktreeWritesRootCheckoutConfig(t *testing.T)
 
 	_, err = os.Stat(filepath.Join(worktreeRoot, ".codex", "config.toml"))
 	assert.True(t, os.IsNotExist(err), "linked worktree must not be the only Codex hook config location")
+	assert.FileExists(t, filepath.Join(worktreeRoot, ".codex", "skills", "slipway-next", "SKILL.md"))
 	assert.FileExists(t, filepath.Join(worktreeRoot, ".codex", "skills", "slipway-handoff", "SKILL.md"))
 }
 
@@ -2292,35 +2286,41 @@ func runToolgenGit(t *testing.T, dir string, args ...string) {
 	require.NoErrorf(t, err, "git %s failed: %s", strings.Join(args, " "), string(out))
 }
 
-func TestGeneratedHandoffSkillIsHookAgnostic(t *testing.T) {
+// TestHandoffCommandSurfaceIsGenerated locks that the restored handoff command
+// ships a generated surface for both a skill-surface adapter (codex) and the
+// command-file adapters: `slipway handoff` is a first-class command, not a
+// retired one. Only the outside-the-loop context-pressure detection was removed
+// on this branch; the handoff write/show mechanism is retained.
+func TestHandoffCommandSurfaceIsGenerated(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"codex"}, true))
+	assert.FileExists(t, filepath.Join(root, ".codex", "skills", "slipway-handoff", "SKILL.md"))
 
-	content, err := os.ReadFile(filepath.Join(root, ".codex", "skills", "slipway-handoff", "SKILL.md"))
-	require.NoError(t, err)
-	s := string(content)
-	assert.Contains(t, s, "slipway handoff write")
-	assert.Contains(t, s, "Write at meaningful moments")
-	assert.Contains(t, s, "Read on resume with `slipway handoff show`")
-	assert.Contains(t, s, "hook-agnostic")
-	assert.Contains(t, s, "never assume SessionStart, PreCompact, or any host hook fired")
-	assert.Contains(t, s, "`slipway status` and `slipway next` remain lifecycle authority")
+	for _, cfg := range commandSkillHostConfigs(t) {
+		t.Run(cfg.ID, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, Generate(root, []string{cfg.ID}, true))
+			handoffSkill := commandSkillPath(root, cfg, "handoff")
+			assert.FileExists(t, handoffSkill, "%s must generate the handoff command surface", cfg.ID)
+		})
+	}
 }
 
 func TestHookSettingsRegistrationForSettingsCapableHosts(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, Generate(root, []string{"claude", "qwen"}, true))
 
-	// Claude registers BOTH the inline session-start and context-pressure
-	// commands directly in settings.json, with no launcher path, no
-	// `.claude/hooks/` reference, no `--tool` flag, and no shell operator.
+	// Claude registers the inline session-start command directly in
+	// settings.json, with no launcher path, no `.claude/hooks/` reference, no
+	// `--tool` flag, and no shell operator. The context-pressure PostToolUse hook
+	// was retired and must not appear.
 	claudeSettings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
 	require.NoError(t, err)
 	claude := string(claudeSettings)
 	assert.Contains(t, claude, "SessionStart")
 	assert.Contains(t, claude, sessionStartHookCommand)
-	assert.Contains(t, claude, "PostToolUse")
-	assert.Contains(t, claude, contextPressureHookCommand)
+	assert.NotContains(t, claude, "PostToolUse", "claude must not register the retired context-pressure PostToolUse hook")
+	assert.NotContains(t, claude, retiredContextPressureInlineCommand, "claude must not register the retired context-pressure command")
 	assert.NotContains(t, claude, ".claude/hooks/", "claude settings must not reference a launcher path")
 	assert.NotContains(t, claude, "slipway-session-start", "claude settings must not name a launcher file")
 	assert.NotContains(t, claude, "slipway-context-pressure-post-tool-use", "claude settings must not name a launcher file")
@@ -2336,7 +2336,7 @@ func TestHookSettingsRegistrationForSettingsCapableHosts(t *testing.T) {
 	assert.Contains(t, qwen, "SessionStart")
 	assert.Contains(t, qwen, sessionStartHookCommand)
 	assert.NotContains(t, qwen, "PostToolUse")
-	assert.NotContains(t, qwen, contextPressureHookCommand)
+	assert.NotContains(t, qwen, retiredContextPressureInlineCommand)
 	assert.NotContains(t, qwen, ".qwen/hooks/", "qwen settings must not reference a launcher path")
 	assert.NotContains(t, qwen, "slipway-session-start", "qwen settings must not name a launcher file")
 	assert.NotContains(t, qwen, "--tool", "qwen settings must use the bare inline command")
@@ -2344,7 +2344,8 @@ func TestHookSettingsRegistrationForSettingsCapableHosts(t *testing.T) {
 	assert.NotContains(t, qwen, "||", "qwen settings must not require shell fallback operators")
 
 	// Neither settings-capable host emits any launcher file (extensionless +
-	// .ps1/.cmd/.sh) for either hook event.
+	// .ps1/.cmd/.sh) for the session-start hook, nor for the retired
+	// context-pressure hook.
 	for _, base := range []string{
 		filepath.Join(".claude", "hooks", "slipway-session-start"),
 		filepath.Join(".claude", "hooks", "slipway-context-pressure-post-tool-use"),
@@ -3276,12 +3277,11 @@ func assertPiHooksExtension(t *testing.T, extensionPath string) {
 	assert.NotContains(t, ts, `customType: "slipway-hook"`, "Pi hooks extension must not store persistent custom messages")
 	assert.NotContains(t, ts, "display: false", "Pi hooks extension must not rely on hidden persistent messages")
 
-	// context-pressure cannot be bridged through pi.exec (it reads its metric from
-	// stdin, which pi.exec has no channel for); the dead argv and branch must stay
-	// removed. Target the JSON argv fragment and stashed constant, not prose, so
-	// the header may still explain the omission.
+	// The context-pressure hook was retired entirely; the pi extension must carry
+	// no context-pressure argv or stashed constant. Target the JSON argv fragment
+	// and stashed constant, not prose.
 	assert.NotContains(t, ts, `"hook","context-pressure"`,
-		"Pi hooks extension must not carry a context-pressure argv (pi.exec has no stdin channel)")
+		"Pi hooks extension must not carry a context-pressure argv")
 	assert.NotContains(t, ts, "PRESSURE_ARGV",
 		"Pi hooks extension must not stash a context-pressure argv constant")
 }
@@ -4051,15 +4051,17 @@ func TestInRepoGenerationRendersGoRunHookCommands(t *testing.T) {
 	codex := string(codexConfig)
 	codexAbs := strings.ReplaceAll(abs, `\`, `\\`)
 	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook session-start --tool codex")
-	assert.Contains(t, codex, "go -C "+codexAbs+" run . hook context-pressure --tool codex")
+	assert.NotContains(t, codex, "context-pressure", "codex hooks must not carry the retired context-pressure command")
 	assert.NotContains(t, codex, `"slipway hook`, "in-repo codex hooks must not embed the bare release command")
 
 	// Claude inline settings.json hooks launch the worktree source via go run.
 	claudeSettings := filepath.Join(root, ".claude", "settings.json")
 	sessionCommands := hookCommandsForEvent(t, claudeSettings, "SessionStart")
 	assert.Contains(t, sessionCommands, "go -C "+abs+" run . hook session-start")
-	postCommands := hookCommandsForEvent(t, claudeSettings, "PostToolUse")
-	assert.Contains(t, postCommands, "go -C "+abs+" run . hook context-pressure")
+	claudeRaw, err := os.ReadFile(claudeSettings)
+	require.NoError(t, err)
+	assert.NotContains(t, string(claudeRaw), "PostToolUse", "claude must not register the retired context-pressure PostToolUse hook")
+	assert.NotContains(t, string(claudeRaw), "context-pressure", "claude must not register the retired context-pressure command")
 
 	// Cursor launcher scripts probe `go` and dispatch through go run.
 	launcher, err := os.ReadFile(filepath.Join(root, ".cursor", "hooks", "slipway-session-start"))

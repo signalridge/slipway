@@ -2,12 +2,7 @@ package model
 
 import (
 	"sort"
-	"strconv"
 )
-
-// DefaultContextWindowTokens is the assumed host context window when no valid
-// SLIPWAY_CONTEXT_WINDOW_TOKENS override is provided.
-const DefaultContextWindowTokens = 200000
 
 // Environment-variable scopes classify how a SLIPWAY_* (or ambient) variable
 // relates to the file config surface. The scope tells an operator whether the
@@ -19,8 +14,8 @@ const (
 	// environment value overrides the file value (env > file > default).
 	EnvScopeRepoPolicy = "repo-policy"
 	// EnvScopeRuntimeHost marks a variable the runtime host injects per session
-	// (identity, context-window size, metrics path, host capabilities). It has no
-	// file equivalent because it describes the host, not the project.
+	// (identity, host capabilities). It has no file equivalent because it
+	// describes the host, not the project.
 	EnvScopeRuntimeHost = "runtime-host"
 	// EnvScopeSecret marks a credential that must stay environment-only and is
 	// never representable in `.slipway.yaml`.
@@ -73,7 +68,6 @@ type EnvAcceptedValue struct {
 // operator can see the env > file > default relationship at a glance. Ambient
 // fallback variables are included even though they are not SLIPWAY_-prefixed.
 func EnvCatalog() []EnvCatalogEntry {
-	defaultContextWindow := strconv.Itoa(DefaultContextWindowTokens)
 	entries := []EnvCatalogEntry{
 		{
 			Name:          "SLIPWAY_GITHUB_API_URL",
@@ -102,22 +96,6 @@ func EnvCatalog() []EnvCatalogEntry {
 			ValueSyntax:   "GitHub API token string for an allowlisted override host.",
 			Examples:      []string{"SLIPWAY_GITHUB_API_TOKEN=<token>"},
 			UnsetBehavior: "No override-host token is available; ambient GH_TOKEN/GITHUB_TOKEN are not sent to override hosts.",
-		},
-		{
-			Name:          "SLIPWAY_CONTEXT_WINDOW_TOKENS",
-			Scope:         EnvScopeRuntimeHost,
-			Description:   "Host model context-window size (tokens) used to estimate context-budget pressure.",
-			ValueSyntax:   "Positive integer token count.",
-			Examples:      []string{"SLIPWAY_CONTEXT_WINDOW_TOKENS=" + defaultContextWindow},
-			UnsetBehavior: "Uses the built-in " + defaultContextWindow + "-token context window; malformed, zero, or negative values are ignored and also fall back to " + defaultContextWindow + ".",
-		},
-		{
-			Name:          "SLIPWAY_CONTEXT_METRICS_PATH",
-			Scope:         EnvScopeRuntimeHost,
-			Description:   "Path the host writes live context-usage metrics to for the context-pressure hook.",
-			ValueSyntax:   "Filesystem path to a JSON object with tokens_used plus context_window/context_window_size, or used_pct/used_percentage/remaining_percentage.",
-			Examples:      []string{"SLIPWAY_CONTEXT_METRICS_PATH=/tmp/slipway-context.json"},
-			UnsetBehavior: "The context-pressure hook checks sanitized session temp metric paths and then the transcript tail; missing, malformed, or stale metrics are ignored.",
 		},
 		{
 			Name:          "SLIPWAY_SESSION_OWNER",

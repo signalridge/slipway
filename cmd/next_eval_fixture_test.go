@@ -98,8 +98,6 @@ Docs render.
 			view := fx.execute(t, root, slug)
 
 			assert.Equal(t, slug, view.Slug)
-			require.NotNil(t, view.InputContext.HandoffContext, "expected JSON envelope handoff_context")
-			assert.NotEmpty(t, view.InputContext.HandoffContext.ChangeAuthority)
 			if fx.wantNextSkill != "" {
 				require.NotNil(t, view.NextSkill)
 				assert.Equal(t, fx.wantNextSkill, view.NextSkill.Name)

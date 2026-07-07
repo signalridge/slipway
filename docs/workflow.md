@@ -159,7 +159,7 @@ These commands inspect state without mutating lifecycle authority:
 Use `validate` directly for its machine-readable JSON report. Use `--json` on
 read-only commands that still expose text by default, such as `next` and
 `status`. Use `--diagnostics` on `next` or `run` when you need gate details,
-artifact readiness, transition traces, or context-budget diagnostics.
+artifact readiness, or transition traces.
 
 ## Open Questions Semantics
 

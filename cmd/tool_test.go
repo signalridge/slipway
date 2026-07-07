@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// runRootCommandWithInput executes the full root command with the given args and
+// stdin, capturing stdout and stderr. It is the shared driver for CLI-surface
+// tests in this package.
+func runRootCommandWithInput(args []string, stdin string) (string, string, error) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	cmd := newRootCmd()
+	cmd.SetIn(strings.NewReader(stdin))
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	cmd.SetArgs(args)
+	err := executeRootCommand(cmd)
+	return out.String(), errOut.String(), err
+}
 
 func TestToolMergeSARIFDeterministicAndSeparatedByTool(t *testing.T) {
 	raw := t.TempDir()

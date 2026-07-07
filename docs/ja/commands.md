@@ -76,7 +76,7 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 | コマンド | クラス | 目的 |
 | --- | --- | --- |
 | `slipway tool <helper>` | mutation | 生成されたスキルが使用するヘルパーツールを実行する。明示的なバックエンドやドメインツールが欠けている場合、ヘルパーはフェイルクローズドになる。 |
-| `slipway hook <event>` | mutation | `session-start` や `context-pressure` など、生成されたホストフックヘルパーを実行する。フックは静かに失敗し、ホスト自動化をブロックしない。 |
+| `slipway hook <event>` | mutation | `session-start` など、生成されたホストフックヘルパーを実行する。フックは静かに失敗し、ホスト自動化をブロックしない。 |
 
 `slipway tool` と `slipway hook` は意図的に CLI 専用です。`$slipway-tool`、
 `$slipway-hook`、生成されたホストプロンプトのラッパーはありません。生成されたスキルと
@@ -117,7 +117,7 @@ go run ./internal/toolgen/cmd/gen-surface-manifest --write
 - `--hydrate` / `--hydrate-ref <skill-id>/<name>` — `status`、`review`、`health` は選択されたハイドレート参照本文をテキスト出力に追記します。`--hydrate-ref` はハイドレーションを指定した参照に限定します（繰り返し指定可）。
 - `--focus <alias>` / `--list-focuses` — `status`、`health`、`review`、`validate`、`repair` は公開フォーカスの上書きを受け付けます。列挙するには `<command> --list-focuses` を実行します。既知のエイリアス: `status`/`health` → `incident`、`review` → `sast`、`calibration`、`validate` → `sast`、`property`、`mutation`、`spec-trace`、`repair` は現在いずれも公開していません。
 - `status --root` は正規の Slipway スコープルートを表示します。`status --stats` はワークスペースの診断情報（アクティブ件数、陳腐化したサマリー、整合性の問題）を表示します。
-- `next --no-auto-pass` は自動パスの代わりにスキルの適格性を報告します。`next --context-guard` はコンテキスト予算のガードメッセージをフック形式で出力します。
+- `next --no-auto-pass` は自動パスの代わりにスキルの適格性を報告します。
 - `done --all-ready` は、現在 done-ready な全アクティブ変更をアーカイブします。
 - 同一インテントのスコープ変更は、現在のステージコマンドによって変更修正として扱われます。所有するアーティファクトとエビデンスを更新し、そのまま前進してください。エグゼキューターエージェントは、宣言されたタスクスコープの外へ黙って書き込んではなりません。修正を提案するか、ブロッカーを返します。目的が変わった場合は、新しい統制された変更を開始してください。
 

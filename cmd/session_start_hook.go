@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
@@ -9,6 +10,31 @@ import (
 )
 
 const sessionStartEntrySkill = "slipway"
+
+// hookCommandName is the name of the parent command whose subtree is inlined
+// into host automation. Errors from this subtree are swallowed to a silent
+// exit 0 so a hook can never block the host (see isHookSubtreeCommand).
+const hookCommandName = "hook"
+
+func makeHookCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:    hookCommandName,
+		Short:  "Run internal Slipway hook helpers",
+		Hidden: true,
+		// Hooks are inlined into host automation and must stay inert under
+		// version skew. If a generated config names a hook subcommand this
+		// binary does not have, Cobra would otherwise print parent usage to the
+		// host's hook output channel. Make the parent runnable so any
+		// unresolved invocation returns an error that executeRootCommand
+		// swallows to a silent exit 0 instead of emitting usage text.
+		Args: cobra.ArbitraryArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return errors.New("no hook subcommand resolved")
+		},
+	}
+	cmd.AddCommand(makeSessionStartHookCmd())
+	return cmd
+}
 
 func makeSessionStartHookCmd() *cobra.Command {
 	var toolID string
@@ -28,13 +54,16 @@ func makeSessionStartHookCmd() *cobra.Command {
 	return cmd
 }
 
-// runSessionStartHook emits only the slipway_entry_skill routing pointer. It no
-// longer auto-injects per-session change-state (no active-worktree `next --json`
-// view, no bound-elsewhere handoff pointer, no handoff-brief summary): the
-// per-change handoff is authored explicitly and read with `slipway handoff show
-// --change <slug>`; lifecycle authority comes from `slipway status --json` /
-// `slipway next --json`. The only conditional output is a hard-error diagnostic
-// when the project root cannot be resolved.
+// runSessionStartHook emits the slipway_entry_skill routing pointer plus a
+// static host-facing context note: Slipway does not watch context (the host owns
+// the compact-vs-handoff decision) and the on-demand `slipway handoff` surface is
+// an optional advisory narrative, not lifecycle authority. Both are static — the
+// hook does NOT auto-inject per-session change-state (no active-worktree
+// `next --json` view, no per-session continuity summary): governed continuity
+// comes only from `slipway status --json` / `slipway next --json` over
+// authoritative lifecycle state, which a resuming session runs itself. The only
+// conditional output is a hard-error diagnostic when the project root cannot be
+// resolved.
 func runSessionStartHook(cmd *cobra.Command, toolID string) error {
 	toolID = strings.TrimSpace(toolID)
 
@@ -76,6 +105,7 @@ func sessionStartXMLContext(toolID string, diagnostics []string) string {
 	b.WriteString("slipway_entry_skill: This repository is governed by Slipway. To drive any non-trivial change through the governed lifecycle, load the \"")
 	b.WriteString(sessionStartEntrySkill)
 	b.WriteString("\" skill - the entry point that routes new/next/run/done.\n")
+	b.WriteString("slipway_context_note: Slipway does not watch or measure your context window - you decide when to compact or start a fresh session using your host's own signal. The optional `slipway handoff write` / `slipway handoff show` surface records an advisory continuation narrative; it never replaces `slipway status` / `slipway next` as lifecycle authority.\n")
 	for _, diagnostic := range diagnostics {
 		diagnostic = strings.TrimSpace(diagnostic)
 		if diagnostic == "" {

@@ -277,7 +277,7 @@
     {
       "kind": "implementation",
       "name": "hook",
-      "source": "cmd/context_pressure_hook.go",
+      "source": "cmd/session_start_hook.go",
       "docs": "docs/reference/commands.md",
       "token": "slipway hook"
     },
