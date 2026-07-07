@@ -111,12 +111,19 @@ func TestWorkflowTemplatePinsRuntimeSessionHandoffContract(t *testing.T) {
 	require.NoError(t, err)
 	flat := strings.Join(strings.Fields(content), " ")
 
-	assert.Contains(t, content, "## Runtime Session Handoff")
-	assert.Contains(t, flat, "Use the generated `slipway-handoff` command surface for per-change advisory continuation notes.")
-	assert.Contains(t, flat, "It owns when to run `slipway handoff write`, how to use `slipway handoff show`, and the narrative skeleton.")
-	assert.Contains(t, flat, "The handoff remains advisory only: it is not lifecycle authority, governed evidence, freshness input, or a gate.")
-	assert.Contains(t, flat, "A fresh session must still run `slipway status --json` and `slipway next --json`")
-	assert.Contains(t, flat, "rely on CLI-owned freshness and evidence checks before advancing.")
+	assert.Contains(t, content, "## Session Continuity")
+	// Slipway no longer measures host context; the host owns the timing decision.
+	assert.Contains(t, flat, "Slipway does not measure your context window")
+	assert.Contains(t, flat, "the timing decision is yours")
+	// The handoff mechanism is present and host-invoked, but stays advisory.
+	assert.Contains(t, flat, "slipway handoff write")
+	assert.Contains(t, flat, "slipway handoff show")
+	assert.Contains(t, flat, "You own when to call them.")
+	assert.Contains(t, flat, "it is NOT lifecycle authority, governed evidence, freshness input, or a gate")
+	// Lifecycle authority still comes only from status/next, never from the prose.
+	assert.Contains(t, flat, "Governed continuity comes ONLY from `slipway status --json` and `slipway next --json`")
+	assert.Contains(t, flat, "The host's own memory, compaction summary, or progress notes are informal context only and are NEVER governance authority.")
+	assert.Contains(t, flat, "MUST run `slipway status` / `slipway next` and MUST NOT infer the governed position from a host summary")
 }
 
 func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
@@ -154,10 +161,12 @@ func TestHandoffGuidanceDoesNotBecomeLifecycleAuthority(t *testing.T) {
 	}
 
 	flatRun := strings.Join(strings.Fields(runCommand), " ")
-	assert.Contains(t, flatRun, "`slipway handoff write`")
-	assert.Contains(t, flatRun, "Resolve `<slug>` from fresh `slipway status --json` / `slipway next --json`, not from the handoff body.")
-	assert.NotContains(t, flatRun, "using the workflow skill's Runtime Session Handoff contract.")
+	// The run body surfaces the advisory handoff-write path (host owns the timing),
+	// but must keep it explicitly advisory and must not resurrect the retired
+	// context-pressure self-monitoring block.
+	assert.Contains(t, flatRun, "slipway handoff write")
 	assert.Contains(t, flatRun, "The handoff is advisory only; it does not replace `slipway status --json`, `slipway next --json`, lifecycle gates, freshness, or evidence checks.")
+	assert.NotContains(t, flatRun, "## Context Self-Monitoring")
 }
 
 func TestDecisionTemplatePinsSupersessionGuidance(t *testing.T) {
@@ -725,7 +734,7 @@ func TestRenderNextCommandEntryUsesQueryOnlyContract(t *testing.T) {
 	assert.Contains(t, content, "Treat the default JSON as an action contract")
 	assert.Contains(t, content, "confirmation_requirement.next_action")
 	assert.NotContains(t, content, "confirmation_requirement.resume_response_supported")
-	assert.Contains(t, content, "`context_budget` appears only when `guard_action` is `warn` or `stop`")
+	assert.NotContains(t, content, "context_budget", "retired context-budget guard must not appear in the next prompt")
 	assert.Contains(t, content, "slipway health --governance --json --change <slug>")
 	assert.Contains(t, content, "Run `slipway run --json` when evidence is ready.")
 	assert.Contains(t, content, "`next` is query-only")
@@ -1338,10 +1347,8 @@ func TestRunCommandEntryContainsLoopBehavioralBlocks(t *testing.T) {
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len([]byte(content)), 6500, "generated slipway-run prompt must stay compact")
 
-	assert.NotContains(t, content, "context_budget.health",
-		"run command must not reference status fields that do not exist")
-	assert.Contains(t, content, "context_budget.guard_action",
-		"run command missing returned-view context guard guidance")
+	assert.NotContains(t, content, "context_budget",
+		"retired context-budget guard must not appear in the run prompt")
 	assert.Contains(t, content, "Use `slipway run --json --diagnostics` only for full readiness fields",
 		"run command missing diagnostics boundary guidance")
 	assert.Contains(t, content, "`advanced` reports the mutation performed by this invocation",

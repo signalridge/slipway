@@ -1181,7 +1181,6 @@ func TestReviewRequiredTokensUseArtifactScopedSpecLayers(t *testing.T) {
 			projection,
 			assembleSkillViewOptions{
 				IncludeReviewContext: true,
-				IncludeContextBudget: true,
 			},
 		)
 		require.NoError(t, err)
@@ -1916,7 +1915,6 @@ func TestRunJSONRoutesToShipVerificationAfterReviewSetWithoutDisplayPromotion(t 
 		nil,
 		assembleSkillViewOptions{
 			IncludeReviewContext: true,
-			IncludeContextBudget: true,
 		},
 	)
 	require.NoError(t, err)
@@ -1926,6 +1924,130 @@ func TestRunJSONRoutesToShipVerificationAfterReviewSetWithoutDisplayPromotion(t 
 	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
 	assert.Empty(t, view.NextSkill.DisplayName)
 	assert.Empty(t, view.NextSkill.BlockingName)
+}
+
+// Regression for #412: when every selected review peer is fresh and the only
+// stale gate is the terminal ship-verification gate (surfaced as a digest-drift
+// required_skill_stale blocker), next_skill.name must route to ship-verification
+// and not fall through to the static head-of-batch review peer. The #420 test
+// above locks the ship_gate_blocked variant, which never enters the
+// review-alignment resolver; the required_skill_stale variant does, and used to
+// be redirected to selectedReviewSkills[0] (spec-compliance-review),
+// contradicting the correct blockers[]/recovery steps.
+func TestRunJSONRoutesToShipVerificationWhenStaleGateIsTheOnlyBlocker(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	change := model.NewChange("ship-verification-stale-gate")
+	change.QualityMode = model.QualityModeStandard
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+
+	view := nextView{
+		Slug:         change.Slug,
+		CurrentState: model.StateS3Review,
+		InputContext: nextContext{WorkspaceRoot: root},
+	}
+	err := assembleSkillViewWithOptions(
+		root,
+		&view,
+		changeRef{Slug: change.Slug},
+		progression.AdvanceSummary{
+			Action:    "blocked",
+			FromState: model.StateS3Review,
+			Blockers:  []model.ReasonCode{model.NewReasonCode("required_skill_stale", "ship-verification:tracked.go")},
+		},
+		&change,
+		nil,
+		passingSelectedReviewEvidenceForNextSkillTests(1),
+		nil,
+		assembleSkillViewOptions{
+			IncludeReviewContext: true,
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, view.NextSkill)
+	// The terminal ship gate is owned by nextS3ShipAuthoritySkill, not the
+	// review-alignment fallback; a stale ship gate must not be redirected to a
+	// review peer.
+	assert.Equal(t, progression.SkillShipVerification, view.NextSkill.Name)
+
+	// next_skill must agree with the (already correct) recovery steps, which the
+	// command layer derives from view.Blockers. Mirror that here and assert the
+	// recovery targets re-recording ship-verification, not a fresh review peer.
+	view.Recovery = model.BuildRecovery(view.Blockers)
+	require.NotNil(t, view.Recovery)
+	var recoveryCommands []string
+	for _, step := range view.Recovery.Steps {
+		recoveryCommands = append(recoveryCommands, step.Command)
+	}
+	joinedRecovery := strings.Join(recoveryCommands, "\n")
+	assert.Contains(t, joinedRecovery, progression.SkillShipVerification,
+		"recovery steps should target ship-verification")
+	assert.NotContains(t, joinedRecovery, progression.SkillSpecComplianceReview,
+		"a stale ship gate must not steer recovery at a fresh review peer")
+}
+
+// The #412 guard lives in reviewAlignmentSkillForTarget, which has two live
+// caller edges: the required_skill_stale case (surfaced from advance blockers,
+// exercised end-to-end by the test above) AND the review_alignment_required
+// case. The latter is what a real digest-drifted-but-passing ship-verification
+// record produces: IsReviewSkill("ship-verification") is false, so the terminal
+// gate is not filtered out of the stale-evidence authorities, and
+// StaleEvidenceRepairAvailable injects review_alignment_required:ship-verification
+// into view.Blockers (next_skill_view.go). Locking the resolver directly for
+// both blocker codes ensures the guard cannot be narrowed to only one case
+// without a failing test — a gap the end-to-end TempDir test cannot catch,
+// because it has no on-disk ship record and therefore never injects
+// review_alignment_required.
+func TestReviewAlignmentResolverFallsThroughForTerminalShipGate(t *testing.T) {
+	t.Parallel()
+
+	// spec-compliance-review is head-of-batch, so an unguarded fallback would
+	// mis-map the terminal ship target to it — the exact #412 regression.
+	selected := []string{
+		progression.SkillSpecComplianceReview,
+		progression.SkillCodeQualityReview,
+	}
+
+	t.Run("target resolver returns empty for the terminal ship gate", func(t *testing.T) {
+		assert.Empty(t, reviewAlignmentSkillForTarget(selected, progression.SkillShipVerification))
+	})
+
+	t.Run("both blocker-code caller edges fall through", func(t *testing.T) {
+		cases := []struct {
+			name    string
+			blocker model.ReasonCode
+		}{
+			{
+				name:    "review_alignment_required (real digest-drift injection edge)",
+				blocker: model.NewReasonCode("review_alignment_required", progression.SkillShipVerification),
+			},
+			{
+				name:    "required_skill_stale (advance-blocker edge)",
+				blocker: model.NewReasonCode("required_skill_stale", "ship-verification:tracked.go"),
+			},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				assert.Empty(t,
+					reviewAlignmentSkillForBlockers(selected, []model.ReasonCode{tc.blocker}),
+					"terminal ship gate must fall through to nextS3ShipAuthoritySkill, not a review peer")
+			})
+		}
+	})
+
+	// Positive control: the guard must stay narrow. Genuine upstream-realignment
+	// targets still map to their review peer, proving the ship-gate guard does
+	// not over-suppress legitimate review-alignment routing.
+	t.Run("legitimate upstream realignment is unaffected", func(t *testing.T) {
+		assert.Equal(t, progression.SkillSpecComplianceReview,
+			reviewAlignmentSkillForTarget(selected, progression.SkillPlanAudit))
+		assert.Equal(t, progression.SkillCodeQualityReview,
+			reviewAlignmentSkillForTarget(selected, progression.SkillWaveOrchestration))
+	})
 }
 
 func TestDiagnosticCommandsExposePathAuthorityWhenFreshnessUnknown(t *testing.T) {
@@ -2811,7 +2933,6 @@ func TestNextJSONDefaultIsHandoffOnlyAndDiagnosticsKeepsFullSurface(t *testing.T
 			assert.Equal(t, diagnosticsView.NextSkill.State, handoffView.NextSkill.State)
 		}
 		assert.Equal(t, diagnosticsView.InputContext.WorkspaceRoot, handoffView.InputContext.WorkspaceRoot)
-		assert.NotContains(t, raw, "context_budget")
 		assert.NotContains(t, raw, "constraints")
 		assert.NotContains(t, raw, "governance_signals")
 		assert.NotContains(t, raw, "active_controls")
@@ -2923,7 +3044,6 @@ func TestNextJSONHandoffDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		assert.Equal(t, slug, handoff.Slug)
 		assert.Equal(t, model.StateS3Review, handoff.CurrentState)
 		assert.Equal(t, governedExecutionMode, handoff.ExecutionMode)
-		assert.Nil(t, handoff.ContextBudget)
 		require.NotNil(t, handoff.NextSkill)
 		assert.Equal(t, progression.SkillSpecComplianceReview, handoff.NextSkill.Name)
 		assert.NotNil(t, handoff.NextSkill.SkillConstraints)
@@ -2935,40 +3055,6 @@ func TestNextJSONHandoffDoesNotBuildDiagnosticSurfaces(t *testing.T) {
 		assert.NotEmpty(t, handoff.InputContext.ArtifactBundle)
 		assert.Nil(t, handoff.InputContext.WavePlan)
 	})
-}
-
-func TestNextHandoffViewOmitsHealthyBudget(t *testing.T) {
-	t.Parallel()
-
-	view := nextView{
-		Slug:            "budget-ok",
-		Phase:           model.PhasePlanning,
-		ExecutionMode:   governedExecutionMode,
-		CurrentState:    model.StateS1Plan,
-		LifecycleStatus: string(model.ChangeStatusActive),
-		InputContext: nextContext{
-			WorkspaceRoot:  "/repo",
-			ArtifactBundle: "artifacts/changes/budget-ok",
-		},
-		ContextBudget: &contextBudget{
-			GuardAction:      "ok",
-			RemainingPercent: 80.0,
-			Breakdown: contextBudgetBreakdown{
-				SkillPrompt:     1,
-				ArtifactContext: 2,
-				StateContext:    3,
-			},
-		},
-		Blockers:                []model.ReasonCode{},
-		ConfirmationRequirement: confirmationNoBoundary("no_confirmation_boundary"),
-	}
-
-	handoff := buildNextHandoffView(view)
-	assert.Nil(t, handoff.ContextBudget)
-	raw, err := json.Marshal(handoff)
-	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "context_budget")
-	assert.NotContains(t, string(raw), "breakdown")
 }
 
 func TestConfirmationRequirementDistinguishesHardStopFromCommandBoundary(t *testing.T) {
@@ -3159,128 +3245,6 @@ func TestNextHandoffViewUsesStructuredConfirmationRequirement(t *testing.T) {
 	assert.NotContains(t, confirmation, "resume_response_supported")
 	assert.Equal(t, "run governance skill code-quality-review and record evidence", confirmation["next_action"])
 	assert.Equal(t, "skill_handoff", confirmation["next_action_kind"])
-}
-
-func TestNextHandoffViewOutputsMinimalWarnBudget(t *testing.T) {
-	t.Parallel()
-
-	view := nextView{
-		Slug:            "budget-warn",
-		Phase:           model.PhasePlanning,
-		ExecutionMode:   governedExecutionMode,
-		CurrentState:    model.StateS1Plan,
-		LifecycleStatus: string(model.ChangeStatusActive),
-		InputContext: nextContext{
-			WorkspaceRoot:  "/repo",
-			ArtifactBundle: "artifacts/changes/budget-warn",
-		},
-		ContextBudget: &contextBudget{
-			EstimatedTokens:      100,
-			AssumedContextWindow: 200,
-			UtilizationPercent:   50,
-			RemainingPercent:     42.3,
-			Health:               "degrading",
-			QualityCurve:         "degrading",
-			GuardAction:          "warn",
-			Thresholds: contextBudgetThresholds{
-				WarnBelowRemainingPercent: 50,
-				StopBelowRemainingPercent: 35,
-			},
-			Breakdown: contextBudgetBreakdown{
-				SkillPrompt:     1,
-				ArtifactContext: 2,
-				StateContext:    3,
-			},
-		},
-		Blockers:                []model.ReasonCode{},
-		ConfirmationRequirement: confirmationNoBoundary("no_confirmation_boundary"),
-	}
-
-	handoff := buildNextHandoffView(view)
-	require.NotNil(t, handoff.ContextBudget)
-	assert.Equal(t, "warn", handoff.ContextBudget.GuardAction)
-	assert.Equal(t, 42.3, handoff.ContextBudget.RemainingPercent)
-	raw, err := json.Marshal(handoff)
-	require.NoError(t, err)
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal(raw, &payload))
-	budget, ok := payload["context_budget"].(map[string]any)
-	require.True(t, ok)
-	assert.Len(t, budget, 2)
-	assert.Contains(t, budget, "guard_action")
-	assert.Contains(t, budget, "remaining_percent")
-}
-
-func TestNextHandoffViewStopBudgetKeepsRecoveryPathsWithoutDiagnostics(t *testing.T) {
-	t.Parallel()
-
-	view := nextView{
-		Slug:            "budget-stop",
-		Phase:           model.PhaseBuilding,
-		ExecutionMode:   governedExecutionMode,
-		CurrentState:    model.StateS2Implement,
-		LifecycleStatus: string(model.ChangeStatusActive),
-		NextSkill: &nextSkillView{
-			Name:            progression.SkillWaveOrchestration,
-			VerificationDir: "artifacts/changes/budget-stop/verification/wave-orchestration",
-			State:           string(model.StateS2Implement),
-		},
-		InputContext: nextContext{
-			WorkspaceRoot:  "/repo",
-			ArtifactBundle: "artifacts/changes/budget-stop",
-			HandoffContext: &handoffContextView{
-				ChangeAuthority: "artifacts/changes/budget-stop/change.yaml",
-				PolicyPacks: []handoffPolicyPack{{
-					Name:          "local",
-					Path:          ".slipway/policy.yaml",
-					AdvisoryRules: []string{"keep out of default handoff"},
-				}},
-			},
-			GateStatus:     map[string]string{"review": "blocked"},
-			ArtifactStatus: map[string]string{"tasks.md": "missing"},
-		},
-		ContextBudget: &contextBudget{
-			RemainingPercent: 0,
-			GuardAction:      "stop",
-			Breakdown: contextBudgetBreakdown{
-				SkillPrompt:     1,
-				ArtifactContext: 2,
-				StateContext:    3,
-			},
-		},
-		GovernanceSignals: &governanceSignalView{BlastRadius: "high"},
-		ActiveControls: []governanceControlView{{
-			ControlID: "domain-review",
-			Mode:      "blocking",
-			Scope:     "change",
-		}},
-		RequiredActions: []governanceActionView{{
-			ControlID:   "domain-review",
-			Description: "record domain review evidence",
-		}},
-		SkillEvidence:           []skillEvidenceEntry{{SkillName: "wave-orchestration"}},
-		Blockers:                []model.ReasonCode{},
-		ConfirmationRequirement: confirmationHardStop("skill_handoff:wave-orchestration"),
-	}
-
-	handoff := buildNextHandoffView(view)
-	require.NotNil(t, handoff.ContextBudget)
-	assert.Equal(t, "stop", handoff.ContextBudget.GuardAction)
-	assert.Equal(t, "artifacts/changes/budget-stop/change.yaml", handoff.InputContext.ChangeAuthority)
-
-	raw, err := json.Marshal(handoff)
-	require.NoError(t, err)
-	s := string(raw)
-	assert.NotContains(t, s, "handoff_context")
-	assert.NotContains(t, s, "policy_packs")
-	assert.NotContains(t, s, "advisory_rules")
-	assert.NotContains(t, s, "gate_status")
-	assert.NotContains(t, s, "artifact_status")
-	assert.NotContains(t, s, "governance_signals")
-	assert.NotContains(t, s, "active_controls")
-	assert.NotContains(t, s, "required_actions")
-	assert.NotContains(t, s, "skill_evidence")
-	assert.NotContains(t, s, "breakdown")
 }
 
 func TestRunDoesNotRequireResumeAfterAbortWithoutWaveBackedState(t *testing.T) {
@@ -4348,40 +4312,6 @@ func TestRunIncludesTransitionTrace(t *testing.T) {
 			}
 		}
 		assert.True(t, hasWorktreeAdvance, "expected auto_transitions to include S1_PLAN advancement")
-	})
-}
-
-func TestNextContextBudgetHardStopAddsWarning(t *testing.T) {
-	root := t.TempDir()
-	withCommandWorkspace(t, root, func() {
-		// Force a tiny context window so the estimated budget trips the hard stop.
-		t.Setenv("SLIPWAY_CONTEXT_WINDOW_TOKENS", "1")
-		initTestWorkspace(t, root)
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "context hard stop")
-		change, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		change.CurrentState = model.StateS1Plan
-		change.PlanSubStep = model.PlanSubStepAudit
-		require.NoError(t, state.SaveChange(root, change))
-
-		cmd := commandForRoot(t, root, makeNextCmd())
-		cmd.SetArgs([]string{"--json", "--diagnostics"})
-		var buf bytes.Buffer
-		cmd.SetOut(&buf)
-		require.NoError(t, cmd.Execute())
-
-		var view nextView
-		require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
-		require.NotNil(t, view.ContextBudget)
-		assert.Equal(t, "stop", view.ContextBudget.GuardAction)
-		found := false
-		for _, w := range view.Warnings {
-			if strings.Contains(w, "stop threshold") {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "stop action should produce a warning, not a blocker")
 	})
 }
 

@@ -153,7 +153,6 @@ func buildHandoffContext(root string, change model.Change, paths state.ResolvedC
 		WorkflowProfile:   string(change.EffectiveWorkflowProfile()),
 		ContextPolicy:     "bounded_references_only",
 		Trace:             buildHandoffTrace(change, eventLog),
-		ContextBudget:     &handoffBudgetHintView{Mode: "compact", MaxInlineBytes: 12000},
 		ReadRefs:          readRefs,
 		PolicyPacks:       policyPacks,
 		Risk:              buildHandoffRisk(change, nil),

@@ -26,12 +26,13 @@ func assertNoSessionStartChangeState(t *testing.T, body string) {
 	assert.NotContains(t, body, "--change")
 }
 
-func TestSessionStartHookEmitsOnlyEntrySkillPointer(t *testing.T) {
+func TestSessionStartHookEmitsEntrySkillPointerAndContextNote(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 		// An active change of this worktree must NOT cause any change-state
-		// auto-injection; only the entry-skill routing pointer is emitted.
+		// auto-injection; only the entry-skill routing pointer and the static
+		// context contract are emitted.
 		createGovernedRequest(t, root, levelNonDiscovery, "session-start entry-skill only")
 
 		cmd := makeHookCmd()
@@ -44,6 +45,14 @@ func TestSessionStartHookEmitsOnlyEntrySkillPointer(t *testing.T) {
 		assert.Contains(t, body, `<slipway-session-start tool="claude">`)
 		assert.Contains(t, body, "slipway_entry_skill:")
 		assert.Contains(t, body, `load the "slipway" skill`)
+		// change.yaml goal: the session-start contract must advertise that Slipway
+		// does not watch context and that the on-demand handoff surface exists as
+		// optional advisory continuity (never lifecycle authority).
+		assert.Contains(t, body, "slipway_context_note:")
+		assert.Contains(t, body, "does not watch or measure your context window")
+		assert.Contains(t, body, "slipway handoff write")
+		assert.Contains(t, body, "slipway handoff show")
+		assert.Contains(t, body, "never replaces `slipway status` / `slipway next` as lifecycle authority")
 		assertNoSessionStartChangeState(t, body)
 		assert.NotContains(t, body, "hook_diagnostic:")
 	})
@@ -70,6 +79,10 @@ func TestSessionStartHookEmitsCodexAdditionalContext(t *testing.T) {
 		require.NoError(t, json.Unmarshal(out.Bytes(), &payload))
 		additionalContext := payload["hookSpecificOutput"]["additionalContext"]
 		assert.Contains(t, additionalContext, "slipway_entry_skill:")
+		// The context contract must also ride the Codex additionalContext path.
+		assert.Contains(t, additionalContext, "slipway_context_note:")
+		assert.Contains(t, additionalContext, "does not watch or measure your context window")
+		assert.Contains(t, additionalContext, "slipway handoff write")
 		assertNoSessionStartChangeState(t, additionalContext)
 	})
 }

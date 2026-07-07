@@ -198,9 +198,7 @@ which bridges the `session-start` hook into pi's `session_start` /
 `before_agent_start` extension events (pi auto-discovers `.pi/extensions/`, so
 no settings.json registration is needed). pi only loads project-local extensions
 after the project is trusted, so the bridge stays inert until you trust the
-project in pi. The `context-pressure` hook is not bridged into pi: it reads its
-metric from stdin, pi's extension `exec` has no stdin channel, and pi manages
-context pressure natively.
+project in pi.
 
 Qwen and Kiro expose commands as generated command skills rather than separate
 prompt files. Qwen writes `.qwen/settings.json` for the session-start hook.
@@ -217,10 +215,9 @@ Claude (`.claude/settings.json`) and Qwen (`.qwen/settings.json`) register hooks
 inline in their own settings file rather than through launcher scripts. Slipway
 writes bare `slipway hook ...` commands directly into `settings.json`:
 
-- `slipway hook context-pressure` on `PostToolUse`
 - `slipway hook session-start` on `SessionStart`
 
-Claude registers both hooks. Qwen registers `SessionStart` only. No
+Claude and Qwen register the `SessionStart` hook only. No
 launcher file is generated for these settings-registered hooks; the command
 resolves the `slipway` binary on `PATH` and hook behavior lives in that binary.
 Pi's `settings.json` is registration-only for skills and prompts; its

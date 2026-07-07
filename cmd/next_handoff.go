@@ -16,7 +16,6 @@ type nextHandoffView struct {
 	HostCapabilities            []hostCapabilityView    `json:"host_capabilities,omitempty"`
 	NextSkill                   *nextSkillHandoff       `json:"next_skill"`
 	ReviewBatch                 *reviewBatchView        `json:"review_batch,omitempty"`
-	ContextBudget               *contextBudgetHandoff   `json:"context_budget,omitempty"`
 	InputContext                nextHandoffContext      `json:"input_context"`
 	AutoPassEligible            []model.AutoPassedState `json:"auto_pass_eligible,omitempty"`
 	EvidenceFreshness           string                  `json:"evidence_freshness,omitempty"`
@@ -44,15 +43,9 @@ type nextSkillHandoff struct {
 	TechniqueHints       []techniqueHint    `json:"technique_hints,omitempty"`
 }
 
-type contextBudgetHandoff struct {
-	GuardAction      string  `json:"guard_action"`
-	RemainingPercent float64 `json:"remaining_percent"`
-}
-
 type nextHandoffContext struct {
 	WorkspaceRoot        string                  `json:"workspace_root"`
 	ArtifactBundle       string                  `json:"artifact_bundle,omitempty"`
-	ChangeAuthority      string                  `json:"change_authority,omitempty"`
 	CodebaseMapDir       string                  `json:"codebase_map_dir,omitempty"`
 	CodebaseMapDocs      map[string]string       `json:"codebase_map_docs,omitempty"`
 	CodebaseMapStatus    string                  `json:"codebase_map_status,omitempty"`
@@ -79,11 +72,6 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			TechniqueHints:       cloneTechniqueHints(view.NextSkill.TechniqueHints),
 		}
 	}
-	budget := buildContextBudgetHandoff(view.ContextBudget)
-	changeAuthority := ""
-	if budget != nil && budget.GuardAction == "stop" && view.InputContext.HandoffContext != nil {
-		changeAuthority = view.InputContext.HandoffContext.ChangeAuthority
-	}
 	return nextHandoffView{
 		Command:         view.Command,
 		DelegatedTo:     view.DelegatedTo,
@@ -97,13 +85,11 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 			[]hostCapabilityView(nil),
 			view.HostCapabilities...,
 		),
-		NextSkill:     nextSkill,
-		ReviewBatch:   cloneReviewBatch(view.ReviewBatch),
-		ContextBudget: budget,
+		NextSkill:   nextSkill,
+		ReviewBatch: cloneReviewBatch(view.ReviewBatch),
 		InputContext: nextHandoffContext{
 			WorkspaceRoot:        view.InputContext.WorkspaceRoot,
 			ArtifactBundle:       view.InputContext.ArtifactBundle,
-			ChangeAuthority:      changeAuthority,
 			CodebaseMapDir:       view.InputContext.CodebaseMapDir,
 			CodebaseMapDocs:      view.InputContext.CodebaseMapDocs,
 			CodebaseMapStatus:    view.InputContext.CodebaseMapStatus,
@@ -120,21 +106,6 @@ func buildNextHandoffView(view nextView) nextHandoffView {
 		Recovery:                    model.BuildRecovery(view.Blockers),
 		Warnings:                    view.Warnings,
 		Confirmation:                view.ConfirmationRequirement,
-	}
-}
-
-func buildContextBudgetHandoff(budget *contextBudget) *contextBudgetHandoff {
-	if budget == nil {
-		return nil
-	}
-	switch budget.GuardAction {
-	case "warn", "stop":
-		return &contextBudgetHandoff{
-			GuardAction:      budget.GuardAction,
-			RemainingPercent: budget.RemainingPercent,
-		}
-	default:
-		return nil
 	}
 }
 

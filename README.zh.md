@@ -224,7 +224,7 @@ Slipway 用广度换取权威。它支持的一等公民适配器比那些覆盖
 | 工具 | 生成的接口 |
 | --- | --- |
 | Claude | `.claude/skills/slipway-*/SKILL.md`、`.claude/commands/slipway/*.md`、`.claude/settings.json` 钩子条目 |
-| Codex | `.codex/skills/slipway-*/SKILL.md` 入口、命令和治理 skill；`.codex/config.toml` 中的 SessionStart 和 UserPromptSubmit 钩子条目 |
+| Codex | `.codex/skills/slipway-*/SKILL.md` 入口、命令和治理 skill；`.codex/config.toml` 中的 SessionStart 钩子条目 |
 | Cursor | `.cursor/skills/slipway-*/SKILL.md`、`.cursor/commands/*.md`、会话启动钩子启动器 |
 | OpenCode | `.opencode/skills/slipway-*/SKILL.md`、`.opencode/commands/slipway-*.md`、会话启动钩子启动器 |
 | Copilot | `.github/skills/slipway-*/SKILL.md`、`.github/prompts/slipway-*.prompt.md`、`.github/copilot/slipway` 受管状态 |
@@ -236,7 +236,7 @@ Slipway 用广度换取权威。它支持的一等公民适配器比那些覆盖
 
 导出的生成 skill 行按公开的 skill 目录固定：`slipway/SKILL.md`、`slipway-ci-triage/SKILL.md`、`slipway-code-quality-review/SKILL.md`、`slipway-codebase-mapping/SKILL.md`、`slipway-coding-discipline/SKILL.md`、`slipway-context-assembly/SKILL.md`、`slipway-coverage-analysis/SKILL.md`、`slipway-git-recovery/SKILL.md`、`slipway-incident-response/SKILL.md`、`slipway-independent-review/SKILL.md`、`slipway-intake-clarification/SKILL.md`、`slipway-plan-audit/SKILL.md`、`slipway-research-orchestration/SKILL.md`、`slipway-root-cause-tracing/SKILL.md`、`slipway-security-review/SKILL.md`、`slipway-ship-verification/SKILL.md`、`slipway-spec-compliance-review/SKILL.md`、`slipway-spec-trace/SKILL.md`、`slipway-tdd-governance/SKILL.md`、`slipway-test-design/SKILL.md`、`slipway-wave-orchestration/SKILL.md`，以及 `slipway-worktree-preflight/SKILL.md`。
 
-Codex 使用仓库本地的 `.codex/config.toml` 钩子，用于有界的 SessionStart 交接指针和以过期为条件的 UserPromptSubmit 写入提示。这些钩子在仓库以及每个钩子被用户信任之前都处于惰性状态；Slipway 绝不修改 Codex 的全局信任配置。
+Codex 使用仓库本地的 `.codex/config.toml` SessionStart 钩子，发出 Slipway 入口 skill 的路由指针，以及一条静态说明：Slipway 不监测你的上下文窗口（由宿主自行决定何时压缩或开启新会话）。该钩子在仓库以及钩子本身被用户信任之前都处于惰性状态；Slipway 绝不修改 Codex 的全局信任配置。
 
 完整的命令和 skill 清单见 [AI Tool Adapters](docs/reference/ai-tools.md) 和生成的 [Surface Manifest](docs/SURFACE-MANIFEST.json)。
 

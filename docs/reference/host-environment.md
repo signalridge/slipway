@@ -62,23 +62,22 @@ Skill-specific manual fallbacks include `manual_plan_audit`,
 unrecognized fallback tokens are ignored. Fallback selection does not replace
 evidence requirements; it only makes the degradation explicit.
 
-### Context Budget And Pressure
+### Context Ownership
 
-`SLIPWAY_CONTEXT_WINDOW_TOKENS` overrides the assumed context-window size used
-by `next` diagnostics and context-pressure hooks. It must be a positive integer.
-Malformed, zero, or negative values are ignored and Slipway falls back to the
-built-in `200000` token window.
+Slipway does not watch or measure your context window. There is no
+context-pressure hook, no token-budget estimate, and no `next` context guard:
+the host owns the decision of when to compact in place or start a fresh session,
+using whatever native signal it has. The SessionStart hook advertises this
+contract and points at the optional `slipway handoff` surface for capturing an
+advisory continuation narrative. Governed continuity itself does not depend on
+that narrative — it comes solely from authoritative lifecycle state resumed via
+`slipway status` / `slipway next`, with no agent cooperation required.
 
-`SLIPWAY_CONTEXT_METRICS_PATH` points the context-pressure hook at a JSON metrics
-file written by the host. Supported metric shapes are:
-
-- `tokens_used` with `context_window` or `context_window_size`
-- `used_pct`
-- `used_percentage`
-- `remaining_percentage`
-
-Metrics older than the freshness window are ignored. When the path is unset,
-Slipway checks sanitized session temp metric paths and then the transcript tail.
+The SessionStart hook payload carries two static, host-facing keys:
+`slipway_entry_skill` (the entry-skill routing pointer) and
+`slipway_context_note` (the note that Slipway does not watch context and that
+`slipway handoff` is optional advisory continuity). Both are routing/advisory
+context consumed by the host, not user-configured settings.
 
 ### Handoff Owner
 

@@ -73,7 +73,6 @@ If these fields are omitted, the CLI applies conservative fallback defaults.
 - read the generated SKILL.md for `next_skill.name`
 - derive the SKILL.md path from your own tool convention using `slipway-{name}`
 - treat the default JSON as an action contract; do not expect diagnostic context fields
-- `context_budget` appears only when the guard action is `warn` or `stop`
 - if governance controls, policy prose, or full readiness details are needed, run `slipway health --governance --json --change <slug>` or rerun `next` / the current stage command with `--diagnostics`
 - read policy packs by path; do not expect inline policy-pack prose in default JSON
 - do not look for retired agent fields or a second exported prompt file
@@ -96,14 +95,24 @@ guessing the recovery command.
   (and `recovery.steps[].command`), not from memory or a guessed command. When
   `recovery` is absent, re-read `blockers[]` and the surface's own guidance.
 
-## Runtime Session Handoff
-Use the generated `slipway-handoff` command surface for per-change advisory
-continuation notes. It owns when to run `slipway handoff write`, how to use
-`slipway handoff show`, and the narrative skeleton. The handoff remains advisory
-only: it is not lifecycle authority, governed evidence, freshness input, or a
-gate. A fresh session must still run `slipway status --json` and
-`slipway next --json`, obey lifecycle gates, and rely on CLI-owned freshness and
-evidence checks before advancing.
+## Session Continuity
+Slipway does not measure your context window. Detecting when your context is
+running low — and choosing whether to compact in place or start a fresh session —
+is the host's own job, using whatever native signal you have. Slipway never fires
+a context-pressure hook or nudge; the timing decision is yours.
+
+When you decide continuity is worth preserving, use the `slipway handoff` command
+surface: `slipway handoff write` records a per-change advisory narrative (Current
+Position, Next Session Focus, Risks And Blockers) and `slipway handoff show` reads
+it back on resume. You own when to call them.
+
+That handoff is advisory context only — it is NOT lifecycle authority, governed
+evidence, freshness input, or a gate. Governed continuity comes ONLY from
+`slipway status --json` and `slipway next --json` over authoritative lifecycle
+state (change.yaml, stage, evidence, wave-plan). The host's own memory, compaction
+summary, or progress notes are informal context only and are NEVER governance
+authority. A resuming session MUST run `slipway status` / `slipway next` and MUST
+NOT infer the governed position from a host summary or the handoff prose alone.
 
 ## Continuing A Change In A Fresh Session
 When you open a fresh session to resume in-flight governed work, drive the resume
@@ -112,14 +121,14 @@ or old chat. This read path is hook-agnostic and portable across hosts:
 1. Run `slipway status --json` to discover the active change(s) and lifecycle state.
 2. If more than one change is active, select the one you are resuming and pass
    `--change <slug>` to the commands below so you act on the right change.
-3. Run `slipway handoff show --change <slug>` and read the advisory narrative
-   first — it carries the prior session's Current Position, Next Session Focus,
-   and Risks And Blockers.
+3. Run `slipway handoff show --change <slug>` to read the prior session's advisory
+   narrative (Current Position, Next Session Focus, Risks And Blockers), if any.
 4. Then run `slipway next` (add `--change <slug>` when more than one is active) to
    get the authoritative next governed step.
 
-The handoff in step 3 is advisory context only; `slipway status` and
-`slipway next` remain the lifecycle authority for what to do next.
+The handoff in step 3 is advisory context only; `slipway status` and `slipway next`
+remain the only lifecycle authority for what to do next. Never infer the governed
+position from a host memory, compaction summary, or the handoff prose alone.
 
 ## Delegation Surface
 Detailed command contracts live in `references/command-reference.md`. For
@@ -151,8 +160,8 @@ directly with `slipway tool ...`.
 ## Hard Rules
 - do not bypass lifecycle gates
 - do not treat this workflow skill as progression authority
-- do not treat `.git/slipway/runtime/changes/<slug>/handoff.md` as lifecycle authority,
-  governed evidence, freshness input, or a gate
+- do not treat host memory, a compaction summary, or progress notes as lifecycle
+  authority, governed evidence, freshness input, or a gate
 - do not invent command semantics not present in the CLI
 - do not guess the next governed host without `slipway next --json`
 - do not duplicate long per-command prose here when the reference file or command surface already owns it

@@ -168,8 +168,6 @@ func TestBuildNextContextIncludesBoundedHandoffContext(t *testing.T) {
 	assert.Contains(t, view.InputContext.HandoffContext.RequiredReads, ".slipway.yaml")
 	require.NotNil(t, view.InputContext.HandoffContext.Trace)
 	assert.Contains(t, view.InputContext.HandoffContext.Trace.CorrelationID, "next-docs-handoff")
-	require.NotNil(t, view.InputContext.HandoffContext.ContextBudget)
-	assert.Equal(t, "compact", view.InputContext.HandoffContext.ContextBudget.Mode)
 	assert.NotEmpty(t, view.InputContext.HandoffContext.ReadRefs)
 	require.NotNil(t, view.InputContext.HandoffContext.Risk)
 	assert.Contains(t, view.InputContext.HandoffContext.Risk.Hints[0], "docs profile")

@@ -93,10 +93,9 @@ $slipway-init
   `./prompts` を登録します。さらに `.pi/extensions/slipway-hooks.ts` を生成し、
   `session-start` フックを pi の `session_start` / `before_agent_start` 拡張イベントへ
   ブリッジします。pi は `.pi/extensions/` を自動検出しますが、プロジェクトが信頼された後にだけ
-  プロジェクトローカル拡張を読み込みます。`context-pressure` フックはブリッジされません
-  （pi の拡張 `exec` には stdin がありません）。
+  プロジェクトローカル拡張を読み込みます。
 - Qwen は `.qwen/settings.json` を書き込み、セッション開始フックを登録します。
-- Codex は `SessionStart` と `UserPromptSubmit` 向けの `.codex/config.toml` フックを
+- Codex は `SessionStart` 向けの `.codex/config.toml` フックを
   書き込みます。これらのフックは、リポジトリと各フックがユーザーによって信頼されるまでは
   無効であり、Slipway がグローバルな Codex の信頼設定を編集することはありません。
 

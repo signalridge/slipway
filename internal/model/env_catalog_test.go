@@ -5,7 +5,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -271,36 +270,6 @@ func TestEnvCatalogHostCapabilityWiringContract(t *testing.T) {
 		if !fallbackTokens[token] {
 			t.Fatalf("SLIPWAY_HOST_CAPABILITY_FALLBACKS accepted values missing %q: %#v", token, fallbackTokens)
 		}
-	}
-}
-
-func TestEnvCatalogContextWindowDefaultMirrorsRuntimeConstant(t *testing.T) {
-	defaultWindow := strconv.Itoa(DefaultContextWindowTokens)
-	entries := EnvCatalog()
-	for _, entry := range entries {
-		if entry.Name != "SLIPWAY_CONTEXT_WINDOW_TOKENS" {
-			continue
-		}
-		if !strings.Contains(entry.UnsetBehavior, defaultWindow) {
-			t.Fatalf("SLIPWAY_CONTEXT_WINDOW_TOKENS unset behavior %q does not mention default %s", entry.UnsetBehavior, defaultWindow)
-		}
-		if len(entry.Examples) == 0 || !strings.Contains(entry.Examples[0], defaultWindow) {
-			t.Fatalf("SLIPWAY_CONTEXT_WINDOW_TOKENS examples %#v do not mention default %s", entry.Examples, defaultWindow)
-		}
-		return
-	}
-	t.Fatal("SLIPWAY_CONTEXT_WINDOW_TOKENS missing from env catalog")
-}
-
-func TestHostEnvironmentDocsMirrorContextWindowDefault(t *testing.T) {
-	defaultWindow := strconv.Itoa(DefaultContextWindowTokens)
-	path := filepath.Join(repoRootForTest(t), "docs", "reference", "host-environment.md")
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read host environment docs: %v", err)
-	}
-	if !strings.Contains(string(content), "`"+defaultWindow+"`") {
-		t.Fatalf("host environment docs must mention default context window %s", defaultWindow)
 	}
 }
 

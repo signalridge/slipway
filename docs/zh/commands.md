@@ -113,7 +113,7 @@ baseline 文档是有用的起步上下文，但不是经过编写的存量（br
 | 命令 | 类别 | 用途 |
 | --- | --- | --- |
 | `slipway tool <helper>` | mutation | 运行生成的 skill 所使用的辅助工具；缺少显式后端或领域工具时，辅助工具失败即停。 |
-| `slipway hook <event>` | mutation | 运行生成的宿主 hook 辅助命令，例如 `session-start` 和 `context-pressure`；hook 会静默失败，避免阻塞宿主自动化。 |
+| `slipway hook <event>` | mutation | 运行生成的宿主 hook 辅助命令，例如 `session-start`；hook 会静默失败，避免阻塞宿主自动化。 |
 
 `slipway tool` 和 `slipway hook` 有意只供 CLI 使用。它们没有 `$slipway-tool`、
 `$slipway-hook`，也没有生成的宿主提示词包装；生成的 skill 和宿主配置会直接调用具体的
@@ -176,8 +176,7 @@ go run ./internal/toolgen/cmd/gen-surface-manifest --write
   `property`、`mutation`、`spec-trace`；`repair` 目前没有暴露任何别名。
 - `status --root` 打印规范的 Slipway scope 根；`status --stats` 显示工作区诊断（活动变更数、过期
   摘要、完整性问题）。
-- `next --no-auto-pass` 报告 skill 的可执行性，而不是自动放行；`next --context-guard` 以 hook 格式
-  输出上下文预算守护消息。
+- `next --no-auto-pass` 报告 skill 的可执行性，而不是自动放行。
 - `done --all-ready` 归档当前所有处于 done-ready 的活动变更。
 - 同一意图范围内的改动由当前阶段命令作为变更修订处理：更新所属产物和证据，然后继续向前推进。执行代理
   绝不能悄悄写到已声明的任务范围之外；它们要么提出修订，要么返回一个阻塞项。如果目标变了，就开启一个

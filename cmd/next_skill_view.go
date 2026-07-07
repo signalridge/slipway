@@ -19,14 +19,12 @@ import (
 type assembleSkillViewOptions struct {
 	IncludeSkillEvidence bool
 	IncludeReviewContext bool
-	IncludeContextBudget bool
 	IncludeAgentContext  bool
 }
 
 var fullSkillViewOptions = assembleSkillViewOptions{
 	IncludeSkillEvidence: true,
 	IncludeReviewContext: true,
-	IncludeContextBudget: true,
 	IncludeAgentContext:  true,
 }
 
@@ -38,7 +36,7 @@ const (
 )
 
 // assembleSkillView resolves the next skill, builds the skill view with technique hints,
-// review context, constraints, and context budget, then applies guards.
+// review context, and constraints.
 // governedChange is the already-loaded executable change from buildNextContextByMode.
 // precomputedPassingSkills lets callers reuse skill evidence that was already
 // loaded earlier in the same invocation instead of reading verification files
@@ -376,9 +374,6 @@ func assembleSkillViewWithOptions(
 			planLocked:           view.planLocked,
 		})
 	}
-	if options.IncludeContextBudget {
-		view.ContextBudget = estimateContextBudget(root, ns, view.InputContext)
-	}
 	if options.IncludeAgentContext {
 		view.Constraints = deriveAgentConstraints(registry, nextSkillName)
 		if atBundlePlanAuditHandoff {
@@ -396,7 +391,6 @@ func assembleSkillViewWithOptions(
 	if advanced.Action == "blocked" {
 		view.Blockers = appendReasonCodes(view.Blockers, advanced.Blockers)
 	}
-	applyContextBudgetGuard(view)
 
 	return nil
 }
@@ -795,6 +789,13 @@ func reviewAlignmentSkillForBlockers(selectedReviewSkills []string, blockers []m
 
 func reviewAlignmentSkillForTarget(selectedReviewSkills []string, target string) string {
 	target = strings.TrimSpace(target)
+	// The terminal ship-verification gate is not a selected review peer; it is
+	// owned by nextS3ShipAuthoritySkill. A stale/blocked ship gate must fall
+	// through to that resolver rather than be redirected to the head-of-batch
+	// review peer by the fallback below (#412).
+	if target == progression.SkillShipVerification {
+		return ""
+	}
 	if stringInSlice(selectedReviewSkills, target) {
 		return target
 	}

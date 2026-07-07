@@ -31,19 +31,3 @@ func TestWriteStatusTextPropagatesWriterError(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, writeErr)
 }
-
-func TestWriteContextGuardHookMessagesPropagatesWriterError(t *testing.T) {
-	t.Parallel()
-
-	writeErr := errors.New("write failed")
-	view := nextView{
-		ContextBudget: &contextBudget{
-			GuardAction:      "warn",
-			RemainingPercent: 42.0,
-		},
-	}
-
-	err := writeContextGuardHookMessages(failingWriter{err: writeErr}, view)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, writeErr)
-}
