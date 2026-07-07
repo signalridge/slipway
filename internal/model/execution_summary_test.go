@@ -96,6 +96,35 @@ func TestExecutionSummaryValidateRejectsCompletedTaskSetMismatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "completed_tasks")
 }
 
+func TestExecutionTaskSummaryEqualDistinguishesNoOpJustification(t *testing.T) {
+	t.Parallel()
+
+	base := ExecutionTaskSummary{
+		TaskID:   "task-a",
+		Verdict:  TaskVerdictPass,
+		TaskKind: TaskKindCode,
+	}
+	justified := base
+	justified.NoOpJustification = "no safe behavior-preserving change exists"
+
+	assert.False(t, base.Equal(justified))
+	assert.True(t, justified.Equal(justified))
+}
+
+func TestExecutionTaskSummaryNormalizeTrimsNoOpJustification(t *testing.T) {
+	t.Parallel()
+
+	task := ExecutionTaskSummary{
+		TaskID:            "task-a",
+		Verdict:           TaskVerdictPass,
+		TaskKind:          TaskKindCode,
+		NoOpJustification: "  spaced justification  ",
+	}
+	task.Normalize()
+
+	assert.Equal(t, "spaced justification", task.NoOpJustification)
+}
+
 func TestExecutionSummaryValidateRejectsNonPassTaskSetMismatch(t *testing.T) {
 	t.Parallel()
 

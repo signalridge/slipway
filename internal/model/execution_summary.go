@@ -26,13 +26,18 @@ func (v ExecutionVerdict) IsValid() bool {
 }
 
 type ExecutionTaskSummary struct {
-	TaskID          string                       `yaml:"task_id" json:"task_id"`
-	Verdict         TaskVerdict                  `yaml:"verdict" json:"verdict"`
-	TaskKind        TaskKind                     `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
-	ChangedFiles    []string                     `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
-	TargetFiles     []string                     `yaml:"target_files,omitempty" json:"target_files,omitempty"`
-	EvidenceRef     string                       `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
-	FreshnessInputs ExecutionTaskFreshnessInputs `yaml:"freshness_inputs,omitempty" json:"freshness_inputs,omitempty"`
+	TaskID       string      `yaml:"task_id" json:"task_id"`
+	Verdict      TaskVerdict `yaml:"verdict" json:"verdict"`
+	TaskKind     TaskKind    `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
+	ChangedFiles []string    `yaml:"changed_files,omitempty" json:"changed_files,omitempty"`
+	TargetFiles  []string    `yaml:"target_files,omitempty" json:"target_files,omitempty"`
+	EvidenceRef  string      `yaml:"evidence_ref,omitempty" json:"evidence_ref,omitempty"`
+	// NoOpJustification legitimizes a pass code task that changed zero files
+	// because honest investigation concluded no safe behavior-preserving change
+	// exists. It lives on evidence (never on the tasks-plan hash), so recording
+	// it introduces no wave-execution staleness cascade.
+	NoOpJustification string                       `yaml:"no_op_justification,omitempty" json:"no_op_justification,omitempty"`
+	FreshnessInputs   ExecutionTaskFreshnessInputs `yaml:"freshness_inputs,omitempty" json:"freshness_inputs,omitempty"`
 	// EvidenceInputHash is retained only so legacy hash-only summaries can be
 	// diagnosed as stale instead of failing to parse. It is no longer a
 	// freshness authority and new generated summaries should leave it empty.
@@ -105,6 +110,7 @@ func (t *ExecutionTaskSummary) Normalize() {
 	if !t.CapturedAt.IsZero() {
 		t.CapturedAt = t.CapturedAt.Round(0).UTC()
 	}
+	t.NoOpJustification = strings.TrimSpace(t.NoOpJustification)
 	t.FreshnessInputs.Normalize()
 	slices.Sort(t.ChangedFiles)
 	slices.Sort(t.TargetFiles)
@@ -156,6 +162,7 @@ func (t ExecutionTaskSummary) Equal(other ExecutionTaskSummary) bool {
 		left.Verdict == right.Verdict &&
 		left.TaskKind == right.TaskKind &&
 		left.EvidenceRef == right.EvidenceRef &&
+		left.NoOpJustification == right.NoOpJustification &&
 		left.FreshnessInputs.Equal(right.FreshnessInputs) &&
 		left.EvidenceInputHash == right.EvidenceInputHash &&
 		left.CapturedAt.Equal(right.CapturedAt) &&

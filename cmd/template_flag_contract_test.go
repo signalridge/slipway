@@ -360,6 +360,7 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 			"captured-at":         true,
 			"changed-file":        true,
 			"evidence-ref":        true,
+			"no-op-justification": true,
 			"run-summary-version": true,
 			"session-id":          true,
 			"target-file":         true,

@@ -441,6 +441,71 @@ func TestEvidenceTaskResultFileBatchInvalidMemberWritesNoEvidence(t *testing.T) 
 	})
 }
 
+func TestEvidenceTaskResultFileRecordsJustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-01.json"),
+			[]byte(`{"task_id":"t-01","verdict":"pass","evidence_ref":"test:no-op","changed_files":[],"no_op_justification":"honest investigation found no safe behavior-preserving change"}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		cmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, cmd.Execute())
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskResultFileRejectsUnjustifiedNoOpCodeTask(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-t-01.json"),
+			[]byte(`{"task_id":"t-01","verdict":"pass","evidence_ref":"test:no-op-missing","changed_files":[]}`), 0o644))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-t-01.json"})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_changed_file_required", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestEvidenceTaskManualRejectsNoOpJustificationWithChangedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, _ := createMultiTaskEvidenceTaskFixture(t, root)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task",
+			"--json",
+			"--task-id", "t-01",
+			"--run-summary-version", "1",
+			"--task-kind", "code",
+			"--verdict", "pass",
+			"--evidence-ref", "test:contradiction",
+			"--changed-file", "cmd/evidence.go",
+			"--target-file", "cmd/evidence.go",
+			"--no-op-justification", "must not combine with changed files",
+		})
+		cliErr := asCLIError(cmd.Execute())
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_written_invalid", cliErr.ErrorCode)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
 func TestEvidenceTaskResultFileRejectsExecutorOwnedLedgerFields(t *testing.T) {
 	t.Parallel()
 

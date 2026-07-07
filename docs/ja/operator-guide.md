@@ -99,7 +99,7 @@ JSON 出力では、`applied_repairs` が実施された修正を列挙し、`un
 タスク証跡欠落のブロッカーには、ランタイムタスク証跡ディレクトリ、
 `record_command=slipway evidence task --result-file <path> --json`、そしてコンパクトな
 エグゼキューター結果スキーマが含まれます。
-`task_id,verdict,evidence_ref,changed_files,blockers,session_id`
+`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`
 `--result-file` を繰り返すと複数のタスク結果ファイルをアトミックにインポートできます。Slipway は
 バッチ全体をプリフライトし、いずれかのファイルが無効、または別のタスク ID と重複する場合は、
 タスク証跡を一切書き込みません。

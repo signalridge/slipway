@@ -326,7 +326,7 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 `cleaned_lock_anchor`；`change-create.lock` 和 `repair.lock` 仍是工作区/scope 级的协调锁，而不是
 逐变更锁。缺失任务证据的阻塞项包含运行时任务证据路径、
 `record_command=slipway evidence task --result-file <path> --json`，以及紧凑的结果 schema：
-`task_id,verdict,evidence_ref,changed_files,blockers,session_id`；重复 `--result-file` 可做原子
+`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`；重复 `--result-file` 可做原子
 批量导入。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 

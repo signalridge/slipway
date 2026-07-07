@@ -29,6 +29,7 @@ type TaskEvidencePayload struct {
 	ChangedFiles      []string                           `json:"changed_files,omitempty"`
 	TargetFiles       []string                           `json:"target_files,omitempty"`
 	EvidenceRef       string                             `json:"evidence_ref,omitempty"`
+	NoOpJustification string                             `json:"no_op_justification,omitempty"`
 	Blockers          []model.ReasonCode                 `json:"blockers,omitempty"`
 	CapturedAt        string                             `json:"captured_at,omitempty"`
 	FreshnessInputs   model.ExecutionTaskFreshnessInputs `json:"freshness_inputs,omitempty"`
@@ -41,7 +42,7 @@ type TaskEvidenceRunVersionMismatchError struct {
 	Got      int
 }
 
-const taskEvidenceResultSchema = "task_id,verdict,evidence_ref,changed_files,blockers,session_id"
+const taskEvidenceResultSchema = "task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id"
 
 func taskEvidenceActionDetail(root, slug string, runSummaryVersion int) string {
 	parts := []string{}
@@ -526,17 +527,21 @@ func ParseTaskEvidence(_ string, path string, expectedRunSummaryVersion int) (mo
 		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("freshness_inputs is required")
 	}
 	task := model.ExecutionTaskSummary{
-		TaskID:          run.TaskID,
-		Verdict:         run.Verdict,
-		TaskKind:        run.TaskKind,
-		ChangedFiles:    append([]string(nil), run.ChangedFiles...),
-		TargetFiles:     append([]string(nil), run.TargetFiles...),
-		EvidenceRef:     strings.TrimSpace(run.EvidenceRef),
-		FreshnessInputs: payload.FreshnessInputs,
-		Blockers:        append([]model.ReasonCode(nil), run.Blockers...),
-		CapturedAt:      capturedAt,
+		TaskID:            run.TaskID,
+		Verdict:           run.Verdict,
+		TaskKind:          run.TaskKind,
+		ChangedFiles:      append([]string(nil), run.ChangedFiles...),
+		TargetFiles:       append([]string(nil), run.TargetFiles...),
+		EvidenceRef:       strings.TrimSpace(run.EvidenceRef),
+		NoOpJustification: strings.TrimSpace(payload.NoOpJustification),
+		FreshnessInputs:   payload.FreshnessInputs,
+		Blockers:          append([]model.ReasonCode(nil), run.Blockers...),
+		CapturedAt:        capturedAt,
 	}
 	task.Normalize()
+	if task.NoOpJustification != "" && len(task.ChangedFiles) > 0 {
+		return model.ExecutionTaskSummary{}, time.Time{}, "", fmt.Errorf("no_op_justification must not be combined with changed_files")
+	}
 	if err := task.Validate(); err != nil {
 		return model.ExecutionTaskSummary{}, time.Time{}, "", err
 	}

@@ -192,6 +192,16 @@ func requiresChangedFiles(task model.ExecutionTaskSummary) bool {
 	case model.TaskKindVerification, model.TaskKindInvestigation:
 		return false
 	default:
+		// A pass code task that changed zero files is legitimate when it carries
+		// an explicit no_op_justification (honest investigation concluded no safe
+		// behavior-preserving change exists). Match how tasksMissingChangedFiles
+		// normalizes the changed-file count so an empty-but-justified task is not
+		// flagged, while an unjustified empty task stays blocked (fail-closed).
+		if task.TaskKind == model.TaskKindCode &&
+			strings.TrimSpace(task.NoOpJustification) != "" &&
+			len(changedFiles(&model.ExecutionSummary{Tasks: []model.ExecutionTaskSummary{task}})) == 0 {
+			return false
+		}
 		return true
 	}
 }

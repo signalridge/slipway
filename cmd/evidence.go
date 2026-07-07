@@ -385,19 +385,20 @@ func makeEvidenceSkillCmd() *cobra.Command {
 
 func makeEvidenceTaskCmd() *cobra.Command {
 	var (
-		jsonOutput    bool
-		changeSlug    string
-		taskID        string
-		runSummary    int
-		taskKindRaw   string
-		verdictRaw    string
-		evidenceRef   string
-		resultFiles   []string
-		changedFiles  []string
-		targetFiles   []string
-		blockerSpecs  []string
-		capturedAtRaw string
-		sessionID     string
+		jsonOutput        bool
+		changeSlug        string
+		taskID            string
+		runSummary        int
+		taskKindRaw       string
+		verdictRaw        string
+		evidenceRef       string
+		resultFiles       []string
+		changedFiles      []string
+		targetFiles       []string
+		blockerSpecs      []string
+		capturedAtRaw     string
+		sessionID         string
+		noOpJustification string
 	)
 
 	cmd := &cobra.Command{
@@ -636,6 +637,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 					ChangedFiles:      changedFiles,
 					TargetFiles:       targetFiles,
 					EvidenceRef:       evidenceRef,
+					NoOpJustification: strings.TrimSpace(noOpJustification),
 					Blockers:          blockers,
 					CapturedAt:        capturedAt.Format(time.RFC3339Nano),
 					FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
@@ -702,6 +704,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Manual flag mode only: stable transcript, command, artifact, or note reference")
 	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id; may be repeated for atomic batch import; cannot be combined with manual task flags")
 	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Manual flag mode only: changed file path for this task; may be repeated")
+	cmd.Flags().StringVar(&noOpJustification, "no-op-justification", "", "Manual flag mode only: justification for a pass code task that changed zero files because no safe behavior-preserving change exists; must not be combined with --changed-file")
 	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Manual flag mode only: target file path for this task; may be repeated")
 	cmd.Flags().StringArrayVar(&blockerSpecs, "blocker", nil, "Manual flag mode only: task blocker as code or code:detail; may be repeated")
 	cmd.Flags().StringVar(&capturedAtRaw, "captured-at", "", "Manual flag mode only: evidence timestamp in RFC3339Nano; defaults to now")
@@ -1015,11 +1018,12 @@ func prepareEvidenceTaskResultFiles(
 				map[string]any{"task_id": taskID, "result_file": resultFile},
 			)
 		}
-		if len(changedFiles) == 0 {
+		noOpJustification := strings.TrimSpace(result.NoOpJustification)
+		if len(changedFiles) == 0 && noOpJustification == "" {
 			return nil, newInvalidUsageError(
 				"evidence_task_changed_file_required",
-				"result-file task evidence requires at least one changed_files entry",
-				"Write executor result JSON with changed_files containing the workspace-relative files changed by the task.",
+				"result-file task evidence requires at least one changed_files entry or a no_op_justification",
+				"Write executor result JSON with changed_files containing the workspace-relative files changed by the task, or a no_op_justification explaining why no safe behavior-preserving change exists.",
 				map[string]any{"task_id": taskID, "result_file": resultFile},
 			)
 		}
@@ -1043,6 +1047,7 @@ func prepareEvidenceTaskResultFiles(
 			ChangedFiles:      changedFiles,
 			TargetFiles:       targetFiles,
 			EvidenceRef:       evidenceRef,
+			NoOpJustification: noOpJustification,
 			Blockers:          blockers,
 			CapturedAt:        commandCapturedAt.Format(time.RFC3339Nano),
 			FreshnessInputs:   state.ExpectedExecutionTaskFreshnessInputs(change, runSummary, taskID, wavePlan.TasksPlanHash),
@@ -1866,12 +1871,13 @@ func parseEvidenceTaskCapturedAt(raw string, commandCapturedAt time.Time) (time.
 }
 
 type evidenceTaskResultFile struct {
-	TaskID       string            `json:"task_id"`
-	Verdict      model.TaskVerdict `json:"verdict"`
-	EvidenceRef  string            `json:"evidence_ref"`
-	ChangedFiles []string          `json:"changed_files"`
-	Blockers     []string          `json:"blockers"`
-	SessionID    string            `json:"session_id"`
+	TaskID            string            `json:"task_id"`
+	Verdict           model.TaskVerdict `json:"verdict"`
+	EvidenceRef       string            `json:"evidence_ref"`
+	ChangedFiles      []string          `json:"changed_files"`
+	NoOpJustification string            `json:"no_op_justification"`
+	Blockers          []string          `json:"blockers"`
+	SessionID         string            `json:"session_id"`
 }
 
 func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
@@ -1882,6 +1888,7 @@ func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
 		"verdict",
 		"evidence-ref",
 		"changed-file",
+		"no-op-justification",
 		"target-file",
 		"blocker",
 		"captured-at",
@@ -2010,6 +2017,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 	}
 	result.TaskID = strings.TrimSpace(result.TaskID)
 	result.EvidenceRef = strings.TrimSpace(result.EvidenceRef)
+	result.NoOpJustification = strings.TrimSpace(result.NoOpJustification)
 	result.SessionID = strings.TrimSpace(result.SessionID)
 	return result, nil
 }
