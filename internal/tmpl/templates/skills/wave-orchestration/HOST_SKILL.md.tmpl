@@ -194,7 +194,7 @@ gate unless a task owns a genuinely isolated command.
 - Inputs: task ID, acceptance criteria, changed-file scope, technique references, locked decisions.
 - For tasks that may need repository-map guidance, pass `input_context.codebase_map_dir` and relevant `input_context.codebase_map_docs` paths instead of inlining map content.
 - Pass `input_context.codebase_map_doc_states` whenever map metadata is present so executors can perform the codebase-map relevance/staleness self-check.
-- Outputs: `task_id`, `verdict`, `changed_files`, `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
+- Outputs: `task_id`, `verdict`, `changed_files`, optional `no_op_justification` (only for a pass code task that changed zero files), `test_summary`, `evidence_ref`, `blockers`, and concise `notes`.
 - Write scopes must be disjoint, or the brief must name the merge strategy.
 - For test-bearing work, isolate the `task_kind=test` test-authoring step from
   the `task_kind=code` implementation step: give the test-authoring executor

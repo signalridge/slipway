@@ -132,6 +132,16 @@ func (t ExecutionTaskSummary) Validate() error {
 	if t.TaskKind != "" && !t.TaskKind.IsValid() {
 		return fmt.Errorf("invalid task_kind %q", t.TaskKind)
 	}
+	// Enforce the no_op_justification validity envelope on every task that reaches
+	// Validate, not only at the evidence write gates. This closes the summary
+	// read/save boundary: a hand-edited execution-summary.yaml cannot smuggle a
+	// contradictory or out-of-envelope justification into durable state that
+	// scope-contract then trusts for its changed-files exemption. It routes
+	// through the same ValidateNoOpJustification authority as the record gates and
+	// the task-evidence read boundary, so every boundary agrees.
+	if err := t.ValidateNoOpJustification(len(t.ChangedFiles) > 0); err != nil {
+		return err
+	}
 	for i, blocker := range t.Blockers {
 		if err := blocker.Validate(); err != nil {
 			return fmt.Errorf("blockers[%d]: %w", i, err)

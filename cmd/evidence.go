@@ -53,7 +53,13 @@ type evidenceSkillView struct {
 }
 
 const (
-	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with task_id, verdict, evidence_ref, changed_files, optional no_op_justification (only for a pass code task that changed zero files), blockers, and optional session_id; repeat --result-file to import multiple task results atomically."
+	// compactExecutorResultSchema is the single source of truth for the fields an
+	// executor result JSON file may contain. Every remediation and help string
+	// that teaches the schema references it, so none drift from the
+	// evidenceTaskResultFile struct or the no_op_justification validity envelope.
+	compactExecutorResultSchema = "task_id, verdict, evidence_ref, changed_files, optional no_op_justification (only for a pass code task that changed zero files), blockers, and optional session_id"
+
+	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with " + compactExecutorResultSchema + "; repeat --result-file to import multiple task results atomically."
 	maxEvidenceTaskResultFileBytes    = int64(1 << 20)
 	maxEvidenceTaskResultFiles        = 256
 )
@@ -756,7 +762,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Manual flag mode only: task kind: code, test, doc, ops, verification, investigation, other")
 	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Manual flag mode only: task verdict: pass, fail, blocked, incomplete, timeout")
 	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Manual flag mode only: stable transcript, command, artifact, or note reference")
-	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with task_id, verdict, evidence_ref, changed_files, optional no_op_justification (only for a pass code task that changed zero files), blockers, and optional session_id; may be repeated for atomic batch import; cannot be combined with manual task flags")
+	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with "+compactExecutorResultSchema+"; may be repeated for atomic batch import; cannot be combined with manual task flags")
 	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Manual flag mode only: changed file path for this task; may be repeated")
 	cmd.Flags().StringVar(&noOpJustification, "no-op-justification", "", "Manual flag mode only: justification for a pass code task that changed zero files because no safe behavior-preserving change exists; must not be combined with --changed-file")
 	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Manual flag mode only: target file path for this task; may be repeated")
@@ -1974,7 +1980,7 @@ func rejectEvidenceTaskResultFileLedgerFlags(cmd *cobra.Command) error {
 			return newInvalidUsageError(
 				"evidence_task_result_file_mixed_mode",
 				fmt.Sprintf("--result-file cannot be combined with --%s", flagName),
-				"Use --result-file by itself for compact executor results; Slipway derives ledger fields from the current wave plan and reads task-owned verdict, evidence_ref, changed_files, blockers, and session_id from each result file.",
+				"Use --result-file by itself for compact executor results; Slipway derives ledger fields from the current wave plan and reads task-owned verdict, evidence_ref, changed_files, optional no_op_justification, blockers, and session_id from each result file.",
 				map[string]any{"flag": "--" + flagName},
 			)
 		}
@@ -2024,7 +2030,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_too_large",
 			fmt.Sprintf("task result file %q is too large: %d bytes exceeds %d bytes", resultFile, info.Size(), maxEvidenceTaskResultFileBytes),
-			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write a compact executor result JSON file with only "+compactExecutorResultSchema+".",
 			map[string]any{
 				"path":      resultFile,
 				"size":      info.Size(),
@@ -2046,7 +2052,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_too_large",
 			fmt.Sprintf("task result file %q is too large: exceeds %d bytes", resultFile, maxEvidenceTaskResultFileBytes),
-			"Write a compact executor result JSON file with only task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write a compact executor result JSON file with only "+compactExecutorResultSchema+".",
 			map[string]any{
 				"path":      resultFile,
 				"max_bytes": maxEvidenceTaskResultFileBytes,
@@ -2060,7 +2066,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_invalid",
 			fmt.Sprintf("task result file is not valid JSON: %v", err),
-			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write executor result JSON with "+compactExecutorResultSchema+".",
 			map[string]any{"path": resultFile},
 		)
 	}
@@ -2087,7 +2093,7 @@ func loadEvidenceTaskResultFile(root string, change model.Change, resultFile str
 		return evidenceTaskResultFile{}, newInvalidUsageError(
 			"evidence_task_result_file_invalid",
 			fmt.Sprintf("task result file has invalid schema: %v", err),
-			"Write executor result JSON with task_id, verdict, evidence_ref, changed_files, blockers, and optional session_id.",
+			"Write executor result JSON with "+compactExecutorResultSchema+".",
 			map[string]any{"path": resultFile},
 		)
 	}

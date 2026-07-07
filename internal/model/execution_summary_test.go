@@ -188,6 +188,38 @@ func TestValidateNoOpJustificationEnforcesEnvelope(t *testing.T) {
 	}
 }
 
+func TestExecutionTaskSummaryValidateEnforcesNoOpJustificationEnvelope(t *testing.T) {
+	t.Parallel()
+
+	// Validate() must route through the envelope authority so the field cannot
+	// ride out-of-envelope on any task that reaches Validate — including a summary
+	// loaded from or saved to disk.
+	contradiction := ExecutionTaskSummary{
+		TaskID:            "task-a",
+		Verdict:           TaskVerdictPass,
+		TaskKind:          TaskKindCode,
+		ChangedFiles:      []string{"internal/foo.go"},
+		NoOpJustification: "no safe behavior-preserving change exists",
+	}
+	assert.ErrorIs(t, contradiction.Validate(), ErrNoOpJustificationWithChangedFiles)
+
+	outOfEnvelope := ExecutionTaskSummary{
+		TaskID:            "task-a",
+		Verdict:           TaskVerdictPass,
+		TaskKind:          TaskKindVerification,
+		NoOpJustification: "no safe behavior-preserving change exists",
+	}
+	assert.ErrorIs(t, outOfEnvelope.Validate(), ErrNoOpJustificationInvalidTask)
+
+	legitimate := ExecutionTaskSummary{
+		TaskID:            "task-a",
+		Verdict:           TaskVerdictPass,
+		TaskKind:          TaskKindCode,
+		NoOpJustification: "no safe behavior-preserving change exists",
+	}
+	assert.NoError(t, legitimate.Validate())
+}
+
 func TestExecutionSummaryValidateRejectsNonPassTaskSetMismatch(t *testing.T) {
 	t.Parallel()
 

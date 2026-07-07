@@ -830,6 +830,66 @@ func TestLoadExecutionSummaryRejectsUnknownFields(t *testing.T) {
 	assert.Contains(t, err.Error(), "parse execution summary")
 }
 
+func TestLoadExecutionSummaryRejectsNoOpJustificationOutsideEnvelope(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	saveActiveChangeForTest(t, root, "demo")
+	path := testExecutionSummaryPath(root, "demo")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	// A justification on a pass verification task is out of envelope: the field is
+	// meaningful only for a pass code task. A hand-edited summary must fail closed
+	// at the read boundary, not ride inertly into scope-contract decisions.
+	require.NoError(t, os.WriteFile(path, []byte(`version: 1
+run_summary_version: 2
+captured_at: 2026-04-08T00:00:00Z
+overall_verdict: pass
+completed_tasks:
+  - task-a
+tasks:
+  - task_id: task-a
+    verdict: pass
+    task_kind: verification
+    no_op_justification: no safe behavior-preserving change exists
+    captured_at: 2026-04-08T00:00:00Z
+`), 0o644))
+
+	_, err := LoadExecutionSummary(root, "demo")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, model.ErrNoOpJustificationInvalidTask)
+}
+
+func TestLoadExecutionSummaryRejectsNoOpJustificationWithChangedFiles(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	saveActiveChangeForTest(t, root, "demo")
+	path := testExecutionSummaryPath(root, "demo")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	// A justification combined with changed files is a contradiction; it must be
+	// rejected on load exactly as the write gates and task-evidence read boundary
+	// reject it.
+	require.NoError(t, os.WriteFile(path, []byte(`version: 1
+run_summary_version: 2
+captured_at: 2026-04-08T00:00:00Z
+overall_verdict: pass
+completed_tasks:
+  - task-a
+tasks:
+  - task_id: task-a
+    verdict: pass
+    task_kind: code
+    changed_files:
+      - internal/foo.go
+    no_op_justification: no safe behavior-preserving change exists
+    captured_at: 2026-04-08T00:00:00Z
+`), 0o644))
+
+	_, err := LoadExecutionSummary(root, "demo")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, model.ErrNoOpJustificationWithChangedFiles)
+}
+
 func TestLoadExecutionSummaryAcceptsStructuredReasonCodes(t *testing.T) {
 	t.Parallel()
 

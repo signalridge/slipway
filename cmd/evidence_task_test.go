@@ -935,6 +935,12 @@ func TestEvidenceTaskResultFileRejectsInvalidPayloadsWithoutWritingEvidence(t *t
 				cliErr := asCLIError(cmd.Execute())
 				require.NotNil(t, cliErr)
 				assert.Equal(t, tt.errorCode, cliErr.ErrorCode)
+				if tt.errorCode == "evidence_task_result_file_invalid" {
+					// The schema-teaching remediation must advertise the full compact
+					// schema, including no_op_justification, so a malformed payload does
+					// not train the executor back into the pre-#410 schema.
+					assert.Contains(t, cliErr.Remediation, "no_op_justification")
+				}
 				assertTaskEvidenceNotWritten(t, root, slug, "t-01")
 				assertTaskEvidenceNotWritten(t, root, slug, "t-missing")
 			})
