@@ -497,6 +497,21 @@ func TestWaveOrchestrationTemplateRequiresDegradedJustification(t *testing.T) {
 	assert.Contains(t, content, "advisory on light")
 }
 
+func TestWaveOrchestrationTemplateDocumentsNoOpJustification(t *testing.T) {
+	t.Parallel()
+
+	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
+		"ToolID":      "claude",
+		"Trigger":     "/slipway:wave-orchestration",
+		"Description": "test",
+	})
+	require.NoError(t, err)
+
+	// The honest zero-change code path must be discoverable from the executor
+	// result-JSON contract, not left to private host knowledge (#410).
+	assert.Contains(t, content, "no_op_justification")
+}
+
 func TestCoreGovernanceSkillsUseWorkflowOutlineInsteadOfGraphviz(t *testing.T) {
 	t.Parallel()
 	data := map[string]string{"ToolID": "claude", "Trigger": "/slipway:test", "Description": "test"}

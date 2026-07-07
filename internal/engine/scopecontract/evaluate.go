@@ -185,25 +185,12 @@ func plannedTaskRequiresChangedFiles(task wave.TaskNode) bool {
 }
 
 func requiresChangedFiles(task model.ExecutionTaskSummary) bool {
-	if task.Verdict != model.TaskVerdictPass {
-		return false
-	}
-	switch task.TaskKind {
-	case model.TaskKindVerification, model.TaskKindInvestigation:
-		return false
-	default:
-		// A pass code task that changed zero files is legitimate when it carries
-		// an explicit no_op_justification (honest investigation concluded no safe
-		// behavior-preserving change exists). Match how tasksMissingChangedFiles
-		// normalizes the changed-file count so an empty-but-justified task is not
-		// flagged, while an unjustified empty task stays blocked (fail-closed).
-		if task.TaskKind == model.TaskKindCode &&
-			strings.TrimSpace(task.NoOpJustification) != "" &&
-			len(changedFiles(&model.ExecutionSummary{Tasks: []model.ExecutionTaskSummary{task}})) == 0 {
-			return false
-		}
-		return true
-	}
+	// Normalize the changed-file count exactly as tasksMissingChangedFiles does
+	// (drop empty/duplicate entries) so an empty-but-justified task is not
+	// flagged, then defer the verdict/kind/justification decision to the shared
+	// model authority that the evidence record-time gates also use.
+	hasFiles := len(changedFiles(&model.ExecutionSummary{Tasks: []model.ExecutionTaskSummary{task}})) > 0
+	return task.RequiresChangedFiles(hasFiles)
 }
 
 func outOfScopeFiles(targets, files []string) []string {

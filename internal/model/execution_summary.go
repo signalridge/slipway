@@ -139,6 +139,37 @@ func (t ExecutionTaskSummary) Validate() error {
 	return nil
 }
 
+// RequiresChangedFiles reports whether this task must record at least one
+// changed file to be a valid, scope-contract-consistent pass. It is the single
+// authority shared by the scope-contract evaluation boundary and the evidence
+// record-time gates, so every boundary agrees on which tasks may honestly
+// change zero files.
+//
+// hasChangedFiles is the caller's normalized view of whether the task recorded
+// any changed file. Callers that normalize paths (dropping empty or duplicate
+// entries) pass their normalized count so an entry that normalizes away is not
+// mistaken for a real change.
+//
+// Non-pass verdicts and verification/investigation kinds never require changed
+// files. A code task is additionally exempt when it carries a no_op_justification
+// and changed zero files (an honest behavior-preserving no-op); an unjustified
+// empty code task stays required (fail-closed).
+func (t ExecutionTaskSummary) RequiresChangedFiles(hasChangedFiles bool) bool {
+	if t.Verdict != TaskVerdictPass {
+		return false
+	}
+	switch t.TaskKind {
+	case TaskKindVerification, TaskKindInvestigation:
+		return false
+	default:
+		if t.TaskKind == TaskKindCode &&
+			strings.TrimSpace(t.NoOpJustification) != "" && !hasChangedFiles {
+			return false
+		}
+		return true
+	}
+}
+
 func (t ExecutionTaskSummary) ToTaskRun(runSummaryVersion int) TaskRun {
 	return TaskRun{
 		TaskID:            t.TaskID,

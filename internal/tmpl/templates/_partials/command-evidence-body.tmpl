@@ -27,7 +27,9 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 - `evidence task` is only valid for an active change in `S2_IMPLEMENT` with a
   materialized wave plan.
 - `--result-file` imports compact executor JSON with `task_id`, `verdict`,
-  `evidence_ref`, `changed_files`, `blockers`, and optional `session_id`.
+  `evidence_ref`, `changed_files`, optional `no_op_justification` (only for a
+  pass code task that changed zero files), `blockers`, and optional
+  `session_id`.
 - `--result-file` may be repeated to import multiple task results in one
   atomic batch; Slipway preflights every file, rejects duplicate `task_id`
   entries, and writes no task evidence if any member is invalid.
@@ -64,8 +66,9 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 ### `evidence task`
 
 - `--result-file <path>`: executor result JSON containing `task_id`, `verdict`,
-  `evidence_ref`, `changed_files`, `blockers`, and optional `session_id`;
-  repeat for atomic batch import
+  `evidence_ref`, `changed_files`, optional `no_op_justification` (only for a
+  pass code task that changed zero files), `blockers`, and optional
+  `session_id`; repeat for atomic batch import
 - `--json`: JSON output
 - `--change <slug>`: target a specific active change
 

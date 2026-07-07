@@ -326,8 +326,10 @@ explicitly in the `scope_contract.exempt_context_files` field, surfaced by
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for wave-orchestration
 sync. The default S2 coordinator path is `--result-file <path>`, repeated when
 the coordinator wants one atomic batch import. Each executor result JSON
-contains `task_id`, `verdict`, `evidence_ref`, `changed_files`, `blockers`, and
-optional `session_id`. A batch preflights every file, rejects duplicate
+contains `task_id`, `verdict`, `evidence_ref`, `changed_files`, optional
+`no_op_justification` (only for a pass code task that changed zero files),
+`blockers`, and optional `session_id`. A batch preflights every file, rejects
+duplicate
 `task_id` entries, and writes no task evidence if any member is invalid.
 Executor result files must not include ledger-owned fields
 (`run_summary_version`, `task_kind`, `target_files`, `captured_at`,
