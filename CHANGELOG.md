@@ -5,7 +5,16 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.41.1](https://github.com/signalridge/slipway/compare/v0.41.0...v0.41.1) (2026-07-06)
+## [0.42.0](https://github.com/signalridge/slipway/compare/v0.41.0...v0.42.0) (2026-07-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* removes the SLIPWAY_CONTEXT_WINDOW_TOKENS and SLIPWAY_CONTEXT_METRICS_PATH environment variables, the context-pressure hook on all host adapters, and the `next` JSON context_budget field.
+
+### Features
+
+* stop watching context; host owns compact/handoff decision ([#422](https://github.com/signalridge/slipway/issues/422)) ([3c0aeec](https://github.com/signalridge/slipway/commit/3c0aeec0fd731e561f112f46428a4be24fdbed6a))
 
 
 ### Bug Fixes
