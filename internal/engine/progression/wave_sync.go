@@ -112,6 +112,15 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		return WaveSyncResult{Blockers: model.NormalizeReasonCodes(staleBlockers)}, nil
 	}
 
+	var preservedPlan *model.WavePlan
+	if change.CurrentState == model.StateS3Review {
+		loadedPlan, err := state.LoadOptionalWavePlanForChange(root, change)
+		if err != nil {
+			return WaveSyncResult{}, err
+		}
+		preservedPlan = loadedPlan
+	}
+
 	wavePlan, err := currentWavePlanForExecution(root, change, mutate)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -122,6 +131,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 		return WaveSyncResult{}, err
 	}
 	tasksPlanHash := wavePlanStructuralHash(wavePlan)
+	planChangeBlockers := S3PreservedTaskPlanChangeBlockers(preservedPlan, wavePlan, tasks)
 	wavePlan = state.ApplyEffectiveParallel(wavePlan, state.EffectiveForcedParallel(root))
 	dispatchModes, err := model.WaveDispatchModesFromVerification(record)
 	if err != nil {
@@ -173,6 +183,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	safetyNetBlockers = append(safetyNetBlockers, scopeEscapes...)
 	if change.CurrentState == model.StateS3Review {
 		safetyNetBlockers = append(safetyNetBlockers, S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes)...)
+		safetyNetBlockers = append(safetyNetBlockers, planChangeBlockers...)
 	}
 	safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
 	safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes, model.DegradedDispatchJustificationsFromVerification(record), enforced)...)
@@ -680,12 +691,9 @@ func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.Execu
 	return model.NormalizeReasonCodes(blockers)
 }
 
-// S3TaskPlanDriftRequiresReexecutionBlockers reports S3 review-time task-plan
-// edits that cannot be honestly absorbed by in-place convergence because the
-// preserved task evidence changed_files no longer fit the amended target_files.
-// The original task_changed_file_scope_escape blocker remains for the precise
-// safety violation; this S3-specific root names the available operator decision
-// boundary instead of telling the host to restamp frozen task evidence.
+// S3TaskPlanDriftRequiresReexecutionBlockers maps concrete scope escapes to
+// the S3 review-time decision boundary that permits prior-evidence discard only
+// when the operator explicitly chooses a fresh execution boundary.
 func S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes []model.ReasonCode) []model.ReasonCode {
 	if len(scopeEscapes) == 0 {
 		return nil
@@ -699,6 +707,109 @@ func S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes []model.ReasonCode)
 		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", detail))
 	}
 	return model.NormalizeReasonCodes(blockers)
+}
+
+// S3PreservedTaskPlanChangeBlockers reports S3 review-time edits to already
+// evidenced tasks that cannot be honestly absorbed in place. Additive new tasks
+// and target_files-only extensions are allowed; semantic edits, dependency
+// edits, task-kind edits, removals, and target narrowing/disjointness require an
+// explicit prior-evidence discard before reexecution.
+func S3PreservedTaskPlanChangeBlockers(previousPlan *model.WavePlan, currentPlan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
+	if previousPlan == nil || len(tasks) == 0 {
+		return nil
+	}
+	previousTasks := wavePlanTaskMap(*previousPlan)
+	currentTasks := wavePlanTaskMap(currentPlan)
+	evidencedTasks := make(map[string]struct{}, len(tasks))
+	for _, task := range tasks {
+		if taskID := strings.TrimSpace(task.TaskID); taskID != "" {
+			evidencedTasks[taskID] = struct{}{}
+		}
+	}
+
+	blockers := []model.ReasonCode{}
+	for taskID := range evidencedTasks {
+		previousTask, hadPrevious := previousTasks[taskID]
+		if !hadPrevious {
+			continue
+		}
+		currentTask, hasCurrent := currentTasks[taskID]
+		if !hasCurrent {
+			blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", taskID+":removed_task"))
+			continue
+		}
+
+		semanticFields := changedSemanticTaskFields(previousTask, currentTask)
+		if len(semanticFields) > 0 {
+			blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", taskID+":semantic_fields="+strings.Join(semanticFields, ",")))
+		}
+		if !targetFilesExtend(previousTask.TargetFiles, currentTask.TargetFiles) {
+			blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", taskID+":target_files"))
+		}
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+func wavePlanTaskMap(plan model.WavePlan) map[string]model.WavePlanTask {
+	plan.Normalize()
+	tasks := map[string]model.WavePlanTask{}
+	for _, planWave := range plan.Waves {
+		for _, planTask := range planWave.Tasks {
+			if taskID := strings.TrimSpace(planTask.TaskID); taskID != "" {
+				tasks[taskID] = planTask
+			}
+		}
+	}
+	return tasks
+}
+
+func changedSemanticTaskFields(previousTask, currentTask model.WavePlanTask) []string {
+	fields := []string{}
+	if strings.TrimSpace(previousTask.Objective) != strings.TrimSpace(currentTask.Objective) {
+		fields = append(fields, "objective")
+	}
+	if previousTask.TaskKind != currentTask.TaskKind {
+		fields = append(fields, "task_kind")
+	}
+	if !slices.Equal(normalizeTaskStringSet(previousTask.DependsOn), normalizeTaskStringSet(currentTask.DependsOn)) {
+		fields = append(fields, "depends_on")
+	}
+	return fields
+}
+
+func normalizeTaskStringSet(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func targetFilesExtend(previousTargets, currentTargets []string) bool {
+	previous := normalizeTaskStringSet(previousTargets)
+	current := normalizeTaskStringSet(currentTargets)
+	if len(previous) == 0 {
+		return true
+	}
+	if len(current) == 0 {
+		return false
+	}
+	for _, target := range previous {
+		if !wave.TargetCoversPath(current, target) {
+			return false
+		}
+	}
+	return true
 }
 
 // OrphanTaskEvidenceBlockers reports every task that has recorded evidence at
@@ -847,7 +958,7 @@ func DispatchEvidenceBlockers(
 		if !ok || !mode.IsValid() {
 			blockers = append(blockers, model.NewReasonCode(
 				"dispatch_mode_absent_on_started_parallel_wave",
-				strconv.Itoa(wavePlanWave.WaveIndex),
+				"wave="+strconv.Itoa(wavePlanWave.WaveIndex),
 			))
 			continue
 		}
@@ -855,7 +966,7 @@ func DispatchEvidenceBlockers(
 			if _, justified := justifications[wavePlanWave.WaveIndex]; !justified {
 				blockers = append(blockers, model.NewReasonCode(
 					"degraded_dispatch_justification_missing",
-					strconv.Itoa(wavePlanWave.WaveIndex),
+					"wave="+strconv.Itoa(wavePlanWave.WaveIndex),
 				))
 			}
 		}

@@ -324,7 +324,7 @@ func TestRecoveryWaveDispatchRemediationsCarryRequiredGuards(t *testing.T) {
 	assert.Contains(t, overlapStep.Remediation, "ordering dependency")
 	assert.NotContains(t, overlapStep.Remediation, "degraded_sequential")
 
-	dispatchStep, ok := recoveryStepFor(NewReasonCode("dispatch_mode_absent_on_started_parallel_wave", "1"))
+	dispatchStep, ok := recoveryStepFor(NewReasonCode("dispatch_mode_absent_on_started_parallel_wave", "wave=1"))
 	require.True(t, ok)
 	assert.Contains(t, dispatchStep.Remediation, "degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>")
 }

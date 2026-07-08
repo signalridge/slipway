@@ -234,7 +234,7 @@ func TestFixStartReexecutionSurfacesDiscardDecisionForS3ScopeNarrowing(t *testin
 		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Details["remediation_command_hint"])
 		assert.Contains(t, cliErr.Details["changed_tasks"], "t-01")
 		assert.Empty(t, cliErr.Details["added_tasks"])
-		assert.Equal(t, "restore target_files coverage and run slipway run", cliErr.Details["non_destructive_alternative"])
+		assert.Equal(t, "restore the preserved task plan shape and run slipway run", cliErr.Details["non_destructive_alternative"])
 		require.NotNil(t, cliErr.Recovery)
 		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Recovery.PrimaryCommand)
 

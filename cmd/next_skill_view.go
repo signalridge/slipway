@@ -156,7 +156,7 @@ func assembleSkillViewWithOptions(
 	if advanced.Action == "blocked" {
 		blockersForResolution = append(blockersForResolution, advanced.Blockers...)
 	}
-	if governedChange != nil && governedChange.CurrentState == model.StateS3Review {
+	if governedChange != nil && governedChange.CurrentState == model.StateS3Review && !hasS3TaskPlanDriftConvergenceRoot(blockersForResolution) {
 		staleTarget, staleAvailable, err := progression.StaleEvidenceRepairAvailable(root, *governedChange, blockersForResolution)
 		if err != nil {
 			return err

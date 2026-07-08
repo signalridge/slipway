@@ -65,7 +65,7 @@ slipway abort --json
 slipway cancel --json
 slipway delete --change <slug> --json
 slipway repair --json
-slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json
+slipway evidence task --json --help
 slipway evidence skill --skill <name> --verdict pass --json
 slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json
 slipway health --json
@@ -82,8 +82,8 @@ slipway config list --json
 - `slipway handoff write` は stdin から参考用の継続メモを書き込みます。bare 形式では完全な `## Current Position` 本文を pipe し、`--section <name>` を渡すと stdin から指定セクションだけを置き換えます。
 - `slipway fix --start-reexecution` は新しい実行境界を開き、既存のタスク証拠を消去します。S3 のタスク計画修正をインプレースで収束できる場合は、意図して `--discard-prior-evidence` を渡すとき以外、`slipway run` を使ってください。
 - `slipway handoff show --json` は現在の変更ごとの handoff を構造化して出力します。
-- `slipway evidence task --task-id <id> --verdict <pass|fail> --evidence-ref <ref> --json` はホスト所有のタスクエビデンスを記録します。変更された各パスは `--changed-file` で繰り返します。
-- wave host がタスク verdict を決定して `slipway evidence task` を呼びます。executor や subagent の出力は事実入力であり、自己署名された evidence payload ではありません。
+- `slipway evidence task --json --help` は、ホスト所有のタスクエビデンス flags を説明します。実際の `--task-id`/`--verdict` 記録呼び出しを所有するのは、S2 の wave host、または S3 のインプレース収束で incomplete として示されたタスクだけです。
+- executor や subagent の出力は wave host への事実入力であり、自己署名された evidence payload ではありません。
 - `slipway validate` は、現在の `tasks.md` から導出した診断用の `wave_plan` JSON 投影を出力します。readiness クライアントは、`wave-plan.yaml` を計画の権威として扱わずに task wave を確認できます。
 - `slipway evidence skill --skill <name> --verdict pass --json` は、そのスキルを所有するステージで統制スキルのエビデンスを記録します。
 - `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` は、選択済み S3 レビュースキルの既に current な passing エビデンスを、意図的な再実行として置き換える場合だけに使います。通常の重複エビデンスは引き続き拒否されます。

@@ -1446,16 +1446,18 @@ func TestEvidenceCommandEntryUsesHostOwnedTaskSurface(t *testing.T) {
 	t.Parallel()
 
 	content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "evidence", "command-evidence-body", "claude")
-	assert.Contains(t, content, "slipway evidence task --task-id",
-		"evidence command body should teach host-owned task evidence recording")
+	assert.Contains(t, content, "slipway evidence task --json --help",
+		"evidence command body should point agents at the host-owned task evidence help surface")
+	assert.NotContains(t, content, "slipway evidence task --task-id <id> --verdict <pass|fail>",
+		"evidence command body must not advertise arbitrary direct task verdict stamping")
 	assert.Contains(t, content, `--reference "context_origin:stage=review=<handle>"`,
 		"evidence command body should teach selected-review context-origin evidence")
 	assert.Contains(t, content, "artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md",
 		"evidence command body should teach selected-review notes-file convention")
 	assert.Contains(t, content, `--reference "fallback:same_context_degraded"`,
 		"evidence command body should teach degraded fallback as a structured reference")
-	assert.Equal(t, 1, strings.Count(content, "slipway evidence task --help"),
-		"evidence command body should have exactly one manual fallback breadcrumb")
+	assert.Equal(t, 2, strings.Count(content, "slipway evidence task --json --help"),
+		"evidence command body should have only invocation and fallback help breadcrumbs")
 
 	taskSection := content
 	start := strings.Index(taskSection, "### `evidence task`")
@@ -1506,8 +1508,10 @@ func TestEvidenceCommandContractScopesTaskLifecycleAndDropsSuiteResult(t *testin
 			require.NotEqual(t, -1, flagsStart, "evidence command surface missing Flags section")
 			contract = contract[:flagsStart]
 
-			assert.Contains(t, contract, "`evidence task` is only valid for an active change in `S2_IMPLEMENT`",
-				"the S2 lifecycle precondition must be scoped to evidence task")
+			assert.Contains(t, contract, "`evidence task` is a host-owned recording surface",
+				"the task lifecycle precondition must be scoped to evidence task")
+			assert.Contains(t, contract, "`S2_IMPLEMENT`",
+				"the S2 lifecycle precondition must still be present for evidence task")
 			assert.NotContains(t, contract, "- Only valid for an active change in `S2_IMPLEMENT`",
 				"the shared Contract section must not make the whole evidence command S2-only")
 			assert.Contains(t, contract, "ship-verification",

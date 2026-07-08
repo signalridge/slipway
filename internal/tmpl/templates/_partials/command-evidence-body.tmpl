@@ -1,17 +1,17 @@
 {{- define "command-evidence-body" -}}
 # Evidence
 
-Record runtime task evidence for the active execution run, or governance skill
+Record host-owned runtime task evidence for the active execution run, or
 verification evidence for the current lifecycle host. The wave-orchestration
-host calls `evidence task` once per completed task during `S2_IMPLEMENT`.
-Governance hosts call `evidence skill` to write `verification/<skill>.yaml`
-through the CLI instead of hand-editing verification files.
+host is the normal caller for `evidence task` during `S2_IMPLEMENT`; at
+`S3_REVIEW`, `evidence task` is limited to tasks the in-place convergence
+summary already surfaced as incomplete. Governance hosts call `evidence skill` to
+write `verification/<skill>.yaml` through the CLI instead of hand-editing
+verification files.
 
 ## Invocation
 ```bash
-slipway evidence task --task-id <id> --verdict <pass|fail> \
-  --evidence-ref "<host-proof-ref>" --changed-file <path> --json
-
+slipway evidence task --json --help
 slipway evidence skill --skill <name> --verdict <pass|fail> \
   --reference "<ref>" --notes-file <path> --json
 
@@ -25,8 +25,10 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 ```
 
 ## Contract
-- `evidence task` is only valid for an active change in `S2_IMPLEMENT` with a
-  materialized wave plan.
+- `evidence task` is a host-owned recording surface. It is valid for an active
+  change in `S2_IMPLEMENT` with a materialized wave plan, or at `S3_REVIEW` only
+  for a newly folded task already surfaced as `incomplete_execution_task` by the
+  in-place convergence summary.
 - The wave host owns the task verdict and evidence record. Executor or subagent
   output is factual input to the host, not a self-stamped governance payload.
 - Record one task per command with `--task-id`, `--verdict`, `--evidence-ref`,
@@ -38,7 +40,7 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 - Slipway derives ledger-owned fields (`run_summary_version`, `task_kind`,
   `target_files`, `captured_at`, `freshness_inputs`, and `input_hash`) from the
   active wave plan and current task evidence run. Do not hand-write evidence JSON.
-- For host-internal or recovery fallback details, use `slipway evidence task --help`.
+- For host-internal or recovery fallback details, use `slipway evidence task --json --help`.
 - `evidence skill` validates the requested skill against the current lifecycle
   state and plan substep, and run-summary-bound skills require a ready
   `execution-summary.yaml`.

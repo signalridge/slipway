@@ -535,7 +535,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		SplitDetail:     true,
 	},
 	"s3_task_plan_drift_requires_reexecution": {
-		Remediation:     "Task {subject}'s preserved S3 task evidence changed file ({detail}) is outside the amended target_files, so in-place convergence cannot honestly preserve it. Either restore target_files to cover the preserved changed file and run `slipway run`, or intentionally reopen execution with prior task evidence discard.",
+		Remediation:     "Task {subject}'s preserved S3 task evidence cannot honestly certify the amended task-plan detail ({detail}); restore target_files coverage and the preserved task semantics, then run `slipway run`, or intentionally reopen execution with prior task evidence discard.",
 		CommandTemplate: "slipway fix --start-reexecution --discard-prior-evidence",
 		Class:           RecoveryClassReviewAlignment,
 		Priority:        4,
@@ -631,7 +631,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRerunSkill,
 	},
 	"degraded_dispatch_justification_missing": {
-		Remediation:     "A degraded_sequential dispatch needs a genuine tool-unavailable justification; record degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail> and re-run wave-orchestration.",
+		Remediation:     "A degraded_sequential dispatch needs a genuine tool-unavailable justification; record degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail> and re-run wave-orchestration (the blocker detail is wave=<n>).",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
@@ -889,7 +889,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRefreshWave,
 	},
 	"dispatch_mode_absent_on_started_parallel_wave": {
-		Remediation:     "A started parallel wave recorded no valid dispatch_mode; record dispatch_mode:wave=<n>:parallel_subagents evidence, or record dispatch_mode:wave=<n>:degraded_sequential plus degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>, then re-run wave-orchestration.",
+		Remediation:     "A started parallel wave recorded no valid dispatch_mode; record dispatch_mode:wave=<n>:parallel_subagents evidence, or record dispatch_mode:wave=<n>:degraded_sequential plus degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>, then re-run wave-orchestration (the blocker detail is wave=<n>).",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},

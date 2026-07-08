@@ -102,7 +102,7 @@ summaries are treated as stale and must be regenerated.
 first stale cause, downstream evidence chain, expected/current task input
 values, authoritative bundle and runtime paths, and a safe next action.
 Missing task evidence blockers include the runtime task evidence directory,
-`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`, and the host-owned fields:
+`record_surface=slipway evidence task --json --help`, and the host-owned fields:
 `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`.
 The wave host decides the verdict and records task evidence; executor or subagent
 output is factual input, not a self-stamped governance payload.

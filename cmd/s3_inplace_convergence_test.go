@@ -47,10 +47,10 @@ func TestRunAtS3AbsorbsAddedTaskInPlace(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden host-owned task evidence loading
+- [ ] `+"`t-01`"+` exercise command fixture
   - depends_on: []
-  - target_files: ["cmd/evidence.go"]
-  - task_kind: code
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
   - covers: [REQ-001]
 
 - [ ] `+"`t-02`"+` cover the newly discovered gap
@@ -138,7 +138,55 @@ func TestRunAtS3AbsorbsTargetFilesOnlyEditInPlace(t *testing.T) {
 	})
 }
 
-func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
+func TestRunAtS3BlocksSemanticTaskEditDespiteTargetExtension(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:original-semantic",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` reframe evidence objective at review
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go", "cmd/fix.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+		require.NoError(t, err)
+		require.NotNil(t, view.Recovery)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", view.Recovery.PrimaryCommand)
+		blockers := model.ReasonSpecs(view.Blockers)
+		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:semantic_fields=objective")
+		assert.NotContains(t, blockers, "task_changed_file_scope_escape:t-01:cmd/lifecycle_commands_test.go")
+
+		fixCmd := commandForRoot(t, root, makeFixCmd())
+		fixCmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		fixCmd.SetOut(&bytes.Buffer{})
+		err = fixCmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "fix_start_reexecution_prior_evidence_discard_required", cliErr.ErrorCode)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Recovery.PrimaryCommand)
+	})
+}
+
+func TestRunAtS3BlocksEditedTaskPlanFromPreservingEvidence(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -168,37 +216,25 @@ func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
   - covers: [REQ-001]
 `)))
 
-		runCmd := commandForRoot(t, root, makeRunCmd())
-		runCmd.SetArgs([]string{"--json", "--change", slug})
-		runCmd.SetOut(&bytes.Buffer{})
-		_ = runCmd.Execute()
-
-		reopened, err := state.LoadChange(root, slug)
-		require.NoError(t, err)
-		assert.Equal(t, model.StateS3Review, reopened.CurrentState,
-			"editing an existing task at S3 must converge in place, not regress the lifecycle")
-
-		plan, err := state.LoadWavePlanForChange(root, reopened)
-		require.NoError(t, err)
-		assert.Equal(t, 1, plan.TotalTasks)
-		assert.Equal(t, 1, plan.RunSummaryVersion,
-			"in-place absorption must NOT bump the run version or wipe the run")
-		require.Len(t, plan.Waves, 1)
-		require.Len(t, plan.Waves[0].Tasks, 1)
-		assert.Equal(t, "harden host-owned evidence after review", plan.Waves[0].Tasks[0].Objective)
-		assert.Equal(t, []string{"cmd/fix.go"}, plan.Waves[0].Tasks[0].TargetFiles)
-		assertTaskEvidenceWritten(t, root, slug, "t-01")
-		summary, err := state.LoadExecutionSummary(root, slug)
-		require.NoError(t, err)
-		blockers := model.ReasonSpecs(summary.OpenBlockers)
-		assert.Contains(t, blockers, "task_changed_file_scope_escape:t-01:cmd/lifecycle_commands_test.go")
-		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:cmd/lifecycle_commands_test.go")
-
 		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 		require.NoError(t, err)
 		require.NotNil(t, view.Recovery)
 		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", view.Recovery.PrimaryCommand)
+		blockers := model.ReasonSpecs(view.Blockers)
+		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:semantic_fields=objective,task_kind")
+		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:target_files")
 
+		reopened, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS3Review, reopened.CurrentState,
+			"semantic S3 task edits must stop at review, not regress the lifecycle")
+		plan, err := state.LoadWavePlanForChange(root, reopened)
+		require.NoError(t, err)
+		require.Len(t, plan.Waves, 1)
+		require.Len(t, plan.Waves[0].Tasks, 1)
+		assert.NotEqual(t, "harden host-owned evidence after review", plan.Waves[0].Tasks[0].Objective,
+			"semantic S3 edits require reexecution; they must not be silently absorbed into preserved evidence")
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
 		fixCmd := commandForRoot(t, root, makeFixCmd())
 		fixCmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
 		fixCmd.SetOut(&bytes.Buffer{})

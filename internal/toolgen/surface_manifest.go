@@ -239,7 +239,7 @@ func jsonContractRows() []SurfaceManifestRow {
 					Name:   "evidence-task-json",
 					Source: commandSourcePath(def.ID),
 					Docs:   "docs/reference/commands.md",
-					Token:  "slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json",
+					Token:  "slipway evidence task --json --help",
 				},
 				SurfaceManifestRow{
 					Kind:   "json-contract",

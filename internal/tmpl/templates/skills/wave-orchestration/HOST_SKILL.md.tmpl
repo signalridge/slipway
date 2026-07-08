@@ -144,8 +144,9 @@ To stay clear of these gates, run a target-overlap PREFLIGHT before spawning a
 `parallel: true` wave, then a post-result changed-file conflict check after.
 Before spawning, compare the current wave's planned `target_files`: if any two
 tasks overlap by exact path, path alias, parent/child scope, case-insensitive
-match, or glob scope, do not spawn them in parallel. Record a host blocker such
-as `dispatch_blocker:wave=<wave_index>:target_overlap` and stop for operator
+match, or glob scope, do not spawn them in parallel and do not downgrade that
+wave to sequential as a workaround. Record a host blocker such as
+`dispatch_blocker:wave=<wave_index>:target_overlap` and stop for operator
 direction before continuing. After executor results return, run the post-result changed-file
 conflict check across returned `changed_files`; if parallel executors touched
 the same file scope or escaped their declared target scope, record a post-result

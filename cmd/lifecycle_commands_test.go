@@ -1373,7 +1373,7 @@ func TestRunStalePlanningEvidenceBlocksInReviewAndPreservesEvidence(t *testing.T
 	}
 }
 
-func TestRunStalePlanningHumanOutputShowsReviewBatchWithoutUpstreamReplayBlockers(t *testing.T) {
+func TestRunStalePlanningHumanOutputShowsInPlaceConvergenceBeforeReviewBatch(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -1387,9 +1387,9 @@ func TestRunStalePlanningHumanOutputShowsReviewBatchWithoutUpstreamReplayBlocker
 
 	stdout := buf.String()
 	assert.Contains(t, stdout, "Change: "+slug+" (S3_REVIEW)")
-	assert.Contains(t, stdout, "Review Batch: spec-compliance-review, code-quality-review, independent-review")
+	assert.Contains(t, stdout, "s3_task_plan_drift_requires_inplace_convergence")
 	assert.Contains(t, stdout, "required_skill_stale")
-	assert.NotContains(t, stdout, "review_alignment_required")
+	assert.Contains(t, stdout, "review_alignment_required")
 	assert.NotContains(t, stdout, "stale_planning_evidence")
 	assert.NotContains(t, stdout, "stale_execution_evidence")
 	assert.NotContains(t, stdout, "scope_contract_drift")
@@ -1475,7 +1475,7 @@ func TestRunStalePlanningEvidenceDoesNotStartRecoveryLoop(t *testing.T) {
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &view))
 	require.NotNil(t, view.Advanced)
 	assert.Equal(t, "blocked", view.Advanced.Action)
-	assert.NotEqual(t, "stale_evidence_requires_review_alignment", view.Advanced.Reason)
+	assert.Equal(t, "stale_evidence_requires_review_alignment", view.Advanced.Reason)
 	assert.NotContains(t, model.ReasonSpecs(view.Blockers), "required_skill_missing:plan-audit")
 
 	unchanged, err := state.LoadChange(root, slug)

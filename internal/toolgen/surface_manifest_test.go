@@ -246,7 +246,7 @@ func TestLocalizedReferenceDocsCarryRecoveryEvidenceHighlights(t *testing.T) {
 		"slipway fix --start-reexecution",
 		"--discard-prior-evidence",
 		"slipway run",
-		"slipway evidence task --task-id",
+		"slipway evidence task --json --help",
 		"slipway validate",
 		"wave_plan",
 	}

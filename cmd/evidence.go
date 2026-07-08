@@ -1283,7 +1283,19 @@ func assertTaskEvidenceConvergenceAtReview(root string, change model.Change, tas
 			map[string]any{"task_id": taskID, "state": string(change.CurrentState)},
 		)
 	case os.IsNotExist(err):
-		return nil
+		allowed, allowErr := missingTaskEvidenceAllowedAtReview(root, change, taskID)
+		if allowErr != nil {
+			return allowErr
+		}
+		if allowed {
+			return nil
+		}
+		return newInvalidUsageError(
+			"evidence_task_prior_evidence_missing_at_review",
+			fmt.Sprintf("task %q has no runtime evidence file, but the current S3 execution summary does not mark it incomplete", taskID),
+			"At S3_REVIEW, record task evidence only for a newly folded task surfaced by incomplete_execution_task. For lost or inconsistent prior task evidence, repair state or intentionally reopen with `slipway fix --start-reexecution --discard-prior-evidence` instead of restamping the task.",
+			map[string]any{"task_id": taskID, "state": string(change.CurrentState), "path": state.DisplayPath(root, path)},
+		)
 	default:
 		return newStateIntegrityError(
 			"evidence_task_review_state_unreadable",
@@ -1293,6 +1305,20 @@ func assertTaskEvidenceConvergenceAtReview(root string, change model.Change, tas
 			map[string]any{"task_id": taskID, "path": state.DisplayPath(root, path)},
 		)
 	}
+}
+
+func missingTaskEvidenceAllowedAtReview(root string, change model.Change, taskID string) (bool, error) {
+	summary, err := state.LoadOptionalExecutionSummary(root, change.Slug)
+	if err != nil || summary == nil {
+		return false, err
+	}
+	for _, blocker := range summary.OpenBlockers {
+		blocker.Normalize()
+		if blocker.Code == progression.IncompleteExecutionTaskBlockerCode && blocker.Detail == taskID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // reviewWaveConvergenceReRecordAllowed reports whether wave-orchestration evidence

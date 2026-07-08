@@ -135,7 +135,7 @@ slipway status --json
 slipway validate
 slipway handoff show --json
 slipway config list --json
-slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json
+slipway evidence task --json --help
 slipway health --doctor --json
 ```
 
@@ -151,7 +151,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 | done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence skill refresh-current JSON | `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` |
-| evidence task JSON | `slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json` |
+| evidence task help | `slipway evidence task --json --help` |
 | fix JSON | `slipway fix --json` |
 | handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
@@ -188,7 +188,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 
 `artifacts/codebase/**` 配下の耐久性あるコードベースマップは、スコープコントラクトの変更ファイル計上から免除されます。それらのコンテキストファイルのみがダーティな場合、`scope_contract.changed_files` と `scope_contract.out_of_scope_files` に含まれず、`scope_contract.status` は `pass` のままです。リフレッシュされたコードベースマップ単独ではスコープコントラクトのドリフトを引き起こしません。このフィルタリングを `git diff` の不一致から推測させるのではなく可視にするため、免除されたファイルは `scope_contract.exempt_context_files` フィールドで明示的に開示され、`slipway validate`、`slipway status --json`、`slipway review --json` で表示されます。正直にゼロ変更の pass code タスクは `no_op_justification` を伴います。スコープコントラクトはそれを変更ファイル要件から免除し、同じ 3 つの面で `scope_contract.no_op_justified_tasks` フィールド（タスク id とその理由）として開示するため、レビュアーは生のエビデンスを読まずにゼロ変更タスクがなぜ通ったのかを把握できます。
 
-`slipway evidence task` は、wave-orchestration の同期のために、フラットなランタイムタスク JSON を `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 配下に書き込みます。S2 の wave host が各タスクの verdict を所有し、`--task-id`、`--verdict`、`--evidence-ref`、網羅的な `--changed-file`、任意の `--blocker`、任意の `--session-id`、そしてゼロ変更の pass code タスク用の `--no-op-justification` で記録します。executor や subagent の出力はホスト判断のための事実入力であり、自己署名された governance payload ではありません。コマンドは `freshness_inputs` を計算し、アクティブな wave plan と現在のタスク evidence run から ledger-owned フィールドを導出し、タスク種別／verdict／blocker を検証し、手書き JSON に頼る代わりに未知または path-unsafe なタスク ID を拒否します。`freshness_inputs` には現在のタスク由来の `tasks_plan_hash` が含まれるため、`tasks.md` が意味的に変わった後にタスクエビデンスを再利用できません。
+`slipway evidence task` は、wave-orchestration の同期のために、フラットなランタイムタスク JSON を `.git/slipway/runtime/changes/<slug>/evidence/tasks/` 配下に書き込みます。S2 の wave host が各タスクの verdict を所有します。S3 review では、インプレース収束が `incomplete_execution_task` として示したタスクにだけこの surface を使えます。所有するホストは `--task-id`、`--verdict`、`--evidence-ref`、網羅的な `--changed-file`、任意の `--blocker`、任意の `--session-id`、そしてゼロ変更の pass code タスク用の `--no-op-justification` で記録します。executor や subagent の出力はホスト判断のための事実入力であり、自己署名された governance payload ではありません。コマンドは `freshness_inputs` を計算し、アクティブな wave plan と現在のタスク evidence run から ledger-owned フィールドを導出し、タスク種別／verdict／blocker を検証し、手書き JSON に頼る代わりに未知または path-unsafe なタスク ID を拒否します。`freshness_inputs` には現在のタスク由来の `tasks_plan_hash` が含まれるため、`tasks.md` が意味的に変わった後にタスクエビデンスを再利用できません。
 
 `slipway evidence skill --skill wave-orchestration` は execution-summary エビデンスのための S2 ブートストラップです。`execution-summary.yaml` が存在する前に、現在のフラットなタスクエビデンス ledger からウェーブのランバージョンを導出し、すべてのタスクエビデンスが単一の有効な `run_summary_version` を使うことを要求し、その ledger から wave-orchestration のダイジェストをスタンプします。`spec-compliance-review`、`code-quality-review`、終端の `ship-verification` ゲートといった後続のラン-サマリー連動スキルは、既存の execution summary を引き続き要求し、それが無い場合は `evidence_skill_run_summary_missing` でフェイルクローズドになります。
 
@@ -196,7 +196,7 @@ JSON コントラクトのカバレッジ向けの安定したマニフェスト
 
 選択された S3 レビューピア（spec-compliance-review、independent-review、ワークフロープロファイルが要求する場合の code-quality-review、ポリシーで選択された場合の security-review）は、現在の diff、計画アーティファクト、ラン-サマリーバージョンに対して自身の verdict を主張します。これらは共有の suite-result キーストーンを消費しません。1 つの権威ある全スイート実行は、加えてあらゆるガードレール SAST ベースラインも、終端の `ship-verification` ゲートが所有します。ゲートはピアの収束後に一度だけそれを実行し、ピア共有のレコードからは決して実行しません。`slipway evidence suite-result` サブコマンドはありません。ship-verification は単一の終端エビデンスパスの一部として、スイートを自ら実行・記録します。
 
-`repair --json` は `applied_repairs` と `unrepaired_drift` を分離します。applied repairs は実際に実行された、範囲を限定したローカル修正です。unrepaired drift には、Slipway が自動的に変更しなかったエビデンスやアーティファクト作業についての target、reason、`next_action` が含まれます。ランタイムタスクエビデンスが新しいという理由だけで陳腐化した ready な execution summary は、現在のウェーブ裏付けのタスクエビデンスから再構築できます。陳腐化した計画ソースのドリフトは未修復のまま残ります。アーカイブ後のクリーンアップで残った空のオーファンなアクティブバンドルディレクトリは `empty_orphan_bundle` の applied repairs として削除されます。空でないオーファンバンドルはオペレーターレビューが必要な整合性所見として残ります。`.git/slipway/runtime/handoff.md` のようなレガシーのリポジトリレベルのハンドオフファイルは、`.git/slipway/runtime/changes/<slug>/handoff.md` への手動移行のために報告されます。保持されていない空のロックアンカーは `cleaned_lock_anchor` として報告されます。`change-create.lock` と `repair.lock` は、変更ごとのロックではなくワークスペース／スコープレベルの調整ロックのままです。欠落したタスクエビデンスのブロッカーには、ランタイムタスクエビデンスパス、`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`、host fields `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id` が含まれます。`health --json` の所見には `active_change_blocking` と `active_change_impact` が含まれます。アドバイザリなコードベースマップ警告は、アクティブな変更に対して非ブロッキングとしてマークされます。
+`repair --json` は `applied_repairs` と `unrepaired_drift` を分離します。applied repairs は実際に実行された、範囲を限定したローカル修正です。unrepaired drift には、Slipway が自動的に変更しなかったエビデンスやアーティファクト作業についての target、reason、`next_action` が含まれます。ランタイムタスクエビデンスが新しいという理由だけで陳腐化した ready な execution summary は、現在のウェーブ裏付けのタスクエビデンスから再構築できます。陳腐化した計画ソースのドリフトは未修復のまま残ります。アーカイブ後のクリーンアップで残った空のオーファンなアクティブバンドルディレクトリは `empty_orphan_bundle` の applied repairs として削除されます。空でないオーファンバンドルはオペレーターレビューが必要な整合性所見として残ります。`.git/slipway/runtime/handoff.md` のようなレガシーのリポジトリレベルのハンドオフファイルは、`.git/slipway/runtime/changes/<slug>/handoff.md` への手動移行のために報告されます。保持されていない空のロックアンカーは `cleaned_lock_anchor` として報告されます。`change-create.lock` と `repair.lock` は、変更ごとのロックではなくワークスペース／スコープレベルの調整ロックのままです。欠落したタスクエビデンスのブロッカーには、ランタイムタスクエビデンスパス、`record_surface=slipway evidence task --json --help`、host fields `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id` が含まれます。`health --json` の所見には `active_change_blocking` と `active_change_impact` が含まれます。アドバイザリなコードベースマップ警告は、アクティブな変更に対して非ブロッキングとしてマークされます。
 
 `done` は、ソースファイルや非アクティブな統制アーティファクトが未コミットでも、done-ready でワークトリーにバインドされた変更をアーカイブし、非ブロッキングの `worktree_dirty_warning` を `worktree_dirty_files` 付きで返します。これにより、オペレーターはそれらのファイルをアーカイブされたバンドルと一緒にコミットできます。`done` はワークトリーを決して削除せず、`git worktree remove` は既にダーティなワークトリーの削除を拒否するため、このアドバイザリがハードブロックを置き換えます。アクティブな `artifacts/changes/<slug>/` バンドルは、`done` がそれを `artifacts/changes/archived/<slug>/` へ書き換えるため、アドバイザリから除外されます。兄弟バンドルやアーカイブ済みバンドルは一覧表示されます。
 

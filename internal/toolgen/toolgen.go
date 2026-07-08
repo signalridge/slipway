@@ -413,8 +413,8 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--focus <alias>] [--list-focuses] [--format text|json]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)"}},
 	{ID: "evidence", Class: CommandClassMutation, Description: "Record supported runtime and skill verification evidence", Tier: "situational", HasPromptSurface: true,
-		Arguments:     "task --task-id <id> --verdict <pass|fail> --evidence-ref <ref> [--changed-file <path> ...] [--blocker <code[:detail]> ...] [--session-id <id>] [--no-op-justification <text>] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--refresh-current] [--json] [--change <slug>]",
-		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` requires an active governed change in S2_IMPLEMENT with a materialized wave plan.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
+		Arguments:     "task [host-owned S2 wave/S3 incomplete-convergence evidence flags] [--json] [--change <slug>]; skill --skill <name> --verdict <pass|fail> [--reference <ref> ...] [--blocker <code[:detail]> ...] [--notes <text>|--notes-file <path>] [--refresh-current] [--json] [--change <slug>]",
+		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "`task` is a host-owned recording surface: only the S2 wave host, or S3 in-place convergence for a task already surfaced as incomplete, should invoke it.", "`skill` requires an active governed change at the lifecycle state owned by the named governance skill; run-summary-bound skills also require current execution evidence."}},
 	// Helpers (2)
 	{ID: "tool", Class: CommandClassMutation, Description: "Run Slipway helper tools", Tier: "helpers", HasPromptSurface: false,
 		Arguments:     "<helper> [helper flags]",

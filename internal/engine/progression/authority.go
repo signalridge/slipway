@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/signalridge/slipway/internal/engine/gate"
 	"github.com/signalridge/slipway/internal/engine/governance"
@@ -412,6 +413,9 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 		return ShipAuthority{}, err
 	}
 	unresolved = append(unresolved, convergenceBlockers...)
+	if reasonCodeListContains(convergenceBlockers, "s3_task_plan_drift_requires_inplace_convergence") {
+		unresolved = suppressS3InPlaceConvergenceDownstreamSymptoms(unresolved)
+	}
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	// Distinguish a present-but-stale ship-verification record from a genuinely
@@ -493,8 +497,10 @@ func s3TaskPlanDriftSubjects(root string, change model.Change) ([]string, error)
 	if !drift.Drifted() {
 		return nil, nil
 	}
-	plan := drift.Plan
+	return s3TaskPlanDriftSubjectsForPlan(root, change, drift.Plan)
+}
 
+func s3TaskPlanDriftSubjectsForPlan(root string, change model.Change, plan model.WavePlan) ([]string, error) {
 	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
 	if err != nil {
 		return nil, err
@@ -519,15 +525,28 @@ func s3TaskPlanDriftSubjects(root string, change model.Change) ([]string, error)
 	return subjects, nil
 }
 
-// s3TaskPlanDriftInPlaceConvergenceBlockers emits the ROOT in-place convergence
-// blocker when S3_REVIEW tasks.md no longer matches the materialized wave plan.
+// s3TaskPlanDriftInPlaceConvergenceBlockers emits the S3 task-plan drift root
+// when S3_REVIEW tasks.md no longer matches the materialized wave plan. Pure
+// additive drift and target_files-only extensions route to in-place convergence;
+// semantic edits or target narrowing/disjointness route to explicit reexecution.
 // Empty outside S3_REVIEW, when no wave plan is materialized yet, or when
 // tasks.md already matches the plan.
 func s3TaskPlanDriftInPlaceConvergenceBlockers(root string, change model.Change) ([]model.ReasonCode, error) {
 	if change.CurrentState != model.StateS3Review {
 		return nil, nil
 	}
-	subjects, err := s3TaskPlanDriftSubjects(root, change)
+	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
+	if err != nil || !drift.HasWavePlan {
+		return nil, err
+	}
+	if !drift.Drifted() {
+		return nil, nil
+	}
+	reexecutionBlockers, err := s3TaskPlanDriftRequiresReexecutionBlockers(root, change, drift.Plan)
+	if err != nil || len(reexecutionBlockers) > 0 {
+		return reexecutionBlockers, err
+	}
+	subjects, err := s3TaskPlanDriftSubjectsForPlan(root, change, drift.Plan)
 	if err != nil {
 		return nil, err
 	}
@@ -536,6 +555,48 @@ func s3TaskPlanDriftInPlaceConvergenceBlockers(root string, change model.Change)
 		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_inplace_convergence", subject))
 	}
 	return model.NormalizeReasonCodes(blockers), nil
+}
+
+func s3TaskPlanDriftRequiresReexecutionBlockers(root string, change model.Change, previousPlan model.WavePlan) ([]model.ReasonCode, error) {
+	currentPlan, _, err := state.MaterializeWavePlanTransactionOpAtRunSummaryVersion(root, change, time.Unix(0, 0).UTC(), previousPlan.RunSummaryVersion)
+	if err != nil {
+		return nil, err
+	}
+	execCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
+	if err != nil || execCtx.Summary == nil {
+		return nil, err
+	}
+	blockers := S3PreservedTaskPlanChangeBlockers(&previousPlan, currentPlan, execCtx.Summary.Tasks)
+	scopeEscapes := TaskChangedFileScopeEscapeBlockers(currentPlan, execCtx.Summary.Tasks)
+	blockers = append(blockers, S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes)...)
+	return model.NormalizeReasonCodes(blockers), nil
+}
+
+func reasonCodeListContains(reasons []model.ReasonCode, code string) bool {
+	for _, reason := range reasons {
+		if strings.TrimSpace(reason.Code) == code {
+			return true
+		}
+	}
+	return false
+}
+
+func suppressS3InPlaceConvergenceDownstreamSymptoms(reasons []model.ReasonCode) []model.ReasonCode {
+	out := make([]model.ReasonCode, 0, len(reasons))
+	for _, reason := range reasons {
+		switch strings.TrimSpace(reason.Code) {
+		case "required_skill_stale",
+			"review_alignment_required",
+			"ship_verification_assurance_attestation_missing",
+			"ship_verification_evidence_missing",
+			"ship_verification_evidence_stale",
+			"ship_verification_reviewer_independence_missing":
+			continue
+		default:
+			out = append(out, reason)
+		}
+	}
+	return out
 }
 
 // shipAssuranceCompleteReference is the AI-driven ship attestation: the host's

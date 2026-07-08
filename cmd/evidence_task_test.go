@@ -99,6 +99,38 @@ func TestS3AddedTaskDriftRoutesShipRecoveryToInPlaceConvergence(t *testing.T) {
 	})
 }
 
+func TestEvidenceTaskAtS3RejectsMissingPriorEvidenceWithoutIncompleteBlocker(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task", "--json",
+			"--change", slug,
+			"--task-id", "t-01",
+			"--verdict", "pass",
+			"--evidence-ref", "test:lost-prior-evidence-restamp",
+			"--changed-file", "cmd/lifecycle_commands_test.go",
+		})
+		cmd.SetOut(&bytes.Buffer{})
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_prior_evidence_missing_at_review", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "incomplete_execution_task")
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
 func TestEvidenceTaskRecordsRuntimeEvidenceAndBuildsExecutionSummary(t *testing.T) {
 	t.Parallel()
 

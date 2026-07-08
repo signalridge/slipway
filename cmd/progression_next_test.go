@@ -214,7 +214,7 @@ func TestNextS3PreReviewTaskPlanDriftRoutesToInPlaceConvergence(t *testing.T) {
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` verify original execution evidence
+- [ ] `+"`t-01`"+` exercise command fixture
   - depends_on: []
   - target_files: ["cmd/lifecycle_commands_test.go"]
   - task_kind: verification
@@ -4621,9 +4621,9 @@ func prepareStalePlanningRecoveryFixture(t *testing.T, root string, currentState
 	staleTasksPath := filepath.Join(bundlePath, "tasks.md")
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` verify recovered planning chain
+- [ ] `+"`t-01`"+` verify ship readiness parity
   - depends_on: []
-  - target_files: ["cmd/next.go", "cmd/run.go"]
+  - target_files: ["cmd/done.go", "cmd/next.go", "cmd/run.go"]
   - task_kind: verification
   - covers: [REQ-001]
 `)))

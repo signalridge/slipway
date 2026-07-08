@@ -237,8 +237,10 @@ func TestEvidenceCommandArgumentsUseHostOwnedTaskSurface(t *testing.T) {
 
 	arguments := CommandArguments("evidence")
 	require.NotEmpty(t, arguments)
-	assert.Contains(t, arguments, "task --task-id <id> --verdict <pass|fail> --evidence-ref <ref>",
-		"evidence command registry should teach host-owned manual task evidence")
+	assert.Contains(t, arguments, "task [host-owned S2 wave/S3 incomplete-convergence evidence flags]",
+		"evidence command registry should describe task evidence as host-owned, not arbitrary direct stamping")
+	assert.NotContains(t, arguments, "task --task-id <id> --verdict <pass|fail> --evidence-ref <ref>",
+		"evidence command registry must not expose direct task verdict stamping as the generic agent-facing surface")
 	assert.NotContains(t, arguments, "--result-file",
 		"evidence command registry should not advertise result-file import as the task evidence surface")
 	assert.NotContains(t, arguments, "--run-summary-version <n>",

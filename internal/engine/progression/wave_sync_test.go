@@ -624,7 +624,7 @@ func TestSyncGovernedWaveExecutionRecordsDegradedDispatchMode(t *testing.T) {
 			require.Len(t, runs, 1)
 			assert.Equal(t, model.WaveDispatchDegradedSequential, runs[0].DispatchMode)
 
-			has := hasWaveReasonCode(result.Blockers, "degraded_dispatch_justification_missing", "1")
+			has := hasWaveReasonCode(result.Blockers, "degraded_dispatch_justification_missing", "wave=1")
 			assert.Equal(t, tt.wantBlockerFor, has)
 		})
 	}
@@ -1936,7 +1936,7 @@ func TestDispatchEvidenceBlockers_StartedParallelWaveMissingTokenBlocks(t *testi
 	blockers := DispatchEvidenceBlockers(plan, tasks, nil, nil, true)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "dispatch_mode_absent_on_started_parallel_wave", blockers[0].Code)
-	assert.Equal(t, "1", blockers[0].Detail)
+	assert.Equal(t, "wave=1", blockers[0].Detail)
 }
 
 func TestDispatchEvidenceBlockers_ValidTokensDoNotBlock(t *testing.T) {
@@ -1980,7 +1980,7 @@ func TestDispatchEvidenceBlockers_BareDegradedFailsClosedWhenEnforced(t *testing
 	blockers := DispatchEvidenceBlockers(plan, tasks, dispatchModes, nil, true)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "degraded_dispatch_justification_missing", blockers[0].Code)
-	assert.Equal(t, "1", blockers[0].Detail)
+	assert.Equal(t, "wave=1", blockers[0].Detail)
 }
 
 func TestDispatchEvidenceBlockers_BareDegradedAdvisoryOnLight(t *testing.T) {
@@ -2304,12 +2304,12 @@ func TestSyncGovernedWaveExecutionBlocksStartedParallelWaveMissingDispatchEviden
 
 	result, err := SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(result.Blockers, "dispatch_mode_absent_on_started_parallel_wave", "1"),
-		"sync must return dispatch_mode_absent_on_started_parallel_wave:1, got %+v", result.Blockers)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "dispatch_mode_absent_on_started_parallel_wave", "wave=1"),
+		"sync must return dispatch_mode_absent_on_started_parallel_wave:wave=1, got %+v", result.Blockers)
 
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "dispatch_mode_absent_on_started_parallel_wave", "1"),
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "dispatch_mode_absent_on_started_parallel_wave", "wave=1"),
 		"dispatch-evidence blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
 
 	runs, err := state.LoadWaveRuns(root, slug, 1)

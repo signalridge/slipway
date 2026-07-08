@@ -62,7 +62,7 @@ slipway abort --json
 slipway cancel --json
 slipway delete --change <slug> --json
 slipway repair --json
-slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json
+slipway evidence task --json --help
 slipway evidence skill --skill <name> --verdict pass --json
 slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json
 slipway health --json
@@ -78,8 +78,8 @@ artifact-readiness detail, or transition traces.
 - `slipway handoff write` writes advisory continuation notes from stdin; pipe a full `## Current Position` narrative to the bare form, or pass `--section <name>` to replace one named section from stdin.
 - `slipway fix --start-reexecution` opens a fresh execution boundary and clears prior task evidence; when S3 task-plan amendments can converge in place, use `slipway run` unless intentionally passing `--discard-prior-evidence`.
 - `slipway handoff show --json` emits the current per-change handoff in structured form.
-- `slipway evidence task --task-id <id> --verdict <pass|fail> --evidence-ref <ref> --json` records host-owned task evidence; repeat `--changed-file` for every changed path.
-- The wave host decides the task verdict and calls `slipway evidence task`; executor or subagent output is factual input, not a self-stamped evidence payload.
+- `slipway evidence task --json --help` documents the host-owned task evidence flags. The S2 wave host, or S3 in-place convergence for a task already surfaced as incomplete, owns any `--task-id`/`--verdict` recording call.
+- Executor or subagent output is factual input to the wave host, not a self-stamped evidence payload.
 - `slipway validate` emits a diagnostic `wave_plan` JSON projection derived from the current `tasks.md` so readiness clients can inspect task waves without treating `wave-plan.yaml` as planning authority.
 - `slipway evidence skill --skill <name> --verdict pass --json` records governed skill evidence at the stage that owns that skill.
 - `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` is only for an intentional rerun that replaces already-current passing evidence for a selected S3 review skill; ordinary duplicate evidence remains rejected.

@@ -357,7 +357,12 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 		// host-owned public task evidence surface.
 		"evidence task": {
 			"captured-at":         true,
+			"changed-file":        true,
+			"evidence-ref":        true,
+			"no-op-justification": true,
 			"run-summary-version": true,
+			"session-id":          true,
+			"task-id":             true,
 			"task-kind":           true,
 			"target-file":         true,
 		},

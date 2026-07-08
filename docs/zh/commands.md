@@ -197,7 +197,7 @@ slipway status --json
 slipway validate
 slipway handoff show --json
 slipway config list --json
-slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json
+slipway evidence task --json --help
 slipway health --doctor --json
 ```
 
@@ -213,7 +213,7 @@ slipway health --doctor --json
 | done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence skill refresh-current JSON | `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` |
-| evidence task JSON | `slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json` |
+| evidence task help | `slipway evidence task --json --help` |
 | fix JSON | `slipway fix --json` |
 | handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
@@ -285,7 +285,7 @@ pass code 任务会带上 `no_op_justification`；范围契约将其豁免于变
 看到一个零改动任务为何通过。
 
 `slipway evidence task` 把扁平的运行时任务 JSON 写到
-`.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。S2 wave host 拥有每个任务的 verdict，并用 `--task-id`、`--verdict`、`--evidence-ref`、完整的 `--changed-file`、可选的 `--blocker`、可选的 `--session-id`，以及零改动 pass code 任务使用的 `--no-op-justification` 来记录。executor 或 subagent 输出只是宿主判断的事实输入，不是自证的治理 payload。该命令会计算 `freshness_inputs`，从活动 wave plan 和当前任务证据运行中推导 ledger-owned 字段，校验任务种类/裁决/阻塞项，并拒绝未知或路径不安全的任务 ID，而不是依赖手写 JSON。`freshness_inputs` 包含当前由任务派生的 `tasks_plan_hash`，这样在 `tasks.md` 发生语义变化之后，任务证据就不能被复用。
+`.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。S2 wave host 拥有每个任务的 verdict；在 S3 review 中，该 surface 只限于原地收敛已经以 `incomplete_execution_task` 暴露的任务。拥有该 surface 的 host 用 `--task-id`、`--verdict`、`--evidence-ref`、完整的 `--changed-file`、可选的 `--blocker`、可选的 `--session-id`，以及零改动 pass code 任务使用的 `--no-op-justification` 来记录。executor 或 subagent 输出只是宿主判断的事实输入，不是自证的治理 payload。该命令会计算 `freshness_inputs`，从活动 wave plan 和当前任务证据运行中推导 ledger-owned 字段，校验任务种类/裁决/阻塞项，并拒绝未知或路径不安全的任务 ID，而不是依赖手写 JSON。`freshness_inputs` 包含当前由任务派生的 `tasks_plan_hash`，这样在 `tasks.md` 发生语义变化之后，任务证据就不能被复用。
 
 `slipway evidence skill --skill wave-orchestration` 是执行摘要证据的 S2 引导。在
 `execution-summary.yaml` 存在之前，它从当前扁平任务证据 ledger 推导 wave 运行版本，要求所有任务证据
@@ -318,7 +318,7 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 `.git/slipway/runtime/changes/<slug>/handoff.md`。空的、未持有的锁锚点会被报告为
 `cleaned_lock_anchor`；`change-create.lock` 和 `repair.lock` 仍是工作区/scope 级的协调锁，而不是
 逐变更锁。缺失任务证据的阻塞项包含运行时任务证据路径、
-`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`，以及 host fields：
+`record_surface=slipway evidence task --json --help`，以及 host fields：
 `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 
