@@ -232,15 +232,15 @@ func TestSurfaceManifestRegistersHookAsCLIOnlyImplementationSurface(t *testing.T
 	assert.Equal(t, "slipway hook", hookImplementationRow.Token)
 }
 
-func TestEvidenceCommandArgumentsUseResultFileOnlyTaskSurface(t *testing.T) {
+func TestEvidenceCommandArgumentsUseHostOwnedTaskSurface(t *testing.T) {
 	t.Parallel()
 
 	arguments := CommandArguments("evidence")
 	require.NotEmpty(t, arguments)
-	assert.Contains(t, arguments, "task --result-file <path> [--result-file <path> ...]",
-		"evidence command registry should teach compact task result import")
-	assert.NotContains(t, arguments, "| task --task-id <id>",
-		"evidence command registry should keep manual task mode out of agent-facing Arguments")
+	assert.Contains(t, arguments, "task --task-id <id> --verdict <pass|fail> --evidence-ref <ref>",
+		"evidence command registry should teach host-owned manual task evidence")
+	assert.NotContains(t, arguments, "--result-file",
+		"evidence command registry should not advertise result-file import as the task evidence surface")
 	assert.NotContains(t, arguments, "--run-summary-version <n>",
 		"evidence command registry should keep manual task ledger fields out of agent-facing Arguments")
 }
@@ -3623,10 +3623,10 @@ func TestRenderedTDDGovernanceExpandsFreshEvidencePartials(t *testing.T) {
 
 	assert.Contains(t, body, "Current `run_version` matches the latest execution run for this change.")
 	assert.Contains(t, body, "reproducible command or transcript reference")
-	assert.Contains(t, body, "compact executor result JSON")
-	assert.Contains(t, body, "slipway evidence task --result-file")
+	assert.Contains(t, body, "host-owned task evidence")
+	assert.Contains(t, body, "slipway evidence task --task-id")
 	assert.NotContains(t, body, "with a valid task `--verdict`")
-	assert.Contains(t, body, "not through a separate evidence-note command")
+	assert.Contains(t, body, "separate evidence-note command")
 	assert.NotContains(t, body, "recorded not-applicable via a `slipway evidence task` note")
 	assert.NotContains(t, body, "rather than a TDD verdict")
 	assert.NotContains(t, body, "{{template", "rendered tdd-governance must not leak raw template directives")

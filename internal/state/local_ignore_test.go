@@ -79,7 +79,6 @@ func TestLocalStateGitIgnoreRulesHideProofDirsButNotGovernedRecords(t *testing.T
 	require.NoError(t, err)
 
 	ignored := []string{
-		".slipway-tmp/task-result.json",
 		"artifacts/changes/demo/evidence/governance/review.yaml",
 		"artifacts/changes/demo/events/lifecycle.jsonl",
 		"artifacts/changes/demo/execution/t-01-result.json",
@@ -132,7 +131,6 @@ func TestEnsureLocalStateGitIgnoreMigratesCodebaseMapsToTracked(t *testing.T) {
 	require.NoError(t, err)
 	got := string(content)
 	assert.NotContains(t, got, "/artifacts/codebase/", "codebase maps must no longer be git-ignored after migration")
-	assert.Contains(t, got, "/.slipway-tmp/")
 	assert.Contains(t, got, "/artifacts/changes/**/evidence/")
 	assert.Contains(t, got, "/artifacts/changes/**/events/")
 	assert.Contains(t, got, "/artifacts/changes/**/execution/")

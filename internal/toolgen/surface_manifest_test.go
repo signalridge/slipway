@@ -246,8 +246,7 @@ func TestLocalizedReferenceDocsCarryRecoveryEvidenceHighlights(t *testing.T) {
 		"slipway fix --start-reexecution",
 		"--discard-prior-evidence",
 		"slipway run",
-		"slipway evidence task --result-file",
-		".slipway-tmp/",
+		"slipway evidence task --task-id",
 		"slipway validate",
 		"wave_plan",
 	}
@@ -263,30 +262,11 @@ func TestLocalizedReferenceDocsCarryRecoveryEvidenceHighlights(t *testing.T) {
 	}
 
 	for _, docsPath := range []string{
-		"docs/installation.md",
-		"docs/ja/installation.md",
-		"docs/zh/installation.md",
-	} {
-		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
-		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
-		assert.Containsf(t, content, "scope-contract", "%s must document scope-contract scratch exemption", docsPath)
-	}
-
-	for _, docsPath := range []string{
-		"docs/design.md",
-		"docs/ja/design.md",
-		"docs/zh/design.md",
-	} {
-		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
-		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
-	}
-	for _, docsPath := range []string{
 		"docs/commands.md",
 		"docs/ja/commands.md",
 		"docs/zh/commands.md",
 	} {
 		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
-		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
 		assert.Containsf(t, content, "--discard-prior-evidence", "%s must document --discard-prior-evidence", docsPath)
 	}
 }

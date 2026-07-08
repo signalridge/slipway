@@ -12,4 +12,4 @@
 ## File Formats
 - `tasks.md` remains the planning authority for task IDs and wave projection.
 - `wave-plan.yaml`, `execution-summary.yaml`, and verification YAML remain engine-owned state files.
-- Evidence result files remain compact JSON inputs accepted by `slipway evidence task --result-file`.
+- Task evidence is recorded through host-owned `slipway evidence task` flags; executor/subagent outputs remain factual reports consumed by the host.

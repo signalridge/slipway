@@ -266,8 +266,8 @@ var blockerRemediations = map[string]blockerRemediation{
 		SplitDetail:     true,
 	},
 	"incomplete_execution_task": {
-		Remediation:     "Record task evidence for {subject} with `slipway evidence task --result-file <path>` (or the manual evidence task flags), then re-run wave-orchestration.",
-		CommandTemplate: "slipway evidence task --result-file <path>",
+		Remediation:     "Record task evidence for {subject}: the wave host must decide the outcome, then run `slipway evidence task --task-id {subject} --verdict <verdict> --evidence-ref <ref> [--changed-file <path>]... --json` before re-running wave-orchestration. For delegated work, use the subagent's factual report as evidence_ref material; for inline work, use the host's command/transcript proof.",
+		CommandTemplate: "slipway evidence task --task-id {subject} --verdict <verdict> --evidence-ref <ref> [--changed-file <path>]...",
 		Class:           RecoveryClassSatisfyControl,
 	},
 	"intake_confirmation_incomplete": {

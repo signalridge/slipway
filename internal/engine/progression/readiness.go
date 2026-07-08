@@ -896,11 +896,8 @@ func WorkspaceChangedFilesForDoneArchive(paths state.ResolvedChangePaths) []stri
 
 // workspaceChangedFiles returns changed files for scope-contract and
 // dirty-advisory accounting. The second result, exemptContext, is the set of
-// dirty context/scratch artifacts (artifacts/codebase/** plus the documented
-// evidence scratch locations) that the scope-contract filter intentionally drops
-// from the changed set. Scope-contract scans also include ignored
-// .slipway-tmp/** scratch files so the documented exemption stays observable
-// after the managed local .gitignore block hides them from ordinary Git status.
+// dirty context artifacts (artifacts/codebase/**) that the scope-contract
+// filter intentionally drops from the changed set.
 // Both results are unique-sorted; either may be nil.
 func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChangedFilesOptions) (changed, exemptContext []string) {
 	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
@@ -912,9 +909,6 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 		if opts.includeLocalState || scopeContractUntrackedChangedFile(workspaceRoot, file) {
 			files = append(files, file)
 		}
-	}
-	if !opts.includeLocalState {
-		files = append(files, scopeContractIgnoredEvidenceScratchFiles(workspaceRoot)...)
 	}
 	if len(files) == 0 {
 		return nil, nil
@@ -958,23 +952,14 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 	return changed, exemptContext
 }
 
-func scopeContractIgnoredEvidenceScratchFiles(workspaceRoot string) []string {
-	return gitNameOnly(workspaceRoot, "ls-files", "--others", "--ignored", "--exclude-standard", "--", ".slipway-tmp")
-}
 func scopeContractExemptChangedFile(file string) bool {
-	return scopeContractContextArtifactChangedFile(file) || scopeContractEvidenceScratchChangedFile(file)
+	return scopeContractContextArtifactChangedFile(file)
 }
 
 func scopeContractContextArtifactChangedFile(file string) bool {
 	file = filepath.ToSlash(strings.TrimSpace(file))
 	file = strings.TrimPrefix(file, "./")
 	return file == "artifacts/codebase" || strings.HasPrefix(file, "artifacts/codebase/")
-}
-
-func scopeContractEvidenceScratchChangedFile(file string) bool {
-	file = filepath.ToSlash(strings.TrimSpace(file))
-	file = strings.TrimPrefix(file, "./")
-	return file == ".slipway-tmp" || strings.HasPrefix(file, ".slipway-tmp/")
 }
 
 func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {

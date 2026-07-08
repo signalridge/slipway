@@ -280,7 +280,7 @@ func TestRecoveryOrdersTaskEvidenceBeforeWaveOrchestrationEvidence(t *testing.T)
 	require.NotNil(t, recovery)
 	require.Len(t, recovery.Steps, 2)
 	assert.Equal(t, "incomplete_execution_task", recovery.Steps[0].Code)
-	assert.Equal(t, "slipway evidence task --result-file <path>", recovery.PrimaryCommand)
+	assert.Equal(t, "slipway evidence task --task-id t-02 --verdict <verdict> --evidence-ref <ref> [--changed-file <path>]...", recovery.PrimaryCommand)
 	assert.Contains(t, recovery.PrimaryAction, "Record task evidence")
 	assert.Equal(t, "required_skill_stale", recovery.Steps[1].Code)
 }

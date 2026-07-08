@@ -1056,8 +1056,8 @@ func TestRepairReportsMissingRuntimeTaskEvidenceWithCommandHint(t *testing.T) {
 				continue
 			}
 			found = true
-			assert.Contains(t, drift.Reason, "record_command=slipway evidence task --result-file <path> --json")
-			assert.Contains(t, drift.Reason, "result_schema=task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id")
+			assert.Contains(t, drift.Reason, "record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json")
+			assert.Contains(t, drift.Reason, "host_fields=task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id")
 			assert.NotContains(t, drift.Reason, "required_fields=task_id,run_summary_version,task_kind")
 		}
 		assert.True(t, found, "expected repair to report missing runtime task evidence for %s", slug)

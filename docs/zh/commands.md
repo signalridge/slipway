@@ -85,8 +85,7 @@ baseline 文档是有用的起步上下文，但不是经过编写的存量（br
 而不是藏成本地状态。已有仓库会在下一次 `slipway new`、`slipway codebase-map` 或 `slipway init`
 重写受管 `.gitignore` 块时自动迁移（`next`/`run`/`status`/`repair` 不会调和它）；包内的
 `events/`、`verification/`、遗留的逐变更 `evidence/` 以及 `.worktrees/` 路径仍然被忽略。运行时的
-任务证据存放在 `.git/slipway/runtime/changes/<slug>/evidence/` 下。
-临时任务结果 JSON 放在 `.slipway-tmp/`；该目录会被 git 忽略，并作为 scope-contract 豁免 scratch 披露，因此 `slipway evidence task --result-file` 不会制造无关的 dirty-worktree 阻塞。
+任务证据存放在 `.git/slipway/runtime/changes/<slug>/evidence/` 下，并通过 `slipway evidence task` 写入。
 
 ## 情境命令
 
@@ -198,7 +197,7 @@ slipway status --json
 slipway validate
 slipway handoff show --json
 slipway config list --json
-slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
+slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json
 slipway health --doctor --json
 ```
 
@@ -214,7 +213,7 @@ slipway health --doctor --json
 | done JSON | `slipway done` |
 | evidence skill JSON | `slipway evidence skill --skill <name> --verdict pass --json` |
 | evidence skill refresh-current JSON | `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` |
-| evidence task JSON | `slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json` |
+| evidence task JSON | `slipway evidence task --task-id t-01 --verdict pass --evidence-ref host:proof --changed-file cmd/example.go --json` |
 | fix JSON | `slipway fix --json` |
 | handoff JSON | `slipway handoff show --json` |
 | health JSON | `slipway health --json` |
@@ -286,18 +285,7 @@ pass code 任务会带上 `no_op_justification`；范围契约将其豁免于变
 看到一个零改动任务为何通过。
 
 `slipway evidence task` 把扁平的运行时任务 JSON 写到
-`.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。默认的 S2
-协调器路径是 `--result-file <path>`，当协调器想要一次原子的批量导入时可重复该标志。每个执行器结果
-JSON 包含 `task_id`、`verdict`、`evidence_ref`、`changed_files`、可选的
-`no_op_justification`（仅用于零变更的 pass code 任务）、`blockers` 和可选的
-`session_id`。一个批次会预检每个文件、拒绝重复的 `task_id` 条目，并且只要有任何成员无效就不写入任何
-任务证据。执行器结果文件不得包含由 ledger 拥有的字段（`run_summary_version`、`task_kind`、
-`target_files`、`captured_at`、`freshness_inputs` 或 `input_hash`）；Slipway 会从当前活动 wave
-计划和当前任务证据运行里推导它们。手动标志模式仍可用于宿主内部或恢复回退场景；当前标志契约请用
-`slipway evidence task --help` 查看。该命令会计算 `freshness_inputs`、校验任务种类/裁决/阻塞项，
-并拒绝未知或路径不安全的任务 ID，而不是依赖手写的 JSON。
-`freshness_inputs` 包含当前由任务派生的 `tasks_plan_hash`，这样在 `tasks.md` 发生语义变化之后，
-任务证据就不能被复用。
+`.git/slipway/runtime/changes/<slug>/evidence/tasks/` 下，供 wave-orchestration 同步。S2 wave host 拥有每个任务的 verdict，并用 `--task-id`、`--verdict`、`--evidence-ref`、完整的 `--changed-file`、可选的 `--blocker`、可选的 `--session-id`，以及零改动 pass code 任务使用的 `--no-op-justification` 来记录。executor 或 subagent 输出只是宿主判断的事实输入，不是自证的治理 payload。该命令会计算 `freshness_inputs`，从活动 wave plan 和当前任务证据运行中推导 ledger-owned 字段，校验任务种类/裁决/阻塞项，并拒绝未知或路径不安全的任务 ID，而不是依赖手写 JSON。`freshness_inputs` 包含当前由任务派生的 `tasks_plan_hash`，这样在 `tasks.md` 发生语义变化之后，任务证据就不能被复用。
 
 `slipway evidence skill --skill wave-orchestration` 是执行摘要证据的 S2 引导。在
 `execution-summary.yaml` 存在之前，它从当前扁平任务证据 ledger 推导 wave 运行版本，要求所有任务证据
@@ -330,9 +318,8 @@ code-quality-review，以及按策略选中时的 security-review）针对当前
 `.git/slipway/runtime/changes/<slug>/handoff.md`。空的、未持有的锁锚点会被报告为
 `cleaned_lock_anchor`；`change-create.lock` 和 `repair.lock` 仍是工作区/scope 级的协调锁，而不是
 逐变更锁。缺失任务证据的阻塞项包含运行时任务证据路径、
-`record_command=slipway evidence task --result-file <path> --json`，以及紧凑的结果 schema：
-`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`；重复 `--result-file` 可做原子
-批量导入。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
+`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`，以及 host fields：
+`task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`。`health --json` 的发现包含 `active_change_blocking` 和 `active_change_impact`；咨询性
 的 codebase-map 警告对活动变更被标记为非阻塞。
 
 `done` 会归档 done-ready 且绑定 worktree 的变更，即使源文件或非活动治理产物仍未提交，并返回

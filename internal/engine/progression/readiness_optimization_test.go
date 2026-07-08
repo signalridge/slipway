@@ -486,7 +486,6 @@ func TestEvaluateGovernanceReadinessDisclosesExemptContextFilesWithoutScopeDrift
 
 	const inScopeFile = "cmd/next.go"
 	const exemptFile = "artifacts/codebase/ARCHITECTURE.md"
-	const scratchFile = ".slipway-tmp/task-result.json"
 
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "artifacts", "codebase"), 0o755))
@@ -570,18 +569,11 @@ func TestEvaluateGovernanceReadinessDisclosesExemptContextFilesWithoutScopeDrift
 	summary.Normalize()
 	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, *summary))
 
-	// Dirty a tracked in-scope file, a tracked exempt context artifact, and an
-	// untracked evidence scratch result so the scope-contract evaluation observes
-	// all three but only gates on the real implementation file.
+	// Dirty a tracked in-scope file and a tracked exempt context artifact so the
+	// scope-contract evaluation observes both but only gates on the real
+	// implementation file.
 	require.NoError(t, os.WriteFile(filepath.Join(root, inScopeFile), []byte("package cmd // changed\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, exemptFile), []byte("# Architecture changed\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(state.LocalStateGitIgnoreBlock()), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".slipway-tmp"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, scratchFile), []byte(`{"task_id":"t-01"}`), 0o644))
-	assert.NotContains(t, gitNameOnly(root, "ls-files", "--others", "--exclude-standard"), scratchFile,
-		"managed .gitignore should hide evidence scratch files from ordinary untracked scans")
-	assert.Contains(t, gitNameOnly(root, "ls-files", "--others", "--ignored", "--exclude-standard", "--", ".slipway-tmp"), scratchFile,
-		"scope-contract scan must explicitly recover ignored evidence scratch files for disclosure")
 
 	readiness, err := EvaluateGovernanceReadiness(root, change, GovernanceReadinessOptions{})
 	require.NoError(t, err)
@@ -595,12 +587,6 @@ func TestEvaluateGovernanceReadinessDisclosesExemptContextFilesWithoutScopeDrift
 		"exempted context-artifact file must stay out of ChangedFiles")
 	assert.NotContains(t, readiness.ScopeContract.OutOfScopeFiles, exemptFile,
 		"exempted context-artifact file must not be reported as out-of-scope drift")
-	assert.Contains(t, readiness.ScopeContract.ExemptContextFiles, scratchFile,
-		"dirty evidence scratch file must be disclosed in ExemptContextFiles")
-	assert.NotContains(t, readiness.ScopeContract.ChangedFiles, scratchFile,
-		"exempted evidence scratch file must stay out of ChangedFiles")
-	assert.NotContains(t, readiness.ScopeContract.OutOfScopeFiles, scratchFile,
-		"exempted evidence scratch file must not be reported as out-of-scope drift")
 }
 
 func TestWorkspaceChangedFilesForDoneArchiveExcludesBundleAndGeneratedLocalState(t *testing.T) {

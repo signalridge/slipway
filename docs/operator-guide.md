@@ -102,12 +102,10 @@ summaries are treated as stale and must be regenerated.
 first stale cause, downstream evidence chain, expected/current task input
 values, authoritative bundle and runtime paths, and a safe next action.
 Missing task evidence blockers include the runtime task evidence directory,
-`record_command=slipway evidence task --result-file <path> --json`, and the
-compact executor result schema:
+`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`, and the host-owned fields:
 `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`.
-Repeat `--result-file` to import multiple task result files atomically; Slipway
-preflights the whole batch and writes no task evidence if any file is invalid or
-duplicates another task ID.
+The wave host decides the verdict and records task evidence; executor or subagent
+output is factual input, not a self-stamped governance payload.
 The directory is `.git/slipway/runtime/changes/<slug>/evidence/tasks/` for the
 active change; bundle-local `events/` and `verification/` remain under
 `artifacts/changes/<slug>/`.

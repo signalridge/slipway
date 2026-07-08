@@ -250,13 +250,11 @@ slipway init
 ```
 
 これにより、リポジトリの `.slipway.yaml` 設定に加えて、`.gitignore` に
-「# Slipway local state (managed)」の管理ブロックが書き込まれ（`.slipway-tmp/`、
-バンドルローカルの `events/`、`verification/`、レガシーの変更ごとの `evidence/`、`.worktrees/` の各パスを無視）、
+「# Slipway local state (managed)」の管理ブロックが書き込まれ（バンドルローカルの
+`events/`、`verification/`、レガシーの変更ごとの `evidence/`、`.worktrees/` の各パスを無視）、
 リポジトリローカルの `.git/slipway/` ランタイム領域が作成されます。ランタイムのタスク証跡は
-`.git/slipway/runtime/changes/<slug>/evidence/` 以下に記録されます。一時的なタスク結果 JSON は
-`slipway evidence task --result-file` 用に `.slipway-tmp/` に置いてください。このディレクトリは
-無視され、scope-contract から除外される scratch 領域です。`--tools` を渡さないかぎり、
-AI ツールのサーフェスは一切生成されません。
+`slipway evidence task` 経由で `.git/slipway/runtime/changes/<slug>/evidence/` 以下に記録されます。
+`--tools` を渡さないかぎり、AI ツールのサーフェスは一切生成されません。
 
 ```bash
 slipway init --tools claude

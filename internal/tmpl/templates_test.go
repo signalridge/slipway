@@ -1139,7 +1139,7 @@ func TestGovernedHostTemplatesAdvanceWithRunAfterConfirmation(t *testing.T) {
 	}
 }
 
-func TestTDDGovernanceUsesResultFileTaskEvidenceContract(t *testing.T) {
+func TestTDDGovernanceUsesHostOwnedTaskEvidenceContract(t *testing.T) {
 	t.Parallel()
 
 	data := map[string]string{
@@ -1150,10 +1150,10 @@ func TestTDDGovernanceUsesResultFileTaskEvidenceContract(t *testing.T) {
 	content, err := Render("skills/tdd-governance/HOST_SKILL.md.tmpl", data)
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "slipway evidence task --result-file",
-		"tdd-governance should point agents at result-file task evidence import")
-	assertNoManualTaskEvidenceFlags(t, content, "tdd-governance")
-	assert.Contains(t, content, "not through a separate evidence-note command")
+	assert.Contains(t, content, "slipway evidence task --task-id",
+		"tdd-governance should point agents at host-owned task evidence recording")
+	assertNoLedgerTaskEvidenceFlags(t, content, "tdd-governance")
+	assert.Contains(t, content, "separate evidence-note command")
 	assert.NotContains(t, content, "recorded not-applicable via a `slipway evidence task` note")
 	assert.NotContains(t, content, "rather than a TDD verdict")
 }
@@ -1442,12 +1442,12 @@ func TestStatusCommandEntryUsesGovernanceSummaryContract(t *testing.T) {
 	assert.NotContains(t, content, "consume full governance controls from `status --json`")
 }
 
-func TestEvidenceCommandEntryUsesResultFileOnlyTaskSurface(t *testing.T) {
+func TestEvidenceCommandEntryUsesHostOwnedTaskSurface(t *testing.T) {
 	t.Parallel()
 
 	content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "evidence", "command-evidence-body", "claude")
-	assert.Contains(t, content, "slipway evidence task --result-file",
-		"evidence command body should teach result-file task evidence import")
+	assert.Contains(t, content, "slipway evidence task --task-id",
+		"evidence command body should teach host-owned task evidence recording")
 	assert.Contains(t, content, `--reference "context_origin:stage=review=<handle>"`,
 		"evidence command body should teach selected-review context-origin evidence")
 	assert.Contains(t, content, "artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md",
@@ -1465,7 +1465,7 @@ func TestEvidenceCommandEntryUsesResultFileOnlyTaskSurface(t *testing.T) {
 	require.NotEqual(t, -1, end, "evidence command body missing evidence skill flag section")
 	taskSection = taskSection[:end]
 
-	assertNoManualTaskEvidenceFlags(t, taskSection, "evidence command task section")
+	assertNoLedgerTaskEvidenceFlags(t, taskSection, "evidence command task section")
 }
 
 func TestEvidenceCommandContractScopesTaskLifecycleAndDropsSuiteResult(t *testing.T) {
@@ -1536,7 +1536,7 @@ func TestTemplateFSExcludesTransientPythonArtifacts(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestWaveOrchestrationEvidenceTaskSurfaceUsesResultFileOnly(t *testing.T) {
+func TestWaveOrchestrationEvidenceTaskSurfaceUsesHostOwnedFlags(t *testing.T) {
 	t.Parallel()
 
 	content, err := Render("skills/wave-orchestration/HOST_SKILL.md.tmpl", map[string]string{
@@ -1545,9 +1545,9 @@ func TestWaveOrchestrationEvidenceTaskSurfaceUsesResultFileOnly(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Contains(t, content, "slipway evidence task --result-file",
-		"wave-orchestration skill must teach compact task result import")
-	assertNoManualTaskEvidenceFlags(t, content, "wave-orchestration")
+	assert.Contains(t, content, "slipway evidence task --task-id",
+		"wave-orchestration skill must teach host-owned task evidence recording")
+	assertNoLedgerTaskEvidenceFlags(t, content, "wave-orchestration")
 	assert.NotContains(t, content, "manual flag mode",
 		"wave-orchestration skill must not teach manual task ledger mode as agent guidance")
 	assert.Contains(t, content, "Do not hand-write files under",
@@ -1571,12 +1571,12 @@ func TestWaveOrchestrationSkillOmitsDeletedCheckpointResumeGuidance(t *testing.T
 		"wave-orchestration skill missing top-level IRON LAW")
 	assert.Contains(t, content, "slipway evidence task",
 		"wave-orchestration skill must route task evidence through the supported CLI")
-	assert.Contains(t, content, "slipway evidence task --result-file",
-		"wave-orchestration skill must teach compact task result import")
-	assertNoManualTaskEvidenceFlags(t, content, "wave-orchestration")
-	assert.NotContains(t, content, "manual flag mode",
-		"wave-orchestration skill must not teach manual task ledger mode as agent guidance")
-	assert.Contains(t, content, "`run_summary_version`, `task_kind`, `target_files`, `captured_at`,",
+	assert.Contains(t, content, "slipway evidence task --task-id",
+		"wave-orchestration skill must teach host-owned task evidence recording")
+	assertNoLedgerTaskEvidenceFlags(t, content, "wave-orchestration")
+	assert.NotContains(t, content, "result-file mode",
+		"wave-orchestration skill must not teach result-file import as agent guidance")
+	assert.Contains(t, content, "`run_summary_version`, `task_kind`, `target_files`,",
 		"wave-orchestration skill must identify ledger-owned fields")
 	assert.NotContains(t, content, `slipway evidence task --task-id "<task_id>" --run-summary-version`,
 		"wave-orchestration skill must not teach the long manual evidence command as the default")
@@ -2047,23 +2047,17 @@ func renderPromptSurfaceForTest(t *testing.T, templateName, commandID, bodyTempl
 	return content
 }
 
-func assertNoManualTaskEvidenceFlags(t *testing.T, content, surface string) {
+func assertNoLedgerTaskEvidenceFlags(t *testing.T, content, surface string) {
 	t.Helper()
 
 	for _, forbidden := range []string{
-		"--task-id",
 		"--run-summary-version",
 		"--task-kind",
-		"--verdict",
-		"--evidence-ref",
-		"--changed-file",
 		"--target-file",
-		"--blocker",
 		"--captured-at",
-		"--session-id",
 	} {
 		assert.NotContains(t, content, forbidden,
-			"%s must not teach manual evidence task flag %s",
+			"%s must not teach ledger-owned evidence task flag %s",
 			surface, forbidden)
 	}
 }

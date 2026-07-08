@@ -205,32 +205,25 @@ gate unless a task owns a genuinely isolated command.
 - Detailed dispatch examples live in `references/executor-dispatch-reference.md`.
 
 ## Task Evidence Ledger
-For every completed task, record runtime task evidence through the supported CLI
-before passing wave-orchestration. Do not hand-write files under
+For every completed task, the wave host records runtime task evidence through the
+supported CLI before passing wave-orchestration. Do not hand-write files under
 `.git/slipway/runtime/changes/<slug>/evidence/tasks/`.
 
 ```bash
-slipway evidence task --result-file "<executor-result.json>" \
-  [--result-file "<next-executor-result.json>" ...] --json
+slipway evidence task --task-id "<task_id>" --verdict "<pass|fail>" \
+  --evidence-ref "<host-proof-ref>" [--changed-file "<path>" ...] --json
 ```
 
-In result-file mode, put non-pass verdicts and blocker codes in each executor
-result JSON's `verdict` and `blockers` fields. Repeat `--result-file` to import
-multiple task results in one atomic batch; Slipway preflights every file,
-rejects duplicate `task_id` entries, and writes no task evidence if any member
-is invalid. Blockers belong in executor result JSON. Slipway computes
-`freshness_inputs` and `captured_at`; executor result JSON contains only
-`task_id`, `verdict`, `evidence_ref`, `changed_files`, optional
-`no_op_justification`, `blockers`, and optional `session_id`. Set
-`no_op_justification` only for a pass code task that honestly changed zero files
-(explaining why no safe behavior-preserving change exists); never combine it with
-non-empty `changed_files`. Do not include ledger-owned fields such as `run_summary_version`, `task_kind`, `target_files`, `captured_at`,
-`freshness_inputs`, or `input_hash`. For host-internal or recovery fallback
-details, use `slipway evidence task --help`. A passing wave-orchestration record
-without task evidence blocks execution-summary generation.
-Executor agents may report evidence refs, but the coordinator records them
-through `slipway evidence task`; executors must not self-stamp governed
-freshness or write verification YAML directly.
+The host owns the verdict. Executor agents may report facts (`task_id`,
+`changed_files`, `test_summary`, blockers, notes, and suggested evidence refs),
+but they do not produce governance evidence JSON and must not self-stamp
+freshness or verification state. Record non-pass task blockers with `--blocker`.
+Set `--no-op-justification` only for a pass code task that honestly changed zero
+files; never combine it with `--changed-file`. Slipway derives ledger-owned
+fields such as `run_summary_version`, `task_kind`, `target_files`,
+`captured_at`, `freshness_inputs`, and `input_hash` from the active wave plan and
+current task evidence run. A passing wave-orchestration record without task
+evidence blocks execution-summary generation.
 
 **Completeness contract:** record passing evidence for EVERY planned task in the
 wave plan before the change can advance to review. A planned task left without

@@ -352,21 +352,14 @@ func TestCobraFlagsCoveredByRegistryArguments(t *testing.T) {
 	// Keep this list small and justified — it is the only sanctioned way for a
 	// real flag to be absent from the reference.
 	exempt := map[string]map[string]bool{
-		// `evidence task` still exposes manual-mode flags in Cobra and black-box
-		// help, but generated Arguments intentionally teach the result-file-only
-		// agent surface.
+		// `evidence task` exposes ledger override flags in Cobra for black-box
+		// recovery/debugging, but generated Arguments intentionally teach the
+		// host-owned public task evidence surface.
 		"evidence task": {
-			"blocker":             true,
 			"captured-at":         true,
-			"changed-file":        true,
-			"evidence-ref":        true,
-			"no-op-justification": true,
 			"run-summary-version": true,
-			"session-id":          true,
-			"target-file":         true,
-			"task-id":             true,
 			"task-kind":           true,
-			"verdict":             true,
+			"target-file":         true,
 		},
 	}
 

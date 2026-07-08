@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -33,19 +31,12 @@ func TestRunAtS3AbsorbsAddedTaskInPlace(t *testing.T) {
 
 		// Record passing evidence for the original single task t-01 and drive
 		// the change to S3_REVIEW (mirrors the established S2->S3 setup).
-		rawResult, err := json.Marshal(map[string]any{
-			"task_id":       "t-01",
-			"verdict":       "pass",
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
 			"evidence_ref":  "test:original-t-01",
-			"changed_files": []string{"cmd/evidence.go"},
 		})
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result.json"), rawResult, 0o644))
-
-		evidenceCmd := commandForRoot(t, root, makeEvidenceCmd())
-		evidenceCmd.SetArgs([]string{"task", "--json", "--result-file", "task-result.json"})
-		evidenceCmd.SetOut(&bytes.Buffer{})
-		require.NoError(t, evidenceCmd.Execute())
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
@@ -155,19 +146,12 @@ func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
 		initTestWorkspace(t, root)
 		slug, change := createEvidenceTaskFixture(t, root)
 
-		rawResult, err := json.Marshal(map[string]any{
-			"task_id":       "t-01",
-			"verdict":       "pass",
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
 			"evidence_ref":  "test:original-t-01",
-			"changed_files": []string{"cmd/evidence.go"},
 		})
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result.json"), rawResult, 0o644))
-
-		evidenceCmd := commandForRoot(t, root, makeEvidenceCmd())
-		evidenceCmd.SetArgs([]string{"task", "--json", "--result-file", "task-result.json"})
-		evidenceCmd.SetOut(&bytes.Buffer{})
-		require.NoError(t, evidenceCmd.Execute())
 
 		writePassingExecutionSummary(t, root, slug, 1, "t-01")
 		writePassingWaveEvidence(t, root, slug, 1)
@@ -205,17 +189,14 @@ func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
 		assert.Equal(t, []string{"cmd/fix.go"}, plan.Waves[0].Tasks[0].TargetFiles)
 		assertTaskEvidenceWritten(t, root, slug, "t-01")
 
-		restampResult, err := json.Marshal(map[string]any{
-			"task_id":       "t-01",
-			"verdict":       "pass",
-			"evidence_ref":  "test:restamp-t-01",
-			"changed_files": []string{"cmd/fix.go"},
-		})
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(filepath.Join(root, "task-result-restamp.json"), restampResult, 0o644))
-
 		restampCmd := commandForRoot(t, root, makeEvidenceCmd())
-		restampCmd.SetArgs([]string{"task", "--json", "--result-file", "task-result-restamp.json"})
+		restampCmd.SetArgs([]string{
+			"task", "--json",
+			"--task-id", "t-01",
+			"--verdict", "pass",
+			"--evidence-ref", "test:restamp-t-01",
+			"--changed-file", "cmd/fix.go",
+		})
 		restampCmd.SetOut(&bytes.Buffer{})
 		err = restampCmd.Execute()
 		require.Error(t, err)

@@ -159,8 +159,8 @@ func TestEvaluateRequiredSkills_FailsClosedWhenRunSummaryBoundSkillHasNoSummary(
 	}
 	require.NotEmpty(t, runSummaryBlocker)
 	assert.Contains(t, runSummaryBlocker, "task_evidence_path=")
-	assert.Contains(t, runSummaryBlocker, "record_command=slipway evidence task --result-file <path> --json")
-	assert.Contains(t, runSummaryBlocker, "result_schema=task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id")
+	assert.Contains(t, runSummaryBlocker, "record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json")
+	assert.Contains(t, runSummaryBlocker, "host_fields=task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id")
 	assert.NotContains(t, runSummaryBlocker, "required_fields=task_id,run_summary_version,task_kind")
 }
 

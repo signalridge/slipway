@@ -97,12 +97,9 @@ JSON 出力では、`applied_repairs` が実施された修正を列挙し、`un
 期待値/現在値のタスク入力値、権威あるバンドルおよびランタイムのパス、安全な次のアクションとともに
 現在性チェックの失敗を公開します。
 タスク証跡欠落のブロッカーには、ランタイムタスク証跡ディレクトリ、
-`record_command=slipway evidence task --result-file <path> --json`、そしてコンパクトな
-エグゼキューター結果スキーマが含まれます。
+`record_command=slipway evidence task --task-id <task_id> --verdict <verdict> --evidence-ref <ref> [--changed-file <path> ...] --json`、そして host-owned fields が含まれます。
 `task_id,verdict,evidence_ref,changed_files,no_op_justification,blockers,session_id`
-`--result-file` を繰り返すと複数のタスク結果ファイルをアトミックにインポートできます。Slipway は
-バッチ全体をプリフライトし、いずれかのファイルが無効、または別のタスク ID と重複する場合は、
-タスク証跡を一切書き込みません。
+wave host が verdict を決定してタスク evidence を記録します。executor や subagent の出力は事実入力であり、自己署名された governance payload ではありません。
 このディレクトリはアクティブな変更については `.git/slipway/runtime/changes/<slug>/evidence/tasks/` です。
 バンドルローカルの `events/` と `verification/` は `artifacts/changes/<slug>/` 配下のままです。
 

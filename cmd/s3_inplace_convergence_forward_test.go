@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -178,7 +176,7 @@ func TestRunAtS3RejectsWaveReRecordBeforeFoldedTaskEvidence(t *testing.T) {
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_task_evidence_incomplete", cliErr.ErrorCode)
 		require.NotNil(t, cliErr.Recovery)
-		assert.Equal(t, "slipway evidence task --result-file <path>", cliErr.Recovery.PrimaryCommand)
+		assert.Equal(t, "slipway evidence task --task-id t-02 --verdict <verdict> --evidence-ref <ref> [--changed-file <path>]...", cliErr.Recovery.PrimaryCommand)
 		assert.Equal(t, "incomplete_execution_task", cliErr.Recovery.Steps[0].Code)
 
 		// No passing wave-orchestration record may have been written out of order.
@@ -223,17 +221,14 @@ func recordTaskResult(t *testing.T, root, taskID, ref, changedFile string) {
 
 func recordTaskResultErr(t *testing.T, root, taskID, ref, changedFile string) error {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{
-		"task_id":       taskID,
-		"verdict":       "pass",
-		"evidence_ref":  ref,
-		"changed_files": []string{changedFile},
-	})
-	require.NoError(t, err)
-	relFile := strings.ReplaceAll(taskID, "/", "_") + "-result.json"
-	require.NoError(t, os.WriteFile(filepath.Join(root, relFile), raw, 0o644))
 	cmd := commandForRoot(t, root, makeEvidenceCmd())
-	cmd.SetArgs([]string{"task", "--json", "--result-file", relFile})
+	cmd.SetArgs([]string{
+		"task", "--json",
+		"--task-id", taskID,
+		"--verdict", "pass",
+		"--evidence-ref", ref,
+		"--changed-file", changedFile,
+	})
 	cmd.SetOut(&bytes.Buffer{})
 	return cmd.Execute()
 }
