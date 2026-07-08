@@ -63,7 +63,7 @@ coordinator context.
   the target-overlap preflight and the post-result changed-file conflict check
   keep you clear of it; recover by fixing `target_files` or the change and
   re-recording evidence.
-- `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
+- `parallel_wave_changed_file_overlap:wave=<wave_index>:file=<file>:tasks=<tasks>` — two tasks
   in the same `parallel: true` wave wrote the same file. Sequential waves
   sharing a file are allowed; a parallel overlap is an execution-safety stop
   point requiring operator direction.
@@ -71,7 +71,7 @@ coordinator context.
   parallel wave recorded no dispatch-mode evidence. Silent parallel inference is
   gone: record `dispatch_mode:wave=<wave_index>:parallel_subagents` or
   `dispatch_mode:wave=<wave_index>:degraded_sequential` for the wave.
-- `executor_agent_missing:<wave_index>:<task_id>` — a `parallel_subagents` wave
+- `executor_agent_missing:wave=<wave_index>:task=<task_id>` — a `parallel_subagents` wave
   is missing a per-task executor handle. Record exactly one
   `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` per planned task;
   `degraded_sequential` and non-parallel waves require no handles.

@@ -23,6 +23,20 @@ func buildWavePlan(root, artifactBundle string, cfg model.Config) *wavePlanView 
 	return view
 }
 
+func s3WavePlanProjectionNeeded(root string, change model.Change, blockers []model.ReasonCode) bool {
+	for _, blocker := range blockers {
+		switch strings.TrimSpace(blocker.Code) {
+		case "s3_task_plan_drift_requires_inplace_convergence", "incomplete_execution_task":
+			return true
+		}
+	}
+	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
+	if err != nil {
+		return false
+	}
+	return drift.Drifted()
+}
+
 // derivedWavePlanView parses tasks.md and computes dependency-ordered waves.
 // Returns nil if tasks.md is missing or empty (not an error — plan may not exist yet).
 func derivedWavePlanView(root, artifactBundle string) *wavePlanView {

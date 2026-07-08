@@ -526,9 +526,9 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "Scope Contract is missing required target files",
 	},
-	"s3_task_plan_drift_requires_reexecution": {
+	"s3_task_plan_drift_requires_inplace_convergence": {
 		Severity: ReasonSeverityError,
-		Message:  "tasks.md adds a task the materialized wave plan does not contain; its task evidence cannot be recorded in place and S3 review/ship-verification went stale. Reopen execution to re-materialize the wave plan with the added task",
+		Message:  "tasks.md has S3 task-plan amendments the materialized wave plan has not absorbed yet; run S3 in-place convergence before recording task evidence or reopening execution",
 	},
 	"session_isolation_warning": {
 		Severity: ReasonSeverityWarning,

@@ -173,6 +173,7 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
 	safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes, model.DegradedDispatchJustificationsFromVerification(record), enforced)...)
 	safetyNetBlockers = append(safetyNetBlockers, ExecutorAgentBlockers(wavePlan, tasks, dispatchModes, model.ExecutorAgentHandlesFromVerification(record))...)
+	safetyNetBlockers = append(safetyNetBlockers, OrphanTaskEvidenceBlockers(wavePlan, tasks)...)
 	if len(safetyNetBlockers) > 0 {
 		executionSummary.OpenBlockers = model.NormalizeReasonCodes(append(executionSummary.OpenBlockers, safetyNetBlockers...))
 		executionSummary.SyncDerivedFields()
@@ -277,14 +278,7 @@ func currentWavePlanForExecution(root string, change model.Change, mutate bool) 
 }
 
 func wavePlanStructuralHash(plan model.WavePlan) string {
-	plan.Normalize()
-	if strings.TrimSpace(plan.EffectiveStructuralHash) != "" {
-		return strings.TrimSpace(plan.EffectiveStructuralHash)
-	}
-	if strings.TrimSpace(plan.TasksPlanStructuralHash) != "" {
-		return strings.TrimSpace(plan.TasksPlanStructuralHash)
-	}
-	return strings.TrimSpace(plan.TasksPlanHash)
+	return plan.StructuralHash()
 }
 
 // LatestPassingWaveEvidence returns the latest passing wave-orchestration verification record.
@@ -681,6 +675,39 @@ func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.Execu
 	return model.NormalizeReasonCodes(blockers)
 }
 
+// OrphanTaskEvidenceBlockers reports every task that has recorded evidence at
+// the current run version but is absent from the current wave plan. When a task
+// is removed from tasks.md during S3 review, its evidence persists in the
+// execution summary and the task artifacts may still exist. This blocker makes that
+// drift fail closed at wave sync so the host can explicitly prune orphan evidence
+// or reopen with --discard-prior-evidence, instead of silently carrying it
+// forward.
+func OrphanTaskEvidenceBlockers(plan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
+	if len(tasks) == 0 {
+		return nil
+	}
+	planTaskIDs := make(map[string]struct{})
+	for _, planWave := range plan.Waves {
+		for _, planTask := range planWave.Tasks {
+			if taskID := strings.TrimSpace(planTask.TaskID); taskID != "" {
+				planTaskIDs[taskID] = struct{}{}
+			}
+		}
+	}
+	blockers := []model.ReasonCode{}
+	for _, task := range tasks {
+		taskID := strings.TrimSpace(task.TaskID)
+		if taskID == "" {
+			continue
+		}
+		if _, inPlan := planTaskIDs[taskID]; inPlan {
+			continue
+		}
+		blockers = append(blockers, model.NewReasonCode("orphan_task_evidence", taskID))
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
 // ParallelWaveChangedFileOverlapBlockers reports, for plan-parallel waves only,
 // any changed file that two or more tasks in the same wave both recorded. Tasks
 // in a parallel wave may run concurrently in the shared worktree, so two
@@ -740,7 +767,7 @@ func ParallelWaveChangedFileOverlapBlockers(plan model.WavePlan, tasks []model.E
 			}
 			blockers = append(blockers, model.NewReasonCode(
 				"parallel_wave_changed_file_overlap",
-				fmt.Sprintf("%d:%s:%s", wavePlanWave.WaveIndex, display[key], strings.Join(taskIDs, ",")),
+				fmt.Sprintf("wave=%d:file=%s:tasks=%s", wavePlanWave.WaveIndex, display[key], strings.Join(taskIDs, ",")),
 			))
 		}
 	}
@@ -864,7 +891,7 @@ func ExecutorAgentBlockers(
 			}
 			blockers = append(blockers, model.NewReasonCode(
 				"executor_agent_missing",
-				fmt.Sprintf("%d:%s", wavePlanWave.WaveIndex, planTask.TaskID),
+				fmt.Sprintf("wave=%d:task=%s", wavePlanWave.WaveIndex, planTask.TaskID),
 			))
 		}
 	}

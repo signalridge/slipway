@@ -266,9 +266,9 @@ var blockerRemediations = map[string]blockerRemediation{
 		SplitDetail:     true,
 	},
 	"incomplete_execution_task": {
-		Remediation:     "Execute task {subject} and record its evidence with `slipway evidence task`, or update tasks.md if the task no longer belongs, then continue wave-orchestration.",
-		CommandTemplate: "slipway run",
-		Class:           RecoveryClassRefreshWave,
+		Remediation:     "Record task evidence for {subject} with `slipway evidence task --result-file <path>` (or the manual evidence task flags), then re-run wave-orchestration.",
+		CommandTemplate: "slipway evidence task --result-file <path>",
+		Class:           RecoveryClassSatisfyControl,
 	},
 	"intake_confirmation_incomplete": {
 		Remediation:     "Complete the Approved Summary in intent.md before continuing.",
@@ -522,18 +522,14 @@ var blockerRemediations = map[string]blockerRemediation{
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
-	"s3_task_plan_drift_requires_reexecution": {
-		// ROOT recovery for a task added to tasks.md at S3_REVIEW that the
-		// materialized wave plan does not contain: its task evidence cannot be
-		// recorded in place (evidence task rejects it as not in the wave projection)
-		// and `slipway run` will not re-materialize a settled review, so the S3
-		// review and ship-verification evidence go stale with no in-place exit. The
-		// only public refresh is to reopen execution, which re-materializes the wave
-		// plan WITH the added task and lets its evidence be re-recorded. Ranked as a
-		// ReviewAlignment root so it outranks the stale-review/ship symptoms it
-		// causes and is selected as the primary recovery step.
-		Remediation:     "tasks.md adds task {subject}, which the materialized wave plan does not contain, so its task evidence cannot be recorded in place and the S3 review + ship-verification evidence went stale. Reopen execution to re-materialize the wave plan with the added task, re-record its task evidence, then re-run S3 review and ship-verification. If the work belongs on an existing task instead, remove the added task from tasks.md.",
-		CommandTemplate: "slipway fix --start-reexecution",
+	"orphan_task_evidence": {
+		Remediation:     "Task {subject} has recorded evidence at the current run version but is no longer in the current tasks.md wave plan; run `slipway repair` to prune orphan task evidence, or reopen with `slipway fix --start-reexecution --discard-prior-evidence` to start a fresh run.",
+		CommandTemplate: "slipway repair",
+		Class:           RecoveryClassRefreshWave,
+	},
+	"s3_task_plan_drift_requires_inplace_convergence": {
+		Remediation:     "tasks.md has S3 task-plan amendments ({subject}) that the materialized wave plan has not absorbed yet. Run S3 in-place convergence to re-materialize the wave plan at the same run_summary_version and preserve prior task evidence. Record task evidence only for newly added tasks surfaced as incomplete; edited already-evidenced tasks are re-certified through review evidence before wave-orchestration is re-recorded.",
+		CommandTemplate: "slipway run",
 		Class:           RecoveryClassReviewAlignment,
 		Priority:        5,
 		SplitDetail:     true,
@@ -921,7 +917,6 @@ var diagnosticOnlyReasonCodes = map[string]struct{}{
 	// calls BuildRecovery). The RepairHint command is noted for traceability.
 	"multiple_active_changes":              {}, // RepairHint: slipway status
 	"execution_interrupted":                {}, // RepairHint: slipway run --resume
-	"orphan_task_evidence":                 {}, // RepairHint: slipway repair
 	"orphan_bundle_directory":              {}, // RepairHint: inspect/remove the orphan bundle manually
 	"task_evidence_unreadable":             {}, // RepairHint: regenerate execution evidence (slipway run)
 	"workspace_scope_config_missing":       {}, // RepairHint: slipway repair
@@ -1010,7 +1005,10 @@ func BuildRecovery(blockers []ReasonCode) *RecoverySummary {
 	for _, key := range order {
 		steps = append(steps, recoveryStepForGroup(groups[key]))
 	}
-	primary := selectPrimaryStep(steps)
+	sort.SliceStable(steps, func(i, j int) bool {
+		return lessRecoveryStep(steps[i], steps[j])
+	})
+	primary := steps[0]
 	return &RecoverySummary{
 		PrimaryCommand: primary.Command,
 		PrimaryAction:  primary.Remediation,
@@ -1218,19 +1216,6 @@ func tidyTemplate(s string) string {
 		s = strings.ReplaceAll(s, p, p[1:])
 	}
 	return strings.TrimSpace(s)
-}
-
-// selectPrimaryStep picks the single primary recovery step by static class
-// priority, breaking ties by severity (error before warning) then code, so the
-// selection is deterministic and independent of blocker ordering.
-func selectPrimaryStep(steps []RecoveryStep) RecoveryStep {
-	best := steps[0]
-	for _, step := range steps[1:] {
-		if lessRecoveryStep(step, best) {
-			best = step
-		}
-	}
-	return best
 }
 
 func lessRecoveryStep(a, b RecoveryStep) bool {

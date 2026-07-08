@@ -1745,7 +1745,7 @@ func TestPromptSurfaceTemplateContracts(t *testing.T) {
 	t.Run("fix body distinguishes reexecution mode", func(t *testing.T) {
 		content := renderPromptSurfaceForTest(t, "commands/command-entry.md.tmpl", "fix", "command-fix-body", "claude")
 		assert.Contains(t, content, "Ordinary `fix` discovery does not advance lifecycle state")
-		assert.Contains(t, content, "`fix --start-reexecution` is the explicit review-driven reexecution mode")
+		assert.Contains(t, content, "S3 task-plan amendments")
 		assert.Contains(t, content, "--start-reexecution")
 	})
 

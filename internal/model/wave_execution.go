@@ -80,6 +80,13 @@ func (p *WavePlan) Normalize() {
 	}
 }
 
+// StructuralHash returns the normalized task-plan structural hash used to
+// compare a persisted wave plan with the current tasks.md projection.
+func (p WavePlan) StructuralHash() string {
+	p.Normalize()
+	return p.EffectiveStructuralHash
+}
+
 func (p WavePlan) Validate() error {
 	if p.Version != WavePlanVersion {
 		return fmt.Errorf("version must be %d", WavePlanVersion)

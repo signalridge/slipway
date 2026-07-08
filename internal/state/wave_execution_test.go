@@ -256,6 +256,60 @@ func writeBundleTasksForTest(t *testing.T, root string, change model.Change, tas
 	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "tasks.md"), []byte(tasksMD), 0o644))
 }
 
+func TestCurrentTasksPlanDriftFromWavePlanIgnoresEmptyPlanHashes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty structural hash is unknown not drift", func(t *testing.T) {
+		t.Parallel()
+
+		root := createRuntimeLayout(t)
+		change := saveActiveChangeForTest(t, root, "wave-drift-empty-structural")
+		writeBundleTasksForTest(t, root, change, oneTaskMD)
+		plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+		require.NoError(t, err)
+
+		writeBundleTasksForTest(t, root, change, twoIndependentTasksMD)
+		currentScope, err := CurrentTasksPlanScopeState(root, change)
+		require.NoError(t, err)
+		plan.TasksPlanHash = ""
+		plan.TasksPlanStructuralHash = ""
+		plan.EffectiveStructuralHash = ""
+		plan.TasksPlanScopeHash = currentScope
+		require.NoError(t, saveWavePlanForTest(root, change.Slug, plan))
+
+		drift, err := CurrentTasksPlanDriftFromWavePlan(root, change)
+		require.NoError(t, err)
+		assert.True(t, drift.HasWavePlan)
+		assert.False(t, drift.StructuralDrift)
+		assert.False(t, drift.Drifted())
+	})
+
+	t.Run("empty scope hash is unknown not drift", func(t *testing.T) {
+		t.Parallel()
+
+		root := createRuntimeLayout(t)
+		change := saveActiveChangeForTest(t, root, "wave-drift-empty-scope")
+		writeBundleTasksForTest(t, root, change, oneTaskMD)
+		plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+		require.NoError(t, err)
+
+		writeBundleTasksForTest(t, root, change, "# Tasks\n\n- [ ] `t-01` solo\n  - target_files: [\"b.go\"]\n  - task_kind: code\n")
+		currentStructural, err := CurrentTasksPlanStructuralState(root, change)
+		require.NoError(t, err)
+		plan.TasksPlanHash = currentStructural
+		plan.TasksPlanStructuralHash = currentStructural
+		plan.EffectiveStructuralHash = currentStructural
+		plan.TasksPlanScopeHash = ""
+		require.NoError(t, saveWavePlanForTest(root, change.Slug, plan))
+
+		drift, err := CurrentTasksPlanDriftFromWavePlan(root, change)
+		require.NoError(t, err)
+		assert.True(t, drift.HasWavePlan)
+		assert.False(t, drift.ScopeDrift)
+		assert.False(t, drift.Drifted())
+	})
+}
+
 func TestMaterializeWavePlanMarksMultiTaskWaveParallel(t *testing.T) {
 	t.Parallel()
 

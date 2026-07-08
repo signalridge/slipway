@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -976,6 +977,58 @@ func TestStaleResearchOnlyDoesNotBlockPastS1Plan(t *testing.T) {
 	}
 }
 
+func TestStaleResearchOnlyDemotesRuntimeActionPastS1Plan(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	controls := []model.ControlActivation{
+		makeControl(model.ControlResearch, model.ControlModeBlocking, model.ControlScopeDiscovery),
+	}
+
+	for _, stateName := range []model.WorkflowState{model.StateS2Implement, model.StateS3Review} {
+		stateName := stateName
+		t.Run(string(stateName), func(t *testing.T) {
+			t.Parallel()
+
+			change := model.NewChange("runtime-stale-research-" + strings.ToLower(string(stateName)))
+			change.CurrentState = stateName
+			change.NeedsDiscovery = true
+			require.NoError(t, state.SaveChange(root, change))
+
+			bundleDir, err := state.GovernedBundleDir(root, change)
+			require.NoError(t, err)
+			require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\nConfirmed scope.\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte(validResearchForRuntimeActionTest()), 0o644))
+			writeVerificationForTest(t, root, change.Slug, skillIntakeClarification, model.VerificationRecord{
+				Verdict:   model.VerificationVerdictPass,
+				Timestamp: time.Now().UTC(),
+			})
+
+			actions := ResolveRuntimeRequiredActions(root, change, model.GovernanceSnapshot{ActiveControls: controls}, true)
+			require.Len(t, actions, 1)
+			assert.Equal(t, model.ControlResearch, actions[0].ControlID)
+			assert.Equal(t, model.ControlModeAdvisory, actions[0].Mode,
+				"stale-only research past S1 must not appear as an active blocking action")
+			assert.False(t, actions[0].Satisfied)
+			assert.Empty(t, RequiredActionBlockers(change, actions))
+		})
+	}
+}
+
+func validResearchForRuntimeActionTest() string {
+	return `# Research
+## Alternatives Considered
+Option A vs Option B.
+## Unknowns
+None remaining.
+## Assumptions
+Standard deployment.
+## Canonical References
+Internal docs.
+`
+}
+
 func TestResearchActionStillBlocksPastS1WhenNotOnlyStale(t *testing.T) {
 	t.Parallel()
 
@@ -1050,6 +1103,72 @@ Internal docs.
 	require.Len(t, actions, 1)
 	assert.True(t, actions[0].Satisfied, "intake + scope + research.md structure should satisfy the research control")
 	assert.Empty(t, RequiredActionBlockers(change, actions), "satisfied research action must not block S1_PLAN")
+}
+
+func TestResolveRuntimeRequiredActionsKeepsIntakeScopeEvidenceUnboundAfterExecution(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	change := model.NewChange("runtime-actions-scope-still-confirmed")
+	change.NeedsDiscovery = true
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(bundleDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "intent.md"), []byte("# Intent\nValidated scope\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bundleDir, "research.md"), []byte(`# Research
+## Alternatives Considered
+Option A vs Option B.
+## Unknowns
+None remaining.
+## Assumptions
+Standard deployment.
+## Canonical References
+Internal docs.
+`), 0o644))
+	require.NoError(t, state.SaveExecutionSummary(root, change.Slug, model.ExecutionSummary{
+		Version:           model.ExecutionSummaryVersion,
+		RunSummaryVersion: 3,
+		CapturedAt:        time.Now().UTC(),
+		OverallVerdict:    model.ExecutionVerdictPass,
+		CompletedTasks:    []string{"task-a"},
+		Tasks: []model.ExecutionTaskSummary{{
+			TaskID:     "task-a",
+			Verdict:    model.TaskVerdictPass,
+			TaskKind:   model.TaskKindCode,
+			CapturedAt: time.Now().UTC(),
+		}},
+	}))
+	writeVerificationForTest(t, root, change.Slug, skillIntakeClarification, model.VerificationRecord{
+		Verdict:    model.VerificationVerdictPass,
+		Blockers:   []model.ReasonCode{},
+		Timestamp:  time.Now().UTC(),
+		RunVersion: 0,
+		References: []string{"scope:confirmed"},
+	})
+
+	snap := model.GovernanceSnapshot{
+		Version: model.GovernanceSnapshotVersion,
+		Summary: model.SignalSummary{
+			BlastRadius: model.SignalLevelLow,
+		},
+		Traceability: model.TraceabilitySummary{
+			Status: model.TraceabilityStatusOK,
+		},
+		ActiveControls: []model.ControlActivation{
+			makeControl(model.ControlResearch, model.ControlModeBlocking, model.ControlScopeDiscovery),
+		},
+		ComputedAt: time.Now().UTC(),
+	}
+
+	actions := ResolveRuntimeRequiredActions(root, change, snap, false)
+	require.Len(t, actions, 1)
+	assert.True(t, actions[0].Satisfied, "S0 intake proof is not bound to later execution run versions")
+	assert.NotContains(t, actions[0].Description, "run_version_mismatch")
+	assert.Empty(t, RequiredActionBlockers(change, actions), "satisfied research action must not contradict done-ready routing")
 }
 
 func TestExecutionScopeDoesNotBlockDiscoveryAtS1(t *testing.T) {

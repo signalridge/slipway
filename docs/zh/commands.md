@@ -40,8 +40,9 @@
 `slipway fix` 是 S3 评审发现的修复面。它会发现评审反馈和对齐阻塞项，然后返回一个
 `repair_batch_id` 以及一份契约；如果配置了 `fix` slot，契约会包含 `contract.subagent`。宿主应优先使用
 这个 directive，否则回退到 native fresh-context 修复子代理。普通的发现过程不会推进生命周期状态；
-`slipway fix --start-reexecution` 才是显式的、由评审驱动的模式，它会重新打开 S2，并为实现修复生成
-一个全新的执行运行边界。宿主会先收集所选评审批次的发现，按根因将它们合并成一份修复简报，并且
+`slipway fix --start-reexecution` 是显式的评审驱动模式，它会重新打开 S2，并为实现修复生成
+一个全新的执行运行边界。对于 S3 阶段的任务计划修订，应使用 `slipway run`：它会在相同的
+`run_summary_version` 上就地重新物化 wave projection，并保留既有任务证据。只有在明确要丢弃既有任务证据时，才附加 `--discard-prior-evidence`。宿主会先收集所选评审批次的发现，按根因将它们合并成一份修复简报，并且
 在其他所选评审仍在报告期间，绝不能内联或逐条修复发现。等子代理改完代码、产物、测试或同一意图范围
 证据之后，重新运行受影响的所选评审，并在 `slipway review` 关闭该批次之前同时记录
 `context_origin:stage=review=<handle>` 和 `context_origin:stage=fix=<handle>`。
@@ -85,6 +86,7 @@ baseline 文档是有用的起步上下文，但不是经过编写的存量（br
 重写受管 `.gitignore` 块时自动迁移（`next`/`run`/`status`/`repair` 不会调和它）；包内的
 `events/`、`verification/`、遗留的逐变更 `evidence/` 以及 `.worktrees/` 路径仍然被忽略。运行时的
 任务证据存放在 `.git/slipway/runtime/changes/<slug>/evidence/` 下。
+临时任务结果 JSON 放在 `.slipway-tmp/`；该目录会被 git 忽略，并作为 scope-contract 豁免 scratch 披露，因此 `slipway evidence task --result-file` 不会制造无关的 dirty-worktree 阻塞。
 
 ## 情境命令
 

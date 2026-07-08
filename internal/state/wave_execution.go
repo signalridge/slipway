@@ -256,6 +256,55 @@ func CurrentTasksPlanScopeState(root string, change model.Change) (string, error
 	return hashes.Scope, err
 }
 
+// TasksPlanWavePlanDrift describes whether the current tasks.md projection has
+// drifted from the last materialized wave-plan.yaml cache.
+type TasksPlanWavePlanDrift struct {
+	HasWavePlan           bool
+	Plan                  model.WavePlan
+	StructuralDrift       bool
+	ScopeDrift            bool
+	CurrentStructuralHash string
+	PlanStructuralHash    string
+	CurrentScopeHash      string
+	PlanScopeHash         string
+}
+
+func (d TasksPlanWavePlanDrift) Drifted() bool {
+	return d.StructuralDrift || d.ScopeDrift
+}
+
+// CurrentTasksPlanDriftFromWavePlan is the single authority for comparing the
+// current tasks.md structural/scope projection to the materialized wave plan.
+// Empty hashes on either side are treated as unknown rather than drift so older
+// caches or future lazy hash formats do not produce cross-surface false alarms.
+func CurrentTasksPlanDriftFromWavePlan(root string, change model.Change) (TasksPlanWavePlanDrift, error) {
+	plan, err := LoadOptionalWavePlanForChange(root, change)
+	if err != nil || plan == nil {
+		return TasksPlanWavePlanDrift{}, err
+	}
+
+	currentStructural, currentScope, err := currentTasksPlanStructuralAndScopeState(root, change)
+	if err != nil {
+		return TasksPlanWavePlanDrift{}, err
+	}
+
+	planStructural := strings.TrimSpace(plan.StructuralHash())
+	planScope := strings.TrimSpace(plan.TasksPlanScopeHash)
+	currentStructural = strings.TrimSpace(currentStructural)
+	currentScope = strings.TrimSpace(currentScope)
+
+	return TasksPlanWavePlanDrift{
+		HasWavePlan:           true,
+		Plan:                  *plan,
+		StructuralDrift:       currentStructural != "" && planStructural != "" && currentStructural != planStructural,
+		ScopeDrift:            currentScope != "" && planScope != "" && currentScope != planScope,
+		CurrentStructuralHash: currentStructural,
+		PlanStructuralHash:    planStructural,
+		CurrentScopeHash:      currentScope,
+		PlanScopeHash:         planScope,
+	}, nil
+}
+
 // currentTasksPlanStructuralAndScopeState returns both the structural and scope
 // state from a single tasks.md read+parse. In-package callers that need both
 // (execution-repair drift, stale-planning diagnostics) use this instead of

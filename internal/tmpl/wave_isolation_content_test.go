@@ -71,6 +71,16 @@ func TestWaveOrchestrationDocumentsEngineSafetyModelAndBlockers(t *testing.T) {
 			assert.Containsf(t, lower, code, "%s must name engine blocker %q", surface.name, code)
 		}
 
+		detailContracts := []string{
+			"parallel_wave_changed_file_overlap:wave=<wave_index>:file=<file>:tasks=<tasks>",
+			"executor_agent_missing:wave=<wave_index>:task=<task_id>",
+		}
+		for _, contract := range detailContracts {
+			assert.Containsf(t, lower, contract, "%s must document self-describing blocker detail %q", surface.name, contract)
+		}
+		assert.NotContainsf(t, lower, "parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>", "%s must not document positional overlap detail", surface.name)
+		assert.NotContainsf(t, lower, "executor_agent_missing:<wave_index>:<task_id>", "%s must not document positional executor detail", surface.name)
+
 		// Single shared-worktree safety model: accurate target_files + exhaustive
 		// changed_files are the boundary; the engine records/gates but does not spawn.
 		assert.Containsf(t, lower, "shared", "%s must describe the shared worktree safety model", surface.name)

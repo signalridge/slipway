@@ -472,8 +472,12 @@ func buildNextViewForCommandWithReadContext(readCtx *stateReadContext, ref chang
 		}
 	}
 
-	// Attach wave plan when at S2_IMPLEMENT for governed changes.
+	// Attach the live tasks.md-derived wave projection in execution, and at review
+	// only when S3 convergence needs to expose the authoritative task map. Settled
+	// S3 handoffs stay lean and do not build diagnostic surfaces.
 	if view.CurrentState == model.StateS2Implement && governedChange != nil {
+		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle, view.config)
+	} else if view.CurrentState == model.StateS3Review && governedChange != nil && s3WavePlanProjectionNeeded(root, *governedChange, view.Blockers) {
 		view.InputContext.WavePlan = buildWavePlan(root, view.InputContext.ArtifactBundle, view.config)
 	}
 
@@ -807,6 +811,8 @@ func deriveConfirmationRequirement(view nextView) confirmationRequirement {
 	case hasReasonCode(view.Blockers, "run_slipway_done_to_finalize"):
 		return confirmationCommandRequired("run_slipway_done_to_finalize")
 	case hasReasonCode(view.Blockers, "run_slipway_run_to_advance"):
+		return confirmationCommandRequired("run_slipway_run_to_advance")
+	case hasReasonCode(view.Blockers, "s3_task_plan_drift_requires_inplace_convergence"):
 		return confirmationCommandRequired("run_slipway_run_to_advance")
 	case hasNonPacingBlocker(view):
 		return confirmationGovernanceBlocked()

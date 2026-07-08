@@ -182,7 +182,7 @@ func TestCommandRegistryContainsAllAdapterSkillIDs(t *testing.T) {
 		"fix command registry should expose the explicit reexecution mode")
 	require.NotEmpty(t, fixDef.Notes)
 	assert.Contains(t, fixDef.Notes[0], "Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state")
-	assert.Contains(t, fixDef.Notes[0], "`slipway fix --start-reexecution` explicitly reopens S2")
+	assert.Contains(t, fixDef.Notes[0], "S3 task-plan amendments should use `slipway run`")
 	assert.NotContains(t, CommandArguments("done"), "--json",
 		"done emits JSON unconditionally and should not publish a no-op --json flag")
 	assert.NotContains(t, CommandArguments("validate"), "--json",
@@ -2436,6 +2436,40 @@ func TestCommandEntryPrerequisitesAreCommandSpecific(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, initEntry, ".slipway.yaml` must exist")
 	assert.NotContains(t, initEntry, "an active change must exist")
+}
+
+func TestCommandSurfacesRenderCommandBoundaryMetadata(t *testing.T) {
+	t.Parallel()
+
+	entry, err := renderCommandEntry(toolRegistry["claude"], "fix")
+	require.NoError(t, err)
+	assert.Contains(t, entry, "## Command Boundary")
+	assert.Contains(t, entry, "`state_mutating`: `true`")
+	assert.Contains(t, entry, "`exclusive`: `true`")
+	assert.Contains(t, entry, "`parallel_safe`: `false`")
+	assert.Contains(t, entry, "`preflight_required`: `true`")
+	assert.Contains(t, entry, "`--start-reexecution`: `state_mutating=true`, `exclusive=true`, `destructive=true`, `parallel_safe=false`, `preflight_required=true`; alternative: `slipway run`")
+	assert.Contains(t, entry, "S3 task-plan amendments must use `slipway run`")
+
+	skill, err := renderCommandSkill(toolRegistry["codex"], "fix")
+	require.NoError(t, err)
+	assert.Contains(t, skill, "## Command Boundary")
+	assert.Contains(t, skill, "`--start-reexecution`: `state_mutating=true`, `exclusive=true`, `destructive=true`, `parallel_safe=false`, `preflight_required=true`; alternative: `slipway run`")
+	assert.Contains(t, skill, "S3 task-plan amendments must use `slipway run`")
+
+	repairEntry, err := renderCommandEntry(toolRegistry["claude"], "repair")
+	require.NoError(t, err)
+	assert.Contains(t, repairEntry, "## Command Boundary")
+	assert.Contains(t, repairEntry, "`state_mutating`: `true`")
+	assert.Contains(t, repairEntry, "`exclusive`: `false`")
+	assert.Contains(t, repairEntry, "`parallel_safe`: `true`")
+	assert.Contains(t, repairEntry, "`preflight_required`: `false`")
+
+	repairSkill, err := renderCommandSkill(toolRegistry["codex"], "repair")
+	require.NoError(t, err)
+	assert.Contains(t, repairSkill, "`exclusive`: `false`")
+	assert.Contains(t, repairSkill, "`parallel_safe`: `true`")
+	assert.Contains(t, repairSkill, "`preflight_required`: `false`")
 }
 
 func TestCommandEntriesLockNextAndRunExecutionContracts(t *testing.T) {

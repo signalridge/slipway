@@ -202,14 +202,7 @@ func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool 
 	if err != nil {
 		return false
 	}
-	plan.Normalize()
-	planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
-	}
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanHash)
-	}
+	planHash := plan.StructuralHash()
 	return planHash != "" && currentHash != "" && planHash != currentHash
 }
 

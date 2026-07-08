@@ -59,7 +59,7 @@ const (
 	// evidenceTaskResultFile struct or the no_op_justification validity envelope.
 	compactExecutorResultSchema = "task_id, verdict, evidence_ref, changed_files, optional no_op_justification (only for a pass code task that changed zero files), blockers, and optional session_id"
 
-	taskEvidenceResultFileRemediation = "Record task evidence with `slipway evidence task --result-file <path> --json` after the executor writes compact JSON with " + compactExecutorResultSchema + "; repeat --result-file to import multiple task results atomically."
+	taskEvidenceResultFileRemediation = "Write executor result JSON files under .slipway-tmp/ (git-ignored, scope-contract-exempt scratch) and record task evidence with `slipway evidence task --result-file .slipway-tmp/<task>.json --json` reporting " + compactExecutorResultSchema + "; repeat --result-file to import multiple task results atomically."
 	maxEvidenceTaskResultFileBytes    = int64(1 << 20)
 	maxEvidenceTaskResultFiles        = 256
 )
@@ -506,20 +506,21 @@ func makeEvidenceTaskCmd() *cobra.Command {
 						)
 					}
 					if addedAtReview {
-						// tasks.md names this task but the materialized wave projection does
-						// not: it was added at S3_REVIEW after S2 execution. Its evidence
-						// cannot be recorded in place and `slipway run` will not
-						// re-materialize a settled review, so the scope contract that demands
-						// it and this command contradict each other (#352). Reopening
-						// execution re-materializes the wave plan WITH the added task and
-						// makes its evidence recordable.
-						return newInvalidUsageError(
+						// tasks.md names this task but the materialized wave projection has
+						// not absorbed it yet. At S3_REVIEW the public forward path is to run
+						// in-place convergence first; that re-materializes the wave plan at
+						// the same run version and makes the folded task evidence-recordable
+						// without wiping prior task evidence.
+						return newCLIErrorWithReasons(
+							categoryInvalidUsage,
 							"evidence_task_unknown",
-							fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it was added after S2 execution", taskID),
-							"This task was added to tasks.md after S2 execution, so the current wave projection does not contain it and its evidence cannot be recorded in place. Reopen execution to re-materialize the wave plan with the added task, then record its evidence: `slipway fix --start-reexecution`. If the work belongs on an existing task, remove the added task from tasks.md.",
+							fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it must be absorbed before evidence can be recorded", taskID),
+							"Run `slipway run` to absorb the tasks.md change in place, then record evidence for the folded task. Do not use `slipway fix --start-reexecution` for S3 task-plan amendments unless you intentionally pass `--discard-prior-evidence` to discard prior task evidence.",
+							change.Slug,
+							s3InPlaceConvergenceReasonCodes([]string{taskID}),
 							map[string]any{
 								"task_id":                  taskID,
-								"remediation_command_hint": "slipway fix --start-reexecution",
+								"remediation_command_hint": "slipway run",
 							},
 						)
 					}
@@ -762,7 +763,7 @@ func makeEvidenceTaskCmd() *cobra.Command {
 	cmd.Flags().StringVar(&taskKindRaw, "task-kind", "", "Manual flag mode only: task kind: code, test, doc, ops, verification, investigation, other")
 	cmd.Flags().StringVar(&verdictRaw, "verdict", "", "Manual flag mode only: task verdict: pass, fail, blocked, incomplete, timeout")
 	cmd.Flags().StringVar(&evidenceRef, "evidence-ref", "", "Manual flag mode only: stable transcript, command, artifact, or note reference")
-	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON with "+compactExecutorResultSchema+"; may be repeated for atomic batch import; cannot be combined with manual task flags")
+	cmd.Flags().StringArrayVar(&resultFiles, "result-file", nil, "executor result JSON (write under .slipway-tmp/ to keep scratch git-ignored and scope-contract-exempt) with "+compactExecutorResultSchema+"; may be repeated for atomic batch import; cannot be combined with manual task flags")
 	cmd.Flags().StringArrayVar(&changedFiles, "changed-file", nil, "Manual flag mode only: changed file path for this task; may be repeated")
 	cmd.Flags().StringVar(&noOpJustification, "no-op-justification", "", "Manual flag mode only: justification for a pass code task that changed zero files because no safe behavior-preserving change exists; must not be combined with --changed-file")
 	cmd.Flags().StringArrayVar(&targetFiles, "target-file", nil, "Manual flag mode only: target file path for this task; may be repeated")
@@ -1001,19 +1002,21 @@ func prepareEvidenceTaskResultFiles(
 				)
 			}
 			if addedAtReview {
-				// tasks.md names this task but the materialized wave projection does
-				// not: it was added at S3_REVIEW after S2 execution, so its evidence
-				// cannot be recorded in place and `slipway run` will not re-materialize
-				// a settled review. Reopening execution re-materializes the wave plan
-				// WITH the added task and makes its evidence recordable (#352).
-				return nil, newInvalidUsageError(
+				// tasks.md names this task but the materialized wave projection has not
+				// absorbed it yet. At S3_REVIEW the public forward path is to run
+				// in-place convergence first; that re-materializes the wave plan at the
+				// same run version and makes the folded task evidence-recordable.
+				return nil, newCLIErrorWithReasons(
+					categoryInvalidUsage,
 					"evidence_task_unknown",
-					fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it was added after S2 execution", taskID),
-					"This task was added to tasks.md after S2 execution, so the current wave projection does not contain it and its evidence cannot be recorded in place. Reopen execution to re-materialize the wave plan with the added task, then record its evidence: `slipway fix --start-reexecution`. If the work belongs on an existing task, remove the added task from tasks.md.",
+					fmt.Sprintf("task %q is in tasks.md but not the current wave projection; it must be absorbed before evidence can be recorded", taskID),
+					"Run `slipway run` to absorb the tasks.md change in place, then record evidence for the folded task. Do not use `slipway fix --start-reexecution` for S3 task-plan amendments unless you intentionally pass `--discard-prior-evidence` to discard prior task evidence.",
+					change.Slug,
+					s3InPlaceConvergenceReasonCodes([]string{taskID}),
 					map[string]any{
 						"task_id":                  taskID,
 						"result_file":              resultFile,
-						"remediation_command_hint": "slipway fix --start-reexecution",
+						"remediation_command_hint": "slipway run",
 					},
 				)
 			}
@@ -1360,12 +1363,7 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 	if scanErr != nil {
 		switch scanErr.Kind {
 		case evidenceTaskRunSummaryVersionsMissingDir:
-			return 0, newInvalidUsageError(
-				"evidence_skill_run_summary_missing",
-				"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-				taskEvidenceResultFileRemediation,
-				map[string]any{"skill": progression.SkillWaveOrchestration},
-			)
+			return 0, newWaveOrchestrationTaskEvidenceMissingError(root, change)
 		case evidenceTaskRunSummaryVersionsReadDir, evidenceTaskRunSummaryVersionsReadFile:
 			return 0, newStateIntegrityError(
 				"evidence_skill_task_evidence_load_failed",
@@ -1393,12 +1391,7 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 		}
 	}
 	if len(versions) == 0 {
-		return 0, newInvalidUsageError(
-			"evidence_skill_run_summary_missing",
-			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-			taskEvidenceResultFileRemediation,
-			map[string]any{"skill": progression.SkillWaveOrchestration},
-		)
+		return 0, newWaveOrchestrationTaskEvidenceMissingError(root, change)
 	}
 	if len(versions) > 1 {
 		return 0, newInvalidUsageError(
@@ -1433,12 +1426,7 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 		)
 	}
 	if len(tasks) == 0 {
-		return 0, newInvalidUsageError(
-			"evidence_skill_run_summary_missing",
-			"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
-			taskEvidenceResultFileRemediation,
-			map[string]any{"skill": progression.SkillWaveOrchestration},
-		)
+		return 0, newWaveOrchestrationTaskEvidenceMissingError(root, change)
 	}
 	wavePlan, err := loadCurrentWavePlanForCommand(root, change)
 	if err != nil {
@@ -1461,10 +1449,13 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 		}
 	}
 	if blockers := progression.IncompleteExecutionTaskBlockers(wavePlan, runs); len(blockers) > 0 {
-		return 0, newInvalidUsageError(
+		return 0, newCLIErrorWithReasons(
+			categoryInvalidUsage,
 			"evidence_skill_task_evidence_incomplete",
 			"wave-orchestration evidence requires current task evidence for every planned task",
 			"Record task evidence for every planned task in the active execution run before recording wave-orchestration evidence.",
+			change.Slug,
+			blockers,
 			map[string]any{
 				"skill":               progression.SkillWaveOrchestration,
 				"run_summary_version": runVersion,
@@ -1473,6 +1464,22 @@ func waveOrchestrationTaskEvidenceRunVersion(root string, change model.Change) (
 		)
 	}
 	return runVersion, nil
+}
+
+func newWaveOrchestrationTaskEvidenceMissingError(root string, change model.Change) *CLIError {
+	reasons := []model.ReasonCode(nil)
+	if wavePlan, err := loadCurrentWavePlanForCommand(root, change); err == nil {
+		reasons = progression.IncompleteExecutionTaskBlockers(wavePlan, nil)
+	}
+	return newCLIErrorWithReasons(
+		categoryInvalidUsage,
+		"evidence_skill_run_summary_missing",
+		"wave-orchestration evidence requires task evidence before execution-summary.yaml exists",
+		taskEvidenceResultFileRemediation,
+		change.Slug,
+		reasons,
+		map[string]any{"skill": progression.SkillWaveOrchestration},
+	)
 }
 
 func validateEvidenceSkillStage(root string, change model.Change, def skill.Definition) error {
@@ -1813,7 +1820,7 @@ func evidenceSkillWrongStateRemediation(root string, change model.Change, def sk
 func postReviewReplacementEvidenceRemediation(root string, change model.Change, surface string) string {
 	reviewSkills := selectedReviewSkillsForRemediation(root, change)
 	return fmt.Sprintf(
-		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof for %s evidence, then rerun %s. If the work needs a fresh execution run (for example a task added to tasks.md at review that the wave projection does not contain), reopen execution with `slipway fix --start-reexecution`.",
+		"%s is S2-only after wave execution. For review-driven repairs or tests, record fresh proof for %s evidence, then rerun %s. If tasks.md added review-discovered tasks that the wave projection has not absorbed yet, run `slipway run` first so S3 converges in place without discarding prior task evidence.",
 		surface,
 		strings.Join(reviewSkills, ", "),
 		progression.SkillShipVerification,
@@ -2193,7 +2200,7 @@ func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, waveP
 			map[string]any{
 				"slug":                     change.Slug,
 				"active_run_summary":       wavePlan.RunSummaryVersion,
-				"remediation_command_hint": "slipway fix --start-reexecution",
+				"remediation_command_hint": "slipway evidence task --result-file <path>",
 			},
 		)
 	}
@@ -2207,7 +2214,7 @@ func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, waveP
 					"slug":                     change.Slug,
 					"active_run_summary":       wavePlan.RunSummaryVersion,
 					"existing_run_summary":     version,
-					"remediation_command_hint": "slipway fix --start-reexecution",
+					"remediation_command_hint": "slipway evidence task --result-file <path>",
 				},
 			)
 		}
@@ -2364,11 +2371,9 @@ func findEvidenceWavePlanTask(plan model.WavePlan, taskID string) (model.WavePla
 }
 
 // taskPlannedButNotInWavePlan reports whether taskID is declared by the current
-// tasks.md but absent from the materialized wave projection — i.e. it was added at
-// S3_REVIEW after S2 execution. Such a task cannot be evidenced in place, so the
-// public refresh is to reopen execution (`slipway fix --start-reexecution`). It is
-// restricted to S3_REVIEW, where the added task is the genuine dead end and the
-// reexecution route is valid.
+// tasks.md but absent from the materialized wave projection. At S3_REVIEW this
+// means the host must run in-place convergence first so the wave projection
+// absorbs the current tasks.md before task evidence is recorded.
 func taskPlannedButNotInWavePlan(root string, change model.Change, wavePlan model.WavePlan, taskID string) (bool, error) {
 	if change.CurrentState != model.StateS3Review {
 		return false, nil

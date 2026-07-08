@@ -53,7 +53,10 @@ use that directive when present, otherwise default to a native fresh-context
 repair subagent. Ordinary discovery does not advance lifecycle state;
 `slipway fix --start-reexecution` is the explicit review-driven
 mode that reopens S2 and materializes a fresh execution run boundary for
-implementation repairs. The host first collects the selected review
+implementation repairs. For S3 task-plan amendments, use `slipway run`
+instead: it re-materializes the wave projection in place at the same
+`run_summary_version` and preserves prior task evidence. Add
+`--discard-prior-evidence` only when intentionally discarding that evidence. The host first collects the selected review
 batch findings, consolidates them by root cause into one repair brief, and must
 not repair findings inline or one-by-one while other selected reviewers are still
 reporting. After the subagent changes code, artifacts, tests, or same-intent
@@ -105,7 +108,10 @@ state. Existing repositories auto-migrate the next time `slipway new`,
 block (`next`/`run`/`status`/`repair` do not reconcile it); bundle-local
 `events/`, `verification/`, legacy per-change `evidence/`, and `.worktrees/`
 paths stay ignored. Runtime task evidence lives under
-`.git/slipway/runtime/changes/<slug>/evidence/`.
+`.git/slipway/runtime/changes/<slug>/evidence/`. Put transient task result
+JSON files under `.slipway-tmp/`; the directory is git-ignored and disclosed as
+scope-contract-exempt scratch so `slipway evidence task --result-file` does not
+create unrelated dirty-worktree blockers.
 
 ## Situational Commands
 

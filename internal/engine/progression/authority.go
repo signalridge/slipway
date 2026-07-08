@@ -400,21 +400,19 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	unresolved = append(unresolved, attestationBlockers...)
 	unresolved = append(unresolved, independencePresenceBlockers...)
 	unresolved = append(unresolved, orderingBlockers...)
-	// ROOT-cause naming for an S3 task-plan-drift dead end (#344/#352): a task
-	// added to tasks.md at review that the materialized wave plan does not contain
-	// cannot be evidenced in place, and a settled `slipway run` will not
-	// re-materialize it, so the selected reviewers and ship-verification go stale
-	// with no in-place exit. The stale-skill / ship-missing symptoms above are the
-	// downstream effects; emitting the dedicated reexecution root here, gated on the
-	// stale cascade actually being present (so an UNSETTLED review — whose tasks
-	// `slipway run` still folds in place — is not pushed to the heavier reopen),
-	// lets recovery name `slipway fix --start-reexecution` as the primary step.
+	// ROOT-cause naming for S3 task-plan drift (#427): review-time amendments to
+	// tasks.md that the materialized wave plan has not absorbed yet must be folded
+	// through S3 in-place convergence before task evidence can be
+	// recorded. The stale-skill / ship-missing symptoms above are downstream
+	// effects; emitting the dedicated in-place convergence root here, gated on the
+	// stale cascade actually being present, lets recovery name `slipway run` as the
+	// primary step instead of the destructive reexecution hammer.
 	staleCascade := staleReviewOrShipSkillCascade(reviewAuthority.Blockers, verifySkillBlockers)
-	reexecutionBlockers, err := s3TaskPlanDriftReexecutionBlockers(root, change, staleCascade)
+	convergenceBlockers, err := s3TaskPlanDriftInPlaceConvergenceBlockers(root, change, staleCascade)
 	if err != nil {
 		return ShipAuthority{}, err
 	}
-	unresolved = append(unresolved, reexecutionBlockers...)
+	unresolved = append(unresolved, convergenceBlockers...)
 	unresolved = model.NormalizeReasonCodes(unresolved)
 
 	// Distinguish a present-but-stale ship-verification record from a genuinely
@@ -502,19 +500,23 @@ func staleReviewOrShipSkillCascade(blockerSets ...[]model.ReasonCode) bool {
 	return false
 }
 
-// s3AddedTaskPlanDriftTaskIDs returns tasks.md task IDs absent from the
-// materialized wave plan at S3_REVIEW — tasks added after S2 execution that
-// cannot be evidenced in place. Empty outside S3_REVIEW or when no wave plan is
-// materialized. Single detector for the added-task dead end: the reexecution root
-// (authority) and the amendment-diagnostic suppression (readiness) both key off it.
-func s3AddedTaskPlanDriftTaskIDs(root string, change model.Change) ([]string, error) {
+// s3TaskPlanDriftSubjects returns stable recovery subjects for S3_REVIEW
+// task-plan drift. Added tasks are named individually; edited/restructured-only
+// drift falls back to tasks.md because the in-place convergence operation absorbs
+// the full current task projection, not one independently executable task.
+func s3TaskPlanDriftSubjects(root string, change model.Change) ([]string, error) {
 	if change.CurrentState != model.StateS3Review {
 		return nil, nil
 	}
-	plan, err := state.LoadOptionalWavePlanForChange(root, change)
-	if err != nil || plan == nil {
+	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
+	if err != nil || !drift.HasWavePlan {
 		return nil, err
 	}
+	if !drift.Drifted() {
+		return nil, nil
+	}
+	plan := drift.Plan
+
 	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
 	if err != nil {
 		return nil, err
@@ -523,33 +525,37 @@ func s3AddedTaskPlanDriftTaskIDs(root string, change model.Change) ([]string, er
 	for _, id := range plan.TaskIDs() {
 		inPlan[strings.TrimSpace(id)] = struct{}{}
 	}
-	var added []string
+	var subjects []string
 	for _, id := range planned {
-		if _, ok := inPlan[strings.TrimSpace(id)]; !ok {
-			added = append(added, strings.TrimSpace(id))
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		if _, ok := inPlan[id]; !ok {
+			subjects = append(subjects, id)
 		}
 	}
-	return added, nil
+	if len(subjects) == 0 {
+		subjects = append(subjects, "tasks.md")
+	}
+	slices.Sort(subjects)
+	return subjects, nil
 }
 
-// s3TaskPlanDriftReexecutionBlockers emits the ROOT reexecution blocker, one per
-// added-task subject, when at S3_REVIEW tasks.md names a task the materialized
-// wave plan does not contain AND the stale review/ship cascade is present. Such a
-// task cannot be evidenced in place (evidence task rejects it as outside the wave
-// projection) and a settled `slipway run` will not re-materialize it, so reopening
-// execution is the only public refresh. Empty outside S3_REVIEW, when no wave plan
-// is materialized yet, or when every planned task is already in the plan.
-func s3TaskPlanDriftReexecutionBlockers(root string, change model.Change, staleCascade bool) ([]model.ReasonCode, error) {
+// s3TaskPlanDriftInPlaceConvergenceBlockers emits the ROOT in-place convergence
+// blocker when S3_REVIEW tasks.md no longer matches the materialized wave plan
+// AND the stale review/ship cascade is present. Empty outside S3_REVIEW, when no
+// wave plan is materialized yet, or when tasks.md already matches the plan.
+func s3TaskPlanDriftInPlaceConvergenceBlockers(root string, change model.Change, staleCascade bool) ([]model.ReasonCode, error) {
 	if change.CurrentState != model.StateS3Review || !staleCascade {
 		return nil, nil
 	}
-	added, err := s3AddedTaskPlanDriftTaskIDs(root, change)
+	subjects, err := s3TaskPlanDriftSubjects(root, change)
 	if err != nil {
 		return nil, err
 	}
 	var blockers []model.ReasonCode
-	for _, id := range added {
-		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", id))
+	for _, subject := range subjects {
+		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_inplace_convergence", subject))
 	}
 	return model.NormalizeReasonCodes(blockers), nil
 }

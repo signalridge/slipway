@@ -181,18 +181,12 @@ func evaluateGovernanceReadinessBaseWithReaders(
 		readiness.EvidenceFreshness = state.ProjectExecutionFreshnessForState(effectiveState, execCtx.Diagnostics)
 	}
 	if state.ExecutionFreshnessIsS3TaskPlanAmendment(effectiveState, execCtx.Diagnostics) {
-		// For an ADDED task (in tasks.md, absent from the wave plan) the "continue
-		// without rerunning S2" guidance is wrong — that task can only be evidenced by
-		// reopening execution, which the s3_task_plan_drift_requires_reexecution root
-		// and its recovery already direct. Only surface the amendment diagnostic for the
-		// edited-existing-task case, where the in-place review path is valid.
-		addedDrift, err := s3AddedTaskPlanDriftTaskIDs(root, evaluationChange)
-		if err != nil {
-			return GovernanceReadiness{}, err
-		}
-		if len(addedDrift) == 0 {
-			readiness.Diagnostics = append(readiness.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
-		}
+		// S3 task-plan amendments converge in place: `slipway run` re-materializes
+		// the wave projection at the same run version, after which only added or
+		// changed task evidence needs to be recorded. Surface the diagnostic for both
+		// edited existing tasks and newly added tasks so recovery does not require
+		// private sequencing knowledge.
+		readiness.Diagnostics = append(readiness.Diagnostics, state.S3TaskPlanAmendmentDiagnostic)
 	}
 
 	paths, err := state.ResolveChangePaths(root, evaluationChange)
@@ -900,13 +894,13 @@ func WorkspaceChangedFilesForDoneArchive(paths state.ResolvedChangePaths) []stri
 	return changed
 }
 
-// workspaceChangedFiles returns the Git-visible changed files for scope-contract
-// and dirty-advisory accounting. The second result, exemptContext, is the set of
-// dirty codebase-map context artifacts (artifacts/codebase/**) that the
-// scope-contract filter intentionally drops from the changed set. It is collected
-// in the same pass that drops them — and only on the scope-contract path
-// (opts.includeLocalState == false) — so the disclosed exemption is exactly the
-// set filtered out, never a separately re-derived (and potentially divergent) one.
+// workspaceChangedFiles returns changed files for scope-contract and
+// dirty-advisory accounting. The second result, exemptContext, is the set of
+// dirty context/scratch artifacts (artifacts/codebase/** plus the documented
+// evidence scratch locations) that the scope-contract filter intentionally drops
+// from the changed set. Scope-contract scans also include ignored
+// .slipway-tmp/** scratch files so the documented exemption stays observable
+// after the managed local .gitignore block hides them from ordinary Git status.
 // Both results are unique-sorted; either may be nil.
 func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChangedFilesOptions) (changed, exemptContext []string) {
 	workspaceRoot := strings.TrimSpace(paths.WorkspaceRoot)
@@ -918,6 +912,9 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 		if opts.includeLocalState || scopeContractUntrackedChangedFile(workspaceRoot, file) {
 			files = append(files, file)
 		}
+	}
+	if !opts.includeLocalState {
+		files = append(files, scopeContractIgnoredEvidenceScratchFiles(workspaceRoot)...)
 	}
 	if len(files) == 0 {
 		return nil, nil
@@ -945,7 +942,7 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 			if bundleRel != "" && bundleRel != "." && (file == bundleRel || strings.HasPrefix(file, bundleRel+"/")) {
 				continue
 			}
-			if !opts.includeLocalState && scopeContractContextArtifactChangedFile(file) {
+			if !opts.includeLocalState && scopeContractExemptChangedFile(file) {
 				exempt = append(exempt, file)
 				continue
 			}
@@ -961,10 +958,23 @@ func workspaceChangedFiles(paths state.ResolvedChangePaths, opts workspaceChange
 	return changed, exemptContext
 }
 
+func scopeContractIgnoredEvidenceScratchFiles(workspaceRoot string) []string {
+	return gitNameOnly(workspaceRoot, "ls-files", "--others", "--ignored", "--exclude-standard", "--", ".slipway-tmp")
+}
+func scopeContractExemptChangedFile(file string) bool {
+	return scopeContractContextArtifactChangedFile(file) || scopeContractEvidenceScratchChangedFile(file)
+}
+
 func scopeContractContextArtifactChangedFile(file string) bool {
 	file = filepath.ToSlash(strings.TrimSpace(file))
 	file = strings.TrimPrefix(file, "./")
 	return file == "artifacts/codebase" || strings.HasPrefix(file, "artifacts/codebase/")
+}
+
+func scopeContractEvidenceScratchChangedFile(file string) bool {
+	file = filepath.ToSlash(strings.TrimSpace(file))
+	file = strings.TrimPrefix(file, "./")
+	return file == ".slipway-tmp" || strings.HasPrefix(file, ".slipway-tmp/")
 }
 
 func scopeContractUntrackedChangedFile(workspaceRoot, file string) bool {

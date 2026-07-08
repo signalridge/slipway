@@ -16,15 +16,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestS3AddedTaskDriftRoutesShipRecoveryToReexecution is the end-to-end guard for
-// #344/#352: when a task is added to tasks.md at a ship-ready S3_REVIEW, the
-// materialized wave plan cannot contain it, so its evidence cannot be recorded in
-// place and the selected reviewers + ship-verification go stale. The recovery must
-// (ASK 1) name `slipway fix --start-reexecution` as the PRIMARY action via the
-// dedicated reexecution root, (ASK 2) report the present-but-stale ship record as
-// ship_verification_evidence_stale rather than the misleading _missing, and (ASK 4)
-// route `evidence task` for the added task to reexecution instead of a dead end.
-func TestS3AddedTaskDriftRoutesShipRecoveryToReexecution(t *testing.T) {
+// TestS3AddedTaskDriftRoutesShipRecoveryToInPlaceConvergence is the end-to-end
+// guard for #427: when a task is added to tasks.md at a ship-ready S3_REVIEW, the
+// materialized wave plan has not absorbed it yet. Recovery must name `slipway run`
+// as the primary in-place convergence action, preserve the present-but-stale ship
+// record as ship_verification_evidence_stale, and route premature `evidence task`
+// attempts to run convergence before recording the added task's evidence.
+func TestS3AddedTaskDriftRoutesShipRecoveryToInPlaceConvergence(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -64,16 +62,16 @@ func TestS3AddedTaskDriftRoutesShipRecoveryToReexecution(t *testing.T) {
 		require.NoError(t, err)
 		specs := model.ReasonSpecs(ship.Result.ReasonCodes)
 		assert.Equal(t, model.GateStatusBlocked, ship.Result.Status)
-		assert.Contains(t, specs, "s3_task_plan_drift_requires_reexecution:t-07",
-			"the added-task drift root must be named for the reexecution route")
+		assert.Contains(t, specs, "s3_task_plan_drift_requires_inplace_convergence:t-07",
+			"the added-task drift root must be named for the in-place convergence route")
 		assert.Contains(t, specs, "ship_verification_evidence_stale",
 			"a present-but-stale ship record must be honest, not reported missing")
 		assert.NotContains(t, specs, "ship_verification_evidence_missing")
 
 		recovery := model.BuildRecovery(ship.Result.ReasonCodes)
 		require.NotNil(t, recovery)
-		assert.Equal(t, "slipway fix --start-reexecution", recovery.PrimaryCommand,
-			"reexecution must be the primary recovery step over the stale-skill symptoms")
+		assert.Equal(t, "slipway run", recovery.PrimaryCommand,
+			"in-place convergence must be the primary recovery step over the stale-skill symptoms")
 
 		raw, err := json.Marshal(map[string]any{
 			"task_id":       "t-07",
@@ -93,8 +91,12 @@ func TestS3AddedTaskDriftRoutesShipRecoveryToReexecution(t *testing.T) {
 		cliErr := asCLIError(execErr)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_task_unknown", cliErr.ErrorCode)
-		assert.Contains(t, cliErr.Remediation, "slipway fix --start-reexecution",
-			"the added-task evidence dead end must name the reexecution route")
+		assert.Contains(t, cliErr.Remediation, "slipway run",
+			"the added-task evidence precondition must name the in-place convergence route")
+		assert.Equal(t, "slipway run", cliErr.Details["remediation_command_hint"])
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand,
+			"REQ-005: premature added-task evidence must surface recovery.primary_command=slipway run so JSON clients follow the in-place convergence route")
 	})
 }
 

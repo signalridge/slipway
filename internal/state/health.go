@@ -14,8 +14,10 @@ import (
 )
 
 // HealthFinding represents a single health diagnostic result.
-// Repairable=true means the issue can be resolved by `slipway repair` (cleanup).
-// Repairable=false means operator intervention is required (contract violation).
+// Repairable=true means Slipway can surface a concrete CLI recovery command in
+// RepairHint (usually `slipway repair`, but stage-specific recoveries may point
+// at another governed command). Repairable=false means operator intervention is
+// required before the diagnostic can be resolved.
 type HealthFinding struct {
 	Severity             model.ReasonSeverity `json:"severity" yaml:"severity"`
 	Category             string               `json:"category" yaml:"category"`
@@ -315,25 +317,27 @@ func executionContractHealthFindings(root string, change model.Change) ([]Health
 		}
 		plan = loadedPlan
 
-		plan.Normalize()
-		planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
-		if planHash == "" {
-			planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+		drift, driftErr := CurrentTasksPlanDriftFromWavePlan(root, change)
+		if driftErr != nil {
+			return findings, driftErr
 		}
-		if planHash == "" {
-			planHash = strings.TrimSpace(plan.TasksPlanHash)
-		}
-		if currentHash, err := CurrentTasksPlanStructuralState(root, change); err == nil &&
-			planHash != "" &&
-			currentHash != planHash {
+		if drift.Drifted() {
+			hint := wavePlanRepairHint()
+			if change.CurrentState == model.StateS3Review {
+				hint = "Run `slipway run` to converge the S3 task-plan amendment in place and preserve existing execution evidence."
+			}
+			detail := drift.CurrentStructuralHash
+			if !drift.StructuralDrift {
+				detail = drift.CurrentScopeHash
+			}
 			findings = append(findings, HealthFinding{
 				Severity:   model.ReasonSeverityError,
 				Category:   "wave_execution",
 				Slug:       change.Slug,
 				Message:    "Derived wave plan is stale against tasks.md",
 				Repairable: true,
-				RepairHint: wavePlanRepairHint(),
-				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_drift", currentHash)},
+				RepairHint: hint,
+				Reasons:    []model.ReasonCode{model.NewReasonCode("wave_plan_drift", detail)},
 			})
 			return findings, nil
 		}

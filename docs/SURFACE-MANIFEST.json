@@ -76,63 +76,158 @@
       "name": "abort",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway abort"
+      "token": "slipway abort",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "cancel",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway cancel"
+      "token": "slipway cancel",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "codebase-map",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway codebase-map"
+      "token": "slipway codebase-map",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
       "name": "config",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway config"
+      "token": "slipway config",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
       "name": "delete",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway delete"
+      "token": "slipway delete",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true,
+        "modes": [
+          {
+            "name": "--yes",
+            "state_mutating": true,
+            "exclusive": true,
+            "destructive": true,
+            "parallel_safe": false,
+            "preflight_required": true,
+            "alternative": "slipway delete (dry-run)",
+            "notes": [
+              "Default dry-run prints a plan and deletes nothing; `--yes` executes the irreversible discard of governed state.",
+              "Reads of `slipway status`/`slipway next` must complete before invoking this mode."
+            ]
+          },
+          {
+            "name": "--force",
+            "state_mutating": true,
+            "exclusive": true,
+            "destructive": true,
+            "parallel_safe": false,
+            "preflight_required": true,
+            "notes": [
+              "Overrides the dirty/unsafe-untracked refusal for `--worktree`; use only after inspecting the flagged changes."
+            ]
+          }
+        ]
+      }
     },
     {
       "kind": "command",
       "name": "done",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway done"
+      "token": "slipway done",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "evidence",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway evidence"
+      "token": "slipway evidence",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "fix",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway fix"
+      "token": "slipway fix",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true,
+        "modes": [
+          {
+            "name": "--start-reexecution",
+            "state_mutating": true,
+            "exclusive": true,
+            "destructive": true,
+            "parallel_safe": false,
+            "preflight_required": true,
+            "alternative": "slipway run",
+            "notes": [
+              "Reads of `slipway next`, command docs, and host skill guidance must complete before invoking this mode.",
+              "S3 task-plan amendments must use `slipway run` unless `--discard-prior-evidence` is supplied intentionally; this mode is for explicit fresh execution boundaries that discard prior task evidence."
+            ]
+          }
+        ]
+      }
     },
     {
       "kind": "command",
       "name": "handoff",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway handoff"
+      "token": "slipway handoff",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
@@ -146,21 +241,39 @@
       "name": "hook",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway hook"
+      "token": "slipway hook",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
       "name": "implement",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway implement"
+      "token": "slipway implement",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "init",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway init"
+      "token": "slipway init",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
@@ -174,14 +287,26 @@
       "name": "intake",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway intake"
+      "token": "slipway intake",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "new",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway new"
+      "token": "slipway new",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
@@ -195,35 +320,65 @@
       "name": "plan",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway plan"
+      "token": "slipway plan",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "preset",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway preset"
+      "token": "slipway preset",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "repair",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway repair"
+      "token": "slipway repair",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",
       "name": "review",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway review"
+      "token": "slipway review",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
       "name": "run",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway run"
+      "token": "slipway run",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": false,
+        "exclusive": true,
+        "preflight_required": true
+      }
     },
     {
       "kind": "command",
@@ -237,7 +392,13 @@
       "name": "tool",
       "source": "internal/toolgen/toolgen.go:commandRegistry",
       "docs": "docs/reference/commands.md",
-      "token": "slipway tool"
+      "token": "slipway tool",
+      "command_boundary": {
+        "state_mutating": true,
+        "parallel_safe": true,
+        "exclusive": false,
+        "preflight_required": false
+      }
     },
     {
       "kind": "command",

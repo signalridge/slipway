@@ -52,6 +52,7 @@ type validateView struct {
 	TasksContract               *artifactContractView                `json:"tasks_contract,omitempty"`
 	DecisionContract            *artifactContractView                `json:"decision_contract,omitempty"`
 	ScopeContract               *scopeContractView                   `json:"scope_contract,omitempty"`
+	WavePlan                    *wavePlanView                        `json:"wave_plan,omitempty"`
 	Diagnostics                 []string                             `json:"diagnostics,omitempty"`
 	Mode                        string                               `json:"mode,omitempty"`
 	HydrateReferences           []string                             `json:"hydrate_references,omitempty"`
@@ -131,6 +132,7 @@ func buildValidateViewBase(
 		SkillsReady:   skillsReady,
 		Blockers:      model.NormalizeReasonCodes(blockers),
 		Recovery:      buildValidateRecovery(blockers, nil),
+		WavePlan:      buildValidateWavePlan(root, change),
 		CanAdvance:    len(blockers) == 0,
 		Diagnostics:   diagnostics,
 		EvidenceFreshness: projectFreshnessForExecMode(
@@ -144,6 +146,18 @@ func buildValidateViewBase(
 
 func buildValidateRecovery(blockers []model.ReasonCode, gateDetails map[string]model.GateRecord) *model.RecoverySummary {
 	return model.BuildRecovery(appendValidateRecoveryInputs(blockers, gateDetails))
+}
+
+func buildValidateWavePlan(root string, change model.Change) *wavePlanView {
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return nil
+	}
+	cfg, err := loadConfigAtRoot(root)
+	if err != nil {
+		return buildWavePlan(root, bundleDir, model.Config{})
+	}
+	return buildWavePlan(root, bundleDir, cfg)
 }
 
 func makeValidateCmd() *cobra.Command {

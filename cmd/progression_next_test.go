@@ -164,7 +164,7 @@ func TestNextS3ReviewWithPassingPeerEvidenceReportsGoalVerificationHandoff(t *te
 	}
 }
 
-func TestNextStalePlanningEvidenceReportsReviewAlignmentHandoff(t *testing.T) {
+func TestNextStalePlanningEvidenceReportsS3InPlaceConvergenceCommand(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -173,16 +173,19 @@ func TestNextStalePlanningEvidenceReportsReviewAlignmentHandoff(t *testing.T) {
 	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
 	require.NoError(t, err)
 
-	require.NotNil(t, view.NextSkill)
+	assert.Nil(t, view.NextSkill)
 	assert.Equal(t, model.StateS3Review, view.CurrentState)
-	assert.NotEqual(t, progression.SkillPlanAudit, view.NextSkill.Name)
 	reasons := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
 	assert.NotContains(t, reasons, "required_skill_stale:plan-audit:")
 	assert.NotContains(t, reasons, "required_skill_stale:wave-orchestration:")
 	assert.NotContains(t, reasons, "required_skill_stale:intake-clarification:")
 	assert.NotContains(t, reasons, state.StalePlanningEvidenceBlockerToken)
-	assert.NotContains(t, reasons, "run_slipway_run_to_advance:"+string(model.StateS3Review))
-	assert.Equal(t, "review_batch", view.ConfirmationRequirement.Reason)
+	assert.Contains(t, reasons, "s3_task_plan_drift_requires_inplace_convergence:tasks.md")
+	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	assert.Equal(t, "command", view.ConfirmationRequirement.NextActionKind)
+	assert.Equal(t, "slipway run", view.ConfirmationRequirement.NextCommand)
+	require.NotNil(t, view.Recovery)
+	assert.Equal(t, "slipway run", view.Recovery.PrimaryCommand)
 	require.NotNil(t, view.FreshnessDiagnostics)
 	assert.Equal(t, "fresh", view.FreshnessDiagnostics.Status)
 	assert.Empty(t, view.FreshnessDiagnostics.StalePairs)

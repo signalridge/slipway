@@ -22,6 +22,7 @@ const (
 // Existing repositories auto-migrate when EnsureLocalStateGitIgnore next rewrites
 // the managed block (on `slipway new`/`codebase-map`/`init`).
 var localStateGitIgnorePatterns = []string{
+	"/.slipway-tmp/",
 	"/artifacts/changes/**/evidence/",
 	"/artifacts/changes/**/events/",
 	"/artifacts/changes/**/execution/",

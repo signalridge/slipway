@@ -35,11 +35,10 @@ type Report struct {
 	OutOfScopeFiles         []string `json:"out_of_scope_files,omitempty"`
 	MissingContractTasks    []string `json:"missing_contract_tasks,omitempty"`
 	MissingChangedFileTasks []string `json:"missing_changed_file_tasks,omitempty"`
-	// ExemptContextFiles discloses the dirty codebase-map (artifacts/codebase/**)
-	// files the scope-contract filter intentionally drops from ChangedFiles. The
-	// exemption is preserved (these files stay out of ChangedFiles /
-	// OutOfScopeFiles and never affect Status); this field only makes the
-	// otherwise-silent exemption observable.
+	// ExemptContextFiles discloses dirty context/scratch files the scope-contract
+	// filter intentionally drops from ChangedFiles. The exemption is preserved
+	// (these files stay out of ChangedFiles / OutOfScopeFiles and never affect
+	// Status); this field only makes the otherwise-silent exemption observable.
 	ExemptContextFiles []string `json:"exempt_context_files,omitempty"`
 	// NoOpJustifiedTasks discloses the pass code tasks that the Scope Contract
 	// exempted from the changed-files requirement because they carry a

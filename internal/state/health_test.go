@@ -368,6 +368,52 @@ func TestCollectHealthReportIgnoresPersistedWavePlanDriftDuringS2(t *testing.T) 
 	assert.False(t, found, "S2 health must ignore stale persisted wave-plan cache")
 }
 
+func TestCollectHealthReportRoutesS3ScopeOnlyWavePlanDriftToRun(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := model.NewChange("s3-scope-only-wave-plan-drift")
+	change.Status = model.ChangeStatusActive
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, SaveChange(root, change))
+
+	bundleDir := filepath.Dir(BundleChangeFilePath(root, change.Slug))
+	tasksPath := filepath.Join(bundleDir, "tasks.md")
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` preserve task shape
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: code
+`), 0o644))
+	_, err := MaterializeWavePlan(root, change)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(tasksPath, []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` preserve task shape
+  - depends_on: []
+  - target_files: ["cmd/run.go", "cmd/fix.go"]
+  - task_kind: code
+`), 0o644))
+
+	report, err := CollectHealthReport(root)
+	require.NoError(t, err)
+
+	var waveFinding *HealthFinding
+	for i := range report.Findings {
+		if report.Findings[i].Category == "wave_execution" && report.Findings[i].Slug == change.Slug {
+			waveFinding = &report.Findings[i]
+			break
+		}
+	}
+	require.NotNil(t, waveFinding, "S3 target_files-only drift must surface as wave-plan drift")
+	assert.Contains(t, strings.Join(model.ReasonSpecs(waveFinding.Reasons), "\n"), "wave_plan_drift")
+	assert.Contains(t, waveFinding.RepairHint, "slipway run")
+	assert.NotContains(t, waveFinding.RepairHint, "slipway repair")
+}
+
 func TestCollectHealthReportReportsUnreadablePersistedWavePlanAsCacheDuringS2(t *testing.T) {
 	t.Parallel()
 

@@ -182,14 +182,7 @@ func wavePlanRepairDrift(root string, change model.Change, plan model.WavePlan, 
 	if err != nil {
 		return false, false, err
 	}
-	plan.Normalize()
-	planStructuralHash := strings.TrimSpace(plan.EffectiveStructuralHash)
-	if planStructuralHash == "" {
-		planStructuralHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
-	}
-	if planStructuralHash == "" {
-		planStructuralHash = strings.TrimSpace(plan.TasksPlanHash)
-	}
+	planStructuralHash := plan.StructuralHash()
 	if planStructuralHash != "" && currentStructuralHash != "" && planStructuralHash != currentStructuralHash {
 		return true, ExecutionSummaryReady(summary), nil
 	}

@@ -76,8 +76,11 @@ artifact-readiness detail, or transition traces.
 ## Subcommand And Mode Highlights
 
 - `slipway handoff write` writes advisory continuation notes from stdin; pipe a full `## Current Position` narrative to the bare form, or pass `--section <name>` to replace one named section from stdin.
+- `slipway fix --start-reexecution` opens a fresh execution boundary and clears prior task evidence; when S3 task-plan amendments can converge in place, use `slipway run` unless intentionally passing `--discard-prior-evidence`.
 - `slipway handoff show --json` emits the current per-change handoff in structured form.
 - `slipway evidence task --result-file <path> --json` imports compact executor task results; repeat `--result-file` for an atomic batch.
+- Put transient `slipway evidence task --result-file` JSON under `.slipway-tmp/`; the directory is git-ignored and scope-contract-exempt scratch.
+- `slipway validate` emits a diagnostic `wave_plan` JSON projection derived from the current `tasks.md` so readiness clients can inspect task waves without treating `wave-plan.yaml` as planning authority.
 - `slipway evidence skill --skill <name> --verdict pass --json` records governed skill evidence at the stage that owns that skill.
 - `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` is only for an intentional rerun that replaces already-current passing evidence for a selected S3 review skill; ordinary duplicate evidence remains rejected.
 - `slipway status --stats --json` reports workspace diagnostics without reviving the retired top-level `stats` command.

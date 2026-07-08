@@ -270,6 +270,34 @@ func TestRecoveryTextNamesSelectedReviewAndShipVerification(t *testing.T) {
 	}
 }
 
+func TestRecoveryOrdersTaskEvidenceBeforeWaveOrchestrationEvidence(t *testing.T) {
+	t.Parallel()
+
+	recovery := BuildRecovery([]ReasonCode{
+		NewReasonCode("required_skill_stale", "wave-orchestration:execution-summary.yaml"),
+		NewReasonCode("incomplete_execution_task", "t-02"),
+	})
+	require.NotNil(t, recovery)
+	require.Len(t, recovery.Steps, 2)
+	assert.Equal(t, "incomplete_execution_task", recovery.Steps[0].Code)
+	assert.Equal(t, "slipway evidence task --result-file <path>", recovery.PrimaryCommand)
+	assert.Contains(t, recovery.PrimaryAction, "Record task evidence")
+	assert.Equal(t, "required_skill_stale", recovery.Steps[1].Code)
+}
+
+func TestRecoveryRoutesS3AddedTaskDriftToInPlaceConvergence(t *testing.T) {
+	t.Parallel()
+
+	recovery := BuildRecovery([]ReasonCode{
+		NewReasonCode("ship_verification_evidence_stale", ""),
+		NewReasonCode("s3_task_plan_drift_requires_inplace_convergence", "t-07"),
+	})
+	require.NotNil(t, recovery)
+	assert.Equal(t, "slipway run", recovery.PrimaryCommand)
+	assert.Equal(t, "s3_task_plan_drift_requires_inplace_convergence", recovery.Steps[0].Code)
+	assert.Contains(t, recovery.PrimaryAction, "same run_summary_version")
+}
+
 func recoveryRelevantCanonicalCodes() []string {
 	exact := map[string]bool{
 		"archive_failed":                                  true,
@@ -320,7 +348,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"ship_verification_evidence_missing":              true,
 		"ship_verification_evidence_stale":                true,
 		"ship_verification_ordering_invalid":              true,
-		"s3_task_plan_drift_requires_reexecution":         true,
+		"s3_task_plan_drift_requires_inplace_convergence": true,
 		"ship_verification_reviewer_independence_missing": true,
 		"tasks_checklist_invalid_format":                  true,
 		"unknown_reason_code":                             true,
@@ -427,7 +455,7 @@ func sampleRecoveryDetail(code string) string {
 		return "index_0"
 	case "tasks_plan_changed_since_task_evidence":
 		return "t-03"
-	case "s3_task_plan_drift_requires_reexecution":
+	case "s3_task_plan_drift_requires_inplace_convergence":
 		return "t-07"
 	case "worktree_validation_error":
 		return "missing branch"

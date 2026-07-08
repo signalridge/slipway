@@ -153,6 +153,34 @@ func TestSurfaceManifestExposesEvidenceRefreshCurrentJSONContract(t *testing.T) 
 	t.Fatal("surface manifest must expose the evidence skill refresh-current JSON contract")
 }
 
+func TestSurfaceManifestCommandBoundariesUseLifecycleMetadata(t *testing.T) {
+	t.Parallel()
+
+	rows := map[string]SurfaceManifestRow{}
+	for _, row := range BuildSurfaceManifest().Rows {
+		if row.Kind == "command" {
+			rows[row.Name] = row
+		}
+	}
+
+	repair := rows["repair"].CommandBoundary
+	require.NotNil(t, repair)
+	assert.True(t, repair.StateMutating)
+	assert.True(t, repair.ParallelSafe)
+	assert.False(t, repair.Exclusive)
+	assert.False(t, repair.PreflightRequired)
+
+	fix := rows["fix"].CommandBoundary
+	require.NotNil(t, fix)
+	assert.True(t, fix.StateMutating)
+	assert.False(t, fix.ParallelSafe)
+	assert.True(t, fix.Exclusive)
+	assert.True(t, fix.PreflightRequired)
+	require.NotEmpty(t, fix.Modes)
+	assert.Equal(t, "--start-reexecution", fix.Modes[0].Name)
+	assert.True(t, fix.Modes[0].Destructive)
+}
+
 func TestCommittedSurfaceManifestMatchesBuilder(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +235,59 @@ func TestJSONContractTokensExistInDetailedCommandDocs(t *testing.T) {
 			assert.Containsf(t, docsContent[docsPath], row.Token,
 				"%s must include JSON token %q for %s/%s", docsPath, row.Token, row.Kind, row.Name)
 		}
+	}
+}
+
+func TestLocalizedReferenceDocsCarryRecoveryEvidenceHighlights(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := toolgenRepoRoot(t)
+	requiredReferenceTokens := []string{
+		"slipway fix --start-reexecution",
+		"--discard-prior-evidence",
+		"slipway run",
+		"slipway evidence task --result-file",
+		".slipway-tmp/",
+		"slipway validate",
+		"wave_plan",
+	}
+	for _, docsPath := range []string{
+		"docs/reference/commands.md",
+		"docs/ja/reference/commands.md",
+		"docs/zh/reference/commands.md",
+	} {
+		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+		for _, token := range requiredReferenceTokens {
+			assert.Containsf(t, content, token, "%s must carry recovery/evidence highlight token %q", docsPath, token)
+		}
+	}
+
+	for _, docsPath := range []string{
+		"docs/installation.md",
+		"docs/ja/installation.md",
+		"docs/zh/installation.md",
+	} {
+		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
+		assert.Containsf(t, content, "scope-contract", "%s must document scope-contract scratch exemption", docsPath)
+	}
+
+	for _, docsPath := range []string{
+		"docs/design.md",
+		"docs/ja/design.md",
+		"docs/zh/design.md",
+	} {
+		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
+	}
+	for _, docsPath := range []string{
+		"docs/commands.md",
+		"docs/ja/commands.md",
+		"docs/zh/commands.md",
+	} {
+		content := readSurfaceManifestFixture(t, filepath.Join(repoRoot, docsPath))
+		assert.Containsf(t, content, ".slipway-tmp/", "%s must document evidence scratch directory", docsPath)
+		assert.Containsf(t, content, "--discard-prior-evidence", "%s must document --discard-prior-evidence", docsPath)
 	}
 }
 

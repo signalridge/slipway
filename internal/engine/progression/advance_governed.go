@@ -792,37 +792,32 @@ func autoConfirmScaffold(root string, change model.Change, target model.Workflow
 	return artifact.ScaffoldGovernedBundleForChange(root, change, target, resolution.Schema)
 }
 
-// tasksPlanDriftedFromWavePlan reports whether the current tasks.md structural
-// projection differs from the materialized wave plan, i.e. the plan was edited
-// since it was last materialized. It is the S3_REVIEW trigger for in-place
-// convergence: only a real plan delta re-materializes the wave plan at review.
+// tasksPlanDriftedFromWavePlan reports whether the current tasks.md structural or
+// scope projection differs from the materialized wave plan, i.e. the plan was
+// edited since it was last materialized. It is the S3_REVIEW trigger for
+// in-place convergence: only a real plan delta re-materializes the wave plan at
+// review.
 // A missing wave plan reports no drift (there is nothing materialized to
 // converge against); the upstream bundle gate already guarantees a readable
 // tasks.md by this point, so a read error is surfaced rather than masked.
 func tasksPlanDriftedFromWavePlan(root string, change model.Change) (bool, error) {
-	plan, err := state.LoadOptionalWavePlanForChange(root, change)
+	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
 	if err != nil {
 		return false, err
 	}
-	if plan == nil {
-		return false, nil
-	}
-	current, err := state.CurrentTasksPlanStructuralState(root, change)
-	if err != nil {
-		return false, err
-	}
-	return strings.TrimSpace(current) != strings.TrimSpace(wavePlanStructuralHash(*plan)), nil
+	return drift.Drifted(), nil
 }
 
 // reviewConvergencePending reports whether S3_REVIEW has in-place convergence
-// work to absorb on this run. It is true when either tasks.md structurally
-// drifted from the materialized wave plan (a task was added or restructured at
-// review → re-materialize the plan), or the per-task evidence ledger advanced
-// past the persisted execution summary (a folded-in task's evidence was recorded
-// → rebuild the summary so its incomplete_execution_task blocker clears). A
-// settled review — plan matches tasks.md and the summary reflects the ledger —
-// reports no pending work, preserving the read-only S3 behavior that done-ready
-// and light-preset flows rely on.
+// work to absorb on this run. It is true when either tasks.md structurally or
+// scope-wise drifted from the materialized wave plan (a task was added,
+// restructured, or retargeted at review -> re-materialize the plan), or the
+// per-task evidence ledger advanced past the persisted execution summary (a
+// folded-in task's evidence was recorded -> rebuild the summary so its
+// incomplete_execution_task blocker clears). A settled review -- plan matches
+// tasks.md and the summary reflects the ledger -- reports no pending work,
+// preserving the read-only S3 behavior that done-ready and light-preset flows
+// rely on.
 func reviewConvergencePending(root string, change model.Change) (bool, error) {
 	drifted, err := tasksPlanDriftedFromWavePlan(root, change)
 	if err != nil {

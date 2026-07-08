@@ -116,6 +116,53 @@ func TestDerivedWavePlanPreviewComputesWavesFromDependencies(t *testing.T) {
 	assert.False(t, view.Waves[1].Parallel, "single-task wave is not parallel")
 }
 
+func TestValidateViewSurfacesLiveWavePlanProjection(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		change := model.NewChange("validate-wave-plan")
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+		writeWavePlanTasksFixture(t, root, change.Slug, wavelessDependencyTasksFixture)
+
+		view := buildValidateViewBase(root, change, nil, nil, map[string]string{}, nil)
+		require.NotNil(t, view.WavePlan)
+		assert.Equal(t, 4, view.WavePlan.TotalTasks)
+		assert.Equal(t, 2, view.WavePlan.WaveCount)
+	})
+}
+
+func TestNextViewSurfacesS3TargetFilesOnlyWavePlanProjection(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go", "cmd/next_wave_plan.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "next"})
+		require.NoError(t, err)
+		require.NotNil(t, view.InputContext.WavePlan, "S3 target_files-only drift must expose a live wave projection")
+		require.Len(t, view.InputContext.WavePlan.Waves, 1)
+		require.Len(t, view.InputContext.WavePlan.Waves[0].Tasks, 1)
+		assert.ElementsMatch(t, []string{"cmd/lifecycle_commands_test.go", "cmd/next_wave_plan.go"}, view.InputContext.WavePlan.Waves[0].Tasks[0].TargetFiles)
+	})
+}
+
 func TestMaterializeWavePlanComputesWavesFromDependencies(t *testing.T) {
 	t.Parallel()
 

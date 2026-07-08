@@ -7,6 +7,22 @@ tier: "{{.Tier}}"
 surface: "{{.Surface}}"
 ---
 {{ include .BodyTemplate . }}
+
+## Command Boundary
+- `state_mutating`: `{{.StateMutating}}`
+- `exclusive`: `{{.Exclusive}}`
+- `parallel_safe`: `{{.ParallelSafe}}`
+- `preflight_required`: `{{.PreflightRequired}}`
+{{- if .Modes }}
+
+### Mode Boundaries
+{{- range .Modes }}
+- `{{ .Name }}`: `state_mutating={{ .StateMutating }}`, `exclusive={{ .Exclusive }}`, `destructive={{ .Destructive }}`, `parallel_safe={{ .ParallelSafe }}`, `preflight_required={{ .PreflightRequired }}`{{ if .Alternative }}; alternative: `{{ .Alternative }}`{{ end }}
+{{- range .Notes }}
+  - {{ . }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- if .Prerequisites }}
 
 ## Prerequisites

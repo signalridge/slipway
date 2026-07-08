@@ -177,6 +177,9 @@ func TestRunAtS3RejectsWaveReRecordBeforeFoldedTaskEvidence(t *testing.T) {
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
 		assert.Equal(t, "evidence_skill_task_evidence_incomplete", cliErr.ErrorCode)
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway evidence task --result-file <path>", cliErr.Recovery.PrimaryCommand)
+		assert.Equal(t, "incomplete_execution_task", cliErr.Recovery.Steps[0].Code)
 
 		// No passing wave-orchestration record may have been written out of order.
 		assert.True(t, summaryHasIncompleteTask(t, root, slug), "rejected re-record must leave the incomplete blocker intact")

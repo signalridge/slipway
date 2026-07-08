@@ -1879,7 +1879,7 @@ func TestParallelWaveChangedFileOverlapBlockers_ParallelOverlapBlocks(t *testing
 	blockers := ParallelWaveChangedFileOverlapBlockers(plan, tasks)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "parallel_wave_changed_file_overlap", blockers[0].Code)
-	assert.Equal(t, "1:internal/x.go:task-a,task-b", blockers[0].Detail)
+	assert.Equal(t, "wave=1:file=internal/x.go:tasks=task-a,task-b", blockers[0].Detail)
 }
 
 func TestParallelWaveChangedFileOverlapBlockers_SequentialOverlapAllowed(t *testing.T) {
@@ -2033,7 +2033,7 @@ func TestExecutorAgentBlockers_ParallelSubagentsMissingHandleBlocks(t *testing.T
 	blockers := ExecutorAgentBlockers(plan, tasks, dispatchModes, handles)
 	require.Len(t, blockers, 1)
 	assert.Equal(t, "executor_agent_missing", blockers[0].Code)
-	assert.Equal(t, "1:task-b", blockers[0].Detail)
+	assert.Equal(t, "wave=1:task=task-b", blockers[0].Detail)
 }
 
 func TestExecutorAgentBlockers_AllHandlesPresentNoBlock(t *testing.T) {
@@ -2232,12 +2232,12 @@ func TestSyncGovernedWaveExecutionSurfacesParallelOverlapBlocker(t *testing.T) {
 
 	result, err := SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
-		"sync must return parallel_wave_changed_file_overlap:1:cmd/shared.go:task-a,task-b, got %+v", result.Blockers)
+	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "wave=1:file=cmd/shared.go:tasks=task-a,task-b"),
+		"sync must return parallel_wave_changed_file_overlap wave=1:file=cmd/shared.go:tasks=task-a,task-b, got %+v", result.Blockers)
 
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "parallel_wave_changed_file_overlap", "wave=1:file=cmd/shared.go:tasks=task-a,task-b"),
 		"overlap blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
 }
 
@@ -2381,14 +2381,14 @@ func TestSyncGovernedWaveExecutionBlocksParallelSubagentsWaveMissingExecutorHand
 
 	result, err := SyncGovernedWaveExecution(root, change)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "1:task-b"),
-		"sync must return executor_agent_missing:1:task-b, got %+v", result.Blockers)
-	assert.False(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "1:task-a"),
+	assert.True(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "wave=1:task=task-b"),
+		"sync must return executor_agent_missing wave=1:task=task-b, got %+v", result.Blockers)
+	assert.False(t, hasWaveReasonCode(result.Blockers, "executor_agent_missing", "wave=1:task=task-a"),
 		"task-a has a recorded handle and must not be blocked, got %+v", result.Blockers)
 
 	summary, err := state.LoadExecutionSummary(root, slug)
 	require.NoError(t, err)
-	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "executor_agent_missing", "1:task-b"),
+	assert.True(t, hasWaveReasonCode(summary.OpenBlockers, "executor_agent_missing", "wave=1:task=task-b"),
 		"executor-handle blocker must persist in saved summary OpenBlockers, got %+v", summary.OpenBlockers)
 }
 
@@ -2468,7 +2468,7 @@ func TestSyncGovernedWaveExecutionSurfacesSafetyNetsUnderPlanDrift(t *testing.T)
 		"plan-drift blocker must be present, got %+v", result.Blockers)
 	assert.True(t, hasReasonCodeWithCode(result.Blockers, "task_changed_file_scope_escape"),
 		"scope-escape blockers must survive plan drift, got %+v", result.Blockers)
-	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "1:cmd/shared.go:task-a,task-b"),
+	assert.True(t, hasWaveReasonCode(result.Blockers, "parallel_wave_changed_file_overlap", "wave=1:file=cmd/shared.go:tasks=task-a,task-b"),
 		"parallel-overlap blockers must survive plan drift, got %+v", result.Blockers)
 }
 

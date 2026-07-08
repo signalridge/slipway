@@ -27,7 +27,7 @@ const planAuditFileName = "plan-audit.yaml"
 
 // S3TaskPlanAmendmentDiagnostic explains why S3 task-plan edits stay in the
 // review/fix loop instead of forcing S2 execution evidence replay.
-const S3TaskPlanAmendmentDiagnostic = "s3_task_plan_amendment_review_required: tasks.md changed after S2 execution evidence; continue S3 review/fix without rerunning S2 solely for task-plan edits"
+const S3TaskPlanAmendmentDiagnostic = "s3_task_plan_amendment_review_required: tasks.md changed after S2 execution evidence; run slipway run to absorb the task-plan amendment in place, then continue S3 review/fix without rerunning S2 solely for task-plan edits"
 
 type ExecutionSummaryLoadError struct {
 	Path string

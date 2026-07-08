@@ -250,11 +250,14 @@ slipway init
 ```
 
 This writes the repo's `.slipway.yaml` config plus a managed
-"# Slipway local state (managed)" block in `.gitignore` (ignoring bundle-local
-`events/`, `verification/`, legacy per-change `evidence/`, and `.worktrees/`
-paths), and creates the repo-local `.git/slipway/` runtime area. Runtime task
-evidence is recorded under `.git/slipway/runtime/changes/<slug>/evidence/`. It
-does not generate any AI-tool surfaces unless you pass `--tools`:
+"# Slipway local state (managed)" block in `.gitignore` (ignoring `.slipway-tmp/`,
+bundle-local `events/`, `verification/`, legacy per-change `evidence/`, and
+`.worktrees/` paths), and creates the repo-local `.git/slipway/` runtime area.
+Runtime task evidence is recorded under
+`.git/slipway/runtime/changes/<slug>/evidence/`. Put transient task result JSON
+for `slipway evidence task --result-file` under `.slipway-tmp/`; the directory is
+ignored and scope-contract-exempt scratch. It does not generate any AI-tool
+surfaces unless you pass `--tools`:
 
 ```bash
 slipway init --tools claude

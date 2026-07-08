@@ -21,11 +21,82 @@ type SurfaceManifest struct {
 // SurfaceManifestRow ties one generated or documented public surface to the
 // authority that creates it and the documentation token that keeps it visible.
 type SurfaceManifestRow struct {
-	Kind   string `json:"kind"`
-	Name   string `json:"name"`
-	Source string `json:"source"`
-	Docs   string `json:"docs"`
-	Token  string `json:"token"`
+	Kind            string                          `json:"kind"`
+	Name            string                          `json:"name"`
+	Source          string                          `json:"source"`
+	Docs            string                          `json:"docs"`
+	Token           string                          `json:"token"`
+	CommandBoundary *SurfaceManifestCommandBoundary `json:"command_boundary,omitempty"`
+}
+
+type SurfaceManifestCommandBoundary struct {
+	StateMutating     bool                         `json:"state_mutating"`
+	ParallelSafe      bool                         `json:"parallel_safe"`
+	Exclusive         bool                         `json:"exclusive"`
+	PreflightRequired bool                         `json:"preflight_required"`
+	Modes             []SurfaceManifestCommandMode `json:"modes,omitempty"`
+}
+
+type SurfaceManifestCommandMode struct {
+	Name              string   `json:"name"`
+	StateMutating     bool     `json:"state_mutating"`
+	Exclusive         bool     `json:"exclusive"`
+	Destructive       bool     `json:"destructive"`
+	ParallelSafe      bool     `json:"parallel_safe"`
+	PreflightRequired bool     `json:"preflight_required"`
+	Alternative       string   `json:"alternative,omitempty"`
+	Notes             []string `json:"notes,omitempty"`
+}
+
+// lifecycleAdvancingMutationCommands lists mutation commands that advance or
+// terminalize governed lifecycle state. Such commands are exclusive: a host
+// must not schedule them in the same parallel batch as prerequisite reads or
+// as each other, because they mutate the authoritative change/wave/evidence
+// state machines.
+var lifecycleAdvancingMutationCommands = map[string]struct{}{
+	"new":       {},
+	"intake":    {},
+	"plan":      {},
+	"implement": {},
+	"review":    {},
+	"fix":       {},
+	"run":       {},
+	"done":      {},
+	"cancel":    {},
+	"delete":    {},
+	"preset":    {},
+	"abort":     {},
+	"evidence":  {},
+}
+
+// commandBoundary derives the host-consumable mutation/scheduling boundary for
+// a command from its registry definition. Query commands return nil (no
+// boundary surface); mutation commands expose state mutation, exclusivity for
+// lifecycle-advancing commands, and any per-mode stricter boundaries.
+func commandBoundary(def CommandDef) *SurfaceManifestCommandBoundary {
+	if def.Class != CommandClassMutation {
+		return nil
+	}
+	boundary := commandSchedulingBoundaryFor(def)
+	manifestBoundary := &SurfaceManifestCommandBoundary{
+		StateMutating:     boundary.StateMutating,
+		ParallelSafe:      boundary.ParallelSafe,
+		Exclusive:         boundary.Exclusive,
+		PreflightRequired: boundary.PreflightRequired,
+	}
+	for _, mode := range boundary.Modes {
+		manifestBoundary.Modes = append(manifestBoundary.Modes, SurfaceManifestCommandMode{
+			Name:              mode.Name,
+			StateMutating:     mode.StateMutating,
+			Exclusive:         mode.Exclusive,
+			Destructive:       mode.Destructive,
+			ParallelSafe:      mode.ParallelSafe,
+			PreflightRequired: mode.PreflightRequired,
+			Alternative:       mode.Alternative,
+			Notes:             mode.Notes,
+		})
+	}
+	return manifestBoundary
 }
 
 // BuildSurfaceManifest derives the public surface inventory from Slipway-owned
@@ -34,13 +105,17 @@ func BuildSurfaceManifest() SurfaceManifest {
 	rows := []SurfaceManifestRow{}
 
 	for _, def := range commandRegistry {
-		rows = append(rows, SurfaceManifestRow{
+		row := SurfaceManifestRow{
 			Kind:   "command",
 			Name:   def.ID,
 			Source: "internal/toolgen/toolgen.go:commandRegistry",
 			Docs:   "docs/reference/commands.md",
 			Token:  "slipway " + def.ID,
-		})
+		}
+		if boundary := commandBoundary(def); boundary != nil {
+			row.CommandBoundary = boundary
+		}
+		rows = append(rows, row)
 	}
 	rows = append(rows, SurfaceManifestRow{
 		Kind:   "implementation",

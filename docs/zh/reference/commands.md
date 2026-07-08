@@ -75,8 +75,11 @@ slipway config list --json
 ## 子命令与模式要点
 
 - `slipway handoff write` 从 stdin 写入咨询性的续作笔记；bare 形式需要 pipe 一段完整的 `## Current Position` 正文，加 `--section <name>` 时会从 stdin 替换指定小节。
+- `slipway fix --start-reexecution` 会打开新的执行边界并清除既有任务证据；当 S3 任务计划修订可以就地收敛时，除非明确传入 `--discard-prior-evidence`，请使用 `slipway run`。
 - `slipway handoff show --json` 以结构化形式输出当前变更的 handoff。
 - `slipway evidence task --result-file <path> --json` 导入紧凑的执行任务结果；重复 `--result-file` 可进行原子批量导入。
+- 临时的 `slipway evidence task --result-file` JSON 请放在 `.slipway-tmp/` 下；该目录会被 git 忽略，并作为 scope-contract 豁免的 scratch 空间。
+- `slipway validate` 会输出从当前 `tasks.md` 导出的诊断性 `wave_plan` JSON 投影，让 readiness 客户端查看 task wave，而不是把 `wave-plan.yaml` 当作计划权威。
 - `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。
 - `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` 只用于把已选 S3 review skill 的当前 passing 证据作为一次明确重跑来替换；普通重复证据仍会被拒绝。
 - `slipway status --stats --json` 报告工作区诊断，不重新引入已退休的顶层 `stats` 命令。

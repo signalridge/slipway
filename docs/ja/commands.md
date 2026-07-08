@@ -23,7 +23,7 @@
 
 計画の現在性は構造的なタスク計画ハッシュをキーとします。プラン監査は S2 が開始できる前に計画バンドルをレビューしますが、`wave-plan.yaml` を計画の権威として認証するものではありません。`wave-plan.yaml` は現在の `tasks.md` から具現化された S2 実行用の投影／キャッシュであり、その `generated_at` は現在性を判断する根拠ではなく、表示・監査用の具現化時刻です。`slipway next --json` の `input_context.wave_plan` フィールドは別個の診断専用の投影で、永続化された `wave-plan.yaml` キャッシュが定義しない表示専用フィールド（`wave_count`、`advisories`）を含むため、決してキャッシュにコピーしてはなりません。`wave-plan.yaml` はツール（`slipway repair`）が再生成するエンジン所有のキャッシュで、手編集はしません。読み取れない場合は、`tasks.md` を編集するのではなく `slipway repair` で再生成してください。
 
-`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` とコントラクトを返します。`fix` slot が設定されている場合、そのコントラクトには `contract.subagent` が含まれます。ホストはその directive を優先し、存在しない場合は native fresh-context 修復サブエージェントへフォールバックします。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
+`slipway fix` は S3 のレビュー指摘修復サーフェスです。レビュアーの指摘とアライメントブロッカーを検出し、`repair_batch_id` とコントラクトを返します。`fix` slot が設定されている場合、そのコントラクトには `contract.subagent` が含まれます。ホストはその directive を優先し、存在しない場合は native fresh-context 修復サブエージェントへフォールバックします。通常の検出はライフサイクルの状態を進めません。`slipway fix --start-reexecution` は、S2 を再オープンして実装修復のための新しい実行ランの境界を具現化する、明示的なレビュー駆動モードです。S3 のタスク計画修正では `slipway run` を使います。これは同じ `run_summary_version` のまま wave projection をインプレースで再物化し、既存のタスク証拠を保持します。既存のタスク証拠を意図的に破棄する場合だけ `--discard-prior-evidence` を追加します。ホストはまず選択されたレビューバッチの指摘を収集し、根本原因ごとに 1 つの修復ブリーフへ統合します。他の選択されたレビュアーがまだ報告中の段階で、指摘をインラインまたは 1 件ずつ修復してはなりません。サブエージェントがコード、アーティファクト、テスト、または同一インテントのスコープエビデンスを変更した後は、影響を受けた選択レビュアーを再実行し、`slipway review` がバッチをクローズする前に `context_origin:stage=review=<handle>` と `context_origin:stage=fix=<handle>` の両方を記録します。`slipway repair` は引き続きローカルの整合性のみを扱います。
 
 設定された subagent delegation target は `.slipway.yaml` の `subagents.*` にあります。
 slot は `default`、`plan_audit`、`executor`、`review`、`fix`、`verify` です。各
@@ -55,7 +55,7 @@ slipway new "schema migration" --full   # force fresh ship-verification evidence
 
 `codebase-map --json` は、ドキュメントが CLI で検出されたリポジトリ事実のみを含む場合に `status: "baseline"` を報告します。ベースラインのドキュメントは出発点として有用なコンテキストであり、作り込まれたブラウンフィールド分析ではありません。呼び出し側は計画やレビューで頼る前に、ソース裏付けのある所見でこれらを洗練すべきです。
 
-`artifacts/codebase/` 配下のコードベースマップは既定で git 管理対象です。耐久性のあるブラウンフィールドのコンテキストは、ローカル限定の状態として隠すのではなく、レビューし共有するためのものです。既存のリポジトリは、`slipway new`、`slipway codebase-map`、または `slipway init` が管理対象の `.gitignore` ブロックを書き換える次のタイミングで自動移行します（`next`/`run`/`status`/`repair` はこれを調整しません）。バンドルローカルの `events/`、`verification/`、レガシーの変更ごとの `evidence/`、および `.worktrees/` パスは引き続き無視されます。ランタイムのタスクエビデンスは `.git/slipway/runtime/changes/<slug>/evidence/` 配下にあります。
+`artifacts/codebase/` 配下のコードベースマップは既定で git 管理対象です。耐久性のあるブラウンフィールドのコンテキストは、ローカル限定の状態として隠すのではなく、レビューし共有するためのものです。既存のリポジトリは、`slipway new`、`slipway codebase-map`、または `slipway init` が管理対象の `.gitignore` ブロックを書き換える次のタイミングで自動移行します（`next`/`run`/`status`/`repair` はこれを調整しません）。バンドルローカルの `events/`、`verification/`、レガシーの変更ごとの `evidence/`、および `.worktrees/` パスは引き続き無視されます。ランタイムのタスクエビデンスは `.git/slipway/runtime/changes/<slug>/evidence/` 配下にあります。一時的なタスク結果 JSON は `.slipway-tmp/` に置きます。このディレクトリは git ignore され、scope-contract の免除 scratch として開示されるため、`slipway evidence task --result-file` が無関係な dirty-worktree ブロッカーを作りません。
 
 ## 状況依存コマンド
 

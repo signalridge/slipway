@@ -43,7 +43,7 @@ Slipway 的价值不在于某一道关卡，而在于每个受治理的阶段都
 
 ### 4. 范围收敛
 
-`tasks.md` 里每个任务声明的 `target_files` 都是一份范围契约，用波次规划器做冲突检测时同一个 `TargetCoversPath` 谓词来评估，因此"覆盖"和"冲突"共用同一份实现。契约之外的已记录改动会失败即停（`scope_contract_drift` 及其同类），每一种都映射到可操作的补救动作。范围契约有两类被公开声明的豁免项，二者都在 `validate`/`status`/`review --json` 上呈现，而不是被悄悄应用。其一是 `artifacts/codebase/` 下的持久代码库地图：当只有那些上下文文件变脏时，它们不计入 `scope_contract.changed_files`，并以 `scope_contract.exempt_context_files` 呈现。其二是诚实地零改动的 pass code 任务：当它带有 `no_op_justification` 时，即豁免于变更文件要求，并以 `scope_contract.no_op_justified_tasks` 呈现。
+`tasks.md` 里每个任务声明的 `target_files` 都是一份范围契约，用波次规划器做冲突检测时同一个 `TargetCoversPath` 谓词来评估，因此"覆盖"和"冲突"共用同一份实现。契约之外的已记录改动会失败即停（`scope_contract_drift` 及其同类），每一种都映射到可操作的补救动作。范围契约有公开声明的豁免项，都会在 `validate`/`status`/`review --json` 上呈现，而不是被悄悄应用。`artifacts/codebase/` 下的持久代码库地图：当只有那些上下文文件变脏时，它们不计入 `scope_contract.changed_files`，并以 `scope_contract.exempt_context_files` 呈现。文档化的 `.slipway-tmp/**` 证据暂存文件同样不计入 changed/out-of-scope 漂移，并以 `scope_contract.exempt_context_files` 呈现，即使受管 `.gitignore` 会让普通 status 看不到它们。此外，诚实地零改动的 pass code 任务：当它带有 `no_op_justification` 时，即豁免于变更文件要求，并以 `scope_contract.no_op_justified_tasks` 呈现。
 
 ### 5. 感知漂移的前向恢复
 

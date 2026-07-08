@@ -80,8 +80,11 @@ slipway config list --json
 ## サブコマンドとモードの要点
 
 - `slipway handoff write` は stdin から参考用の継続メモを書き込みます。bare 形式では完全な `## Current Position` 本文を pipe し、`--section <name>` を渡すと stdin から指定セクションだけを置き換えます。
+- `slipway fix --start-reexecution` は新しい実行境界を開き、既存のタスク証拠を消去します。S3 のタスク計画修正をインプレースで収束できる場合は、意図して `--discard-prior-evidence` を渡すとき以外、`slipway run` を使ってください。
 - `slipway handoff show --json` は現在の変更ごとの handoff を構造化して出力します。
 - `slipway evidence task --result-file <path> --json` はコンパクトな実行タスク結果を取り込みます。原子的なバッチにするには `--result-file` を繰り返します。
+- 一時的な `slipway evidence task --result-file` JSON は `.slipway-tmp/` に置いてください。このディレクトリは git ignore され、scope-contract から除外される scratch 領域です。
+- `slipway validate` は、現在の `tasks.md` から導出した診断用の `wave_plan` JSON 投影を出力します。readiness クライアントは、`wave-plan.yaml` を計画の権威として扱わずに task wave を確認できます。
 - `slipway evidence skill --skill <name> --verdict pass --json` は、そのスキルを所有するステージで統制スキルのエビデンスを記録します。
 - `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` は、選択済み S3 レビュースキルの既に current な passing エビデンスを、意図的な再実行として置き換える場合だけに使います。通常の重複エビデンスは引き続き拒否されます。
 - `slipway status --stats --json` は、廃止されたトップレベルの `stats` コマンドを戻さずにワークスペース診断を報告します。

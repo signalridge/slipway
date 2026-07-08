@@ -122,7 +122,7 @@ four engine-enforced wave blockers are:
   `changed_files` includes a path not covered by that task's `target_files`
   (post-result scope-escape audit). Fix `target_files` or the change, then
   re-record evidence.
-- `parallel_wave_changed_file_overlap:<wave_index>:<file>:<tasks>` — two tasks
+- `parallel_wave_changed_file_overlap:wave=<wave_index>:file=<file>:tasks=<tasks>` — two tasks
   in the same `parallel: true` wave recorded the same changed file. Sequential
   waves sharing a file are allowed; a parallel overlap must be handled by a
   scope/plan amendment before evidence is re-recorded.
@@ -131,7 +131,7 @@ four engine-enforced wave blockers are:
   parallel dispatch silently; you must record
   `dispatch_mode:wave=<wave_index>:parallel_subagents` (or
   `:degraded_sequential`) for the wave.
-- `executor_agent_missing:<wave_index>:<task_id>` — a `parallel_subagents` wave
+- `executor_agent_missing:wave=<wave_index>:task=<task_id>` — a `parallel_subagents` wave
   is missing a per-task `executor_agent` handle reference. Record exactly one
   handle per planned task in the wave.
 

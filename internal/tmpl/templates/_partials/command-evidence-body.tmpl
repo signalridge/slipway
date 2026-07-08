@@ -26,7 +26,7 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 ## Contract
 - `evidence task` is only valid for an active change in `S2_IMPLEMENT` with a
   materialized wave plan.
-- `--result-file` imports compact executor JSON with `task_id`, `verdict`,
+`--result-file` <path> (write under `.slipway-tmp/` for git-ignored, scope-contract-exempt scratch): imports compact executor JSON with `task_id`, `verdict`,
   `evidence_ref`, `changed_files`, optional `no_op_justification` (only for a
   pass code task that changed zero files), `blockers`, and optional
   `session_id`.
@@ -65,7 +65,7 @@ slipway evidence skill --skill <selected-review-skill> --verdict pass \
 
 ### `evidence task`
 
-- `--result-file <path>`: executor result JSON containing `task_id`, `verdict`,
+- `--result-file <path>`: executor result JSON (write under `.slipway-tmp/` for git-ignored scratch) containing `task_id`, `verdict`,
   `evidence_ref`, `changed_files`, optional `no_op_justification` (only for a
   pass code task that changed zero files), `blockers`, and optional
   `session_id`; repeat for atomic batch import

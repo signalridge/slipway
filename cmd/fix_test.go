@@ -139,3 +139,230 @@ func TestFixStartReexecutionAdvancesWavePlanRunVersionAndReopensS2(t *testing.T)
 		assert.True(t, os.IsNotExist(err), "starting a fresh execution run must clear stale task evidence")
 	})
 }
+func TestFixStartReexecutionRejectsAdditiveS3Convergence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:preserved-task-evidence",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` review-discovered additive task
+  - depends_on: []
+  - target_files: ["cmd/fix.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		cmd.SetOut(&bytes.Buffer{})
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "fix_start_reexecution_inplace_convergence_available", cliErr.ErrorCode)
+		assert.Equal(t, "slipway run", cliErr.Details["remediation_command_hint"])
+		assert.Contains(t, cliErr.Details["added_tasks"], "t-02")
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand,
+			"REQ-005: guarded S3 task-plan amendment reexecution must surface recovery.primary_command=slipway run so JSON clients follow the in-place convergence path")
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS3Review, reloaded.CurrentState)
+		plan, err := state.LoadWavePlanForChange(root, reloaded)
+		require.NoError(t, err)
+		assert.Equal(t, 1, plan.RunSummaryVersion)
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestFixStartReexecutionRejectsEditedS3Convergence(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:preserved-task-evidence",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise amended command fixture
+  - depends_on: []
+  - target_files: ["cmd/fix.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		cmd.SetOut(&bytes.Buffer{})
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "fix_start_reexecution_inplace_convergence_available", cliErr.ErrorCode)
+		assert.Equal(t, "slipway run", cliErr.Details["remediation_command_hint"])
+		assert.Contains(t, cliErr.Details["changed_tasks"], "t-01")
+		assert.Empty(t, cliErr.Details["added_tasks"])
+		assert.Equal(t, "--discard-prior-evidence", cliErr.Details["override_flag"])
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand)
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS3Review, reloaded.CurrentState)
+		plan, err := state.LoadWavePlanForChange(root, reloaded)
+		require.NoError(t, err)
+		assert.Equal(t, 1, plan.RunSummaryVersion)
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestFixStartReexecutionRejectsTargetFilesOnlyS3Convergence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:preserved-scope-task-evidence",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go", "cmd/fix.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+`)))
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		cmd.SetOut(&bytes.Buffer{})
+		err := cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "fix_start_reexecution_inplace_convergence_available", cliErr.ErrorCode)
+		assert.Equal(t, "slipway run", cliErr.Details["remediation_command_hint"])
+		assert.Contains(t, cliErr.Details["changed_tasks"], "t-01")
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand)
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS3Review, reloaded.CurrentState)
+		plan, err := state.LoadWavePlanForChange(root, reloaded)
+		require.NoError(t, err)
+		assert.Equal(t, 1, plan.RunSummaryVersion)
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestFixStartReexecutionDiscardPriorEvidenceOverridesS3ConvergenceGuard(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:discarded-task-evidence",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` review-discovered additive task
+  - depends_on: []
+  - target_files: ["cmd/fix.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution", "--discard-prior-evidence"})
+		cmd.SetOut(&bytes.Buffer{})
+		require.NoError(t, cmd.Execute())
+
+		reloaded, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		assert.Equal(t, model.StateS2Implement, reloaded.CurrentState)
+		plan, err := state.LoadWavePlanForChange(root, reloaded)
+		require.NoError(t, err)
+		assert.Equal(t, 2, plan.RunSummaryVersion)
+		assertTaskEvidenceNotWritten(t, root, slug, "t-01")
+	})
+}
+
+func TestFixDiscardPriorEvidenceRequiresStartReexecution(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "discard evidence flag requires reexecution")
+		change, err := state.LoadChange(root, slug)
+		require.NoError(t, err)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		cmd := commandForRoot(t, root, makeFixCmd())
+		cmd.SetArgs([]string{"--json", "--change", slug, "--discard-prior-evidence"})
+		cmd.SetOut(&bytes.Buffer{})
+		err = cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "discard_prior_evidence_requires_reexecution", cliErr.ErrorCode)
+	})
+}

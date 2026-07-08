@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/wave"
 	"github.com/spf13/cobra"
 )
 
@@ -53,6 +56,7 @@ func makeFixCmd() *cobra.Command {
 	var jsonOutput bool
 	var reviewer string
 	var startReexecution bool
+	var discardPriorEvidence bool
 	cmd := &cobra.Command{
 		Use:   "fix",
 		Short: desc("fix"),
@@ -66,7 +70,7 @@ func makeFixCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			view, err := buildFixViewForSlug(root, ref.Slug, reviewer, startReexecution)
+			view, err := buildFixViewForSlug(root, ref.Slug, reviewer, startReexecution, discardPriorEvidence)
 			if err != nil {
 				return err
 			}
@@ -81,10 +85,19 @@ func makeFixCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
 	cmd.Flags().StringVar(&reviewer, "reviewer", "", "Limit repair target discovery to one selected review skill")
 	cmd.Flags().BoolVar(&startReexecution, "start-reexecution", false, "Start a fresh S2 execution run for review-driven implementation repairs")
+	cmd.Flags().BoolVar(&discardPriorEvidence, "discard-prior-evidence", false, "Confirm that --start-reexecution may discard prior task evidence instead of using S3 in-place convergence")
 	return cmd
 }
 
-func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution bool) (fixView, error) {
+func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution, discardPriorEvidence bool) (fixView, error) {
+	if discardPriorEvidence && !startReexecution {
+		return fixView{}, newInvalidUsageError(
+			"discard_prior_evidence_requires_reexecution",
+			"--discard-prior-evidence is only valid with --start-reexecution",
+			"Use `slipway fix --start-reexecution --discard-prior-evidence` only when intentionally opening a fresh execution boundary; otherwise omit the flag.",
+			nil,
+		)
+	}
 	change, err := loadActiveChange(
 		root,
 		slug,
@@ -139,6 +152,27 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution boo
 	targets := reviewFixTargets(root, change, selected, reviewerFilter, verifications, readiness.Blockers)
 
 	if startReexecution {
+		if convergence, guardErr := s3ReviewTaskConvergencePending(root, change); guardErr != nil {
+			return fixView{}, guardErr
+		} else if convergence.Pending && !discardPriorEvidence {
+			return fixView{}, newCLIErrorWithReasons(
+				categoryPrecondition,
+				"fix_start_reexecution_inplace_convergence_available",
+				"tasks.md has review-discovered task-plan amendments that Slipway can absorb in place at S3_REVIEW",
+				"Run `slipway run` to re-materialize the current wave projection at the same run_summary_version. Record task evidence only for newly added tasks surfaced as incomplete; edited already-evidenced tasks stay frozen and are re-certified through review evidence before wave-orchestration is re-recorded. `slipway fix --start-reexecution` would bump the run version and clear existing task evidence; pass `--discard-prior-evidence` only when that discard is intentional.",
+				change.Slug,
+				s3InPlaceConvergenceReasonCodes(convergence.ReasonSubjects()),
+				map[string]any{
+					"added_tasks":                convergence.AddedTasks,
+					"changed_tasks":              convergence.ChangedTasks,
+					"removed_tasks":              convergence.RemovedTasks,
+					"drifted_tasks":              convergence.ReasonSubjects(),
+					"remediation_command_hint":   "slipway run",
+					"destructive_effect_blocked": "would bump run_summary_version and clear existing task evidence",
+					"override_flag":              "--discard-prior-evidence",
+				},
+			)
+		}
 		change, err = startFixReexecution(root, change)
 		if err != nil {
 			return fixView{}, err
@@ -235,6 +269,148 @@ func nextExecutionRunSummaryVersion(root string, change model.Change) (int, erro
 		return 1, nil
 	}
 	return latest + 1, nil
+}
+
+type s3ReviewTaskConvergence struct {
+	Pending      bool
+	AddedTasks   []string
+	ChangedTasks []string
+	RemovedTasks []string
+}
+
+func (c s3ReviewTaskConvergence) ReasonSubjects() []string {
+	subjects := append([]string{}, c.AddedTasks...)
+	subjects = append(subjects, c.ChangedTasks...)
+	subjects = append(subjects, c.RemovedTasks...)
+	slices.Sort(subjects)
+	if len(subjects) == 0 && c.Pending {
+		return []string{"tasks.md"}
+	}
+	return subjects
+}
+
+func s3ReviewTaskConvergencePending(root string, change model.Change) (s3ReviewTaskConvergence, error) {
+	if change.CurrentState != model.StateS3Review {
+		return s3ReviewTaskConvergence{}, nil
+	}
+	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
+	if err != nil || !drift.HasWavePlan {
+		return s3ReviewTaskConvergence{}, err
+	}
+	if !drift.Drifted() {
+		return s3ReviewTaskConvergence{}, nil
+	}
+	plan := drift.Plan
+	current, err := currentTaskPlanByIDForFix(root, change)
+	if err != nil {
+		return s3ReviewTaskConvergence{}, err
+	}
+
+	persisted := map[string]model.WavePlanTask{}
+	var changed []string
+	var removed []string
+	for _, plannedWave := range plan.Waves {
+		for _, task := range plannedWave.Tasks {
+			taskID := strings.TrimSpace(task.TaskID)
+			if taskID == "" {
+				continue
+			}
+			persisted[taskID] = task
+			currentTask, ok := current[taskID]
+			if !ok {
+				removed = append(removed, taskID)
+			} else if !sameFixTaskProjection(task, currentTask) {
+				changed = append(changed, taskID)
+			}
+		}
+	}
+
+	var added []string
+	for taskID := range current {
+		if _, ok := persisted[taskID]; !ok {
+			added = append(added, taskID)
+		}
+	}
+	slices.Sort(added)
+	slices.Sort(changed)
+	slices.Sort(removed)
+	return s3ReviewTaskConvergence{Pending: true, AddedTasks: added, ChangedTasks: changed, RemovedTasks: removed}, nil
+}
+
+func s3InPlaceConvergenceReasonCodes(taskIDs []string) []model.ReasonCode {
+	reasons := make([]model.ReasonCode, 0, len(taskIDs))
+	for _, taskID := range taskIDs {
+		if taskID = strings.TrimSpace(taskID); taskID != "" {
+			reasons = append(reasons, model.NewReasonCode("s3_task_plan_drift_requires_inplace_convergence", taskID))
+		}
+	}
+	return model.NormalizeReasonCodes(reasons)
+}
+
+func currentTaskPlanByIDForFix(root string, change model.Change) (map[string]wave.TaskNode, error) {
+	bundleDir, err := state.GovernedBundleDir(root, change)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(filepath.Join(bundleDir, "tasks.md")) // #nosec G304 -- governed bundle path is resolved by Slipway state authority.
+	if err != nil {
+		return nil, err
+	}
+	plan, err := wave.ParseTaskPlan(string(raw))
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]wave.TaskNode, len(plan.Tasks))
+	for _, task := range plan.Tasks {
+		if taskID := strings.TrimSpace(task.TaskID); taskID != "" {
+			byID[taskID] = task
+		}
+	}
+	return byID, nil
+}
+
+func sameFixTaskProjection(persisted model.WavePlanTask, current wave.TaskNode) bool {
+	return strings.TrimSpace(persisted.TaskID) == strings.TrimSpace(current.TaskID) &&
+		strings.TrimSpace(persisted.Objective) == strings.TrimSpace(current.Objective) &&
+		persisted.TaskKind == current.TaskKind &&
+		slices.Equal(normalizeFixStringList(persisted.DependsOn), normalizeFixStringList(current.DependsOn)) &&
+		slices.Equal(normalizeFixPathList(persisted.TargetFiles), normalizeFixPathList(current.TargetFiles))
+}
+
+func normalizeFixStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func normalizeFixPathList(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := model.NormalizePublicPath(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func reviewFixTargets(

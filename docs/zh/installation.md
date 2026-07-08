@@ -250,7 +250,7 @@ slipway init
 ```
 
 这会写入仓库的 `.slipway.yaml` 配置，并在 `.gitignore` 中加入一个受管理的
-"# Slipway local state (managed)" 块（忽略 bundle 本地的 `events/`、`verification/`、旧版的逐变更 `evidence/` 以及 `.worktrees/` 路径），同时创建仓库本地的 `.git/slipway/` 运行时区域。运行时的任务证据记录在 `.git/slipway/runtime/changes/<slug>/evidence/` 下。除非你传入 `--tools`，否则它不会生成任何 AI 工具的接入面：
+"# Slipway local state (managed)" 块（忽略 `.slipway-tmp/`、bundle 本地的 `events/`、`verification/`、旧版的逐变更 `evidence/` 以及 `.worktrees/` 路径），同时创建仓库本地的 `.git/slipway/` 运行时区域。运行时的任务证据记录在 `.git/slipway/runtime/changes/<slug>/evidence/` 下。临时任务结果 JSON 请放在 `.slipway-tmp/` 中供 `slipway evidence task --result-file` 使用；该目录会被忽略，并作为 scope-contract 豁免的 scratch 空间。除非你传入 `--tools`，否则它不会生成任何 AI 工具的接入面：
 
 ```bash
 slipway init --tools claude

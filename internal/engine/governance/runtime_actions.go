@@ -113,6 +113,9 @@ func ResolveRuntimeRequiredActions(root string, change model.Change, snap model.
 		RollbackSectionExists:        hasRollbackDocumentation(root, change),
 	})
 	for idx := range actions {
+		if staleOnlyResearchHandledOutsideRequiredActions(change, actions[idx]) {
+			actions[idx].Mode = model.ControlModeAdvisory
+		}
 		if actions[idx].Satisfied {
 			continue
 		}
@@ -176,15 +179,19 @@ func RequiredActionBlockers(change model.Change, actions []RequiredAction) []str
 	return blockers
 }
 
+func staleOnlyResearchHandledOutsideRequiredActions(change model.Change, action RequiredAction) bool {
+	return action.ControlID == model.ControlResearch &&
+		action.unsatisfiedOnlyByStaleEvidence &&
+		(change.CurrentState == model.StateS2Implement || change.CurrentState == model.StateS3Review)
+}
+
 func actionBlocksCurrentState(change model.Change, action RequiredAction) bool {
 	if action.ControlID == model.ControlResearch && change.CurrentState == model.StateS1Plan {
 		// Research is actionable at S1_PLAN, but hard-blocking here deadlocks both
 		// discovery and non-discovery paths before research is possible.
 		return false
 	}
-	if action.ControlID == model.ControlResearch &&
-		action.unsatisfiedOnlyByStaleEvidence &&
-		(change.CurrentState == model.StateS2Implement || change.CurrentState == model.StateS3Review) {
+	if staleOnlyResearchHandledOutsideRequiredActions(change, action) {
 		// Once the change has moved past S1, stale research evidence is no longer
 		// recertified by the generic research required-action. The progression
 		// stale-evidence path defers upstream S1 drift to S3 review alignment, so
@@ -301,7 +308,7 @@ func (s runtimeVerificationState) skillSatisfied(skillName string, latestRunVers
 	if requireRunSummary && latestRunVersion < 1 {
 		return false, nil, []string{"runtime_verification_not_ready:" + skillName + ":run_summary_missing"}
 	}
-	if latestRunVersion > 0 && rec.RunVersion != latestRunVersion {
+	if requireRunSummary && latestRunVersion > 0 && rec.RunVersion != latestRunVersion {
 		return false, nil, []string{fmt.Sprintf("runtime_verification_not_ready:%s:run_version_mismatch(got=%d,want=%d)", skillName, rec.RunVersion, latestRunVersion)}
 	}
 	return true, []SatisfiedBy{{

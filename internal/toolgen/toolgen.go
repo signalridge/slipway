@@ -244,6 +244,17 @@ const (
 	CommandClassMutation CommandClass = "mutation"
 )
 
+type CommandModeBoundary struct {
+	Name              string
+	StateMutating     bool
+	Exclusive         bool
+	Destructive       bool
+	ParallelSafe      bool
+	PreflightRequired bool
+	Alternative       string
+	Notes             []string
+}
+
 type CommandDef struct {
 	ID               string
 	Class            CommandClass
@@ -251,8 +262,9 @@ type CommandDef struct {
 	Arguments        string
 	Prerequisites    []string
 	Notes            []string
-	Tier             string // "core" | "discovery" | "situational" | "helpers" | "diagnostics" | "setup"
-	HasPromptSurface bool   // true = generates inline command prompt surface; false for CLI-only commands
+	Tier             string                // "core" | "discovery" | "situational" | "helpers" | "diagnostics" | "setup"
+	HasPromptSurface bool                  // true = generates inline command prompt surface; false for CLI-only commands
+	Modes            []CommandModeBoundary // optional command modes/flags with stricter scheduling semantics
 }
 
 // commandRegistry is the single source of truth for adapter command metadata.
@@ -291,12 +303,26 @@ var commandRegistry = []CommandDef{
 		Arguments:     "[--json] [--diagnostics] [--all|--changed-only] [--focus <alias>] [--list-focuses] [--format text|json] [--hydrate] [--hydrate-ref <skill-id>/<name>] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with execution-summary evidence (run wave-orchestration first)."}},
 	{ID: "fix", Class: CommandClassMutation, Description: "Dispatch fresh-context fixes for S3 review findings", Tier: "core", HasPromptSurface: true,
-		Arguments:     "[--json] [--reviewer <skill>] [--start-reexecution] [--change <slug>]",
+		Arguments:     "[--json] [--reviewer <skill>] [--start-reexecution [--discard-prior-evidence]] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "An active governed change must be in S3_REVIEW with review findings to repair."},
 		Notes: []string{
-			"Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state; `slipway fix --start-reexecution` explicitly reopens S2 and materializes a fresh execution run for review-driven implementation repairs.",
+			"Ordinary `slipway fix` discovery does not run local-integrity repair and does not advance lifecycle state; `slipway fix --start-reexecution` explicitly reopens S2 and materializes a fresh execution run for review-driven implementation repairs, but S3 task-plan amendments should use `slipway run` to preserve prior task evidence unless `--discard-prior-evidence` is supplied intentionally.",
 			"After the repair subagent edits code/artifacts, rerun and record the affected reviewer evidence, then run `slipway review`.",
+		},
+		Modes: []CommandModeBoundary{{
+			Name:              "--start-reexecution",
+			StateMutating:     true,
+			Exclusive:         true,
+			Destructive:       true,
+			ParallelSafe:      false,
+			PreflightRequired: true,
+			Alternative:       "slipway run",
+			Notes: []string{
+				"Reads of `slipway next`, command docs, and host skill guidance must complete before invoking this mode.",
+				"S3 task-plan amendments must use `slipway run` unless `--discard-prior-evidence` is supplied intentionally; this mode is for explicit fresh execution boundaries that discard prior task evidence.",
+			},
 		}},
+	},
 	{ID: "next", Class: CommandClassQuery, Description: "Query next actionable skill (read-only, does not advance state)", Tier: "core", HasPromptSurface: true,
 		Arguments: "[--json] [--diagnostics] [--no-auto-pass] [--change <slug>]",
 		Notes: []string{
@@ -346,7 +372,34 @@ var commandRegistry = []CommandDef{
 			"Default (no `--yes`) prints a dry-run plan and deletes nothing; `--yes` executes.",
 			"`--worktree` also removes the bound git worktree (refused on dirty or unsafe-untracked changes unless `--force`); `--archived` purges an archived terminal record. The implementation/PR branch is never deleted.",
 			"`cancel` archives a terminal record; `delete` discards local governed state. `status`/`next` route here when a change is abandoned, broken, or bound elsewhere.",
-		}},
+		},
+		Modes: []CommandModeBoundary{
+			{
+				Name:              "--yes",
+				StateMutating:     true,
+				Exclusive:         true,
+				Destructive:       true,
+				ParallelSafe:      false,
+				PreflightRequired: true,
+				Alternative:       "slipway delete (dry-run)",
+				Notes: []string{
+					"Default dry-run prints a plan and deletes nothing; `--yes` executes the irreversible discard of governed state.",
+					"Reads of `slipway status`/`slipway next` must complete before invoking this mode.",
+				},
+			},
+			{
+				Name:              "--force",
+				StateMutating:     true,
+				Exclusive:         true,
+				Destructive:       true,
+				ParallelSafe:      false,
+				PreflightRequired: true,
+				Notes: []string{
+					"Overrides the dirty/unsafe-untracked refusal for `--worktree`; use only after inspecting the flagged changes.",
+				},
+			},
+		},
+	},
 	{ID: "validate", Class: CommandClassQuery, Description: "Read-only evidence and gate check", Tier: "situational", HasPromptSurface: true,
 		Arguments:     "[--focus <alias>] [--list-focuses] [--format text|json] [--change <slug>]",
 		Prerequisites: []string{"`.slipway.yaml` must exist (run `slipway init` first)", "Can be used with or without an active change."}},
@@ -552,12 +605,17 @@ type workflowSkillData struct {
 }
 
 type commandEntry struct {
-	Name          string
-	Description   string
-	Arguments     string
-	Prerequisites []string
-	Notes         []string
-	Focuses       []commandFocusEntry
+	Name              string
+	Description       string
+	Arguments         string
+	Prerequisites     []string
+	Notes             []string
+	Focuses           []commandFocusEntry
+	StateMutating     bool
+	ParallelSafe      bool
+	Exclusive         bool
+	PreflightRequired bool
+	Modes             []CommandModeBoundary
 }
 
 type commandFocusEntry struct {
@@ -652,13 +710,18 @@ var commandDescriptions = func() map[string]string {
 }()
 
 type commandRenderData struct {
-	ID            string
-	Class         CommandClass
-	Tier          string
-	Description   string
-	Arguments     string
-	Prerequisites []string
-	Notes         []string
+	ID                string
+	Class             CommandClass
+	Tier              string
+	Description       string
+	Arguments         string
+	Prerequisites     []string
+	Notes             []string
+	StateMutating     bool
+	ParallelSafe      bool
+	Exclusive         bool
+	PreflightRequired bool
+	Modes             []CommandModeBoundary
 }
 
 func commandPrerequisites(id string) []string {
@@ -672,19 +735,47 @@ func commandPrerequisites(id string) []string {
 	}
 }
 
+type commandSchedulingBoundary struct {
+	StateMutating     bool
+	ParallelSafe      bool
+	Exclusive         bool
+	PreflightRequired bool
+	Modes             []CommandModeBoundary
+}
+
+func commandSchedulingBoundaryFor(def CommandDef) commandSchedulingBoundary {
+	if def.Class != CommandClassMutation {
+		return commandSchedulingBoundary{ParallelSafe: true}
+	}
+	_, exclusive := lifecycleAdvancingMutationCommands[def.ID]
+	return commandSchedulingBoundary{
+		StateMutating:     true,
+		ParallelSafe:      !exclusive,
+		Exclusive:         exclusive,
+		PreflightRequired: exclusive || len(def.Modes) > 0,
+		Modes:             append([]CommandModeBoundary(nil), def.Modes...),
+	}
+}
+
 func buildCommandRenderData(id string) (commandRenderData, error) {
 	def, ok := commandRegistryMap[id]
 	if !ok {
 		return commandRenderData{}, fmt.Errorf("command %q missing from command registry", id)
 	}
+	boundary := commandSchedulingBoundaryFor(def)
 	return commandRenderData{
-		ID:            id,
-		Class:         def.Class,
-		Tier:          def.Tier,
-		Description:   commandDescriptions[id],
-		Arguments:     CommandArguments(id),
-		Prerequisites: commandPrerequisites(id),
-		Notes:         append([]string(nil), def.Notes...),
+		ID:                id,
+		Class:             def.Class,
+		Tier:              def.Tier,
+		Description:       commandDescriptions[id],
+		Arguments:         CommandArguments(id),
+		Prerequisites:     commandPrerequisites(id),
+		Notes:             append([]string(nil), def.Notes...),
+		StateMutating:     boundary.StateMutating,
+		ParallelSafe:      boundary.ParallelSafe,
+		Exclusive:         boundary.Exclusive,
+		PreflightRequired: boundary.PreflightRequired,
+		Modes:             boundary.Modes,
 	}, nil
 }
 
@@ -699,12 +790,17 @@ func buildWorkflowCommandEntries(ids []string, expectedTier string) ([]commandEn
 			return nil, fmt.Errorf("workflow command %q expected tier %q, got %q", id, expectedTier, meta.Tier)
 		}
 		out = append(out, commandEntry{
-			Name:          meta.ID,
-			Description:   meta.Description,
-			Arguments:     meta.Arguments,
-			Prerequisites: meta.Prerequisites,
-			Notes:         append([]string(nil), meta.Notes...),
-			Focuses:       buildCommandFocusEntries(meta.ID),
+			Name:              meta.ID,
+			Description:       meta.Description,
+			Arguments:         meta.Arguments,
+			Prerequisites:     meta.Prerequisites,
+			Notes:             append([]string(nil), meta.Notes...),
+			Focuses:           buildCommandFocusEntries(meta.ID),
+			StateMutating:     meta.StateMutating,
+			ParallelSafe:      meta.ParallelSafe,
+			Exclusive:         meta.Exclusive,
+			PreflightRequired: meta.PreflightRequired,
+			Modes:             append([]CommandModeBoundary(nil), meta.Modes...),
 		})
 	}
 	return out, nil
@@ -2290,15 +2386,20 @@ func renderSurfaceRouterSkill(cfg ToolConfig, def namespaceRouterDefinition) (st
 // and renderCommandSkill. Callers add any surface-specific keys after.
 func baseCommandRenderData(cfg ToolConfig, id string, meta commandRenderData) map[string]any {
 	return map[string]any{
-		"CommandID":     meta.ID,
-		"ToolID":        cfg.ID,
-		"Trigger":       commandTrigger(cfg, meta.ID),
-		"Class":         meta.Class,
-		"Description":   meta.Description,
-		"BodyTemplate":  "command-" + id + "-body",
-		"Arguments":     meta.Arguments,
-		"Prerequisites": meta.Prerequisites,
-		"Tier":          meta.Tier,
+		"CommandID":         meta.ID,
+		"ToolID":            cfg.ID,
+		"Trigger":           commandTrigger(cfg, meta.ID),
+		"Class":             meta.Class,
+		"Description":       meta.Description,
+		"BodyTemplate":      "command-" + id + "-body",
+		"Arguments":         meta.Arguments,
+		"Prerequisites":     meta.Prerequisites,
+		"Tier":              meta.Tier,
+		"StateMutating":     meta.StateMutating,
+		"ParallelSafe":      meta.ParallelSafe,
+		"Exclusive":         meta.Exclusive,
+		"PreflightRequired": meta.PreflightRequired,
+		"Modes":             meta.Modes,
 	}
 }
 

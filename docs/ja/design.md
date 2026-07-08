@@ -43,7 +43,7 @@ Slipway の価値は単一のゲートにあるのではありません。すべ
 
 ### 4. スコープ封じ込め
 
-各タスクが `tasks.md` で宣言する `target_files` はスコープ契約であり、ウェーブプランナーが衝突検出に使うのと同じ `TargetCoversPath` 述語で評価されます。そのため「カバーする」と「衝突する」は単一の実装を共有します。契約外で記録された変更はフェイルクローズドになり（`scope_contract_drift` とその同類）、それぞれが実行可能な是正措置にマッピングされます。スコープ契約には明示された例外が 2 つあり、いずれも黙って適用されるのではなく `validate`／`status`／`review --json` 上で明示されます。1 つ目は `artifacts/codebase/` 配下の永続的なコードベースマップです。それらのコンテキストファイルだけが汚れている場合、それらは `scope_contract.changed_files` から外れたまま `scope_contract.exempt_context_files` として明示されます。2 つ目は正直にゼロ変更の pass code タスクです。`no_op_justification` を伴う場合、変更ファイル要件から免除され、`scope_contract.no_op_justified_tasks` として明示されます。
+各タスクが `tasks.md` で宣言する `target_files` はスコープ契約であり、ウェーブプランナーが衝突検出に使うのと同じ `TargetCoversPath` 述語で評価されます。そのため「カバーする」と「衝突する」は単一の実装を共有します。契約外で記録された変更はフェイルクローズドになり（`scope_contract_drift` とその同類）、それぞれが実行可能な是正措置にマッピングされます。スコープ契約には明示された例外があり、いずれも黙って適用されるのではなく `validate`／`status`／`review --json` 上で明示されます。`artifacts/codebase/` 配下の永続的なコードベースマップ：それらのコンテキストファイルだけが汚れている場合、それらは `scope_contract.changed_files` から外れたまま `scope_contract.exempt_context_files` として明示されます。文書化された `.slipway-tmp/**` 証跡スクラッチファイルも changed/out-of-scope のドリフトから外され、管理対象 `.gitignore` が通常の status から隠していても `scope_contract.exempt_context_files` として明示されます。そして、正直にゼロ変更の pass code タスクです。`no_op_justification` を伴う場合、変更ファイル要件から免除され、`scope_contract.no_op_justified_tasks` として明示されます。
 
 ### 5. ドリフトを認識した前方リカバリ
 
