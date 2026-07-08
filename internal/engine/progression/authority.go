@@ -402,13 +402,12 @@ func buildShipAuthorityFromReadiness(root string, change model.Change, readiness
 	unresolved = append(unresolved, orderingBlockers...)
 	// ROOT-cause naming for S3 task-plan drift (#427): review-time amendments to
 	// tasks.md that the materialized wave plan has not absorbed yet must be folded
-	// through S3 in-place convergence before task evidence can be
-	// recorded. The stale-skill / ship-missing symptoms above are downstream
-	// effects; emitting the dedicated in-place convergence root here, gated on the
-	// stale cascade actually being present, lets recovery name `slipway run` as the
-	// primary step instead of the destructive reexecution hammer.
-	staleCascade := staleReviewOrShipSkillCascade(reviewAuthority.Blockers, verifySkillBlockers)
-	convergenceBlockers, err := s3TaskPlanDriftInPlaceConvergenceBlockers(root, change, staleCascade)
+	// through S3 in-place convergence before task evidence can be recorded or the
+	// review batch can proceed. Missing/stale reviewer and ship evidence are
+	// downstream symptoms; emitting the dedicated in-place convergence root for any
+	// S3 task-plan drift lets public recovery name `slipway run` before review
+	// routing, even when no selected review evidence has been recorded yet.
+	convergenceBlockers, err := s3TaskPlanDriftInPlaceConvergenceBlockers(root, change)
 	if err != nil {
 		return ShipAuthority{}, err
 	}
@@ -479,27 +478,6 @@ func shipVerificationRecordStale(readiness GovernanceReadiness, verifyPassingSki
 	return rec.IsPassing()
 }
 
-// staleReviewOrShipSkillCascade reports whether any blocker is a required_skill_stale
-// for a selected review skill or for ship-verification — the signal that the S3
-// review was completed and then invalidated by a plan/evidence edit (as opposed to
-// an unsettled review whose reviewers are merely missing). It scopes the
-// reexecution root to the genuinely stuck case.
-func staleReviewOrShipSkillCascade(blockerSets ...[]model.ReasonCode) bool {
-	for _, set := range blockerSets {
-		for _, blocker := range set {
-			if strings.TrimSpace(blocker.Code) != "required_skill_stale" {
-				continue
-			}
-			subject, _, _ := strings.Cut(strings.TrimSpace(blocker.Detail), ":")
-			subject = strings.TrimSpace(subject)
-			if subject == SkillShipVerification || isS3ReviewSetSkill(subject) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // s3TaskPlanDriftSubjects returns stable recovery subjects for S3_REVIEW
 // task-plan drift. Added tasks are named individually; edited/restructured-only
 // drift falls back to tasks.md because the in-place convergence operation absorbs
@@ -542,11 +520,11 @@ func s3TaskPlanDriftSubjects(root string, change model.Change) ([]string, error)
 }
 
 // s3TaskPlanDriftInPlaceConvergenceBlockers emits the ROOT in-place convergence
-// blocker when S3_REVIEW tasks.md no longer matches the materialized wave plan
-// AND the stale review/ship cascade is present. Empty outside S3_REVIEW, when no
-// wave plan is materialized yet, or when tasks.md already matches the plan.
-func s3TaskPlanDriftInPlaceConvergenceBlockers(root string, change model.Change, staleCascade bool) ([]model.ReasonCode, error) {
-	if change.CurrentState != model.StateS3Review || !staleCascade {
+// blocker when S3_REVIEW tasks.md no longer matches the materialized wave plan.
+// Empty outside S3_REVIEW, when no wave plan is materialized yet, or when
+// tasks.md already matches the plan.
+func s3TaskPlanDriftInPlaceConvergenceBlockers(root string, change model.Change) ([]model.ReasonCode, error) {
+	if change.CurrentState != model.StateS3Review {
 		return nil, nil
 	}
 	subjects, err := s3TaskPlanDriftSubjects(root, change)

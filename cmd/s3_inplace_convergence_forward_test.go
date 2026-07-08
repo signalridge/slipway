@@ -34,7 +34,7 @@ func TestRunAtS3AcceptsFoldedTaskEvidenceAndRejectsRestamp(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
   - depends_on: []
   - target_files: ["cmd/evidence.go"]
   - task_kind: code
@@ -90,7 +90,7 @@ func TestRunAtS3ConvergesFoldedTaskThroughWaveReRecord(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
   - depends_on: []
   - target_files: ["cmd/evidence.go"]
   - task_kind: code
@@ -150,7 +150,7 @@ func TestRunAtS3RejectsWaveReRecordBeforeFoldedTaskEvidence(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
   - depends_on: []
   - target_files: ["cmd/evidence.go"]
   - task_kind: code

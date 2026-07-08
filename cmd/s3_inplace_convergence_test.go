@@ -47,7 +47,7 @@ func TestRunAtS3AbsorbsAddedTaskInPlace(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
   - depends_on: []
   - target_files: ["cmd/evidence.go"]
   - task_kind: code
@@ -161,7 +161,7 @@ func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
 		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading after review
+- [ ] `+"`t-01`"+` harden host-owned evidence after review
   - depends_on: []
   - target_files: ["cmd/fix.go"]
   - task_kind: code
@@ -185,8 +185,30 @@ func TestRunAtS3AbsorbsEditedTaskInPlace(t *testing.T) {
 			"in-place absorption must NOT bump the run version or wipe the run")
 		require.Len(t, plan.Waves, 1)
 		require.Len(t, plan.Waves[0].Tasks, 1)
-		assert.Equal(t, "harden result file loading after review", plan.Waves[0].Tasks[0].Objective)
+		assert.Equal(t, "harden host-owned evidence after review", plan.Waves[0].Tasks[0].Objective)
 		assert.Equal(t, []string{"cmd/fix.go"}, plan.Waves[0].Tasks[0].TargetFiles)
+		assertTaskEvidenceWritten(t, root, slug, "t-01")
+		summary, err := state.LoadExecutionSummary(root, slug)
+		require.NoError(t, err)
+		blockers := model.ReasonSpecs(summary.OpenBlockers)
+		assert.Contains(t, blockers, "task_changed_file_scope_escape:t-01:cmd/lifecycle_commands_test.go")
+		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:cmd/lifecycle_commands_test.go")
+
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+		require.NoError(t, err)
+		require.NotNil(t, view.Recovery)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", view.Recovery.PrimaryCommand)
+
+		fixCmd := commandForRoot(t, root, makeFixCmd())
+		fixCmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		fixCmd.SetOut(&bytes.Buffer{})
+		err = fixCmd.Execute()
+		require.Error(t, err)
+		fixErr := asCLIError(err)
+		require.NotNil(t, fixErr)
+		assert.Equal(t, "fix_start_reexecution_prior_evidence_discard_required", fixErr.ErrorCode)
+		require.NotNil(t, fixErr.Recovery)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", fixErr.Recovery.PrimaryCommand)
 		assertTaskEvidenceWritten(t, root, slug, "t-01")
 
 		restampCmd := commandForRoot(t, root, makeEvidenceCmd())

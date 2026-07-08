@@ -158,6 +158,7 @@ func canonicalReasonCodeSnapshot() []string {
 		"run_slipway_done_to_finalize",
 		"run_slipway_run_to_advance",
 		"s3_task_plan_drift_requires_inplace_convergence",
+		"s3_task_plan_drift_requires_reexecution",
 		"scope_contract_changed_files_missing",
 		"scope_contract_drift",
 		"scope_contract_evaluation_failed",

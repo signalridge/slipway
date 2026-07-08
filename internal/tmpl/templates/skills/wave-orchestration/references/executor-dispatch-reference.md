@@ -35,7 +35,7 @@ coordinator context.
 ## Runtime Boundary
 - A `parallel: true` wave (from `slipway next --json`) is dispatched concurrently by default: one fresh executor per task, spawned together, then wait for the whole wave.
 - A capable runtime must attempt real executor subagent fan-out for `parallel: true`. If spawning, waiting, result collection, parsing, or cleanup fails, the host must not silently execute the wave inline in the coordinator context; stop and ask for operator direction or record a blocking executor-dispatch failure.
-- Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support. In the latter case note the degradation in the wave report and record `dispatch_mode:wave=<wave_index>:degraded_sequential` in the wave-orchestration verification references. Notes/prose alone are human-readable context and are not parsed as dispatch evidence. If inline execution would pollute coordinator context and the user has not authorized it, stop rather than pretending parallel dispatch happened.
+- Run a wave sequentially only when it is `parallel: false`, or when the host has no concurrent-executor support. In the latter case note the degradation in the wave report and record both `dispatch_mode:wave=<wave_index>:degraded_sequential` and `degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>` in the wave-orchestration verification references. Notes/prose alone are human-readable context and are not parsed as dispatch evidence. If inline execution would pollute coordinator context and the user has not authorized it, stop rather than pretending parallel dispatch happened.
 - Executors share a single worktree unless the runtime explicitly provides stronger isolation. Do not run shared-worktree-wide integration commands such as `go build ./...` concurrently inside each task executor; leave merged-state build/test/lint checks to the post-wave integration gate unless a task owns a genuinely isolated command.
 - Before spawning a `parallel: true` wave, run a target-overlap preflight over the current wave's `target_files`. If two tasks overlap by exact path, path alias, parent/child scope, case-insensitive match, or glob scope, record `dispatch_blocker:wave=<wave_index>:target_overlap` and stop for explicit operator direction before continuing.
 - After executor results return, run a post-result changed-file conflict check across returned `changed_files`. If two parallel executors touched the same file scope or changed files outside declared task targets, record a post-result changed-file conflict and stop before the post-wave integration gate.
@@ -45,7 +45,7 @@ coordinator context.
 ## Dispatch Evidence
 - Successful `parallel: true` fan-out records `dispatch_mode:wave=<wave_index>:parallel_subagents`.
 - Record one stable executor handle reference per spawned task: `executor_agent:wave=<wave_index>:task=<task_id>:<handle>`.
-- Degraded sequential fallback records `dispatch_mode:wave=<wave_index>:degraded_sequential`.
+- Degraded sequential fallback records both `dispatch_mode:wave=<wave_index>:degraded_sequential` and `degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>`.
 - A target-overlap preflight failure records `dispatch_blocker:wave=<wave_index>:target_overlap`.
 - Notes explain the decision, but structured references are the reviewable dispatch evidence.
 
@@ -62,15 +62,19 @@ coordinator context.
   escaped its declared `target_files`. The engine audits this after results, so
   the target-overlap preflight and the post-result changed-file conflict check
   keep you clear of it; recover by fixing `target_files` or the change and
-  re-recording evidence.
+  re-running the owning lifecycle step. At S3 with frozen task evidence, restore
+  honest target coverage or explicitly discard prior task evidence before
+  reexecution.
 - `parallel_wave_changed_file_overlap:wave=<wave_index>:file=<file>:tasks=<tasks>` — two tasks
   in the same `parallel: true` wave wrote the same file. Sequential waves
   sharing a file are allowed; a parallel overlap is an execution-safety stop
   point requiring operator direction.
 - `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
   parallel wave recorded no dispatch-mode evidence. Silent parallel inference is
-  gone: record `dispatch_mode:wave=<wave_index>:parallel_subagents` or
-  `dispatch_mode:wave=<wave_index>:degraded_sequential` for the wave.
+  gone: record `dispatch_mode:wave=<wave_index>:parallel_subagents`, or record
+  `dispatch_mode:wave=<wave_index>:degraded_sequential` together with
+  `degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>`
+  for the wave.
 - `executor_agent_missing:wave=<wave_index>:task=<task_id>` — a `parallel_subagents` wave
   is missing a per-task executor handle. Record exactly one
   `executor_agent:wave=<wave_index>:task=<task_id>:<handle>` per planned task;

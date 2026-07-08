@@ -97,11 +97,12 @@ runtime cannot spawn, wait, collect, parse, and close executor sessions, stop an
 ask for operator direction instead of silently running the whole wave in the
 coordinator context. Fall back to sequential only when the host genuinely lacks
 concurrent executor support, and when you do, say so in the wave report and the
-wave-orchestration verification `references` as
-`dispatch_mode:wave=<wave_index>:degraded_sequential`, with the same fact in
-`notes`, so the degradation stays visible. Notes/prose alone are
-human-readable context and are not parsed as dispatch evidence. A `parallel:
-false` wave (a single task, or `execution.parallelization: off`) runs
+wave-orchestration verification `references` as both
+`dispatch_mode:wave=<wave_index>:degraded_sequential` and
+`degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>`,
+with the same fact in `notes`, so the degradation stays visible. Notes/prose
+alone are human-readable context and are not parsed as dispatch evidence. A
+`parallel: false` wave (a single task, or `execution.parallelization: off`) runs
 sequentially with nothing to note.
 
 ## Target/Changed-File Safety Model
@@ -121,7 +122,9 @@ four engine-enforced wave blockers are:
 - `task_changed_file_scope_escape:<task_id>:<file>` — a task's recorded
   `changed_files` includes a path not covered by that task's `target_files`
   (post-result scope-escape audit). Fix `target_files` or the change, then
-  re-record evidence.
+  re-run the owning lifecycle step; at S3 with frozen task evidence, restore
+  honest target coverage or explicitly discard prior task evidence before
+  reexecution.
 - `parallel_wave_changed_file_overlap:wave=<wave_index>:file=<file>:tasks=<tasks>` — two tasks
   in the same `parallel: true` wave recorded the same changed file. Sequential
   waves sharing a file are allowed; a parallel overlap must be handled by a
@@ -129,8 +132,10 @@ four engine-enforced wave blockers are:
 - `dispatch_mode_absent_on_started_parallel_wave:<wave_index>` — a started
   parallel wave recorded no dispatch-mode evidence. The engine no longer infers
   parallel dispatch silently; you must record
-  `dispatch_mode:wave=<wave_index>:parallel_subagents` (or
-  `:degraded_sequential`) for the wave.
+  `dispatch_mode:wave=<wave_index>:parallel_subagents`, or record
+  `dispatch_mode:wave=<wave_index>:degraded_sequential` together with
+  `degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>`
+  for the wave.
 - `executor_agent_missing:wave=<wave_index>:task=<task_id>` — a `parallel_subagents` wave
   is missing a per-task `executor_agent` handle reference. Record exactly one
   handle per planned task in the wave.

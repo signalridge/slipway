@@ -298,6 +298,37 @@ func TestRecoveryRoutesS3AddedTaskDriftToInPlaceConvergence(t *testing.T) {
 	assert.Contains(t, recovery.PrimaryAction, "same run_summary_version")
 }
 
+func TestRecoverySurfacesS3ScopeNarrowingDecisionBoundary(t *testing.T) {
+	t.Parallel()
+
+	recovery := BuildRecovery([]ReasonCode{
+		NewReasonCode("task_changed_file_scope_escape", "t-01:cmd/lifecycle_commands_test.go"),
+		NewReasonCode("s3_task_plan_drift_requires_reexecution", "t-01:cmd/lifecycle_commands_test.go"),
+	})
+	require.NotNil(t, recovery)
+	assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", recovery.PrimaryCommand)
+	assert.Equal(t, "s3_task_plan_drift_requires_reexecution", recovery.Steps[0].Code)
+	assert.Contains(t, recovery.PrimaryAction, "restore target_files")
+	assert.Contains(t, recovery.PrimaryAction, "prior task evidence discard")
+
+	_, scopeStepOK := recoveryStepFor(NewReasonCode("task_changed_file_scope_escape", "t-01:cmd/lifecycle_commands_test.go"))
+	require.True(t, scopeStepOK)
+}
+
+func TestRecoveryWaveDispatchRemediationsCarryRequiredGuards(t *testing.T) {
+	t.Parallel()
+
+	overlapStep, ok := recoveryStepFor(NewReasonCode("parallel_wave_changed_file_overlap", "wave=1:file=cmd/fix.go:tasks=t-01,t-02"))
+	require.True(t, ok)
+	assert.Contains(t, overlapStep.Remediation, "plan-quality defect")
+	assert.Contains(t, overlapStep.Remediation, "ordering dependency")
+	assert.NotContains(t, overlapStep.Remediation, "degraded_sequential")
+
+	dispatchStep, ok := recoveryStepFor(NewReasonCode("dispatch_mode_absent_on_started_parallel_wave", "1"))
+	require.True(t, ok)
+	assert.Contains(t, dispatchStep.Remediation, "degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>")
+}
+
 func recoveryRelevantCanonicalCodes() []string {
 	exact := map[string]bool{
 		"archive_failed":                                  true,
@@ -349,6 +380,7 @@ func recoveryRelevantCanonicalCodes() []string {
 		"ship_verification_evidence_stale":                true,
 		"ship_verification_ordering_invalid":              true,
 		"s3_task_plan_drift_requires_inplace_convergence": true,
+		"s3_task_plan_drift_requires_reexecution":         true,
 		"ship_verification_reviewer_independence_missing": true,
 		"tasks_checklist_invalid_format":                  true,
 		"unknown_reason_code":                             true,
@@ -457,6 +489,8 @@ func sampleRecoveryDetail(code string) string {
 		return "t-03"
 	case "s3_task_plan_drift_requires_inplace_convergence":
 		return "t-07"
+	case "s3_task_plan_drift_requires_reexecution":
+		return "t-01:cmd/lifecycle_commands_test.go"
 	case "worktree_validation_error":
 		return "missing branch"
 	case "worktree_metadata_persist_failed":

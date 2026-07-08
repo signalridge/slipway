@@ -152,9 +152,23 @@ func buildFixViewForSlug(root, slug, reviewerFilter string, startReexecution, di
 	targets := reviewFixTargets(root, change, selected, reviewerFilter, verifications, readiness.Blockers)
 
 	if startReexecution {
+		if scopeEscapes, guardErr := s3ReviewCurrentScopeEscapes(root, change); guardErr != nil {
+			return fixView{}, guardErr
+		} else if len(scopeEscapes) > 0 && !discardPriorEvidence {
+			return fixView{}, s3ReviewPriorEvidenceDiscardRequiredError(change, nil, nil, nil, scopeEscapes)
+		}
 		if convergence, guardErr := s3ReviewTaskConvergencePending(root, change); guardErr != nil {
 			return fixView{}, guardErr
 		} else if convergence.Pending && !discardPriorEvidence {
+			if len(convergence.ScopeEscapes) > 0 {
+				return fixView{}, s3ReviewPriorEvidenceDiscardRequiredError(
+					change,
+					convergence.AddedTasks,
+					convergence.ChangedTasks,
+					convergence.RemovedTasks,
+					convergence.ScopeEscapes,
+				)
+			}
 			return fixView{}, newCLIErrorWithReasons(
 				categoryPrecondition,
 				"fix_start_reexecution_inplace_convergence_available",
@@ -276,6 +290,7 @@ type s3ReviewTaskConvergence struct {
 	AddedTasks   []string
 	ChangedTasks []string
 	RemovedTasks []string
+	ScopeEscapes []model.ReasonCode
 }
 
 func (c s3ReviewTaskConvergence) ReasonSubjects() []string {
@@ -334,7 +349,11 @@ func s3ReviewTaskConvergencePending(root string, change model.Change) (s3ReviewT
 	slices.Sort(added)
 	slices.Sort(changed)
 	slices.Sort(removed)
-	return s3ReviewTaskConvergence{Pending: true, AddedTasks: added, ChangedTasks: changed, RemovedTasks: removed}, nil
+	scopeEscapes, err := s3ReviewConvergenceScopeEscapes(root, change, plan.RunSummaryVersion)
+	if err != nil {
+		return s3ReviewTaskConvergence{}, err
+	}
+	return s3ReviewTaskConvergence{Pending: true, AddedTasks: added, ChangedTasks: changed, RemovedTasks: removed, ScopeEscapes: scopeEscapes}, nil
 }
 
 func s3InPlaceConvergenceReasonCodes(taskIDs []string) []model.ReasonCode {
@@ -345,6 +364,63 @@ func s3InPlaceConvergenceReasonCodes(taskIDs []string) []model.ReasonCode {
 		}
 	}
 	return model.NormalizeReasonCodes(reasons)
+}
+
+func s3ReviewPriorEvidenceDiscardRequiredError(
+	change model.Change,
+	addedTasks []string,
+	changedTasks []string,
+	removedTasks []string,
+	scopeEscapes []model.ReasonCode,
+) error {
+	reasons := progression.S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes)
+	return newCLIErrorWithReasons(
+		categoryPrecondition,
+		"fix_start_reexecution_prior_evidence_discard_required",
+		"tasks.md has S3 task-plan amendments that cannot be honestly absorbed in place while preserving prior task evidence",
+		"The amended target_files no longer cover changed_files already preserved in task evidence. Restore honest target_files coverage and run `slipway run`, or rerun `slipway fix --start-reexecution --discard-prior-evidence` if discarding prior task evidence is the intentional operator decision.",
+		change.Slug,
+		reasons,
+		map[string]any{
+			"added_tasks":                 addedTasks,
+			"changed_tasks":               changedTasks,
+			"removed_tasks":               removedTasks,
+			"scope_escape_blockers":       model.ReasonSpecs(scopeEscapes),
+			"remediation_command_hint":    "slipway fix --start-reexecution --discard-prior-evidence",
+			"non_destructive_alternative": "restore target_files coverage and run slipway run",
+			"destructive_effect":          "bumps run_summary_version and clears existing task evidence",
+		},
+	)
+}
+
+func s3ReviewCurrentScopeEscapes(root string, change model.Change) ([]model.ReasonCode, error) {
+	if change.CurrentState != model.StateS3Review {
+		return nil, nil
+	}
+	plan, err := state.LoadOptionalWavePlanForChange(root, change)
+	if err != nil || plan == nil {
+		return nil, err
+	}
+	return s3ReviewScopeEscapesForPlan(root, change, *plan)
+}
+
+func s3ReviewConvergenceScopeEscapes(root string, change model.Change, runSummaryVersion int) ([]model.ReasonCode, error) {
+	if change.CurrentState != model.StateS3Review {
+		return nil, nil
+	}
+	plan, _, err := state.MaterializeWavePlanTransactionOpAtRunSummaryVersion(root, change, time.Now().UTC(), runSummaryVersion)
+	if err != nil {
+		return nil, err
+	}
+	return s3ReviewScopeEscapesForPlan(root, change, plan)
+}
+
+func s3ReviewScopeEscapesForPlan(root string, change model.Change, plan model.WavePlan) ([]model.ReasonCode, error) {
+	execCtx, err := state.LoadRelevantExecutionSummaryContext(root, change)
+	if err != nil || execCtx.Summary == nil {
+		return nil, err
+	}
+	return progression.TaskChangedFileScopeEscapeBlockers(plan, execCtx.Summary.Tasks), nil
 }
 
 func currentTaskPlanByIDForFix(root string, change model.Change) (map[string]wave.TaskNode, error) {

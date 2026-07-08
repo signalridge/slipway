@@ -164,7 +164,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"dispatch_mode_absent_on_started_parallel_wave": {
 		Severity: ReasonSeverityError,
-		Message:  "A started parallel wave recorded no valid dispatch_mode evidence; the engine will not infer parallel dispatch, so record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) and re-run",
+		Message:  "A started parallel wave recorded no valid dispatch_mode evidence; the engine will not infer parallel dispatch, so record dispatch_mode:wave=<n>:parallel_subagents, or degraded_sequential plus degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>, and re-run",
 	},
 	"execution_interrupted": {
 		Severity: ReasonSeverityWarning,
@@ -530,6 +530,10 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 		Severity: ReasonSeverityError,
 		Message:  "tasks.md has S3 task-plan amendments the materialized wave plan has not absorbed yet; run S3 in-place convergence before recording task evidence or reopening execution",
 	},
+	"s3_task_plan_drift_requires_reexecution": {
+		Severity: ReasonSeverityError,
+		Message:  "tasks.md has S3 task-plan amendments that preserved task evidence cannot honestly absorb in place; make an operator decision to restore target coverage or explicitly discard prior task evidence and reexecute",
+	},
 	"session_isolation_warning": {
 		Severity: ReasonSeverityWarning,
 		Message:  "Session isolation warning detected in task evidence",
@@ -620,7 +624,7 @@ var canonicalReasonDefinitions = map[string]ReasonDefinition{
 	},
 	"task_changed_file_scope_escape": {
 		Severity: ReasonSeverityError,
-		Message:  "A task recorded a changed file outside its planned target_files; fix target_files and re-record evidence, then let review verify plan/code alignment",
+		Message:  "A task recorded a changed file outside its planned target_files; fix target_files or the change, then re-run the owning lifecycle step without restamping frozen S3 task evidence",
 	},
 	"task_blocker": {
 		Severity: ReasonSeverityError,

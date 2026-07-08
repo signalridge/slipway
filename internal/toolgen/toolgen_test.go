@@ -2593,6 +2593,8 @@ func TestWaveOrchestrationSkillForcesParallelByDefault(t *testing.T) {
 		"wave-orchestration must require noting a degraded sequential fallback")
 	assert.Contains(t, skill, "dispatch_mode:wave=<wave_index>:degraded_sequential",
 		"wave-orchestration must require structured degraded dispatch evidence")
+	assert.Contains(t, skill, "degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>",
+		"wave-orchestration must require structured degraded dispatch justification")
 	assert.Contains(t, skill, "parallelization: off",
 		"wave-orchestration must describe the parallelization off-switch")
 	assert.Contains(t, skill, "post-wave integration gate",
@@ -2651,6 +2653,8 @@ func TestGeneratedWaveOrchestrationCodexDispatchUsesSpawnAgent(t *testing.T) {
 		"generated Codex dispatch reference must not include the old shell fan-out path")
 	assert.Contains(t, ref, "explicit user authorization",
 		"generated Codex dispatch reference must stop for authorization when required")
+	assert.Contains(t, ref, "degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>",
+		"generated Codex dispatch reference must pair degraded sequential fallback with the required justification")
 	assert.Contains(t, ref, "executor_dispatch_stalled",
 		"generated Codex dispatch reference must define stalled-executor recovery")
 	assert.Contains(t, ref, "executor_result_missing",

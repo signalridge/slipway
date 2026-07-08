@@ -375,7 +375,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### ⚠ BREAKING CHANGES
 
-* **wave:** the WaveRun.dispatch_mode public JSON value changes from "parallel" to "parallel_subagents", and the validate/next/status --json blocker-code set gains four fail-closed wave blockers. A started parallel wave without an explicit dispatch_mode token is now blocked instead of silently inferred parallel; record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) plus per-task executor_agent handles, then re-run.
+* **wave:** the WaveRun.dispatch_mode public JSON value changes from "parallel" to "parallel_subagents", and the validate/next/status --json blocker-code set gains four fail-closed wave blockers. A started parallel wave without an explicit dispatch_mode token is now blocked instead of silently inferred parallel; record dispatch_mode:wave=<n>:parallel_subagents with per-task executor_agent handles, or record degraded_sequential together with degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>, then re-run.
 
 ### Features
 

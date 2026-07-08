@@ -523,15 +523,22 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRefreshWave,
 	},
 	"orphan_task_evidence": {
-		Remediation:     "Task {subject} has recorded evidence at the current run version but is no longer in the current tasks.md wave plan; run `slipway repair` to prune orphan task evidence, or reopen with `slipway fix --start-reexecution --discard-prior-evidence` to start a fresh run.",
+		Remediation:     "Task {subject} has recorded evidence at the current run version but is no longer in the current tasks.md wave plan; run `slipway repair` to prune readable current-run orphan task evidence after the wave plan is current. If repair reports non-repairable/malformed evidence or historical preservation applies, inspect the repair findings or intentionally reopen with `slipway fix --start-reexecution --discard-prior-evidence`.",
 		CommandTemplate: "slipway repair",
 		Class:           RecoveryClassRefreshWave,
 	},
 	"s3_task_plan_drift_requires_inplace_convergence": {
-		Remediation:     "tasks.md has S3 task-plan amendments ({subject}) that the materialized wave plan has not absorbed yet. Run S3 in-place convergence to re-materialize the wave plan at the same run_summary_version and preserve prior task evidence. Record task evidence only for newly added tasks surfaced as incomplete; edited already-evidenced tasks are re-certified through review evidence before wave-orchestration is re-recorded.",
+		Remediation:     "tasks.md has S3 task-plan amendments ({subject}) that the materialized wave plan has not absorbed yet. Run S3 in-place convergence to re-materialize the wave plan at the same run_summary_version and preserve prior task evidence when the preserved changed_files still fit the amended target_files. Record task evidence only for newly added tasks surfaced as incomplete; edited already-evidenced tasks are re-certified through review evidence before wave-orchestration is re-recorded. If convergence reports preserved changed_files outside the amended target_files, restore honest target coverage or explicitly reopen with prior-evidence discard.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassReviewAlignment,
 		Priority:        5,
+		SplitDetail:     true,
+	},
+	"s3_task_plan_drift_requires_reexecution": {
+		Remediation:     "Task {subject}'s preserved S3 task evidence changed file ({detail}) is outside the amended target_files, so in-place convergence cannot honestly preserve it. Either restore target_files to cover the preserved changed file and run `slipway run`, or intentionally reopen execution with prior task evidence discard.",
+		CommandTemplate: "slipway fix --start-reexecution --discard-prior-evidence",
+		Class:           RecoveryClassReviewAlignment,
+		Priority:        4,
 		SplitDetail:     true,
 	},
 	"stale_planning_evidence": {
@@ -645,7 +652,7 @@ var blockerRemediations = map[string]blockerRemediation{
 		Priority:        90,
 	},
 	"scope_contract_drift": {
-		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If it is legitimate same-intent work, update the owning task `target_files` in `tasks.md` to cover them, refresh affected evidence, and re-run the current stage with `slipway run`. If the objective changed, open a new governed change.",
+		Remediation:     "Changed files fall outside the planned Scope Contract; recorded wave evidence is preserved. If it is legitimate same-intent work, update the owning task `target_files` in `tasks.md` to cover them and re-run the current stage with `slipway run`. If S3 review has frozen the affected task evidence and the amended target_files intentionally exclude the preserved changed file, reopen with `slipway fix --start-reexecution --discard-prior-evidence` instead of trying to restamp that task evidence. If the objective changed, open a new governed change.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassReviewAlignment,
 	},
@@ -871,18 +878,18 @@ var blockerRemediations = map[string]blockerRemediation{
 		Class:           RecoveryClassRefreshWave,
 	},
 	"task_changed_file_scope_escape": {
-		Remediation:     "Task {subject} recorded a changed file outside its planned target_files; fix the task's target_files in tasks.md to cover it (or revert the out-of-scope change), re-record evidence, then let review verify plan/code alignment.",
+		Remediation:     "Task {subject} recorded changed file {detail} outside its planned target_files; fix the task's target_files in tasks.md to cover it (or revert the out-of-scope change), then re-run validation/current lifecycle. If this is S3 review and the task evidence is already frozen, do not try to restamp it; either restore honest target coverage and run S3 convergence, or intentionally reopen with `slipway fix --start-reexecution --discard-prior-evidence`.",
 		CommandTemplate: "slipway validate",
 		Class:           RecoveryClassFixScope,
 		SplitDetail:     true,
 	},
 	"parallel_wave_changed_file_overlap": {
-		Remediation:     "Two tasks in the same parallel wave recorded the same changed file and can clobber each other in the shared worktree; split the overlapping target_files in tasks.md or record degraded_sequential dispatch for the wave, then re-run wave-orchestration.",
+		Remediation:     "Two tasks in the same plan-parallel wave recorded the same changed file and can clobber each other in the shared worktree; this is a plan-quality defect. Split the overlapping target_files, add an ordering dependency so the tasks no longer share a parallel wave, or stop for explicit operator replanning before re-running wave-orchestration.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},
 	"dispatch_mode_absent_on_started_parallel_wave": {
-		Remediation:     "A started parallel wave recorded no valid dispatch_mode; record dispatch_mode:wave=<n>:parallel_subagents (or degraded_sequential) evidence and re-run wave-orchestration.",
+		Remediation:     "A started parallel wave recorded no valid dispatch_mode; record dispatch_mode:wave=<n>:parallel_subagents evidence, or record dispatch_mode:wave=<n>:degraded_sequential plus degraded_dispatch_justification:wave=<n>:tool_unavailable=<detail>, then re-run wave-orchestration.",
 		CommandTemplate: "slipway run",
 		Class:           RecoveryClassRefreshWave,
 	},

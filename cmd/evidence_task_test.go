@@ -970,13 +970,13 @@ func createMultiTaskEvidenceTaskFixture(t *testing.T, root string) (string, mode
 	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
 	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
 
-- [ ] `+"`t-01`"+` harden result file loading
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
   - depends_on: []
   - target_files: ["cmd/evidence.go"]
   - task_kind: code
   - covers: [REQ-001]
 
-- [ ] `+"`t-02`"+` cover result file reexecution
+- [ ] `+"`t-02`"+` cover host-owned task evidence reexecution
   - depends_on: []
   - target_files: ["cmd/evidence_task_test.go"]
   - task_kind: test

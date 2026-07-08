@@ -197,6 +197,49 @@ func TestNextStalePlanningEvidenceReportsS3InPlaceConvergenceCommand(t *testing.
 	assert.Equal(t, model.PlanSubStepNone, loaded.PlanSubStep)
 }
 
+func TestNextS3PreReviewTaskPlanDriftRoutesToInPlaceConvergence(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	ensureTestGitRepo(t, root)
+	initTestWorkspace(t, root)
+
+	slug, change := createEvidenceTaskFixture(t, root)
+	writePassingExecutionSummary(t, root, slug, 1, "t-01")
+	writePassingWaveEvidence(t, root, slug, 1)
+	change.CurrentState = model.StateS3Review
+	change.PlanSubStep = model.PlanSubStepNone
+	require.NoError(t, state.SaveChange(root, change))
+
+	bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+	require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` verify original execution evidence
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` review-discovered follow-up
+  - depends_on: []
+  - target_files: ["cmd/next.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+`)))
+
+	view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+	require.NoError(t, err)
+
+	reasons := strings.Join(model.ReasonSpecs(view.Blockers), "\n")
+	assert.Contains(t, reasons, "s3_task_plan_drift_requires_inplace_convergence:t-02")
+	assert.Contains(t, reasons, "required_skill_missing:spec-compliance-review")
+	assert.Nil(t, view.NextSkill, "drift convergence root must suppress review-batch handoff until slipway run absorbs tasks.md")
+	require.NotNil(t, view.Recovery)
+	assert.Equal(t, "slipway run", view.Recovery.PrimaryCommand)
+	assert.Equal(t, "run_slipway_run_to_advance", view.ConfirmationRequirement.Reason)
+	assert.Equal(t, "slipway run", view.ConfirmationRequirement.NextCommand)
+}
+
 func TestStalePlanningReviewAlignmentActionContractStaysConsistentAcrossSurfaces(t *testing.T) {
 	t.Parallel()
 

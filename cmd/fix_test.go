@@ -197,7 +197,7 @@ func TestFixStartReexecutionRejectsAdditiveS3Convergence(t *testing.T) {
 	})
 }
 
-func TestFixStartReexecutionRejectsEditedS3Convergence(t *testing.T) {
+func TestFixStartReexecutionSurfacesDiscardDecisionForS3ScopeNarrowing(t *testing.T) {
 	root := t.TempDir()
 	withCommandWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
@@ -230,13 +230,13 @@ func TestFixStartReexecutionRejectsEditedS3Convergence(t *testing.T) {
 		require.Error(t, err)
 		cliErr := asCLIError(err)
 		require.NotNil(t, cliErr)
-		assert.Equal(t, "fix_start_reexecution_inplace_convergence_available", cliErr.ErrorCode)
-		assert.Equal(t, "slipway run", cliErr.Details["remediation_command_hint"])
+		assert.Equal(t, "fix_start_reexecution_prior_evidence_discard_required", cliErr.ErrorCode)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Details["remediation_command_hint"])
 		assert.Contains(t, cliErr.Details["changed_tasks"], "t-01")
 		assert.Empty(t, cliErr.Details["added_tasks"])
-		assert.Equal(t, "--discard-prior-evidence", cliErr.Details["override_flag"])
+		assert.Equal(t, "restore target_files coverage and run slipway run", cliErr.Details["non_destructive_alternative"])
 		require.NotNil(t, cliErr.Recovery)
-		assert.Equal(t, "slipway run", cliErr.Recovery.PrimaryCommand)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Recovery.PrimaryCommand)
 
 		reloaded, err := state.LoadChange(root, slug)
 		require.NoError(t, err)

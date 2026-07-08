@@ -169,7 +169,11 @@ func evaluateGovernedWaveExecution(root string, change model.Change, mutate bool
 	// read-only readiness reports them. Extended by later safety-net gates
 	// (C2/C3).
 	var safetyNetBlockers []model.ReasonCode
-	safetyNetBlockers = append(safetyNetBlockers, TaskChangedFileScopeEscapeBlockers(wavePlan, tasks)...)
+	scopeEscapes := TaskChangedFileScopeEscapeBlockers(wavePlan, tasks)
+	safetyNetBlockers = append(safetyNetBlockers, scopeEscapes...)
+	if change.CurrentState == model.StateS3Review {
+		safetyNetBlockers = append(safetyNetBlockers, S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes)...)
+	}
 	safetyNetBlockers = append(safetyNetBlockers, ParallelWaveChangedFileOverlapBlockers(wavePlan, tasks)...)
 	safetyNetBlockers = append(safetyNetBlockers, DispatchEvidenceBlockers(wavePlan, tasks, dispatchModes, model.DegradedDispatchJustificationsFromVerification(record), enforced)...)
 	safetyNetBlockers = append(safetyNetBlockers, ExecutorAgentBlockers(wavePlan, tasks, dispatchModes, model.ExecutorAgentHandlesFromVerification(record))...)
@@ -635,8 +639,9 @@ func ExecutionSummaryHasIncompleteTask(summary *model.ExecutionSummary) bool {
 // executor that legitimately owns it. Coverage uses wave.TargetCoversPath, the
 // same directional scope predicate the wave planner's conflict detection relies
 // on, so "covers" and "conflicts" share one implementation (REQ-002). The
-// remedy is to fix target_files and re-record evidence; S3 review owns final
-// plan/code alignment.
+// remedy is to fix target_files and re-run the owning lifecycle step; S3
+// review keeps already-recorded task evidence frozen, so disjoint target edits
+// require either restored target coverage or explicit prior-evidence discard.
 func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.ExecutionTaskSummary) []model.ReasonCode {
 	if len(tasks) == 0 {
 		return nil
@@ -671,6 +676,27 @@ func TaskChangedFileScopeEscapeBlockers(plan model.WavePlan, tasks []model.Execu
 				task.TaskID+":"+changedFile,
 			))
 		}
+	}
+	return model.NormalizeReasonCodes(blockers)
+}
+
+// S3TaskPlanDriftRequiresReexecutionBlockers reports S3 review-time task-plan
+// edits that cannot be honestly absorbed by in-place convergence because the
+// preserved task evidence changed_files no longer fit the amended target_files.
+// The original task_changed_file_scope_escape blocker remains for the precise
+// safety violation; this S3-specific root names the available operator decision
+// boundary instead of telling the host to restamp frozen task evidence.
+func S3TaskPlanDriftRequiresReexecutionBlockers(scopeEscapes []model.ReasonCode) []model.ReasonCode {
+	if len(scopeEscapes) == 0 {
+		return nil
+	}
+	blockers := make([]model.ReasonCode, 0, len(scopeEscapes))
+	for _, scopeEscape := range scopeEscapes {
+		detail := strings.TrimSpace(scopeEscape.Detail)
+		if detail == "" {
+			detail = "tasks.md"
+		}
+		blockers = append(blockers, model.NewReasonCode("s3_task_plan_drift_requires_reexecution", detail))
 	}
 	return model.NormalizeReasonCodes(blockers)
 }

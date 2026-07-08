@@ -106,6 +106,7 @@ func TestWaveOrchestrationDispatchReferenceDefinesRuntimeAdapters(t *testing.T) 
 	assert.Contains(t, flatRef, "close each agent")
 	assert.NotContains(t, flatRef, "codex -q --task")
 	assert.Contains(t, flatRef, "dispatch_mode:wave=<wave_index>:degraded_sequential")
+	assert.Contains(t, flatRef, "degraded_dispatch_justification:wave=<wave_index>:tool_unavailable=<detail>")
 
 	for _, field := range []string{
 		"`task_id`",
