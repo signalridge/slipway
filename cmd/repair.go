@@ -658,7 +658,7 @@ func repairDriftNextAction(reason, target string) string {
 	lower := strings.ToLower(reason)
 	switch {
 	case strings.Contains(lower, "evidence digest"), strings.Contains(lower, "required_skill_stale"):
-		return governanceDigestRunNextAction(target)
+		return governanceDigestEvidenceNextAction(target)
 	case strings.Contains(lower, "unknown metadata key"), strings.Contains(lower, "wave_plan_load_failed"):
 		// tasks.md is unparseable (an unsupported/unknown task metadata key, or a
 		// wave-plan derivation failure), so the wave plan cannot be rebuilt and
@@ -681,8 +681,8 @@ func repairDriftNextAction(reason, target string) string {
 }
 
 // buildGovernanceDigestDriftFindings surfaces governance-skill evidence-digest
-// drift (`required_skill_stale`) as a non-repairable finding routed back through
-// normal lifecycle advancement. repair does not mutate engine-owned digests.
+// drift (`required_skill_stale`) as a non-repairable finding. repair does not
+// mutate engine-owned digests; the owning skill must be rerun and recertified.
 func buildGovernanceDigestDriftFindings(root string, changes []model.Change) []repairDriftFinding {
 	out := []repairDriftFinding{}
 	for _, change := range changes {
@@ -713,19 +713,19 @@ func buildGovernanceDigestDriftFindings(root string, changes []model.Change) []r
 			out = append(out, repairDriftFinding{
 				Reason:     fmt.Sprintf("%s: evidence digest for governance skill %q is stale", change.Slug, skillName),
 				Target:     skillName,
-				NextAction: governanceDigestRunNextAction(skillName),
+				NextAction: governanceDigestEvidenceNextAction(skillName),
 			})
 		}
 	}
 	return out
 }
 
-func governanceDigestRunNextAction(skillName string) string {
+func governanceDigestEvidenceNextAction(skillName string) string {
 	skillName = strings.TrimSpace(skillName)
 	if skillName == "" {
-		return "run `slipway run` to repair stale lifecycle evidence and continue alignment"
+		return "re-run the stale governance skill against current inputs, then record fresh evidence with `slipway evidence skill --skill <skill> --verdict pass`"
 	}
-	return fmt.Sprintf("run `slipway run` to repair stale lifecycle evidence for %s and continue alignment", skillName)
+	return fmt.Sprintf("re-run the %s governance skill against current inputs, then record fresh evidence with `slipway evidence skill --skill %s --verdict pass`", skillName, skillName)
 }
 
 func repairAppliedFindingStrings(findings []repairAppliedFinding) []string {

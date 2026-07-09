@@ -1140,12 +1140,12 @@ REQ-001: Original requirement.
 	})
 }
 
-func TestRepairRoutesStaleGovernanceDigestToSlipwayRun(t *testing.T) {
+func TestRepairRoutesStaleGovernanceDigestToEvidenceSkill(t *testing.T) {
 	root := t.TempDir()
 	withWorkspace(t, root, func() {
 		initTestWorkspace(t, root)
 
-		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair routes stale digest to run")
+		slug := createGovernedRequest(t, root, levelNonDiscovery, "repair routes stale digest to evidence skill")
 		change, err := state.LoadChange(root, slug)
 		require.NoError(t, err)
 		change.CurrentState = model.StateS1Plan
@@ -1181,15 +1181,16 @@ func TestRepairRoutesStaleGovernanceDigestToSlipwayRun(t *testing.T) {
 		for _, drift := range summary.UnrepairedDrift {
 			if drift.Target == progression.SkillPlanAudit && strings.Contains(drift.Reason, "evidence digest") {
 				found = true
-				assert.Contains(t, drift.NextAction, "slipway run")
+				assert.Contains(t, drift.NextAction, "slipway evidence skill --skill plan-audit --verdict pass")
 				assert.Contains(t, drift.NextAction, "plan-audit")
+				assert.NotContains(t, drift.NextAction, "slipway run")
 			}
 		}
-		assert.True(t, found, "expected repair to route the stale plan-audit digest through slipway run")
+		assert.True(t, found, "expected repair to route the stale plan-audit digest through evidence skill recertification")
 	})
 }
 
-func TestRepairDriftNextActionDigestGuidanceUsesRun(t *testing.T) {
+func TestRepairDriftNextActionDigestGuidanceUsesEvidenceSkill(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -1206,7 +1207,8 @@ func TestRepairDriftNextActionDigestGuidanceUsesRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := repairDriftNextAction(tc.reason, tc.target)
-			assert.Contains(t, got, "slipway run")
+			assert.Contains(t, got, "slipway evidence skill")
+			assert.NotContains(t, got, "slipway run")
 			assert.NotContains(t, got, "restamp")
 		})
 	}

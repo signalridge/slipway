@@ -482,24 +482,10 @@ func shipVerificationRecordStale(readiness GovernanceReadiness, verifyPassingSki
 	return rec.IsPassing()
 }
 
-// s3TaskPlanDriftSubjects returns stable recovery subjects for S3_REVIEW
+// s3TaskPlanDriftSubjectsForPlan returns stable recovery subjects for S3_REVIEW
 // task-plan drift. Added tasks are named individually; edited/restructured-only
 // drift falls back to tasks.md because the in-place convergence operation absorbs
 // the full current task projection, not one independently executable task.
-func s3TaskPlanDriftSubjects(root string, change model.Change) ([]string, error) {
-	if change.CurrentState != model.StateS3Review {
-		return nil, nil
-	}
-	drift, err := state.CurrentTasksPlanDriftFromWavePlan(root, change)
-	if err != nil || !drift.HasWavePlan {
-		return nil, err
-	}
-	if !drift.Drifted() {
-		return nil, nil
-	}
-	return s3TaskPlanDriftSubjectsForPlan(root, change, drift.Plan)
-}
-
 func s3TaskPlanDriftSubjectsForPlan(root string, change model.Change, plan model.WavePlan) ([]string, error) {
 	planned, err := state.CurrentTasksPlanTaskIDs(root, change)
 	if err != nil {
