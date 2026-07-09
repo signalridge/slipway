@@ -41,6 +41,9 @@ type WavePlanTask struct {
 	DependsOn   []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 	TargetFiles []string `yaml:"target_files,omitempty" json:"target_files,omitempty"`
 	TaskKind    TaskKind `yaml:"task_kind,omitempty" json:"task_kind,omitempty"`
+	Covers      []string `yaml:"covers,omitempty" json:"covers,omitempty"`
+	Evidence    string   `yaml:"evidence,omitempty" json:"evidence,omitempty"`
+	Acceptance  string   `yaml:"acceptance,omitempty" json:"acceptance,omitempty"`
 }
 
 func (p *WavePlan) Normalize() {
@@ -165,9 +168,14 @@ func (t *WavePlanTask) Normalize() {
 	if t.TargetFiles == nil {
 		t.TargetFiles = []string{}
 	}
+	if t.Covers == nil {
+		t.Covers = []string{}
+	}
 	for i := range t.TargetFiles {
 		t.TargetFiles[i] = NormalizePublicPath(t.TargetFiles[i])
 	}
+	t.Evidence = strings.TrimSpace(t.Evidence)
+	t.Acceptance = strings.TrimSpace(t.Acceptance)
 	slices.Sort(t.DependsOn)
 	slices.Sort(t.TargetFiles)
 }

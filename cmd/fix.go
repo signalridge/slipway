@@ -474,7 +474,10 @@ func sameFixTaskProjection(persisted model.WavePlanTask, current wave.TaskNode) 
 		strings.TrimSpace(persisted.Objective) == strings.TrimSpace(current.Objective) &&
 		persisted.TaskKind == current.TaskKind &&
 		slices.Equal(normalizeFixStringList(persisted.DependsOn), normalizeFixStringList(current.DependsOn)) &&
-		slices.Equal(normalizeFixPathList(persisted.TargetFiles), normalizeFixPathList(current.TargetFiles))
+		slices.Equal(normalizeFixPathList(persisted.TargetFiles), normalizeFixPathList(current.TargetFiles)) &&
+		slices.Equal(normalizeFixStringSequence(persisted.Covers), normalizeFixStringSequence(current.Covers)) &&
+		strings.TrimSpace(persisted.Evidence) == strings.TrimSpace(current.Evidence) &&
+		strings.TrimSpace(persisted.Acceptance) == strings.TrimSpace(current.Acceptance)
 }
 
 func normalizeFixStringList(values []string) []string {
@@ -492,6 +495,18 @@ func normalizeFixStringList(values []string) []string {
 		out = append(out, trimmed)
 	}
 	slices.Sort(out)
+	return out
+}
+
+func normalizeFixStringSequence(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
 	return out
 }
 

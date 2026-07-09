@@ -366,6 +366,40 @@ func TestMaterializeWavePlanNormalizesBackslashTargetFiles(t *testing.T) {
 	assert.Equal(t, []string{"cmd/run.go"}, plan.Waves[0].Tasks[0].TargetFiles)
 }
 
+func TestMaterializeWavePlanPreservesStructuralTaskMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := createRuntimeLayout(t)
+	change := saveActiveChangeForTest(t, root, "wave-plan-structural-metadata")
+	writeBundleTasksForTest(t, root, change, `# Tasks
+
+- [ ] `+"`t-01`"+` verify structural task metadata
+  - depends_on: []
+  - target_files: ["cmd/run.go"]
+  - task_kind: verification
+  - covers: [REQ-001, REQ-002]
+  - evidence: go test ./cmd -run TestEvidenceTask
+  - acceptance: task evidence stays fresh
+`)
+
+	plan, err := MaterializeWavePlanAt(root, change, waveMaterializeTime)
+	require.NoError(t, err)
+	require.Len(t, plan.Waves, 1)
+	require.Len(t, plan.Waves[0].Tasks, 1)
+	task := plan.Waves[0].Tasks[0]
+	assert.Equal(t, []string{"REQ-001", "REQ-002"}, task.Covers)
+	assert.Equal(t, "go test ./cmd -run TestEvidenceTask", task.Evidence)
+	assert.Equal(t, "task evidence stays fresh", task.Acceptance)
+
+	loaded, err := LoadWavePlanForChange(root, change)
+	require.NoError(t, err)
+	require.Len(t, loaded.Waves, 1)
+	require.Len(t, loaded.Waves[0].Tasks, 1)
+	assert.Equal(t, task.Covers, loaded.Waves[0].Tasks[0].Covers)
+	assert.Equal(t, task.Evidence, loaded.Waves[0].Tasks[0].Evidence)
+	assert.Equal(t, task.Acceptance, loaded.Waves[0].Tasks[0].Acceptance)
+}
+
 func TestLoadWavePlanForChangePreservesMaterializedParallel(t *testing.T) {
 	t.Parallel()
 
@@ -395,8 +429,8 @@ func TestApplyEffectiveParallelDoesNotMutateInputPlan(t *testing.T) {
 			WaveIndex: 1,
 			Parallel:  false,
 			Tasks: []model.WavePlanTask{
-				{TaskID: "t-02", TargetFiles: []string{"b.go", "a.go"}},
-				{TaskID: "t-01", DependsOn: []string{"x", "a"}},
+				{TaskID: "t-02", TargetFiles: []string{"b.go", "a.go"}, Covers: []string{"REQ-002", "REQ-001"}},
+				{TaskID: "t-01", DependsOn: []string{"x", "a"}, Covers: []string{"REQ-003"}},
 			},
 		}},
 	}
@@ -408,6 +442,7 @@ func TestApplyEffectiveParallelDoesNotMutateInputPlan(t *testing.T) {
 	assert.False(t, plan.Waves[0].Parallel, "effective conversion must not mutate the caller's persisted plan value")
 	assert.Equal(t, []string{"b.go", "a.go"}, plan.Waves[0].Tasks[0].TargetFiles, "normalization must not sort through caller-owned slices")
 	assert.Equal(t, []string{"x", "a"}, plan.Waves[0].Tasks[1].DependsOn, "normalization must not sort through caller-owned slices")
+	assert.Equal(t, []string{"REQ-002", "REQ-001"}, plan.Waves[0].Tasks[0].Covers, "metadata slices must not be sorted through caller-owned state")
 }
 
 func TestMaterializeWavePlanParallelDoesNotChangeHashes(t *testing.T) {

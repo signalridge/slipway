@@ -186,6 +186,56 @@ func TestRunAtS3BlocksSemanticTaskEditDespiteTargetExtension(t *testing.T) {
 	})
 }
 
+func TestRunAtS3BlocksStructuralTaskMetadataEditDespiteStableScope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+		writeTaskEvidenceFile(t, root, slug, 1, "t-01", map[string]any{
+			"task_kind":     "verification",
+			"changed_files": []string{"cmd/lifecycle_commands_test.go"},
+			"target_files":  []string{"cmd/lifecycle_commands_test.go"},
+			"evidence_ref":  "test:original-structural-metadata",
+		})
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` exercise command fixture
+  - depends_on: []
+  - target_files: ["cmd/lifecycle_commands_test.go"]
+  - task_kind: verification
+  - covers: [REQ-002]
+  - evidence: go test ./cmd -run TestEvidenceTask
+  - acceptance: reviewer recertifies the amended evidence contract
+`)))
+
+		view, err := buildNextViewForCommand(root, changeRef{Slug: slug}, nextViewOptions{Preview: true, Command: "run"})
+		require.NoError(t, err)
+		require.NotNil(t, view.Recovery)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", view.Recovery.PrimaryCommand)
+		blockers := model.ReasonSpecs(view.Blockers)
+		assert.Contains(t, blockers, "s3_task_plan_drift_requires_reexecution:t-01:semantic_fields=covers,evidence,acceptance")
+
+		fixCmd := commandForRoot(t, root, makeFixCmd())
+		fixCmd.SetArgs([]string{"--json", "--change", slug, "--start-reexecution"})
+		fixCmd.SetOut(&bytes.Buffer{})
+		err = fixCmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "fix_start_reexecution_prior_evidence_discard_required", cliErr.ErrorCode)
+		require.NotNil(t, cliErr.Recovery)
+		assert.Equal(t, "slipway fix --start-reexecution --discard-prior-evidence", cliErr.Recovery.PrimaryCommand)
+	})
+}
+
 func TestRunAtS3BlocksEditedTaskPlanFromPreservingEvidence(t *testing.T) {
 	t.Parallel()
 

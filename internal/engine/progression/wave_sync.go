@@ -774,6 +774,15 @@ func changedSemanticTaskFields(previousTask, currentTask model.WavePlanTask) []s
 	if !slices.Equal(normalizeTaskStringSet(previousTask.DependsOn), normalizeTaskStringSet(currentTask.DependsOn)) {
 		fields = append(fields, "depends_on")
 	}
+	if !slices.Equal(normalizeTaskStringList(previousTask.Covers), normalizeTaskStringList(currentTask.Covers)) {
+		fields = append(fields, "covers")
+	}
+	if strings.TrimSpace(previousTask.Evidence) != strings.TrimSpace(currentTask.Evidence) {
+		fields = append(fields, "evidence")
+	}
+	if strings.TrimSpace(previousTask.Acceptance) != strings.TrimSpace(currentTask.Acceptance) {
+		fields = append(fields, "acceptance")
+	}
 	return fields
 }
 
@@ -792,6 +801,18 @@ func normalizeTaskStringSet(values []string) []string {
 		out = append(out, trimmed)
 	}
 	slices.Sort(out)
+	return out
+}
+
+func normalizeTaskStringList(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		out = append(out, trimmed)
+	}
 	return out
 }
 

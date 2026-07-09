@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/signalridge/slipway/internal/model"
 	"github.com/signalridge/slipway/internal/state"
@@ -65,6 +66,59 @@ func TestRunAtS3AcceptsFoldedTaskEvidenceAndRejectsRestamp(t *testing.T) {
 		// The folded task's evidence is now written to the ledger — the public
 		// forward exit that was previously a hard deadlock.
 		assertTaskEvidenceWritten(t, root, slug, "t-02")
+	})
+}
+
+func TestRunAtS3RejectsBackdatedFoldedTaskEvidenceCapturedAt(t *testing.T) {
+	root := t.TempDir()
+	withCommandWorkspace(t, root, func() {
+		initTestWorkspace(t, root)
+		slug, change := createEvidenceTaskFixture(t, root)
+
+		recordTaskResult(t, root, "t-01", "test:original-t-01", "cmd/evidence.go")
+		writePassingExecutionSummary(t, root, slug, 1, "t-01")
+		writePassingWaveEvidence(t, root, slug, 1)
+		change.CurrentState = model.StateS3Review
+		require.NoError(t, state.SaveChange(root, change))
+
+		bundlePath := filepath.Join(root, "artifacts", "changes", slug)
+		require.NoError(t, writeBundleArtifactFile(bundlePath, slug, "tasks.md", []byte(`# Tasks
+
+- [ ] `+"`t-01`"+` harden host-owned task evidence loading
+  - depends_on: []
+  - target_files: ["cmd/evidence.go"]
+  - task_kind: code
+  - covers: [REQ-001]
+
+- [ ] `+"`t-02`"+` cover the newly discovered gap
+  - depends_on: []
+  - target_files: ["cmd/evidence_task_test.go"]
+  - task_kind: test
+  - covers: [REQ-001]
+`)))
+
+		runOnce(t, root, slug)
+		record, err := state.LoadVerification(root, slug, "wave-orchestration")
+		require.NoError(t, err)
+
+		cmd := commandForRoot(t, root, makeEvidenceCmd())
+		cmd.SetArgs([]string{
+			"task", "--json",
+			"--task-id", "t-02",
+			"--verdict", "pass",
+			"--evidence-ref", "test:new-t-02-backdated",
+			"--changed-file", "cmd/evidence_task_test.go",
+			"--captured-at", record.Timestamp.Add(-time.Second).Format(time.RFC3339Nano),
+		})
+		cmd.SetOut(&bytes.Buffer{})
+		err = cmd.Execute()
+		require.Error(t, err)
+		cliErr := asCLIError(err)
+		require.NotNil(t, cliErr)
+		assert.Equal(t, "evidence_task_captured_at_stale_for_review_convergence", cliErr.ErrorCode)
+		assert.Contains(t, cliErr.Remediation, "re-record wave-orchestration evidence")
+		assertTaskEvidenceNotWritten(t, root, slug, "t-02")
+		assert.True(t, summaryHasIncompleteTask(t, root, slug), "rejected backdated evidence must leave Door 2 pending")
 	})
 }
 

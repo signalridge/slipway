@@ -578,6 +578,9 @@ func makeEvidenceTaskCmd() *cobra.Command {
 						nil,
 					)
 				}
+				if err := validateEvidenceTaskCapturedAtForReviewConvergence(root, change, taskID, capturedAt); err != nil {
+					return err
+				}
 
 				blockers := model.ReasonCodesFromSpecs(blockerSpecs)
 				for i, blocker := range blockers {
@@ -1498,6 +1501,39 @@ func parseEvidenceTaskCapturedAt(raw string, commandCapturedAt time.Time) (time.
 		return time.Time{}, fmt.Errorf("captured_at must not be in the future")
 	}
 	return capturedAt, nil
+}
+
+func validateEvidenceTaskCapturedAtForReviewConvergence(root string, change model.Change, taskID string, capturedAt time.Time) error {
+	if change.CurrentState != model.StateS3Review {
+		return nil
+	}
+	record, found, err := progression.LatestPassingWaveEvidence(root, change.Slug)
+	if err != nil {
+		return newStateIntegrityError(
+			"evidence_task_wave_evidence_load_failed",
+			fmt.Sprintf("failed to load wave-orchestration evidence for %q: %v", change.Slug, err),
+			"Repair or remove malformed wave-orchestration evidence before recording task evidence.",
+			change.Slug,
+			nil,
+		)
+	}
+	if !found || record.Timestamp.IsZero() {
+		return nil
+	}
+	if capturedAt.UTC().After(record.Timestamp.UTC()) {
+		return nil
+	}
+	return newInvalidUsageError(
+		"evidence_task_captured_at_stale_for_review_convergence",
+		fmt.Sprintf("task %q captured_at must be after the latest wave-orchestration record at S3_REVIEW", taskID),
+		"Omit --captured-at while recording folded task evidence at S3_REVIEW, then re-record wave-orchestration evidence so the wave record post-dates the task evidence.",
+		map[string]any{
+			"task_id":                  taskID,
+			"captured_at":              capturedAt.UTC().Format(time.RFC3339Nano),
+			"wave_record_timestamp":    record.Timestamp.UTC().Format(time.RFC3339Nano),
+			"remediation_command_hint": "slipway evidence task --task-id " + taskID + " --verdict <verdict> --evidence-ref <ref> [--changed-file <path>]...",
+		},
+	)
 }
 
 func deriveEvidenceTaskRunSummaryVersion(root string, change model.Change, wavePlan model.WavePlan) (int, []string, error) {

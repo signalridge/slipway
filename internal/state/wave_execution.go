@@ -127,6 +127,7 @@ func cloneWavePlanForEffectiveParallel(plan model.WavePlan) model.WavePlan {
 		for j := range plan.Waves[i].Tasks {
 			plan.Waves[i].Tasks[j].DependsOn = append([]string(nil), plan.Waves[i].Tasks[j].DependsOn...)
 			plan.Waves[i].Tasks[j].TargetFiles = append([]string(nil), plan.Waves[i].Tasks[j].TargetFiles...)
+			plan.Waves[i].Tasks[j].Covers = append([]string(nil), plan.Waves[i].Tasks[j].Covers...)
 		}
 	}
 	return plan
@@ -176,9 +177,14 @@ func MaterializeWavePlanTransactionOpAtRunSummaryVersion(
 			return model.WavePlan{}, fsutil.FileTransactionOp{}, err
 		}
 	}
-	hashes, nodes, err := currentTaskPlanHashesAndNodes(root, change)
+	hashes, taskNodes, err := currentTaskPlanHashesAndTaskNodes(root, change)
 	if err != nil {
 		return model.WavePlan{}, fsutil.FileTransactionOp{}, err
+	}
+	nodes := taskNodesToWaveNodes(taskNodes)
+	taskNodeByID := make(map[string]wave.TaskNode, len(taskNodes))
+	for _, node := range taskNodes {
+		taskNodeByID[node.TaskID] = node
 	}
 	waves, err := wave.PlanWaves(nodes)
 	if err != nil {
@@ -203,12 +209,16 @@ func MaterializeWavePlanTransactionOpAtRunSummaryVersion(
 	for i, plannedWave := range waves {
 		tasks := make([]model.WavePlanTask, len(plannedWave.Nodes))
 		for j, node := range plannedWave.Nodes {
+			taskNode := taskNodeByID[node.TaskID]
 			tasks[j] = model.WavePlanTask{
 				TaskID:      node.TaskID,
 				Objective:   node.Objective,
 				DependsOn:   append([]string(nil), node.DependsOn...),
 				TargetFiles: append([]string(nil), node.TargetFiles...),
 				TaskKind:    node.TaskKind,
+				Covers:      append([]string(nil), taskNode.Covers...),
+				Evidence:    taskNode.Evidence,
+				Acceptance:  taskNode.Acceptance,
 			}
 		}
 		plan.Waves[i] = model.WavePlanWave{
@@ -351,6 +361,14 @@ type currentTaskPlanHashes struct {
 }
 
 func currentTaskPlanHashesAndNodes(root string, change model.Change) (currentTaskPlanHashes, []wave.Node, error) {
+	hashes, taskNodes, err := currentTaskPlanHashesAndTaskNodes(root, change)
+	if err != nil {
+		return currentTaskPlanHashes{}, nil, err
+	}
+	return hashes, taskNodesToWaveNodes(taskNodes), nil
+}
+
+func currentTaskPlanHashesAndTaskNodes(root string, change model.Change) (currentTaskPlanHashes, []wave.TaskNode, error) {
 	bundleDir, err := GovernedBundleDir(root, change)
 	if err != nil {
 		return currentTaskPlanHashes{}, nil, err
@@ -381,7 +399,15 @@ func currentTaskPlanHashesAndNodes(root string, change model.Change) (currentTas
 		Semantic:   semanticHash,
 		Structural: structuralHash,
 		Scope:      scopeHash,
-	}, taskPlan.Nodes(), nil
+	}, taskPlan.Tasks, nil
+}
+
+func taskNodesToWaveNodes(taskNodes []wave.TaskNode) []wave.Node {
+	nodes := make([]wave.Node, 0, len(taskNodes))
+	for _, taskNode := range taskNodes {
+		nodes = append(nodes, taskNode.Node)
+	}
+	return nodes
 }
 
 func WaveEvidenceDir(root, slug string) string {
