@@ -20,6 +20,11 @@ Both modes create a disposable Git repository whose path contains spaces, Unicod
 - material source refresh, current candidate ID, and structured `adopt` recovery;
 - final status readback.
 
+Windows PowerShell 5.1's legacy native-argument binder does not preserve every
+embedded quote. Both modes therefore start Slipway with `ProcessStartInfo` and
+CommandLineToArgvW-compatible argument escaping, matching the executable's
+actual Windows argv boundary instead of accepting the binder's lossy rewrite.
+
 `native-cmd.cmd` intentionally delegates JSON creation and assertions to the stdlib PowerShell available on supported Windows systems. That PowerShell process is only the assertion driver: in `Cmd` mode, every non-stdin Slipway invocation crosses `cmd.exe /d /v:on` through a UTF-16LE `EncodedCommand`, including doctor, initial Orient, Outcome files, structured answer/adopt/resume argv, status/stop, source import, and the binary's rendered recovery command. The inner encoded PowerShell explicitly configures UTF-8 native input and output before invoking Slipway. Outcome stdin remains a PowerShell-mode-only assertion; Cmd mode submits the equivalent Outcome through an outcome-file argv that crosses `cmd.exe`.
 
 A failure throws or exits non-zero with `native Windows acceptance (...) failed`. Set `SLIPWAY_KEEP_WINDOWS_FIXTURE=1` only for local diagnosis; otherwise fixtures are removed. Use only disposable test data.

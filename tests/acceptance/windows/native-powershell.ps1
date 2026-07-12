@@ -25,12 +25,136 @@ function Assert-True([bool]$Condition, [string]$Message) {
     if (-not $Condition) { Fail $Message }
 }
 
+function Assert-TextEqual {
+    param(
+        [AllowEmptyString()]
+        [string]$Actual,
+
+        [AllowEmptyString()]
+        [string]$Expected,
+
+        [string]$Message
+    )
+    if ([string]::Equals($Actual, $Expected, [StringComparison]::Ordinal)) { return }
+
+    $limit = [Math]::Min($Actual.Length, $Expected.Length)
+    $difference = $limit
+    for ($index = 0; $index -lt $limit; $index++) {
+        if ($Actual[$index] -cne $Expected[$index]) {
+            $difference = $index
+            break
+        }
+    }
+    $actualUnit = if ($difference -lt $Actual.Length) { 'U+{0:X4}' -f [int]$Actual[$difference] } else { '<end>' }
+    $expectedUnit = if ($difference -lt $Expected.Length) { 'U+{0:X4}' -f [int]$Expected[$difference] } else { '<end>' }
+    $actualJson = ConvertTo-Json -InputObject $Actual -Compress
+    $expectedJson = ConvertTo-Json -InputObject $Expected -Compress
+    Fail "$Message; first_difference=$difference expected_unit=$expectedUnit actual_unit=$actualUnit expected_length=$($Expected.Length) actual_length=$($Actual.Length) expected=$expectedJson actual=$actualJson"
+}
+
 function Write-Utf8([string]$Path, [string]$Text) {
     [System.IO.File]::WriteAllText($Path, $Text, $script:Utf8NoBom)
 }
 
 function Join-NativeOutput($Output) {
     return (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+}
+
+function ConvertTo-WindowsCommandLineArgument {
+    param(
+        [AllowEmptyString()]
+        [string]$Value
+    )
+    if ($Value.Length -eq 0) { return '""' }
+
+    $hasSpace = ($Value.IndexOf([char]0x20) -ge 0) -or ($Value.IndexOf([char]0x09) -ge 0)
+    $builder = New-Object System.Text.StringBuilder
+    if ($hasSpace) { [void]$builder.Append([char]0x22) }
+
+    $backslashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq [char]0x5c) {
+            $backslashes++
+            [void]$builder.Append($character)
+            continue
+        }
+        if ($character -eq [char]0x22) {
+            for ($index = 0; $index -lt $backslashes; $index++) {
+                [void]$builder.Append([char]0x5c)
+            }
+            [void]$builder.Append([char]0x5c)
+            [void]$builder.Append($character)
+            $backslashes = 0
+            continue
+        }
+        $backslashes = 0
+        [void]$builder.Append($character)
+    }
+
+    if ($hasSpace) {
+        for ($index = 0; $index -lt $backslashes; $index++) {
+            [void]$builder.Append([char]0x5c)
+        }
+        [void]$builder.Append([char]0x22)
+    }
+    return $builder.ToString()
+}
+
+function Join-WindowsCommandLine([string[]]$Values) {
+    $escaped = @(
+        $Values | ForEach-Object {
+            ConvertTo-WindowsCommandLineArgument -Value ([string]$_)
+        }
+    )
+    return ($escaped -join ' ')
+}
+
+function ConvertTo-PowerShellUtf8Expression([string]$Value) {
+    $encoded = [Convert]::ToBase64String($script:Utf8NoBom.GetBytes($Value))
+    return "[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encoded'))"
+}
+
+function Invoke-ExactNativeProcess {
+    param(
+        [string]$FileName,
+        [string[]]$CommandArgs,
+        [string]$StdinText,
+        [switch]$UseStdin
+    )
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.FileName = $FileName
+    $startInfo.Arguments = Join-WindowsCommandLine -Values $CommandArgs
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.StandardOutputEncoding = $script:Utf8NoBom
+    $startInfo.StandardErrorEncoding = $script:Utf8NoBom
+    if ($UseStdin) {
+        # Windows PowerShell 5.1 runs on .NET Framework, whose redirected
+        # stdin writer inherits Console.InputEncoding configured above.
+        $startInfo.RedirectStandardInput = $true
+    }
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { Fail "could not start native process: $FileName" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if ($UseStdin) {
+            $process.StandardInput.Write($StdinText)
+            $process.StandardInput.Close()
+        }
+        $process.WaitForExit()
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Stdout = $stdoutTask.Result
+            Stderr = $stderrTask.Result
+        }
+    } finally {
+        $process.Dispose()
+    }
 }
 
 function Invoke-SlipwayDirect {
@@ -42,37 +166,48 @@ function Invoke-SlipwayDirect {
     if ($Mode -eq 'Cmd') {
         Fail 'Cmd mode attempted to bypass cmd.exe for a Slipway invocation'
     }
-    if ($UseStdin) {
-        $output = $StdinText | & $script:Exe @CommandArgs 2>&1
-    } else {
-        $output = & $script:Exe @CommandArgs 2>&1
+    $result = Invoke-ExactNativeProcess -FileName $script:Exe -CommandArgs $CommandArgs -StdinText $StdinText -UseStdin:$UseStdin
+    $combined = $result.Stdout
+    if ($result.Stderr.Length -gt 0) {
+        $combined += [Environment]::NewLine + $result.Stderr
     }
-    $exitCode = $LASTEXITCODE
-    $text = Join-NativeOutput $output
-    if ($exitCode -ne 0) {
-        Fail "command exited ${exitCode}: $($CommandArgs -join ' '); output: $text"
+    if ($result.ExitCode -ne 0) {
+        Fail "command exited $($result.ExitCode): $($CommandArgs -join ' '); output: $combined"
     }
-    return $text
-}
-
-function Quote-PowerShellLiteral([string]$Value) {
-    return "'" + $Value.Replace("'", "''") + "'"
+    return $combined
 }
 
 function Invoke-SlipwayViaCmd {
     param([string[]]$CommandArgs)
+    $argumentLine = Join-WindowsCommandLine -Values $CommandArgs
     $parts = New-Object System.Collections.Generic.List[string]
     $parts.Add('$ErrorActionPreference = ''Stop'';')
     $parts.Add('$innerUtf8NoBom = New-Object System.Text.UTF8Encoding($false);')
     $parts.Add('$OutputEncoding = $innerUtf8NoBom;')
     $parts.Add('[Console]::InputEncoding = $innerUtf8NoBom;')
     $parts.Add('[Console]::OutputEncoding = $innerUtf8NoBom;')
-    $parts.Add('&')
-    $parts.Add((Quote-PowerShellLiteral $script:Exe))
-    foreach ($value in $CommandArgs) {
-        $parts.Add((Quote-PowerShellLiteral $value))
-    }
-    $parts.Add('; exit $LASTEXITCODE')
+    $parts.Add('$startInfo = New-Object System.Diagnostics.ProcessStartInfo;')
+    $parts.Add('$startInfo.UseShellExecute = $false;')
+    $parts.Add('$startInfo.CreateNoWindow = $true;')
+    $parts.Add('$startInfo.FileName = ' + (ConvertTo-PowerShellUtf8Expression $script:Exe) + ';')
+    $parts.Add('$startInfo.Arguments = ' + (ConvertTo-PowerShellUtf8Expression $argumentLine) + ';')
+    $parts.Add('$startInfo.RedirectStandardOutput = $true;')
+    $parts.Add('$startInfo.RedirectStandardError = $true;')
+    $parts.Add('$startInfo.StandardOutputEncoding = $innerUtf8NoBom;')
+    $parts.Add('$startInfo.StandardErrorEncoding = $innerUtf8NoBom;')
+    $parts.Add('$process = New-Object System.Diagnostics.Process;')
+    $parts.Add('$process.StartInfo = $startInfo;')
+    $parts.Add('if (-not $process.Start()) { exit 1 };')
+    $parts.Add('$stdoutTask = $process.StandardOutput.ReadToEndAsync();')
+    $parts.Add('$stderrTask = $process.StandardError.ReadToEndAsync();')
+    $parts.Add('$process.WaitForExit();')
+    $parts.Add('$stdout = $stdoutTask.Result;')
+    $parts.Add('$stderr = $stderrTask.Result;')
+    $parts.Add('$exitCode = $process.ExitCode;')
+    $parts.Add('$process.Dispose();')
+    $parts.Add('[Console]::Out.Write($stdout);')
+    $parts.Add('[Console]::Error.Write($stderr);')
+    $parts.Add('exit $exitCode')
     $encoded = [Convert]::ToBase64String(
         [Text.Encoding]::Unicode.GetBytes(($parts -join ' '))
     )
@@ -215,7 +350,9 @@ try {
     $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
     $start = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
     Assert-True ($start.kind -eq 'orient') 'ad-hoc start did not return Orient'
-    Assert-True ($start.goal -eq $goal) 'special-character goal did not preserve exact text'
+    Assert-TextEqual -Actual ([string]$start.goal) -Expected $goal -Message 'special-character goal did not preserve exact text'
+    $startStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-TextEqual -Actual ([string]$startStatus.goal) -Expected $goal -Message 'journaled goal did not preserve exact special characters or CRLF'
 
     $pause = [ordered]@{
         reason = 'decision_required'
@@ -234,7 +371,7 @@ try {
     $oriented = $orientedText | ConvertFrom-Json
     Assert-True ($oriented.kind -eq 'orient') 'structured answer did not fresh-Orient'
     $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
-    Assert-True ($answeredStatus.answers[-1].text -eq $specialAnswer) 'journaled answer did not preserve exact special characters or CRLF'
+    Assert-TextEqual -Actual ([string]$answeredStatus.answers[-1].text) -Expected $specialAnswer -Message 'journaled answer did not preserve exact special characters or CRLF'
     $normalizedAnswer = $specialAnswer.Replace("`r`n", "`n")
     Assert-True ($oriented.context.Contains($normalizedAnswer)) 'bounded context did not contain the normalized special-character answer'
 
