@@ -57,7 +57,17 @@ function Write-Utf8([string]$Path, [string]$Text) {
 }
 
 function Get-Sha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = $null
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $digest = $sha256.ComputeHash($stream)
+        return ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) { $sha256.Dispose() }
+        $stream.Dispose()
+    }
 }
 
 function Join-NativeOutput($Output) {
