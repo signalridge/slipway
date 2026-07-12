@@ -731,7 +731,6 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 	restored.parentIdentity = parentInfo
 	restored.entries = slices.Clone(snapshot.entries)
 	roots := map[string]*os.Root{".": treeRoot}
-	directoryFiles := map[string]*os.File{".": rootFile}
 	var ownedRoots []*os.Root
 	var ownedFiles []*os.File
 	defer func() {
@@ -778,7 +777,6 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 				return fileSnapshot{}, fmt.Errorf("restored directory %s changed while opening", filepath.Join(path, clean))
 			}
 			roots[clean] = childRoot
-			directoryFiles[clean] = dirFile
 			ownedRoots = append(ownedRoots, childRoot)
 			ownedFiles = append(ownedFiles, dirFile)
 			restored.entries[index].identity = opened
@@ -812,11 +810,11 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 		if !item.isDir {
 			continue
 		}
-		if err := directoryFiles[item.rel].Chmod(item.perm); err != nil {
+		if err := roots[item.rel].Chmod(".", item.perm); err != nil {
 			return fileSnapshot{}, err
 		}
 	}
-	if err := rootFile.Chmod(snapshot.perm); err != nil {
+	if err := treeRoot.Chmod(".", snapshot.perm); err != nil {
 		return fileSnapshot{}, err
 	}
 	if err := syncRootDirectory(treeRoot); err != nil {

@@ -28,11 +28,12 @@ var legacyResidueCodesForTest = map[string]string{
 }
 
 type legacyResidueFixture struct {
-	name    string
-	path    string
-	payload []byte
-	mode    os.FileMode
-	modTime time.Time
+	name            string
+	path            string
+	payload         []byte
+	mode            os.FileMode
+	quarantinedMode os.FileMode
+	modTime         time.Time
 }
 
 func TestLegacyRunstoreResidueIsAdvisoryAndUntouchedByCommands(t *testing.T) {
@@ -54,12 +55,19 @@ func TestLegacyRunstoreResidueIsAdvisoryAndUntouchedByCommands(t *testing.T) {
 		require.NoError(t, os.Mkdir(path, 0o700))
 		payload := []byte("opaque legacy payload for " + name + "\n")
 		require.NoError(t, os.WriteFile(filepath.Join(path, "private.bin"), payload, 0o600))
-		info, err := os.Lstat(path)
+		originalInfo, err := os.Lstat(path)
+		require.NoError(t, err)
+		require.NoError(t, os.Chmod(path, 0))
+		quarantinedInfo, err := os.Lstat(path)
 		require.NoError(t, err)
 		fixtures = append(fixtures, legacyResidueFixture{
-			name: name, path: path, payload: payload, mode: info.Mode(), modTime: info.ModTime(),
+			name:            name,
+			path:            path,
+			payload:         payload,
+			mode:            originalInfo.Mode(),
+			quarantinedMode: quarantinedInfo.Mode(),
+			modTime:         quarantinedInfo.ModTime(),
 		})
-		require.NoError(t, os.Chmod(path, 0))
 	}
 	t.Cleanup(func() {
 		for _, fixture := range fixtures {
@@ -129,7 +137,7 @@ func TestLegacyRunstoreResidueIsAdvisoryAndUntouchedByCommands(t *testing.T) {
 	for _, fixture := range fixtures {
 		info, err := os.Lstat(fixture.path)
 		require.NoError(t, err, fixture.name)
-		assert.Equal(t, os.FileMode(0), info.Mode().Perm(), fixture.name)
+		assert.Equal(t, fixture.quarantinedMode, info.Mode(), fixture.name)
 		assert.Equal(t, fixture.modTime, info.ModTime(), fixture.name)
 		require.NoError(t, os.Chmod(fixture.path, fixture.mode.Perm()))
 		payload, err := os.ReadFile(filepath.Join(fixture.path, "private.bin"))

@@ -363,9 +363,25 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	human, humanStderr, err := executeForTest(t, "status", initial.RunID, "--root", repository)
 	require.NoError(t, err, humanStderr)
 	assert.Contains(t, human, "Current source candidate: "+candidateID)
-	assert.Contains(t, human, "--source-choice pinned --candidate "+candidateID)
-	assert.Contains(t, human, "--source-choice adopt --candidate "+candidateID)
 	assert.NotContains(t, human, candidatePath)
+
+	candidateStatusJSON, candidateStatusStderr, err := executeForTest(t, "status", initial.RunID, "--root", repository, "--json")
+	require.NoError(t, err, candidateStatusStderr)
+	var candidateStatus runStatusOutput
+	require.NoError(t, json.Unmarshal([]byte(candidateStatusJSON), &candidateStatus))
+	require.Len(t, candidateStatus.Next.Variants, 2)
+	assert.Equal(t, "keep-pinned", candidateStatus.Next.Variants[0].ID)
+	assert.Equal(t, []string{
+		"slipway", "run", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"--source-choice", "pinned", "--candidate", candidateID,
+	}, candidateStatus.Next.Variants[0].BaseArgv)
+	assert.Empty(t, candidateStatus.Next.Variants[0].Inputs)
+	assert.Equal(t, "adopt", candidateStatus.Next.Variants[1].ID)
+	assert.Equal(t, []string{
+		"slipway", "run", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"--source-choice", "adopt", "--candidate", candidateID,
+	}, candidateStatus.Next.Variants[1].BaseArgv)
+	assert.Empty(t, candidateStatus.Next.Variants[1].Inputs)
 
 	stdout, stderr, err = executeForTest(t, "run", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
 	require.NoError(t, err, stderr)

@@ -114,6 +114,8 @@ func TestApplyFileTransactionRestoresRemovedSnapshotKinds(t *testing.T) {
 		require.NoError(t, os.WriteFile(file, []byte("managed"), 0o640))
 		require.NoError(t, os.Chmod(nested, 0o555))
 		require.NoError(t, os.Chmod(tree, 0o555))
+		assertReadOnlyDirectoryMode(t, tree)
+		assertReadOnlyDirectoryMode(t, nested)
 		t.Cleanup(func() {
 			_ = os.Chmod(tree, 0o700)
 			_ = os.Chmod(nested, 0o700)
