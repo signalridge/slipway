@@ -342,7 +342,7 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 			if guardCalls != 2 {
 				return nil
 			}
-			beforeReplacement, err := os.Lstat(path)
+			beforeReplacement, err := snapshotFileIdentity(path)
 			if err != nil {
 				return err
 			}
@@ -352,7 +352,7 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 			if err := os.WriteFile(path, []byte("transaction"), 0o600); err != nil {
 				return err
 			}
-			afterReplacement, err := os.Lstat(path)
+			afterReplacement, err := snapshotFileIdentity(path)
 			if err != nil {
 				return err
 			}
@@ -394,7 +394,7 @@ func TestFailedInstallPinsStageBeforeCleanupValidation(t *testing.T) {
 				return nil
 			}
 			stageCleanupObserved = true
-			beforeReplacement, err := os.Lstat(recovery)
+			beforeReplacement, err := snapshotFileIdentity(recovery)
 			if err != nil {
 				return err
 			}
@@ -404,7 +404,7 @@ func TestFailedInstallPinsStageBeforeCleanupValidation(t *testing.T) {
 			if err := os.WriteFile(recovery, []byte("transaction"), 0o600); err != nil {
 				return err
 			}
-			afterReplacement, err := os.Lstat(recovery)
+			afterReplacement, err := snapshotFileIdentity(recovery)
 			if err != nil {
 				return err
 			}
@@ -443,7 +443,7 @@ func TestCleanupPreservesEntryReplacedAfterValidation(t *testing.T) {
 			return nil
 		}
 		hookObserved = true
-		beforeReplacement, err := os.Lstat(recovery)
+		beforeReplacement, err := snapshotFileIdentity(recovery)
 		if err != nil {
 			return err
 		}
@@ -453,7 +453,7 @@ func TestCleanupPreservesEntryReplacedAfterValidation(t *testing.T) {
 		if err := os.WriteFile(recovery, []byte("before"), 0o600); err != nil {
 			return err
 		}
-		afterReplacement, err := os.Lstat(recovery)
+		afterReplacement, err := snapshotFileIdentity(recovery)
 		if err != nil {
 			return err
 		}
@@ -526,7 +526,8 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 	later := filepath.Join(dir, "later.txt")
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
 	failure := errors.New("later operation failed")
-	injected := false
+	swapAttempted := false
+	var swapErr error
 
 	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
@@ -534,13 +535,17 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 	}, FileTransactionHooks{
 		BeforeMutation: failPath(later, failure),
 		DuringQuarantineCleanup: func(original, recovery string) error {
-			if original != path || injected {
+			if original != path || swapAttempted {
 				return nil
 			}
-			injected = true
+			swapAttempted = true
 			directory := filepath.Dir(recovery)
-			if err := os.Rename(directory, directory+"-moved"); err != nil {
-				return err
+			swapErr = os.Rename(directory, directory+"-moved")
+			if swapErr != nil {
+				if runtime.GOOS == "windows" {
+					return nil
+				}
+				return swapErr
 			}
 			if err := os.Mkdir(directory, 0o700); err != nil {
 				return err
@@ -550,6 +555,20 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 	})
 
 	require.Error(t, err)
+	require.True(t, swapAttempted)
+	if runtime.GOOS == "windows" {
+		// Windows blocks the directory rename while the transaction lease holds
+		// a descendant handle, so the namespace replacement never occurs.
+		require.Error(t, swapErr, "the transaction identity lease must block quarantine namespace replacement")
+		assert.True(t, isWindowsSharingViolation(swapErr), "unexpected Windows namespace-swap error: %v", swapErr)
+		assert.ErrorIs(t, err, failure)
+		assert.NotErrorIs(t, err, ErrFileTransactionRollbackPrecondition)
+		content, readErr := os.ReadFile(path)
+		require.NoError(t, readErr)
+		assert.Equal(t, "before", string(content))
+		requireNoRecoveryArtifacts(t, dir)
+		return
+	}
 	assert.ErrorIs(t, err, ErrFileTransactionRollbackPrecondition)
 	content, readErr := os.ReadFile(path)
 	require.NoError(t, readErr)
@@ -806,6 +825,22 @@ func assertRecoveryContains(t *testing.T, recoveries []*FileTransactionRecoveryE
 		}
 	}
 	require.Fail(t, "expected recovery content was not reported", expected)
+}
+
+// snapshotFileIdentity captures identity from an open handle so the returned
+// FileInfo remains a historical snapshot after the pathname is replaced.
+func snapshotFileIdentity(path string) (os.FileInfo, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	info, statErr := file.Stat()
+	closeErr := file.Close()
+	if statErr != nil || closeErr != nil {
+		return nil, errors.Join(statErr, closeErr)
+	}
+	return info, nil
 }
 
 func requireNoRecoveryArtifacts(t *testing.T, dir string) {
