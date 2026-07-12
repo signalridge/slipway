@@ -182,6 +182,7 @@ type Review struct {
 type Outcome struct {
 	ContractVersion  int               `json:"contract_version"`
 	ActionID         string            `json:"action_id"`
+	ActionKind       ActionKind        `json:"action_kind"`
 	Status           OutcomeStatus     `json:"status"`
 	Summary          string            `json:"summary"`
 	Observations     []string          `json:"observations"`
@@ -470,7 +471,7 @@ func DecodeOutcome(reader io.Reader) (Outcome, error) {
 
 func validateOutcomeJSONShape(raw []byte, outcome Outcome) error {
 	root, err := requiredJSONObject(raw, "$", []string{
-		"contract_version", "action_id", "status", "summary", "observations", "known_issues",
+		"contract_version", "action_id", "action_kind", "status", "summary", "observations", "known_issues",
 		"suggested_actions", "pause", "implementation", "review",
 	})
 	if err != nil {
@@ -601,6 +602,12 @@ func (outcome Outcome) Validate(kind ActionKind, actionID string) error {
 	}
 	if !ValidActionKind(kind) {
 		return fmt.Errorf("invalid action kind %q", kind)
+	}
+	if !ValidActionKind(outcome.ActionKind) {
+		return fmt.Errorf("invalid outcome action_kind %q", outcome.ActionKind)
+	}
+	if outcome.ActionKind != kind {
+		return fmt.Errorf("outcome action_kind %q does not match current action kind %q", outcome.ActionKind, kind)
 	}
 	switch outcome.Status {
 	case OutcomeCompleted, OutcomeNeedsInput, OutcomePartial, OutcomeError:

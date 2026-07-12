@@ -22,7 +22,7 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	assert.Equal(t, autopilot.ActionOrient, action.Kind)
 	assert.Equal(t, autopilot.ContractVersion, action.ContractVersion)
 
-	orient := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "facts gathered")
+	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts gathered")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the requested update."}}
 	outcomePath := writeOutcome(t, orient)
 	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
@@ -56,7 +56,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	var action autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
-	outcome := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "facts")
+	outcome := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	outcome.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the inspected change."}}
 	encoded, err := json.Marshal(outcome)
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 
-	bad := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "edited")
+	bad := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "edited")
 	bad.ContractVersion = 999
 	encoded, err = json.Marshal(bad)
 	require.NoError(t, err)
@@ -96,20 +96,59 @@ func TestStatusListsMultipleRunsAndStopRequiresAnUnambiguousID(t *testing.T) {
 	assert.Contains(t, stderr, `"id":"list-runs"`)
 }
 
-func TestSubmitRejectsUnknownOutcomeFieldsBeforeWritingJournal(t *testing.T) {
+func TestSubmitRejectsInvalidOutcomeShapeBeforeWritingJournal(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
 	var action autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
-	valid, err := json.Marshal(machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "facts"))
+	valid, err := json.Marshal(machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
 	require.NoError(t, err)
+	missingKind := strings.Replace(string(valid), `"action_kind":"orient",`, "", 1)
+	stdout, stderr, err = executeForTestWithInput(t, missingKind, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr, `required field \"action_kind\" is missing`)
+
+	mismatchedKind := strings.Replace(string(valid), `"action_kind":"orient"`, `"action_kind":"clarify"`, 1)
+	stdout, stderr, err = executeForTestWithInput(t, mismatchedKind, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr, "does not match current action kind")
+
 	bad := strings.Replace(string(valid), `"review":null`, `"review":null,"approved":true`, 1)
 	stdout, stderr, err = executeForTestWithInput(t, bad, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "unknown field")
+
+	stdout, stderr, err = executeForTest(t, "status", action.RunID, "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	var run runStatusOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &run))
+	require.NotNil(t, run.CurrentAction)
+	assert.Equal(t, action.ActionID, run.CurrentAction.ActionID)
+	assert.Nil(t, run.Actions[0].Outcome)
+}
+
+func TestSubmitRejectsSymlinkOutcomeFileBeforeWritingJournal(t *testing.T) {
+	repository := newCLIRepository(t)
+	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	var action autopilot.Action
+	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+
+	target := writeOutcome(t, machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
+	link := filepath.Join(t.TempDir(), "outcome.json")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", link)
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr, `"code":"outcome_unavailable"`)
+	assert.Contains(t, stderr, "outcome file must be a regular non-symlink file")
 
 	stdout, stderr, err = executeForTest(t, "status", action.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
@@ -149,14 +188,14 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	runID := action.RunID
 
-	orient := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "facts")
+	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the change."}}
 	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
 	require.NoError(t, os.WriteFile(filepath.Join(repository, "change.go"), []byte("package sample\n"), 0o600))
-	implementation := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "changed")
+	implementation := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "changed")
 	implementation.Implementation = &autopilot.Implementation{
 		Result:        autopilot.ImplementationApplied,
 		FilesChanged:  []string{"change.go"},
@@ -169,7 +208,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionReview, action.Kind)
 
-	review := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "finding reported")
+	review := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "finding reported")
 	review.Review = &autopilot.Review{
 		Result: autopilot.ReviewFindings,
 		Findings: []autopilot.Finding{{
@@ -185,10 +224,11 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
 }
 
-func machineOutcome(actionID string, status autopilot.OutcomeStatus, summary string) autopilot.Outcome {
+func machineOutcome(actionID string, actionKind autopilot.ActionKind, status autopilot.OutcomeStatus, summary string) autopilot.Outcome {
 	return autopilot.Outcome{
 		ContractVersion:  autopilot.ContractVersion,
 		ActionID:         actionID,
+		ActionKind:       actionKind,
 		Status:           status,
 		Summary:          summary,
 		Observations:     []string{},

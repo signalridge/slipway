@@ -487,7 +487,7 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		chmodErr := dirFile.Chmod(0o700)
 		closeErr := dirFile.Close()
 		current, lstatErr := parent.Lstat(name)
-		if statErr != nil || chmodErr != nil || closeErr != nil || lstatErr != nil || !os.SameFile(info, opened) || !os.SameFile(opened, current) || current.Mode().Perm()&0o077 != 0 {
+		if statErr != nil || chmodErr != nil || closeErr != nil || lstatErr != nil || !os.SameFile(info, opened) || !os.SameFile(opened, current) || !transactionQuarantineModeIsPrivate(current.Mode()) {
 			_ = directory.Close()
 			return allocationError(errors.Join(errors.New("transaction quarantine is not private and stable"), statErr, chmodErr, closeErr, lstatErr))
 		}
@@ -856,7 +856,7 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 		}
 	}
 	private, err := quarantine.parent.Lstat(quarantine.directoryName)
-	if err != nil || !private.IsDir() || private.Mode()&os.ModeSymlink != 0 || private.Mode().Perm()&0o077 != 0 ||
+	if err != nil || !private.IsDir() || private.Mode()&os.ModeSymlink != 0 || !transactionQuarantineModeIsPrivate(private.Mode()) ||
 		quarantine.directoryIdentity == nil || !os.SameFile(private, quarantine.directoryIdentity) {
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(errors.New("quarantine directory is no longer private and transaction-owned"), err))
 	}
@@ -883,6 +883,14 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 		return &FileTransactionRecoveryError{OriginalPath: quarantine.originalPath, RecoveryPath: quarantine.directoryPath, Rollback: rollback, Cause: err}
 	}
 	return nil
+}
+
+func transactionQuarantineModeIsPrivate(mode os.FileMode) bool {
+	// Windows exposes its inherited ACL through the security descriptor, not
+	// os.FileMode permission bits. Chmod can only toggle the read-only attribute,
+	// so the stable real-directory handle and identity checks above are the
+	// available os.Root guarantees on that platform.
+	return runtime.GOOS == "windows" || mode.Perm()&0o077 == 0
 }
 
 func preserveQuarantineFailure(quarantine *fileQuarantine, rollback bool, observedPath string, cause error) error {

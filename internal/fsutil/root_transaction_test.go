@@ -23,7 +23,7 @@ func TestRenameNoReplaceNeverOverwritesExistingDestination(t *testing.T) {
 
 	err = renameNoReplaceRoots(root, root, "old.txt", "new.txt")
 	require.Error(t, err)
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		assert.ErrorIs(t, err, ErrFileTransactionNoReplaceUnsupported)
 	}
 	oldContent, readErr := os.ReadFile(oldPath)
@@ -35,7 +35,7 @@ func TestRenameNoReplaceNeverOverwritesExistingDestination(t *testing.T) {
 }
 
 func TestRootedAtomicWritePreservesConcurrentDestinationChanges(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	t.Run("missing destination is recreated after planning", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestRootTransactionParentSwapDoesNotEscapeRoot(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic links may require elevated privileges")
 	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	t.Run("normal mutation", func(t *testing.T) {
@@ -223,7 +223,7 @@ func TestRootTransactionRejectsParentSwapAfterQuarantineValidation(t *testing.T)
 	if runtime.GOOS == "windows" {
 		t.Skip("directory replacement behavior differs on Windows")
 	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	root := t.TempDir()
@@ -269,7 +269,7 @@ func TestRootTransactionTreeRestoreStaysOnOwnedDirectoryHandle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic links may require elevated privileges")
 	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	root := t.TempDir()
@@ -324,4 +324,13 @@ func TestTreeSnapshotRejectsSymlinksWithoutMutation(t *testing.T) {
 	target, readErr := os.Readlink(filepath.Join(tree, "link"))
 	require.NoError(t, readErr)
 	assert.Equal(t, "target", target)
+}
+
+func atomicNoReplaceAvailableForTest() bool {
+	switch runtime.GOOS {
+	case "darwin", "linux", "windows":
+		return true
+	default:
+		return false
+	}
 }

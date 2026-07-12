@@ -14,7 +14,7 @@ const (
 	faultValidateSlipway      faultPoint = "validate_slipway"
 	faultValidateRuns         faultPoint = "validate_runs"
 	faultValidateRun          faultPoint = "validate_run"
-	faultSyncSlipwayDirectory faultPoint = "sync_slipway_directory"
+	faultSyncSlipwayDirectory faultPoint = "sync_slipway_directory" // #nosec G101 -- deterministic fault-injection label, not credential material.
 	faultSyncCommonDirectory  faultPoint = "sync_common_directory"
 	faultSyncRunsDirectory    faultPoint = "sync_runs_directory"
 	faultSyncRunDirectory     faultPoint = "sync_run_directory"

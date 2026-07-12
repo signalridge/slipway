@@ -666,6 +666,7 @@
       "required": [
         "contract_version",
         "action_id",
+        "action_kind",
         "status",
         "summary",
         "observations",
@@ -678,6 +679,7 @@
       "properties": {
         "contract_version": { "const": 1 },
         "action_id": { "type": "string", "minLength": 1 },
+        "action_kind": { "enum": ["orient", "clarify", "implement", "review", "summarize"] },
         "status": { "enum": ["completed", "needs_input", "partial", "error"] },
         "summary": { "type": "string", "minLength": 1 },
         "observations": { "type": "array", "items": { "type": "string" } },
@@ -708,8 +710,9 @@
       },
       "oneOf": [
         {
-          "title": "Orient, Clarify, or Summarize non-paused result",
+          "title": "non-paused Orient",
           "properties": {
+            "action_kind": { "const": "orient" },
             "status": { "enum": ["completed", "partial", "error"] },
             "pause": { "type": "null" },
             "implementation": { "type": "null" },
@@ -718,8 +721,9 @@
           }
         },
         {
-          "title": "non-destructive input pause",
+          "title": "paused Orient",
           "properties": {
+            "action_kind": { "const": "orient" },
             "status": { "const": "needs_input" },
             "pause": { "$ref": "#/$defs/nonDestructivePause" },
             "implementation": { "type": "null" },
@@ -728,10 +732,22 @@
           }
         },
         {
-          "title": "destructive Implement input pause",
+          "title": "non-paused Clarify",
           "properties": {
+            "action_kind": { "const": "clarify" },
+            "status": { "enum": ["completed", "error"] },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 1 }
+          }
+        },
+        {
+          "title": "paused Clarify",
+          "properties": {
+            "action_kind": { "const": "clarify" },
             "status": { "const": "needs_input" },
-            "pause": { "$ref": "#/$defs/destructivePause" },
+            "pause": { "$ref": "#/$defs/nonDestructivePause" },
             "implementation": { "type": "null" },
             "review": { "type": "null" },
             "suggested_actions": { "maxItems": 0 }
@@ -740,6 +756,7 @@
         {
           "title": "completed Implement",
           "properties": {
+            "action_kind": { "const": "implement" },
             "status": { "const": "completed" },
             "pause": { "type": "null" },
             "implementation": {
@@ -755,6 +772,7 @@
         {
           "title": "partial Implement",
           "properties": {
+            "action_kind": { "const": "implement" },
             "status": { "const": "partial" },
             "pause": { "type": "null" },
             "implementation": {
@@ -770,6 +788,7 @@
         {
           "title": "error Implement",
           "properties": {
+            "action_kind": { "const": "implement" },
             "status": { "const": "error" },
             "pause": { "type": "null" },
             "implementation": {
@@ -783,8 +802,25 @@
           }
         },
         {
+          "title": "paused Implement",
+          "properties": {
+            "action_kind": { "const": "implement" },
+            "status": { "const": "needs_input" },
+            "pause": {
+              "oneOf": [
+                { "$ref": "#/$defs/nonDestructivePause" },
+                { "$ref": "#/$defs/destructivePause" }
+              ]
+            },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
           "title": "completed Review",
           "properties": {
+            "action_kind": { "const": "review" },
             "status": { "const": "completed" },
             "pause": { "type": "null" },
             "implementation": { "type": "null" },
@@ -815,6 +851,7 @@
         {
           "title": "partial Review",
           "properties": {
+            "action_kind": { "const": "review" },
             "status": { "const": "partial" },
             "pause": { "type": "null" },
             "implementation": { "type": "null" },
@@ -830,6 +867,7 @@
         {
           "title": "error Review",
           "properties": {
+            "action_kind": { "const": "review" },
             "status": { "const": "error" },
             "pause": { "type": "null" },
             "implementation": { "type": "null" },
@@ -839,6 +877,17 @@
                 { "properties": { "result": { "const": "error" } } }
               ]
             },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "non-paused Summary",
+          "properties": {
+            "action_kind": { "const": "summarize" },
+            "status": { "enum": ["completed", "error"] },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
             "suggested_actions": { "maxItems": 0 }
           }
         }

@@ -314,9 +314,28 @@ func outcomeReader(command *cobra.Command, path string, stdin bool) (io.Reader, 
 	if stdin {
 		return command.InOrStdin(), nil, nil
 	}
-	file, err := os.Open(path)
+	before, err := os.Lstat(path)
 	if err != nil {
 		return nil, nil, err
+	}
+	if before.Mode()&os.ModeSymlink != 0 || !before.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("outcome file must be a regular non-symlink file")
+	}
+	file, err := os.Open(path) // #nosec G304 -- user-selected file is Lstat-checked and its opened identity is verified below.
+	if err != nil {
+		return nil, nil, err
+	}
+	opened, statErr := file.Stat()
+	current, lstatErr := os.Lstat(path)
+	if statErr != nil || lstatErr != nil || current.Mode()&os.ModeSymlink != 0 || !current.Mode().IsRegular() || !os.SameFile(before, opened) || !os.SameFile(before, current) {
+		_ = file.Close()
+		if statErr != nil {
+			return nil, nil, statErr
+		}
+		if lstatErr != nil {
+			return nil, nil, lstatErr
+		}
+		return nil, nil, fmt.Errorf("outcome file changed while opening")
 	}
 	return file, file.Close, nil
 }

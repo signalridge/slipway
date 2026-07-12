@@ -206,15 +206,16 @@ PY
 }
 
 make_outcome() {
-  python3 -I - "$1" "$2" "$3" "$4" "$5" <<'PY'
+  python3 -I - "$1" "$2" "$3" "$4" "$5" "$6" <<'PY'
 import json
 import sys
 
-path, action_id, status, summary, encoded_extra = sys.argv[1:]
+path, action_id, action_kind, status, summary, encoded_extra = sys.argv[1:]
 extra = json.loads(encoded_extra)
 data = {
     "contract_version": 1,
     "action_id": action_id,
+    "action_kind": action_kind,
     "status": status,
     "summary": summary,
     "observations": extra.pop("observations", []),
@@ -319,7 +320,7 @@ RUN_DIR="$REPO/.git/slipway/runs/$RUN_ID"
 ORIENT_ID=$(json_get "$START" action_id)
 
 ORIENT_OUTCOME="$TMP_ROOT/orient-outcome.json"
-make_outcome "$ORIENT_OUTCOME" "$ORIENT_ID" completed 'Repository facts observed.' '{"suggested_actions":[{"kind":"clarify","brief":"Ask for the release channel."}]}'
+make_outcome "$ORIENT_OUTCOME" "$ORIENT_ID" orient completed 'Repository facts observed.' '{"suggested_actions":[{"kind":"clarify","brief":"Ask for the release channel."}]}'
 CLARIFY="$TMP_ROOT/clarify.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$CLARIFY"
 assert_action "$CLARIFY" clarify
@@ -329,11 +330,11 @@ RETRY="$TMP_ROOT/retry.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$RETRY"
 cmp -s "$CLARIFY" "$RETRY" || fail 'identical Outcome retry did not return the derived current Action'
 CONFLICT_OUTCOME="$TMP_ROOT/conflict-outcome.json"
-make_outcome "$CONFLICT_OUTCOME" "$ORIENT_ID" completed 'Conflicting retry.' '{}'
+make_outcome "$CONFLICT_OUTCOME" "$ORIENT_ID" orient completed 'Conflicting retry.' '{}'
 expect_error 3 outcome_conflict skip-action "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$CONFLICT_OUTCOME"
 
 CLARIFY_OUTCOME="$TMP_ROOT/clarify-outcome.json"
-make_outcome "$CLARIFY_OUTCOME" "$CLARIFY_ID" needs_input 'Release channel requires a user decision.' '{"pause_reason":"decision_required"}'
+make_outcome "$CLARIFY_OUTCOME" "$CLARIFY_ID" clarify needs_input 'Release channel requires a user decision.' '{"pause_reason":"decision_required"}'
 PAUSED="$TMP_ROOT/paused.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --outcome-file "$CLARIFY_OUTCOME" > "$PAUSED"
 assert_state "$PAUSED" paused decision_required answer-decision
@@ -349,7 +350,7 @@ STOPPED_AGAIN="$TMP_ROOT/stopped-again.json"
 assert_state "$STOPPED" stopped "" resume-ad-hoc
 cmp -s "$STOPPED" "$STOPPED_AGAIN" || fail 'repeated stop was not idempotent'
 STOPPED_OUTCOME="$TMP_ROOT/stopped-outcome.json"
-make_outcome "$STOPPED_OUTCOME" "$OLD_IMPLEMENT_ID" completed 'Should not be accepted.' '{"implementation_result":"not_needed"}'
+make_outcome "$STOPPED_OUTCOME" "$OLD_IMPLEMENT_ID" orient completed 'Should not be accepted.' '{"implementation_result":"not_needed"}'
 expect_error 3 run_not_active resume-ad-hoc "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$OLD_IMPLEMENT_ID" --outcome-file "$STOPPED_OUTCOME"
 
 RESUMED="$TMP_ROOT/resumed.json"
@@ -372,27 +373,27 @@ assert run["state"] == "active", run
 PY
 
 RESUMED_ORIENT_OUTCOME="$TMP_ROOT/resumed-orient-outcome.json"
-make_outcome "$RESUMED_ORIENT_OUTCOME" "$RESUMED_ORIENT_ID" completed 'Repository re-oriented after resume.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
+make_outcome "$RESUMED_ORIENT_OUTCOME" "$RESUMED_ORIENT_ID" orient completed 'Repository re-oriented after resume.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 IMPLEMENT2="$TMP_ROOT/implement2.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$RESUMED_ORIENT_ID" --outcome-file "$RESUMED_ORIENT_OUTCOME" > "$IMPLEMENT2"
 assert_action "$IMPLEMENT2" implement
 IMPLEMENT2_ID=$(json_get "$IMPLEMENT2" action_id)
 printf 'implementation change\n' >> "$REPO/README.md"
 IMPLEMENT2_OUTCOME="$TMP_ROOT/implement2-outcome.json"
-make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" completed 'Implementation report included a test failure.' '{"implementation_result":"applied","files_changed":[],"activities":[{"kind":"test","command":"false","exit_code":1,"summary":"reported failure"}]}'
+make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report included a test failure.' '{"implementation_result":"applied","files_changed":[],"activities":[{"kind":"test","command":"false","exit_code":1,"summary":"reported failure"}]}'
 REVIEW="$TMP_ROOT/review.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$IMPLEMENT2_ID" --outcome-file "$IMPLEMENT2_OUTCOME" > "$REVIEW"
 assert_action "$REVIEW" review
 REVIEW_ID=$(json_get "$REVIEW" action_id)
 
 REVIEW_OUTCOME="$TMP_ROOT/review-outcome.json"
-make_outcome "$REVIEW_OUTCOME" "$REVIEW_ID" completed 'Review reported one advisory finding.' '{"review_result":"findings_reported","findings":[{"location":"README.md:1","summary":"Advisory finding","detail":"Report only; do not repair automatically."}]}'
+make_outcome "$REVIEW_OUTCOME" "$REVIEW_ID" review completed 'Review reported one advisory finding.' '{"review_result":"findings_reported","findings":[{"location":"README.md:1","summary":"Advisory finding","detail":"Report only; do not repair automatically."}]}'
 SUMMARIZE="$TMP_ROOT/summarize.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$REVIEW_ID" --outcome-file "$REVIEW_OUTCOME" > "$SUMMARIZE"
 assert_action "$SUMMARIZE" summarize
 SUMMARIZE_ID=$(json_get "$SUMMARIZE" action_id)
 SUMMARY_OUTCOME="$TMP_ROOT/summary-outcome.json"
-make_outcome "$SUMMARY_OUTCOME" "$SUMMARIZE_ID" completed 'Final report prepared.' '{}'
+make_outcome "$SUMMARY_OUTCOME" "$SUMMARIZE_ID" summarize completed 'Final report prepared.' '{}'
 ENDED="$TMP_ROOT/ended.json"
 "$BIN" run submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED"
 assert_state "$ENDED" ended
@@ -417,13 +418,13 @@ SKIP_START="$TMP_ROOT/skip-start.json"
 SKIP_RUN=$(json_get "$SKIP_START" run_id)
 SKIP_ORIENT=$(json_get "$SKIP_START" action_id)
 SKIP_ORIENT_OUT="$TMP_ROOT/skip-orient-out.json"
-make_outcome "$SKIP_ORIENT_OUT" "$SKIP_ORIENT" completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
+make_outcome "$SKIP_ORIENT_OUT" "$SKIP_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 SKIP_IMPLEMENT_JSON="$TMP_ROOT/skip-implement.json"
 "$BIN" run submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_ORIENT" --outcome-file "$SKIP_ORIENT_OUT" > "$SKIP_IMPLEMENT_JSON"
 SKIP_IMPLEMENT=$(json_get "$SKIP_IMPLEMENT_JSON" action_id)
 printf 'skip scenario change\n' >> "$SKIP_REPO/README.md"
 SKIP_IMPLEMENT_OUT="$TMP_ROOT/skip-implement-out.json"
-make_outcome "$SKIP_IMPLEMENT_OUT" "$SKIP_IMPLEMENT" completed 'Changed README.' '{"implementation_result":"applied","files_changed":["README.md"]}'
+make_outcome "$SKIP_IMPLEMENT_OUT" "$SKIP_IMPLEMENT" implement completed 'Changed README.' '{"implementation_result":"applied","files_changed":["README.md"]}'
 SKIP_REVIEW_JSON="$TMP_ROOT/skip-review.json"
 "$BIN" run submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_IMPLEMENT" --outcome-file "$SKIP_IMPLEMENT_OUT" > "$SKIP_REVIEW_JSON"
 SKIP_REVIEW=$(json_get "$SKIP_REVIEW_JSON" action_id)
@@ -432,7 +433,7 @@ SKIP_SUMMARY="$TMP_ROOT/skip-summary.json"
 assert_action "$SKIP_SUMMARY" summarize
 SKIP_SUMMARY_ID=$(json_get "$SKIP_SUMMARY" action_id)
 SKIP_SUMMARY_OUT="$TMP_ROOT/skip-summary-out.json"
-make_outcome "$SKIP_SUMMARY_OUT" "$SKIP_SUMMARY_ID" completed 'Skip report prepared.' '{}'
+make_outcome "$SKIP_SUMMARY_OUT" "$SKIP_SUMMARY_ID" summarize completed 'Skip report prepared.' '{}'
 SKIP_ENDED="$TMP_ROOT/skip-ended.json"
 "$BIN" run submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_SUMMARY_ID" --outcome-file "$SKIP_SUMMARY_OUT" > "$SKIP_ENDED"
 assert_state "$SKIP_ENDED" ended
@@ -453,7 +454,7 @@ assert_action "$VERSION_START" orient
 VERSION_RUN=$(json_get "$VERSION_START" run_id)
 VERSION_ACTION=$(json_get "$VERSION_START" action_id)
 VERSION_OUTCOME="$TMP_ROOT/version-outcome.json"
-make_outcome "$VERSION_OUTCOME" "$VERSION_ACTION" completed 'Wrong contract.' '{}'
+make_outcome "$VERSION_OUTCOME" "$VERSION_ACTION" orient completed 'Wrong contract.' '{}'
 python3 -I - "$VERSION_OUTCOME" <<'PY'
 import json
 import sys
@@ -475,13 +476,13 @@ REPORTED_START="$TMP_ROOT/reported-start.json"
 REPORTED_RUN=$(json_get "$REPORTED_START" run_id)
 REPORTED_ORIENT=$(json_get "$REPORTED_START" action_id)
 REPORTED_ORIENT_OUT="$TMP_ROOT/reported-orient-out.json"
-make_outcome "$REPORTED_ORIENT_OUT" "$REPORTED_ORIENT" completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
+make_outcome "$REPORTED_ORIENT_OUT" "$REPORTED_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 REPORTED_IMPLEMENT_JSON="$TMP_ROOT/reported-implement.json"
 "$BIN" run submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_ORIENT" --outcome-file "$REPORTED_ORIENT_OUT" > "$REPORTED_IMPLEMENT_JSON"
 assert_action "$REPORTED_IMPLEMENT_JSON" implement
 REPORTED_IMPLEMENT=$(json_get "$REPORTED_IMPLEMENT_JSON" action_id)
 REPORTED_IMPLEMENT_OUT="$TMP_ROOT/reported-implement-out.json"
-make_outcome "$REPORTED_IMPLEMENT_OUT" "$REPORTED_IMPLEMENT" completed 'Host reported a file without changing Git.' '{"implementation_result":"applied","files_changed":["ghost.txt"]}'
+make_outcome "$REPORTED_IMPLEMENT_OUT" "$REPORTED_IMPLEMENT" implement completed 'Host reported a file without changing Git.' '{"implementation_result":"applied","files_changed":["ghost.txt"]}'
 REPORTED_SUMMARY="$TMP_ROOT/reported-summary.json"
 "$BIN" run submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_IMPLEMENT" --outcome-file "$REPORTED_IMPLEMENT_OUT" > "$REPORTED_SUMMARY"
 assert_action "$REPORTED_SUMMARY" summarize
@@ -494,14 +495,14 @@ NO_REVIEW_START="$TMP_ROOT/no-review-start.json"
 NO_REVIEW_RUN=$(json_get "$NO_REVIEW_START" run_id)
 NO_REVIEW_ORIENT=$(json_get "$NO_REVIEW_START" action_id)
 NO_REVIEW_ORIENT_OUT="$TMP_ROOT/no-review-orient-out.json"
-make_outcome "$NO_REVIEW_ORIENT_OUT" "$NO_REVIEW_ORIENT" completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
+make_outcome "$NO_REVIEW_ORIENT_OUT" "$NO_REVIEW_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 NO_REVIEW_IMPLEMENT_JSON="$TMP_ROOT/no-review-implement.json"
 "$BIN" run submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_ORIENT" --outcome-file "$NO_REVIEW_ORIENT_OUT" > "$NO_REVIEW_IMPLEMENT_JSON"
 assert_action "$NO_REVIEW_IMPLEMENT_JSON" implement
 NO_REVIEW_IMPLEMENT=$(json_get "$NO_REVIEW_IMPLEMENT_JSON" action_id)
 printf 'no-review change\n' >> "$NO_REVIEW_REPO/README.md"
 NO_REVIEW_IMPLEMENT_OUT="$TMP_ROOT/no-review-implement-out.json"
-make_outcome "$NO_REVIEW_IMPLEMENT_OUT" "$NO_REVIEW_IMPLEMENT" completed 'Changed without review.' '{"implementation_result":"applied","files_changed":["README.md"]}'
+make_outcome "$NO_REVIEW_IMPLEMENT_OUT" "$NO_REVIEW_IMPLEMENT" implement completed 'Changed without review.' '{"implementation_result":"applied","files_changed":["README.md"]}'
 NO_REVIEW_SUMMARY="$TMP_ROOT/no-review-summary.json"
 "$BIN" run submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_IMPLEMENT" --outcome-file "$NO_REVIEW_IMPLEMENT_OUT" > "$NO_REVIEW_SUMMARY"
 assert_action "$NO_REVIEW_SUMMARY" summarize
@@ -526,7 +527,7 @@ assert_action "$BUDGET_START" orient
 BUDGET_RUN=$(json_get "$BUDGET_START" run_id)
 BUDGET_ORIENT=$(json_get "$BUDGET_START" action_id)
 BUDGET_OUTCOME="$TMP_ROOT/budget-outcome.json"
-make_outcome "$BUDGET_OUTCOME" "$BUDGET_ORIENT" completed 'Oriented at budget limit.' '{}'
+make_outcome "$BUDGET_OUTCOME" "$BUDGET_ORIENT" orient completed 'Oriented at budget limit.' '{}'
 BUDGET_PAUSED="$TMP_ROOT/budget-paused.json"
 "$BIN" run submit --root "$BUDGET_REPO" --run "$BUDGET_RUN" --action "$BUDGET_ORIENT" --outcome-file "$BUDGET_OUTCOME" > "$BUDGET_PAUSED"
 assert_state "$BUDGET_PAUSED" paused budget_exhausted resume-ad-hoc
@@ -546,7 +547,7 @@ assert_action "$DESTRUCTIVE_START" orient
 DESTRUCTIVE_RUN=$(json_get "$DESTRUCTIVE_START" run_id)
 DESTRUCTIVE_ORIENT=$(json_get "$DESTRUCTIVE_START" action_id)
 DESTRUCTIVE_ORIENT_OUT="$TMP_ROOT/destructive-orient-out.json"
-make_outcome "$DESTRUCTIVE_ORIENT_OUT" "$DESTRUCTIVE_ORIENT" completed 'Destructive scope discovered.' '{"suggested_actions":[{"kind":"implement","brief":"Request exact destructive confirmation."}]}'
+make_outcome "$DESTRUCTIVE_ORIENT_OUT" "$DESTRUCTIVE_ORIENT" orient completed 'Destructive scope discovered.' '{"suggested_actions":[{"kind":"implement","brief":"Request exact destructive confirmation."}]}'
 DESTRUCTIVE_IMPLEMENT_JSON="$TMP_ROOT/destructive-implement.json"
 "$BIN" run submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_ORIENT" --outcome-file "$DESTRUCTIVE_ORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT_JSON"
 assert_action "$DESTRUCTIVE_IMPLEMENT_JSON" implement
@@ -580,7 +581,7 @@ print(json.dumps({
 PY
 )
 DESTRUCTIVE_PAUSE_OUT="$TMP_ROOT/destructive-pause-out.json"
-make_outcome "$DESTRUCTIVE_PAUSE_OUT" "$DESTRUCTIVE_IMPLEMENT" needs_input 'Exact destructive confirmation required.' "$DESTRUCTIVE_EXTRA"
+make_outcome "$DESTRUCTIVE_PAUSE_OUT" "$DESTRUCTIVE_IMPLEMENT" implement needs_input 'Exact destructive confirmation required.' "$DESTRUCTIVE_EXTRA"
 DESTRUCTIVE_PAUSED="$TMP_ROOT/destructive-paused.json"
 "$BIN" run submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT" --outcome-file "$DESTRUCTIVE_PAUSE_OUT" > "$DESTRUCTIVE_PAUSED"
 assert_state "$DESTRUCTIVE_PAUSED" paused destructive_confirmation_required confirm-destructive
@@ -589,7 +590,7 @@ DESTRUCTIVE_DECLINED="$TMP_ROOT/destructive-declined.json"
 assert_action "$DESTRUCTIVE_DECLINED" orient
 DESTRUCTIVE_REORIENT=$(json_get "$DESTRUCTIVE_DECLINED" action_id)
 DESTRUCTIVE_REORIENT_OUT="$TMP_ROOT/destructive-reorient-out.json"
-make_outcome "$DESTRUCTIVE_REORIENT_OUT" "$DESTRUCTIVE_REORIENT" completed 'User feedback recorded without authority.' '{"suggested_actions":[{"kind":"implement","brief":"Request a fresh exact destructive scope."}]}'
+make_outcome "$DESTRUCTIVE_REORIENT_OUT" "$DESTRUCTIVE_REORIENT" orient completed 'User feedback recorded without authority.' '{"suggested_actions":[{"kind":"implement","brief":"Request a fresh exact destructive scope."}]}'
 DESTRUCTIVE_IMPLEMENT2_JSON="$TMP_ROOT/destructive-implement2.json"
 "$BIN" run submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_REORIENT" --outcome-file "$DESTRUCTIVE_REORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT2_JSON"
 assert_action "$DESTRUCTIVE_IMPLEMENT2_JSON" implement
@@ -623,7 +624,7 @@ print(json.dumps({
 PY
 )
 DESTRUCTIVE_PAUSE2_OUT="$TMP_ROOT/destructive-pause2-out.json"
-make_outcome "$DESTRUCTIVE_PAUSE2_OUT" "$DESTRUCTIVE_IMPLEMENT2" needs_input 'Fresh destructive confirmation required.' "$DESTRUCTIVE_EXTRA2"
+make_outcome "$DESTRUCTIVE_PAUSE2_OUT" "$DESTRUCTIVE_IMPLEMENT2" implement needs_input 'Fresh destructive confirmation required.' "$DESTRUCTIVE_EXTRA2"
 DESTRUCTIVE_PAUSED2="$TMP_ROOT/destructive-paused2.json"
 "$BIN" run submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --outcome-file "$DESTRUCTIVE_PAUSE2_OUT" > "$DESTRUCTIVE_PAUSED2"
 assert_state "$DESTRUCTIVE_PAUSED2" paused destructive_confirmation_required confirm-destructive

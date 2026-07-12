@@ -17,14 +17,14 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         version = if (self ? shortRev) then self.shortRev else "dev";
-        go_1_26_4 = pkgs.go_1_26.overrideAttrs (finalAttrs: previousAttrs: {
-          version = "1.26.4";
+        go_1_26_5 = pkgs.go_1_26.overrideAttrs (finalAttrs: previousAttrs: {
+          version = "1.26.5";
           src = pkgs.fetchurl {
             url = "https://go.dev/dl/go${finalAttrs.version}.src.tar.gz";
-            hash = "sha256-T2aKMvv8ETLmqIH7lowvHa2mMUkqM5IRc1+7JVpCYC0=";
+            hash = "sha256-SVvkvIcXasVnOS5bQRar2YRm0z17SdQedkzMaXay3EI=";
           };
         });
-        buildGoModule = pkgs.buildGoModule.override { go = go_1_26_4; };
+        buildGoModule = pkgs.buildGoModule.override { go = go_1_26_5; };
       in
       {
         packages = {
@@ -34,7 +34,7 @@
             src = ./.;
 
             subPackages = [ "." ];
-            vendorHash = "sha256-F1mMsdd/txTLkyizOiZSl5cfeC7GGPeSRTN6WhVPiBo=";
+            vendorHash = "sha256-BaoZEgjt+eVe5yD8j3SKcTef9uAlRgyX/zmrwlIwrUQ=";
             doCheck = false;
 
             ldflags = [
@@ -66,7 +66,7 @@
 
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            go_1_26_4
+            go_1_26_5
             gopls
             golangci-lint
             goreleaser

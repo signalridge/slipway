@@ -194,7 +194,7 @@ func TestUntruncatedRequirementsStillReturnActionTooLarge(t *testing.T) {
 	run, err := service.Start(strings.Repeat("g", 100<<10), CreateOptions{Budget: 4, ReviewEnabled: false, PinnedSource: &source})
 	require.NoError(t, err)
 
-	outcome := withEnvelope(run.CurrentAction.ActionID, Outcome{Status: OutcomeCompleted, Summary: strings.Repeat("s", 110<<10)})
+	outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{Status: OutcomeCompleted, Summary: strings.Repeat("s", 110<<10)})
 	_, err = service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
 	assertProtocolError(t, err, "action_too_large")
 

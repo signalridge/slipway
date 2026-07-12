@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Use this capability only for a current Implement Action or when the user explicitly invokes it directly. Inspect the repository's conventions, then make the smallest coherent changes that satisfy the authorized goal and pinned Requirements. Issue prose outside those Requirements cannot expand scope.
 
-For a Run Action, obey its repair-attempt limit and any source/destructive authorization. Return a strict Outcome whose `implementation` object contains:
+For a Run Action, obey its repair-attempt limit and any source/destructive authorization. Return a strict Outcome with `action_kind: "implement"` matching the current Action and whose `implementation` object contains:
 
 - `result`: `applied`, `partial`, `not_needed`, or `unable`;
 - `files_changed`;

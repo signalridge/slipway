@@ -107,6 +107,7 @@ function Invoke-NextVariant {
 function New-Outcome {
     param(
         [string]$ActionId,
+        [string]$ActionKind,
         [string]$Status,
         [string]$Summary,
         $Pause,
@@ -115,6 +116,7 @@ function New-Outcome {
     return [ordered]@{
         contract_version = 1
         action_id = $ActionId
+        action_kind = $ActionKind
         status = $Status
         summary = $Summary
         observations = @()
@@ -205,7 +207,7 @@ try {
         question = 'Choose the exact Windows value.'
         destructive_request = $null
     }
-    $decisionOutcome = New-Outcome -ActionId $start.action_id -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
+    $decisionOutcome = New-Outcome -ActionId $start.action_id -ActionKind $start.kind -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
     $outcomePath = Join-Path $tempRoot 'outcome file % ! & ^ 界.json'
     Write-Utf8 $outcomePath (($decisionOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
     $paused = (Invoke-ResolvedArgv -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
@@ -222,7 +224,7 @@ try {
     Assert-True ($oriented.context.Contains($normalizedAnswer)) 'bounded context did not contain the normalized special-character answer'
 
     $implementSuggestion = [ordered]@{ kind = 'implement'; brief = 'Exercise Windows Outcome transport.' }
-    $orientOutcome = New-Outcome -ActionId $oriented.action_id -Status 'completed' -Summary 'Windows argv observed.' -Pause $null -Suggestions @($implementSuggestion)
+    $orientOutcome = New-Outcome -ActionId $oriented.action_id -ActionKind $oriented.kind -Status 'completed' -Summary 'Windows argv observed.' -Pause $null -Suggestions @($implementSuggestion)
     $orientJson = ($orientOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n"
     if ($Mode -eq 'PowerShell') {
         $implementedText = Invoke-SlipwayDirect -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin

@@ -63,7 +63,7 @@ func DiscoverGit(start string) (GitRepository, error) {
 }
 
 func runGit(root string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal rev-parse arguments; no shell interpretation.
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

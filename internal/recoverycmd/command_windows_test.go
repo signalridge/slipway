@@ -47,15 +47,19 @@ func TestCommandPreservesArgvThroughCommandPromptAndPowerShell(t *testing.T) {
 			name: "command prompt metacharacters",
 			values: []string{
 				"run", "answer", "--run", "run with spaces", "--action", `quoted'"界`,
-				"--root", filepath.Join(directory, "root & caret^ (data)"), "--text", "line\r\n&^",
+				"--root", filepath.Join(directory, "root & caret^ (data)"), "--text", "line\r\n&^", "--empty", "",
 			},
 		},
 		{
 			name: "powershell encoded expansion markers",
 			values: []string{
 				"run", "answer", "--run", "run%!", "--action", `quoted'"界`,
-				"--root", filepath.Join(directory, "root %PATH% !value! & caret^"), "--text", "line\r\n%!&^",
+				"--root", filepath.Join(directory, "root %PATH% !value! & caret^"), "--text", "line\r\n%!&^", "--empty", "",
 			},
+		},
+		{
+			name:   "leading argument needs quoting",
+			values: []string{`leading '" argument`, "", `trailing\`},
 		},
 	}
 	for _, test := range tests {

@@ -176,7 +176,7 @@ Issue-bound resume 必须三选一：fresh `--source-file`、显式 `--use-pinne
 
 Action kind 只允许 `orient|clarify|implement|review|summarize`。Issue-bound Action 必须原样带 source identity/revisions 和五段 Requirements；ad-hoc 同时省略两字段，不能发 null。Context 只投影 active decisions 与 Outcome summary/known issues，按 current decision、其他 active decisions、最近 Outcome、其余 Outcome 优先；LF/UTF-8 确定性截断带 original bytes + SHA-256 marker，并记录 per-class omission count。相同 journal replay byte-identical；Requirements 不与 context 抢额度。
 
-Outcome 所有公共字段必须出现；不适用的 `pause|implementation|review` 为 JSON null。Host status 只允许 `completed|needs_input|partial|error`，`skipped` 仅 CLI 产生。
+Outcome 所有公共字段必须出现；其中 `action_kind` 必填，且必须与当前已签发 Action 的 `kind` 完全相同；缺失、未知或不匹配一律拒绝，不从 Action ID、status 或 result branch 推断。不适用的 `pause|implementation|review` 为 JSON null。Host status 只允许 `completed|needs_input|partial|error`，`skipped` 仅 CLI 产生。
 
 | Action | Host status | 必需组合 | Pause | Suggestions |
 | --- | --- | --- | --- | --- |
@@ -184,11 +184,11 @@ Outcome 所有公共字段必须出现；不适用的 `pause|implementation|revi
 | Orient | needs_input | 两 result null | decision/environment | 无 |
 | Clarify | completed/error | 两 result null | 无 | Clarify/Implement/Summarize，0..1 |
 | Clarify | needs_input | 两 result null | decision/environment | 无 |
-| Implement | completed | `applied|not_needed` | 无 | 无 |
+| Implement | completed | `applied\|not_needed` | 无 | 无 |
 | Implement | partial | `partial` | 无 | 无 |
 | Implement | error | `unable` | 无 | 无 |
 | Implement | needs_input | result null | decision/destructive/environment | 无 |
-| Review | completed | `no_findings_reported|findings_reported` | 无 | 无 |
+| Review | completed | `no_findings_reported\|findings_reported` | 无 | 无 |
 | Review | partial | `inconclusive` | 无 | 无 |
 | Review | error | `error` | 无 | 无 |
 | Summarize | completed/error | 两 result null | 无 | 无 |

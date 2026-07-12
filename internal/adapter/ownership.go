@@ -536,7 +536,7 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s is not a regular file", host.ID)
 	}
-	raw, err := os.ReadFile(manifestPath)
+	raw, err := fsutil.ReadFileNoSymlink(manifestPath)
 	if err != nil {
 		return ownershipManifest{}, false, err
 	}
@@ -720,7 +720,7 @@ func hashRegularFile(path string) (string, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("%s is not a regular file", path)
 	}
-	data, err := os.ReadFile(path)
+	data, err := fsutil.ReadFileNoSymlink(path)
 	if err != nil {
 		return "", err
 	}

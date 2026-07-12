@@ -83,7 +83,7 @@ func TestServiceRejectsHostSkippedReviewStatus(t *testing.T) {
 	require.Equal(t, ActionReview, run.CurrentAction.Kind)
 
 	reviewID := run.CurrentAction.ActionID
-	invalid := withEnvelope(reviewID, Outcome{Status: OutcomeStatus("skipped"), Summary: "host skipped"})
+	invalid := withEnvelope(reviewID, ActionReview, Outcome{Status: OutcomeStatus("skipped"), Summary: "host skipped"})
 	_, err := service.Submit(run.ID, reviewID, invalid)
 	assertProtocolError(t, err, "invalid_outcome")
 	loaded, loadErr := service.Load(run.ID)
@@ -201,7 +201,7 @@ func TestServiceSkipStopResumeAndStaleActionRejection(t *testing.T) {
 	assert.Equal(t, NextOperationResume, next.Operation)
 	assert.Equal(t, "resume-ad-hoc", next.Variants[0].ID)
 
-	_, err = service.Submit(run.ID, oldAction, withEnvelope(oldAction, Outcome{Status: OutcomeCompleted, Summary: "late"}))
+	_, err = service.Submit(run.ID, oldAction, withEnvelope(oldAction, ActionOrient, Outcome{Status: OutcomeCompleted, Summary: "late"}))
 	assertProtocolError(t, err, "run_not_active")
 
 	resumed, err := service.Resume(run.ID, ResumeOptions{})
@@ -211,7 +211,7 @@ func TestServiceSkipStopResumeAndStaleActionRejection(t *testing.T) {
 	assert.NotEqual(t, oldAction, resumed.CurrentAction.ActionID)
 	assert.True(t, resumed.Actions[0].Voided)
 
-	_, err = service.Submit(run.ID, oldAction, withEnvelope(oldAction, Outcome{Status: OutcomeCompleted, Summary: "stale"}))
+	_, err = service.Submit(run.ID, oldAction, withEnvelope(oldAction, ActionOrient, Outcome{Status: OutcomeCompleted, Summary: "stale"}))
 	assertProtocolError(t, err, "stale_action")
 
 	skipped, err := service.Skip(run.ID, resumed.CurrentAction.ActionID)
@@ -324,7 +324,7 @@ func TestServiceDuplicateSubmitIsIdempotentAndConflictingDuplicateIsRejected(t *
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
 	actionID := run.CurrentAction.ActionID
-	outcome := withEnvelope(actionID, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+	outcome := withEnvelope(actionID, ActionOrient, Outcome{Status: OutcomeCompleted, Summary: "facts"})
 
 	first, err := service.Submit(run.ID, actionID, outcome)
 	require.NoError(t, err)
@@ -345,7 +345,7 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		service := openTestService(t, repository)
 		run := startTestRun(t, service, 8, false)
 		actionID := run.CurrentAction.ActionID
-		waiting := withEnvelope(actionID, Outcome{Status: OutcomeNeedsInput, Summary: "choose", Pause: pauseReport(PauseDecisionRequired, "host question", nil)})
+		waiting := withEnvelope(actionID, ActionOrient, Outcome{Status: OutcomeNeedsInput, Summary: "choose", Pause: pauseReport(PauseDecisionRequired, "host question", nil)})
 		run, err := service.Submit(run.ID, actionID, waiting)
 		require.NoError(t, err)
 		_, err = service.Resume(run.ID, ResumeOptions{})
@@ -359,7 +359,7 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		service := openTestService(t, repository)
 		run := startTestRun(t, service, 8, false)
 		actionID := run.CurrentAction.ActionID
-		completed := withEnvelope(actionID, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+		completed := withEnvelope(actionID, ActionOrient, Outcome{Status: OutcomeCompleted, Summary: "facts"})
 		run, err := service.Submit(run.ID, actionID, completed)
 		require.NoError(t, err)
 		_, err = service.Stop(run.ID)
@@ -375,7 +375,7 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts"})
 		run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "no change", Implementation: implementationReport(ImplementationNotNeeded)})
 		summarizeID := run.CurrentAction.ActionID
-		summary := withEnvelope(summarizeID, Outcome{Status: OutcomeCompleted, Summary: "reported"})
+		summary := withEnvelope(summarizeID, ActionSummarize, Outcome{Status: OutcomeCompleted, Summary: "reported"})
 		run, err := service.Submit(run.ID, summarizeID, summary)
 		require.NoError(t, err)
 		assert.Equal(t, RunEnded, run.State)
@@ -486,7 +486,7 @@ func TestServiceConcurrentDuplicateSubmitRecordsOneTransition(t *testing.T) {
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
 	actionID := run.CurrentAction.ActionID
-	outcome := withEnvelope(actionID, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+	outcome := withEnvelope(actionID, ActionOrient, Outcome{Status: OutcomeCompleted, Summary: "facts"})
 
 	const workers = 8
 	results := make(chan Run, workers)
@@ -586,7 +586,7 @@ func TestServiceOutcomeIdempotencyUsesExactOriginalPayloadBytes(t *testing.T) {
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
 	actionID := run.CurrentAction.ActionID
-	outcome := withEnvelope(actionID, Outcome{
+	outcome := withEnvelope(actionID, ActionOrient, Outcome{
 		Status:           OutcomeCompleted,
 		Summary:          "exact payload",
 		SuggestedActions: []SuggestedAction{{Kind: ActionImplement, Brief: "Implement exact bytes."}},
@@ -974,15 +974,16 @@ func submitCurrent(t *testing.T, service *Service, run Run, outcome Outcome) Run
 		(run.CurrentAction.Kind == ActionOrient || run.CurrentAction.Kind == ActionClarify) {
 		outcome.SuggestedActions = []SuggestedAction{{Kind: ActionImplement, Brief: "Implement the requested change."}}
 	}
-	outcome = withEnvelope(run.CurrentAction.ActionID, outcome)
+	outcome = withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, outcome)
 	updated, err := service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
 	require.NoError(t, err)
 	return updated
 }
 
-func withEnvelope(actionID string, outcome Outcome) Outcome {
+func withEnvelope(actionID string, actionKind ActionKind, outcome Outcome) Outcome {
 	outcome.ContractVersion = ContractVersion
 	outcome.ActionID = actionID
+	outcome.ActionKind = actionKind
 	if outcome.Observations == nil {
 		outcome.Observations = []string{}
 	}

@@ -18,7 +18,7 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	var action autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
-	waiting := machineOutcome(action.ActionID, autopilot.OutcomeNeedsInput, "channel decision required")
+	waiting := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeNeedsInput, "channel decision required")
 	waiting.Pause = &autopilot.Pause{Reason: autopilot.PauseDecisionRequired, Question: "Which channel?"}
 	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, waiting))
 	require.NoError(t, err, stderr)
@@ -75,7 +75,7 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	runID := action.RunID
 
-	orient := machineOutcome(action.ActionID, autopilot.OutcomeCompleted, "facts")
+	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Delete only after exact confirmation."}}
 	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
@@ -89,7 +89,7 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 		RequestID: "request-cli-1", Targets: targets,
 		Impact: "delete the target permanently", ScopeSHA256: digest,
 	}
-	pause := machineOutcome(action.ActionID, autopilot.OutcomeNeedsInput, "confirmation required")
+	pause := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeNeedsInput, "confirmation required")
 	pause.Pause = &autopilot.Pause{
 		Reason: autopilot.PauseDestructiveConfirm, Question: "Confirm exact target?", DestructiveRequest: request,
 	}

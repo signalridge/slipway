@@ -340,20 +340,16 @@ func TestParseSourceEnforcesAcceptedRequirementsByteLimit(t *testing.T) {
 }
 
 func TestImportSourceFileAcceptsAbsoluteAndRelativeReadOnlyFiles(t *testing.T) {
-	t.Parallel()
-
 	raw, err := json.Marshal(validSourceEnvelope())
 	require.NoError(t, err)
-	path := filepath.Join(t.TempDir(), "source.json")
+	directory := t.TempDir()
+	path := filepath.Join(directory, "source.json")
 	require.NoError(t, os.WriteFile(path, raw, 0o400))
 
 	absolutePinned, err := ImportSourceFile(path)
 	require.NoError(t, err)
-	workingDirectory, err := os.Getwd()
-	require.NoError(t, err)
-	relative, err := filepath.Rel(workingDirectory, path)
-	require.NoError(t, err)
-	relativePinned, err := ImportSourceFile(relative)
+	t.Chdir(directory)
+	relativePinned, err := ImportSourceFile(filepath.Base(path))
 	require.NoError(t, err)
 	assert.Equal(t, absolutePinned, relativePinned)
 	require.NoError(t, os.Remove(path), "the importer must close the opened source handle")

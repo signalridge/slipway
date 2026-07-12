@@ -40,7 +40,7 @@ func TestServiceRejectsWrongLinkedWorktreeBeforeLoadAndEveryMutation(t *testing.
 		call func() error
 	}{
 		{name: "submit", call: func() error {
-			outcome := withEnvelope(run.CurrentAction.ActionID, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+			outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{Status: OutcomeCompleted, Summary: "facts"})
 			_, operationErr := other.Submit(run.ID, run.CurrentAction.ActionID, outcome)
 			return operationErr
 		}},

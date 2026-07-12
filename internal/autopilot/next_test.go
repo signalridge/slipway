@@ -196,6 +196,7 @@ func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
 func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
+	otherWorkspace := filepath.Join(filepath.Dir(workspace), "other")
 	workspaceID := "sha256:" + strings.Repeat("b", 64)
 	valid := Next{
 		Operation: NextOperationResume, WorkspaceIdentity: workspaceID, workspaceRoot: workspace,
@@ -213,12 +214,12 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 		{name: "duplicate variants", mutate: func(next *Next) { next.Variants = append(next.Variants, next.Variants[0]) }, want: "duplicated"},
 		{name: "nil inputs", mutate: func(next *Next) { next.Variants[0].Inputs = nil }, want: "non-null"},
 		{name: "missing root", mutate: func(next *Next) { next.Variants[0].BaseArgv = []string{"slipway", "status"} }, want: "exactly one"},
-		{name: "wrong root", mutate: func(next *Next) { next.Variants[0].BaseArgv[len(next.Variants[0].BaseArgv)-1] = "/other" }, want: "preserve"},
+		{name: "wrong root", mutate: func(next *Next) { next.Variants[0].BaseArgv[len(next.Variants[0].BaseArgv)-1] = otherWorkspace }, want: "preserve"},
 		{name: "public variants disagree on root", mutate: func(next *Next) {
 			next.workspaceRoot = ""
 			other := cloneNextForTest(*next).Variants[0]
 			other.ID = "other-root"
-			other.BaseArgv[len(other.BaseArgv)-1] = "/other"
+			other.BaseArgv[len(other.BaseArgv)-1] = otherWorkspace
 			next.Variants = append(next.Variants, other)
 		}, want: "preserve"},
 		{name: "placeholder", mutate: func(next *Next) { next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "<file>") }, want: "placeholder"},

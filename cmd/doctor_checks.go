@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -43,7 +44,11 @@ func (systemDoctorRunner) LookPath(name string) (string, error) {
 }
 
 func (systemDoctorRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	command := exec.CommandContext(ctx, name, args...)
+	base := strings.ToLower(filepath.Base(name))
+	if base != "gh" && base != "gh.exe" && base != "git" && base != "git.exe" {
+		return nil, fmt.Errorf("doctor executable %q is not allowed", name)
+	}
+	command := exec.CommandContext(ctx, name, args...) // #nosec G204 -- executable is restricted above to gh or git and arguments are passed without a shell.
 	stdout := &boundedDoctorBuffer{limit: doctorOutputLimit}
 	command.Stdout = stdout
 	command.Stderr = io.Discard

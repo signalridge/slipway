@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 const (
@@ -43,7 +45,7 @@ func planSettingsCleanup(root string, host Host) (*settingsChange, string) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return nil, fmt.Sprintf("preserved non-regular settings file %s", host.SettingsPath)
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := fsutil.ReadFileNoSymlink(path)
 	if err != nil {
 		return nil, fmt.Sprintf("could not read %s: %v", host.SettingsPath, err)
 	}

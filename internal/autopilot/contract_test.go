@@ -49,7 +49,9 @@ func TestOutcomeValidationAcceptsEveryLegalMatrixRow(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			require.NoError(t, test.outcome.Validate(test.kind, "action-1"))
+			outcome := test.outcome
+			outcome.ActionKind = test.kind
+			require.NoError(t, outcome.Validate(test.kind, "action-1"))
 		})
 	}
 }
@@ -97,11 +99,28 @@ func TestOutcomeValidationRejectsIllegalMatrixCombinations(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			err := test.outcome.Validate(test.kind, "action-1")
+			outcome := test.outcome
+			outcome.ActionKind = test.kind
+			err := outcome.Validate(test.kind, "action-1")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.want)
 		})
 	}
+}
+
+func TestOutcomeValidationRequiresMatchingActionKind(t *testing.T) {
+	t.Parallel()
+
+	outcome := testOutcome(OutcomeCompleted)
+	outcome.ActionKind = ActionClarify
+	err := outcome.Validate(ActionOrient, "action-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not match current action kind")
+
+	outcome.ActionKind = ActionKind("unknown")
+	err = outcome.Validate(ActionOrient, "action-1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid outcome action_kind")
 }
 
 func TestOutcomeValidationEnforcesSuggestionsAndText(t *testing.T) {
@@ -137,23 +156,24 @@ func TestOutcomeValidationEnforcesSuggestionsAndText(t *testing.T) {
 func TestDecodeOutcomeRequiresExactStrictJSON(t *testing.T) {
 	t.Parallel()
 
-	valid := `{"contract_version":1,"action_id":"action-1","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
+	valid := `{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
 	tests := []struct {
 		name string
 		raw  []byte
 		want string
 	}{
-		{name: "missing array", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"completed","summary":"facts","known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "observations"},
+		{name: "missing action kind", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "action_kind"},
+		{name: "missing array", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "observations"},
 		{name: "null array", raw: []byte(strings.Replace(valid, `"observations":[]`, `"observations":null`, 1)), want: "array, not null"},
 		{name: "wrong array type", raw: []byte(strings.Replace(valid, `"observations":[]`, `"observations":{}`, 1)), want: "cannot unmarshal"},
 		{name: "unknown field", raw: []byte(strings.Replace(valid, `"review":null`, `"review":null,"verdict":true`, 1)), want: "unknown field"},
 		{name: "duplicate key", raw: []byte(strings.Replace(valid, `"summary":"facts"`, `"summary":"facts","summary":"other"`, 1)), want: "duplicate object key"},
-		{name: "nested unknown field", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"extra":true},"implementation":null,"review":null}`), want: "unknown field"},
-		{name: "nested duplicate key", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","question":"again","destructive_request":null},"implementation":null,"review":null}`), want: "duplicate object key"},
-		{name: "nested missing field", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":[],"activities":[],"uncertainties":[]},"review":null}`), want: "attempts"},
-		{name: "nested null array", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":null,"activities":[],"uncertainties":[],"attempts":1},"review":null}`), want: "array, not null"},
+		{name: "nested unknown field", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"extra":true},"implementation":null,"review":null}`), want: "unknown field"},
+		{name: "nested duplicate key", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","question":"again","destructive_request":null},"implementation":null,"review":null}`), want: "duplicate object key"},
+		{name: "nested missing field", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":[],"activities":[],"uncertainties":[]},"review":null}`), want: "attempts"},
+		{name: "nested null array", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":null,"activities":[],"uncertainties":[],"attempts":1},"review":null}`), want: "array, not null"},
 		{name: "trailing value", raw: []byte(valid + ` {}`), want: "trailing json value"},
-		{name: "invalid utf8", raw: append([]byte(`{"contract_version":1,"action_id":"`), append([]byte{0xff}, []byte(`","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`)...)...), want: "valid utf-8"},
+		{name: "invalid utf8", raw: append([]byte(`{"contract_version":1,"action_id":"`), append([]byte{0xff}, []byte(`","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`)...)...), want: "valid utf-8"},
 		{name: "bom", raw: append([]byte{0xef, 0xbb, 0xbf}, []byte(valid)...), want: "bom"},
 	}
 
@@ -176,7 +196,7 @@ func TestDecodeOutcomeRequiresExactStrictJSON(t *testing.T) {
 func TestDecodeOutcomeReturnsVersionErrorAfterStrictDecode(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"contract_version":2,"action_id":"action-1","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
+	raw := `{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
 	_, err := DecodeOutcome(strings.NewReader(raw))
 	var versionErr *VersionError
 	require.ErrorAs(t, err, &versionErr)
@@ -427,6 +447,7 @@ func testOutcome(status OutcomeStatus) Outcome {
 	return Outcome{
 		ContractVersion:  ContractVersion,
 		ActionID:         "action-1",
+		ActionKind:       ActionOrient,
 		Status:           status,
 		Summary:          "observed facts",
 		Observations:     []string{},

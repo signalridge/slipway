@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"unicode/utf16"
+
+	"golang.org/x/sys/windows"
 )
 
 // Quote quotes one argument for cmd.exe.
@@ -19,24 +21,38 @@ func Quote(value string) string {
 }
 
 // Command renders arguments as one command that can be executed as written.
-// Percent and exclamation marks require encoded PowerShell because cmd.exe
-// expands them even inside double quotes.
+// The encoded PowerShell launcher keeps user values out of cmd.exe parsing and
+// assigns a command line composed with the native CommandLineToArgvW rules
+// directly to ProcessStartInfo, bypassing PowerShell's lossy native argv binder.
 func Command(arguments ...string) string {
-	unsafeForCommandPrompt := false
-	quoted := make([]string, len(arguments))
-	for index, argument := range arguments {
-		quoted[index] = Quote(argument)
-		unsafeForCommandPrompt = unsafeForCommandPrompt || strings.ContainsAny(argument, "%!")
+	if len(arguments) == 0 {
+		return ""
 	}
-	if !unsafeForCommandPrompt {
-		return strings.Join(quoted, " ")
-	}
+	script := "$startInfo=New-Object System.Diagnostics.ProcessStartInfo;" +
+		"$startInfo.UseShellExecute=$false;" +
+		"$startInfo.FileName=" + powerShellUTF8Expression(arguments[0]) + ";" +
+		"$startInfo.Arguments=" + powerShellUTF8Expression(composeWindowsArguments(arguments[1:])) + ";" +
+		"$process=[System.Diagnostics.Process]::Start($startInfo);" +
+		"if ($null -eq $process) { exit 1 };" +
+		"$process.WaitForExit();" +
+		"exit $process.ExitCode"
+	return encodedPowerShellCommand(script)
+}
 
-	powershell := make([]string, len(arguments))
+func composeWindowsArguments(arguments []string) string {
+	escaped := make([]string, len(arguments))
 	for index, argument := range arguments {
-		powershell[index] = "'" + strings.ReplaceAll(argument, "'", "''") + "'"
+		escaped[index] = windows.EscapeArg(argument)
 	}
-	script := "& " + strings.Join(powershell, " ")
+	return strings.Join(escaped, " ")
+}
+
+func powerShellUTF8Expression(value string) string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(value))
+	return "[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + encoded + "'))"
+}
+
+func encodedPowerShellCommand(script string) string {
 	codeUnits := utf16.Encode([]rune(script))
 	encodedBytes := make([]byte, len(codeUnits)*2)
 	for index, unit := range codeUnits {

@@ -15,7 +15,7 @@ import (
 )
 
 func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	t.Run("later operation fails", func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 		content, readErr := os.ReadFile(first)
 		require.NoError(t, readErr)
 		assert.Equal(t, "before", string(content))
-		assert.Equal(t, os.FileMode(0o640), fileMode(t, first))
+		assertFileMode(t, first, 0o640)
 		assert.NoFileExists(t, later)
 		requireNoRecoveryArtifacts(t, dir)
 	})
@@ -65,13 +65,13 @@ func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 		content, readErr := os.ReadFile(path)
 		require.NoError(t, readErr)
 		assert.Equal(t, "before", string(content))
-		assert.Equal(t, os.FileMode(0o640), fileMode(t, path))
+		assertFileMode(t, path, 0o640)
 		requireNoRecoveryArtifacts(t, dir)
 	})
 }
 
 func TestApplyFileTransactionRestoresRemovedSnapshotKinds(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	t.Run("regular file", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestApplyFileTransactionRestoresRemovedSnapshotKinds(t *testing.T) {
 		content, readErr := os.ReadFile(path)
 		require.NoError(t, readErr)
 		assert.Equal(t, "evidence", string(content))
-		assert.Equal(t, os.FileMode(0o640), fileMode(t, path))
+		assertFileMode(t, path, 0o640)
 		requireNoRecoveryArtifacts(t, dir)
 	})
 
@@ -160,7 +160,7 @@ func TestFileTransactionPreconditionsPreservePlannedUserPaths(t *testing.T) {
 }
 
 func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	tests := []struct {
@@ -316,7 +316,7 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 }
 
 func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	dir := t.TempDir()
@@ -355,7 +355,7 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 }
 
 func TestRollbackPreservesUserEditsInsideQuarantineAndAtDestination(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	dir := t.TempDir()
@@ -397,7 +397,7 @@ func TestRollbackPreservesUserEditsInsideQuarantineAndAtDestination(t *testing.T
 }
 
 func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	dir := t.TempDir()
@@ -440,7 +440,7 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 }
 
 func TestRollbackPreservesConcurrentRecreationOfMissingPreState(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	dir := t.TempDir()
@@ -475,7 +475,7 @@ func TestRollbackPreservesConcurrentRecreationOfMissingPreState(t *testing.T) {
 }
 
 func TestRollbackOfFailingMutationPreservesUserEdit(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	dir := t.TempDir()
@@ -508,7 +508,7 @@ func TestRollbackPreservesConcurrentSymlinkAndNestedTree(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic links may require elevated privileges")
 	}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	t.Run("symbolic link", func(t *testing.T) {
@@ -569,7 +569,7 @@ func TestRollbackPreservesConcurrentSymlinkAndNestedTree(t *testing.T) {
 }
 
 func TestCommittedTransactionReportsDestinationChangeDuringCleanup(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
 	path := filepath.Join(t.TempDir(), "managed.txt")
@@ -595,7 +595,7 @@ func TestCommittedTransactionReportsDestinationChangeDuringCleanup(t *testing.T)
 }
 
 func TestFileTransactionFailsClosedWhenNoReplaceIsUnavailable(t *testing.T) {
-	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+	if atomicNoReplaceAvailableForTest() {
 		t.Skip("this platform supplies an atomic no-replace rename")
 	}
 	path := filepath.Join(t.TempDir(), "managed.txt")
@@ -660,9 +660,15 @@ func assertReportedRecoveryArtifactsPrivate(t *testing.T, transactionErr error, 
 			continue
 		}
 		assert.Contains(t, transactionErr.Error(), recovery.RecoveryPath)
-		info, err := os.Stat(filepath.Dir(recovery.RecoveryPath))
+		info, err := os.Lstat(filepath.Dir(recovery.RecoveryPath))
 		require.NoError(t, err, recovery.RecoveryPath)
 		assert.True(t, info.IsDir())
+		assert.Zero(t, info.Mode()&os.ModeSymlink)
+		if runtime.GOOS == "windows" {
+			// Windows reports ACLs through security descriptors rather than
+			// os.FileMode permission bits.
+			continue
+		}
 		assert.Zero(t, info.Mode().Perm()&0o077, "recovery directory must be private: %s", recovery.RecoveryPath)
 	}
 }
@@ -697,6 +703,16 @@ func fileMode(t *testing.T, path string) os.FileMode {
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	return info.Mode().Perm()
+}
+
+func assertFileMode(t *testing.T, path string, expected os.FileMode) {
+	t.Helper()
+	actual := fileMode(t, path)
+	if runtime.GOOS == "windows" {
+		assert.Equal(t, expected&0o200, actual&0o200, "Windows only exposes the read-only attribute through os.FileMode")
+		return
+	}
+	assert.Equal(t, expected, actual)
 }
 
 func assertReadOnlyDirectoryMode(t *testing.T, path string) {

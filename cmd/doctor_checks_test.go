@@ -53,6 +53,13 @@ func doctorCommandKey(name string, args ...string) string {
 	return strings.Join(append([]string{name}, args...), "\x00")
 }
 
+func TestSystemDoctorRunnerRejectsUnexpectedExecutables(t *testing.T) {
+	t.Parallel()
+	_, err := (systemDoctorRunner{}).Run(t.Context(), "sh", "-c", "echo unexpected")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "doctor executable")
+}
+
 func TestGitHubDoctorChecksUseStableCodesAndBoundedArgv(t *testing.T) {
 	const (
 		root   = "/safe/repository"

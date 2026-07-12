@@ -153,6 +153,7 @@ Every public Outcome field is mandatory. Arrays must be arrays, including when e
 {
   "contract_version": 1,
   "action_id": "...",
+  "action_kind": "orient",
   "status": "completed",
   "summary": "observed facts",
   "observations": [],
@@ -163,6 +164,8 @@ Every public Outcome field is mandatory. Arrays must be arrays, including when e
   "review": null
 }
 ```
+
+`action_kind` is mandatory and must exactly equal the current Action's `kind`. Slipway rejects a missing, unknown, or mismatched value; there is no inference or legacy fallback.
 
 Host status is only `completed`, `needs_input`, `partial`, or `error`. `skipped` is a CLI-owned `run skip` event and is rejected in a host Outcome. Outcome input is capped at 1 MiB and must be UTF-8 without a BOM or trailing data.
 

@@ -42,6 +42,7 @@ Host Outcome は次の全 field を必ず明示します。
 {
   "contract_version": 1,
   "action_id": "...",
+  "action_kind": "orient",
   "status": "completed",
   "summary": "observed facts",
   "observations": [],
@@ -52,6 +53,8 @@ Host Outcome は次の全 field を必ず明示します。
   "review": null
 }
 ```
+
+`action_kind` は必須で、current Action の `kind` と完全一致しなければなりません。欠落、未知値、不一致は拒否され、推論や legacy fallback はありません。
 
 配列は省略も `null` も不可です。Host status は `completed|needs_input|partial|error` のみで、`skipped` は CLI の `run skip` event です。`needs_input` には pause が必須で、他 status は `pause:null` です。Host pause reason は `decision_required|destructive_confirmation_required|environment_unavailable` のみで、`budget_exhausted` は CLI 専用です。破壊 request は Implement の破壊 pause にだけ許可されます。
 

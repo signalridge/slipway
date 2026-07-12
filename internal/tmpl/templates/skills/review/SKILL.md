@@ -15,7 +15,7 @@ Inspect two dimensions:
 1. **Intent** — missing, partial, incorrect, excessive, or out-of-scope behavior relative to the pinned self-contained Requirements and confirmed decisions.
 2. **Quality** — design, error handling, concurrency, security, maintainability, and test-sensitive concerns.
 
-Report concrete findings with locations, details, and uncertainties. Submit only these combinations:
+Report concrete findings with locations, details, and uncertainties. The strict Run Outcome must carry `action_kind: "review"` matching the current Action. Submit only these combinations:
 
 - host `completed` with `review.result` `no_findings_reported` or `findings_reported`;
 - host `partial` with `review.result` `inconclusive`;

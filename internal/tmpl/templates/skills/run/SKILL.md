@@ -45,6 +45,7 @@ Every host Outcome contains every public field; unrelated result branches are JS
 {
   "contract_version": 1,
   "action_id": "ACTION",
+  "action_kind": "orient",
   "status": "completed",
   "summary": "observed facts",
   "observations": [],
@@ -55,6 +56,8 @@ Every host Outcome contains every public field; unrelated result branches are JS
   "review": null
 }
 ```
+
+`action_kind` is mandatory and must exactly match the current Action's `kind`; never infer, omit, or rewrite it. A missing or mismatched value is rejected.
 
 Only `completed`, `needs_input`, `partial`, and `error` are host statuses. `skipped` is emitted only by the CLI. `needs_input` requires one `pause`; every other status requires `pause: null`.
 

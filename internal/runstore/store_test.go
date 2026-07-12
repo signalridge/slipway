@@ -89,6 +89,7 @@ func TestStoreUsesGitCommonDirectoryAndPrivateJournalFiles(t *testing.T) {
 	runGitCommand(t, mainRepository, "worktree", "add", "-q", "-b", "linked-test", linked)
 	store, err := Open(linked)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	expectedCommon, err := filepath.EvalSymlinks(filepath.Join(mainRepository, ".git"))
 	require.NoError(t, err)
 	expectedLinked, err := filepath.EvalSymlinks(linked)
@@ -191,6 +192,7 @@ func TestStoreVisitStreamsEventLargerThanScannerDefaults(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	payload := map[string]string{"value": strings.Repeat("x", 256<<10)}
 	event, err := NewEvent("large", payload)
 	require.NoError(t, err)
@@ -210,6 +212,7 @@ func TestStoreUpdateRepairsInterruptedTailBeforeAppending(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	runID := "00000000-0000-4000-8000-000000000201"
 	first, err := NewEvent("first", map[string]int{"count": 1})
 	require.NoError(t, err)
@@ -282,6 +285,7 @@ func TestStoreSerializesConcurrentUpdates(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	event, err := NewEvent("created", map[string]int{"count": 0})
 	require.NoError(t, err)
 	require.NoError(t, store.Create("concurrent", event, map[string]int{"count": 0}))
@@ -320,6 +324,7 @@ func TestRemovingRunJournalOnlyRemovesRecovery(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	event, err := NewEvent("created", map[string]string{"goal": "test"})
 	require.NoError(t, err)
 	require.NoError(t, store.Create("remove-me", event, map[string]string{"state": "active"}))
@@ -392,6 +397,7 @@ func TestStoreRejectsSymlinkedRunAndLeafPaths(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
 
 	newRun := func(t *testing.T, runID string) Paths {
 		t.Helper()
