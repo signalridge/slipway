@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\nat
 cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
-资产覆盖 doctor、initial Orient、issue source、Outcome file/stdin（平台支持处）、decision answer、ad-hoc resume、current-candidate keep/adopt 和特殊 argv。Workflow wiring 只是 W collector；必须有同一次已完成的 `windows-latest` 运行记录两个脚本都成功后才能记录 W。本次本地修改不宣称已取得该运行；静态语法或 cross-build 不能冒充 W。
+资产覆盖 doctor、initial Orient、issue source、Outcome file/stdin（平台支持处）、decision answer、ad-hoc resume、current-candidate keep/adopt 和特殊 argv。Workflow wiring 本身仍只是 W collector；[run 29197908671 / Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) 已针对 source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` 完成两个 native assets，因此为该 source、binary 与 assets 记录 W。后续相关修改必须重新完成收集；静态语法或 cross-build 仍不能冒充 W。
 
 ## Symbolic-link transaction 边界
 

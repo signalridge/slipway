@@ -13,7 +13,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\nat
 cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
-CI matrix は `slipway.exe` を build して両方の native entry point を実行します。Scripts は doctor、initial Orient、issue source、Outcome file/stdin（対応する shell）、decision answer、ad-hoc resume、current-candidate keep/adopt、special argv を検査します。Workflow wiring は W collector にすぎず、同じ completed `windows-latest` run で両方が成功するまでは not collected です。この local change はその run を取得済みとは主張しません。
+CI matrix は `slipway.exe` を build して両方の native entry point を実行します。Scripts は doctor、initial Orient、issue source、Outcome file/stdin（対応する shell）、decision answer、ad-hoc resume、current-candidate keep/adopt、special argv を検査します。Workflow wiring 自体は引き続き W collector にすぎません。[run 29197908671 / Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) は source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` に対して両 native asset を完了し、その source、binary、asset set に W を記録します。後続の関連変更には新しい completed collection が必要です。
 
 ## Symbolic-link transaction の境界
 

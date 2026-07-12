@@ -1,6 +1,6 @@
 # Native Windows acceptance assets
 
-These scripts are the native Windows entry points wired into the `windows-latest` CI matrix. Executable assets and workflow wiring are not W evidence by themselves: W is recorded only when one workflow execution successfully runs both scripts against the binary it built. No native W execution is claimed by this local change.
+These scripts are the native Windows entry points wired into the `windows-latest` CI matrix. Executable assets and workflow wiring are not W evidence by themselves: W is recorded only when one workflow execution successfully runs both scripts against the binary it built. The recorded execution below satisfies W for its recorded source, binary, and acceptance assets; workflow wiring alone remains insufficient for later changes.
 
 Build `slipway.exe`, then run both from the repository root:
 
@@ -34,4 +34,22 @@ fixture runs. It records the OS, runner image, PowerShell and cmd versions,
 source and checkout revisions, run URL, and SHA-256 digests for the PowerShell
 asset, cmd asset, and tested binary. Retain that line with the completed job.
 
-A Linux/macOS syntax scan or `GOOS=windows` build cannot establish W. The CI workflow is a collector, not pre-recorded evidence: retain the completed `windows-latest` run URL, native OS and shell versions, binary revision, script digests, output, and evaluator notes before changing matrix status from `not collected`.
+A Linux/macOS syntax scan or `GOOS=windows` build cannot establish W. The recorded run below establishes W only for its recorded source revision, binary, and asset digests; later code or acceptance-asset changes require a new completed `windows-latest` job before the matrix can claim current W.
+
+## Recorded W evidence
+
+[Run 29197908671](https://github.com/signalridge/slipway/actions/runs/29197908671) / [Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) completed the native Windows Go suite and both acceptance modes.
+
+- Source revision: `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47`
+- Checkout revision: `d1095684dbff536a792c19701ff3c65cb228fb78`
+- OS: Microsoft Windows Server 2025 (`Microsoft Windows NT 10.0.26100.0`)
+- Runner image: `win25-vs2026` (`20260628.158.1`)
+- PowerShell: Desktop `5.1.26100.32995`
+- cmd.exe: `Microsoft Windows [Version 10.0.26100.32995]`
+- PowerShell asset SHA-256: `08d4c2c4d83c7c297b2d1a9a70d7ed70856399c129a9552ccf89f0d1147ae6ac`
+- cmd asset SHA-256: `4dfa5d74cb69b17ed6b1192bd9e3fc82de6c66f89f800164c5380096d7b5425d`
+- Tested binary SHA-256: `081524ac5a2742e3dc240c6d3ca8b0f7d1312990b96debfb8ebecde0e6643e0a`
+- PowerShell result: `native Windows acceptance (PowerShell): ok`
+- Cmd result: `native Windows acceptance (Cmd): ok`
+
+This records W only for the source, binary, and assets identified above. A later relevant change needs a new completed collection.

@@ -45,6 +45,8 @@ transcripts/<yyyy-mm-dd>-<host>-<scenario>/
 
 `outcome.sanitized.json` keeps the strict public Outcome shape while redacting values. Verify it against the versioned schema and journal before publication; do not infer activity from prose.
 
+Native Windows W evidence is recorded separately in `../windows/README.md`; it is not transcript evidence.
+
 ## Evidence still not collected
 
 - H for Claude across the 12 prompt scenarios and publication fault workflow;
@@ -52,6 +54,5 @@ transcripts/<yyyy-mm-dd>-<host>-<scenario>/
 - H for Pi across the same set;
 - sampled H for Copilot, Cursor, Kilo, Kiro, OpenCode, Qwen, and Windsurf;
 - live GitHub G evidence described in `../live-github/README.md`;
-- native Windows W evidence from `../windows/`.
 
-These are honest external evidence gaps. Missing H/G/W is not a CLI progression control, Review result, or delivery verdict.
+These are honest external H/G evidence gaps. Missing H/G is not a CLI progression control, Review result, or delivery verdict.

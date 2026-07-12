@@ -8,6 +8,6 @@ C は host autonomy H を証明せず、local fake endpoint や deterministic pu
 
 Local harness は credential なしで timeout-after-success、partial relation failure、duplicate markers、index delay、0/1/multiple reconciliation を再現します。Live G は protected test account/repository を使い、fork PR に secret を渡しません。Transcript は `tests/acceptance/transcripts/` の sanitized format を使い、raw conversation や架空の model run を保存しません。
 
-CI matrix は `windows-latest` で `slipway.exe` を build し、native PowerShell と `cmd.exe` asset の両方を実行します。Workflow は W collector であって事前の evidence ではありません。同じ completed run で両方が成功した場合だけ W を記録し、この local change は実行済みとは主張しません。R gate は `tests/acceptance/` の stdlib link/release-artifact checker で built-site route、archive LICENSE bytes、Scoop、AUR、package path を検査します。
+CI matrix は `windows-latest` で `slipway.exe` を build し、native PowerShell と `cmd.exe` asset の両方を実行します。Workflow wiring 自体は引き続き collector にすぎません。[run 29197908671 / Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) は source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` に対して両 asset を完了したため、matrix はその source、binary、asset set に W を記録します。後続の関連変更には新しい completed collection が必要です。R gate は `tests/acceptance/` の stdlib link/release-artifact checker で built-site route、archive LICENSE bytes、Scoop、AUR、package path を検査します。
 
 Executable acceptance asset は `tests/acceptance/` だけに置き、`scripts/` に複製しません。Command と current status は matrix を参照してください。
