@@ -41,7 +41,7 @@ function Invoke-SlipwayDirect {
     $exitCode = $LASTEXITCODE
     $text = Join-NativeOutput $output
     if ($exitCode -ne 0) {
-        Fail "command exited $exitCode: $($CommandArgs -join ' '); output: $text"
+        Fail "command exited ${exitCode}: $($CommandArgs -join ' '); output: $text"
     }
     return $text
 }
