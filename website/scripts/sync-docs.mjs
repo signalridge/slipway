@@ -20,9 +20,11 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = path.resolve(SCRIPT_DIR, '../../docs');
 const OUT_DIR = path.resolve(SCRIPT_DIR, '../src/content/docs');
 const PUBLIC_ASSETS = path.resolve(SCRIPT_DIR, '../public/assets');
+const PUBLIC_REFERENCE = path.resolve(SCRIPT_DIR, '../public/reference');
 
 // Must match `base` in astro.config.mjs (project Pages path).
 const BASE = '/slipway';
+const REPOSITORY_BLOB = 'https://github.com/signalridge/slipway/blob/main';
 
 // Hand-authored pages preserved across regeneration (the splash landing pages,
 // one per locale). Everything else under OUT_DIR is generated and wiped.
@@ -57,6 +59,13 @@ function rewriteTarget(target, currentDir) {
 
   if (pathPart.endsWith('.md')) {
     const resolved = path.posix.normalize(path.posix.join(currentDir, pathPart));
+    if (resolved.startsWith('../')) {
+      const repositoryRelative = resolved.slice('../'.length);
+      if (repositoryRelative.startsWith('../')) {
+        throw new Error(`documentation link escapes the repository: ${trimmed}`);
+      }
+      return `${REPOSITORY_BLOB}/${repositoryRelative}${suffix}`;
+    }
     return routeFor(resolved.replace(/\.md$/, '')) + suffix;
   }
   if (IMAGE_EXT.test(pathPart) || pathPart.includes('assets/')) {
@@ -64,6 +73,11 @@ function rewriteTarget(target, currentDir) {
     // docs/assets/... is copied to public/assets/..., served at `${BASE}/assets/...`
     const idx = resolved.indexOf('assets/');
     if (idx >= 0) return `${BASE}/${resolved.slice(idx)}${suffix}`;
+  }
+
+  const resolved = path.posix.normalize(path.posix.join(currentDir, pathPart));
+  if (resolved === 'reference/machine-protocol.schema.json') {
+    return `${BASE}/${resolved}${suffix}`;
   }
   return null;
 }
@@ -144,7 +158,10 @@ async function cleanGenerated(dir = OUT_DIR, rootRel = '') {
       await fs.rm(abs, { force: true });
     }
   }
-  if (rootRel === '') await fs.rm(PUBLIC_ASSETS, { recursive: true, force: true });
+  if (rootRel === '') {
+    await fs.rm(PUBLIC_ASSETS, { recursive: true, force: true });
+    await fs.rm(PUBLIC_REFERENCE, { recursive: true, force: true });
+  }
 }
 
 async function main() {
@@ -165,6 +182,10 @@ async function main() {
   if (await fs.stat(assetsSrc).then(() => true).catch(() => false)) {
     await fs.cp(assetsSrc, PUBLIC_ASSETS, { recursive: true });
   }
+
+  const schemaSrc = path.join(DOCS_DIR, 'reference/machine-protocol.schema.json');
+  await fs.mkdir(PUBLIC_REFERENCE, { recursive: true });
+  await fs.copyFile(schemaSrc, path.join(PUBLIC_REFERENCE, 'machine-protocol.schema.json'));
 
   console.log(`sync-docs: ${files.length} pages -> ${path.relative(process.cwd(), OUT_DIR)}`);
 }

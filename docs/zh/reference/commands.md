@@ -1,158 +1,38 @@
 # 命令参考
 
-本页是 Slipway 命令的 Diataxis 参考入口。展开版操作参考仍然保留在
-[命令](../commands.md)；本页让生成的命令面清单锚定在 `docs/reference/` 之下。
+Slipway 只有七个公开命令：
 
-大多数路由命令在需要结构化输出时都支持 `--json`。
-`slipway validate` 和 `slipway done` 不需要单独的 `--json` 标志就输出 JSON，
-`slipway init` 仅用于初始化配置，而 `slipway config`、`slipway tool` 和
-`slipway hook` 是公开的纯 CLI 命令面，不生成适配器 prompt 包装。
+规范语义见[中文产品契约](product-contract.md)与 [machine schema](../../reference/machine-protocol.schema.json)。工作流 issue-first 但不 issue-gated，详见 [Issue 工作流](issue-workflow.md)。
 
-## 命令索引
-
-| 命令 | 类别 | 用途 |
-| --- | --- | --- |
-| `slipway new` | mutation | 创建一个受治理的变更。 |
-| `slipway intake` | mutation | 执行意图澄清与授权。 |
-| `slipway plan` | mutation | 编写或修订规划产物。 |
-| `slipway implement` | mutation | 执行 S2 阶段的实现波次编排。 |
-| `slipway review` | mutation | 执行 S3 阶段的评审收敛。 |
-| `slipway fix` | mutation | 针对 S3 评审发现派发修复。 |
-| `slipway done` | mutation | 归档一个已就绪可完成的变更。 |
-| `slipway next` | query | 查看下一个技能或阻塞项，但不推进流程。 |
-| `slipway run` | mutation | 驱动当前阶段直到触发某个停止条件。 |
-| `slipway status` | query | 显示生命周期状态与下一步操作。 |
-| `slipway codebase-map` | mutation | 创建或刷新仓库范围内的持久化上下文。 |
-| `slipway handoff` | mutation | 写入或显示按变更划分的咨询性续作笔记。 |
-| `slipway preset` | mutation | 确认或更改当前生效的预设。 |
-| `slipway validate` | query | 重新计算就绪度，但不推进流程。 |
-| `slipway abort` | mutation | 中止当前的执行会话。 |
-| `slipway cancel` | mutation | 取消并归档一个活动中的变更。 |
-| `slipway delete` | mutation | 丢弃已放弃的受治理本地状态。 |
-| `slipway repair` | mutation | 执行有界范围的本地完整性修复。 |
-| `slipway evidence` | mutation | 记录受支持的任务或技能证据。 |
-| `slipway tool` | mutation | 运行生成技能所使用的纯 CLI 辅助工具。 |
-| `slipway hook` | mutation | 运行生成的适配器配置所使用的纯 CLI 宿主 hook 辅助命令。 |
-| `slipway health` | query | 显示仓库本地的完整性检查结果。 |
-| `slipway instructions` | query | 显示产物或 codebase-map 的编写约定。 |
-| `slipway init` | mutation | 初始化运行时布局与可选适配器。 |
-| `slipway config` | mutation | 查看并设置仓库级配置键。 |
-
-## JSON 命令面标记
-
-以下示例保持原样，因为生成的命令面清单会检查每个 JSON 契约是否仍能在文档中找到。
+- `install`：安装六个宿主能力。
+  首次安装无需 `--refresh`；已有 ownership manifest 时，普通 `install` 不会改写托管文件，修复、更新或从 version 1 安全切换需显式使用 `--refresh`。
+- `uninstall`：仅删除仍保持原样的托管文件。
+- `list`：列出宿主检测、安装、`needs_refresh` 与 capability 状态。
+- `doctor`：诊断适配器和运行环境，不检查代码改动；version 1 或不完整 surface 会报告 `needs_refresh`/warning。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；带 source 时只读取一次严格 GitHub Change envelope，并仅持久化 pinned snapshot。
+- `status [run-id] [--json]`：列出或查看 run。
+- `stop [run-id] [--json]`：停止但保留恢复日志。
 
 ```bash
-slipway new --json
-slipway intake --json
-slipway plan --json
-slipway implement --json
-slipway review --json
-slipway fix --json
-slipway next --json
-slipway run --json
-slipway status --json
-slipway handoff show --json
-slipway validate
-slipway done
-slipway codebase-map --json
-slipway preset <level> --json
-slipway abort --json
-slipway cancel --json
-slipway delete --change <slug> --json
-slipway repair --json
-slipway evidence task --result-file task-result.json [--result-file next-task-result.json ...] --json
-slipway evidence skill --skill <name> --verdict pass --json
-slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json
-slipway health --json
-slipway instructions <artifact> --json
-slipway config list --json
+slipway run "小型私密修复" --json
+slipway run "实施有界 Change" --source-file /安全临时目录/change-envelope.json --json
 ```
 
-当你需要查看阻塞项细节、产物就绪度细节或状态转换轨迹时，
-请在 `next` 或 `run` 上加 `--diagnostics`。
+导入 source 前警告 accepted Requirements、goal、answers 与 command summaries 可能敏感；raw body/comments/token/env 不进入 journal。详见[运行日志与隐私](../explanation/runs-and-privacy.md)。
 
-## 子命令与模式要点
+宿主使用隐藏的协议命令：
 
-- `slipway handoff write` 从 stdin 写入咨询性的续作笔记；bare 形式需要 pipe 一段完整的 `## Current Position` 正文，加 `--section <name>` 时会从 stdin 替换指定小节。
-- `slipway handoff show --json` 以结构化形式输出当前变更的 handoff。
-- `slipway evidence task --result-file <path> --json` 导入紧凑的执行任务结果；重复 `--result-file` 可进行原子批量导入。
-- `slipway evidence skill --skill <name> --verdict pass --json` 在拥有该 skill 的阶段记录治理 skill 证据。
-- `slipway evidence skill --skill <selected-review-skill> --verdict pass --refresh-current --reference "context_origin:stage=review=<handle>" --notes-file artifacts/changes/<slug>/verification/<selected-review-skill>-notes.md --json` 只用于把已选 S3 review skill 的当前 passing 证据作为一次明确重跑来替换；普通重复证据仍会被拒绝。
-- `slipway status --stats --json` 报告工作区诊断，不重新引入已退休的顶层 `stats` 命令。
-- `slipway health --doctor --json` 在 health 报告中加入面向修复的诊断。
-- `slipway tool <helper>` 由生成的 skill 直接调用，不生成适配器提示词接入面。
-- `slipway hook session-start` 由生成的宿主 hook 配置直接调用；hook 辅助命令会静默失败，避免自动 hook 阻塞用户。
-- `slipway config`、`slipway config list --json`、`slipway config list --env [--json]`、`slipway config get <key> --json` 和 `slipway config set <key> <value>` 用于查看 `.slipway.yaml` 配置键和运行时/密钥环境变量面；只有文件配置键可以更新。`config` 刻意保持 CLI-only，不生成适配器提示词接入面。
-- `subagents.*` 配置控制 `plan_audit`、`executor`、`review`、`fix` 和 `verify` 的 slot-based 委派目标；见 [Subagent 配置](subagents.md)。
-
-## 只读类命令
-
-以下命令只检查状态，不改变生命周期的权威记录：
-
-```bash
-slipway status --json
-slipway validate
-slipway next --json --diagnostics
+```text
+slipway run submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
+slipway run answer --run ID --action ID --text TEXT
+slipway run answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway run skip --run ID --action ID
+slipway run resume ID [--budget N]
+slipway run resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
 ```
 
-在选择某个会产生变更的命令前，先用它们查看现状。
+第一种 resume 仅适用于 ad-hoc Run。Issue-bound resume 必须且只能选择 fresh `--source-file`、显式 `--use-pinned-source` 或按当前 candidate ID 执行 `pinned|adopt` 之一。Skip 不需要理由。暂停、错误与 status JSON 包含带原始绝对 `--root` 的结构化 `next`；只有无未解析必填输入的 argv 才渲染成人类命令。
 
-## 改变阶段状态的命令
+`install/uninstall --json` 固定返回 `{contract_version,hosts,written,removed,preserved,warnings}`，所有数组即使为空也存在；`list --json` 返回 `{contract_version,hosts:[...]}`；无 ID 的 `status --json` 返回 `{contract_version,runs:[...]}`，空列表也是 versioned object。有 ID 的 status 保持扁平 Run projection，并在顶层包含必填 `contract_version` 与 fresh `next`。所有错误固定包含 `contract_version`。
 
-以下命令可能推进或改变受治理的状态：
-
-```bash
-slipway intake --json
-slipway plan --json
-slipway implement --json
-slipway review --json
-slipway fix --json
-slipway done
-slipway run --json --diagnostics
-```
-
-如果某个变更命令失败即停，请重新运行当前的只读检查，
-并按提示给出的恢复命令操作。
-
-配置项 `execution.auto` 作用于 `intake`、`plan` 和 `implement`。
-这些阶段命令本身不接受按次调用的 `--auto` 或 `--no-auto` 覆盖标志；
-当需要单次运行的覆盖行为时，请使用 `slipway run --auto` 或 `slipway run --no-auto`。
-
-## Run 自动模式
-
-`slipway run` 可以在一次成功推进之后，继续越过例行的
-`run_slipway_run_to_advance` 命令边界，让受治理的变更不必只是为了再次运行
-同一个 `slipway run` 命令而停下。你可以用 `execution.auto` 配置项按仓库启用它，
-也可以为单次调用覆盖它：
-
-```bash
-slipway run --json --auto
-slipway run --json --no-auto
-```
-
-对那一次运行而言，`--auto` 和 `--no-auto` 的优先级高于 `execution.auto` 配置。
-在自动模式下，Slipway 只会继续越过例行的 run-to-advance 命令边界，并自动确认
-待处理的工作流预设升级（仅升级，绝不降级）。它不会执行治理技能、派发评审批次、
-记录证据、批准 intake 的已批准摘要（Approved Summary），也不会 finalize done-ready
-变更。非敏感的技能交接和评审批次可能在 `next --json` 中报告为
-`evidence_continuation`，且已有授权足够；但 run/stage 循环仍会停下，等待 host
-运行技能或评审并记录证据。`security-review` 边界、敏感与护栏确认以及每一道证据门
-仍会硬性停下，永远不会被自动越过。
-
-## 命令面清单
-
-`docs/SURFACE-MANIFEST.json` 由 Slipway 自有的 Go 权威源重新生成：
-
-```bash
-go run ./internal/toolgen/cmd/gen-surface-manifest --write
-go run ./internal/toolgen/cmd/gen-surface-manifest --check
-```
-
-新增或修改命令、JSON 输出契约或面向文档的命令面时，
-请确保其标记仍出现在清单对应行的 `docs` 文件中。
-
-## 完整细节
-
-详细的命令参考仍保留在 [命令](../commands.md)，涵盖创建选项、查询类命令、诊断、
-输出标志，以及常见的 JSON 调用方式。
+`doctor --json` 返回 `{contract_version,checks:[{code,status,host_id,name,detail}]}`，status 仅为 `ok|warning|error`。Repository/adapter 稳定 code 为 `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_legacy_manifest`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy`。GitHub 稳定 code 为 `github_cli_unavailable|github_cli_version_unknown|github_cli_rest_fallback_required|github_cli_compatible`、`github_auth_unavailable|github_auth_available`、`github_issue_permissions_ok|github_issue_permissions_limited|github_issue_permissions_unknown`；`gh <2.94.0` 需要官方 REST fallback。Legacy code 为 `legacy_runtime_residue`、`legacy_cache_residue`、`legacy_scope_root_residue`、`legacy_scopes_residue`、`legacy_locks_residue`、`legacy_processes_residue`、`legacy_repair_backups_residue` 与 `legacy_unknown_residue`。Doctor 只检查顶层 metadata，不读取、迁移或删除内容；GitHub/legacy warning 不阻塞 ad-hoc Run，且单独出现时 doctor 仍成功退出。

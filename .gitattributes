@@ -1,6 +1,5 @@
-# Normalize all text files to LF in the repository and on checkout.
-# The governance kernel computes content hashes over these files; CRLF drift
-# (e.g. Windows core.autocrlf=true) must never change a hashed artifact.
+# Normalize repository text to LF so protocol fixtures, generated capabilities,
+# hashes in ownership manifests, and cross-platform builds remain deterministic.
 * text=auto eol=lf
 
 *.go    text eol=lf

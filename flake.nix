@@ -1,5 +1,5 @@
 {
-  description = "Governance CLI for AI-assisted software delivery";
+  description = "User-controlled soft autopilot for AI coding";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -34,7 +34,7 @@
             src = ./.;
 
             subPackages = [ "." ];
-            vendorHash = "sha256-h7e9GmiwlyjVy6ggdYXUO0iHV2Lv6BL+kMfKVVlnL1Q=";
+            vendorHash = "sha256-F1mMsdd/txTLkyizOiZSl5cfeC7GGPeSRTN6WhVPiBo=";
             doCheck = false;
 
             ldflags = [
@@ -46,8 +46,9 @@
             ];
 
             meta = with pkgs.lib; {
-              description = "Governance CLI for AI-assisted software delivery";
+              description = "User-controlled soft autopilot for AI coding";
               homepage = "https://github.com/signalridge/slipway";
+              license = licenses.bsd3;
               maintainers = [ ];
               mainProgram = "slipway";
             };

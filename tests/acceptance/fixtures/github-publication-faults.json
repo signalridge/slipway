@@ -1,0 +1,118 @@
+{
+  "fixture_version": 1,
+  "operation_id": "11111111-1111-4111-8111-111111111111",
+  "cases": [
+    {
+      "name": "created-with-readback",
+      "item_id": "20000000-0000-4000-8000-000000000001",
+      "request_result": "success",
+      "returned_url": "https://github.com/example/publication-fixture/issues/101",
+      "marker_observations": [
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000001", "url": "https://github.com/example/publication-fixture/issues/101"}
+        ]
+      ],
+      "relationships": [
+        {"name": "label:kind:feature", "status": "created"},
+        {"name": "parent", "status": "matched"}
+      ],
+      "expected": {"item_status": "created", "relationship_statuses": ["created", "matched"], "requires_new_confirmation": false}
+    },
+    {
+      "name": "timeout-after-success",
+      "item_id": "20000000-0000-4000-8000-000000000002",
+      "request_result": "timeout",
+      "returned_url": null,
+      "marker_observations": [
+        [],
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000002", "url": "https://github.com/example/publication-fixture/issues/102"}
+        ]
+      ],
+      "relationships": [],
+      "expected": {"item_status": "matched", "relationship_statuses": [], "requires_new_confirmation": false}
+    },
+    {
+      "name": "partial-relation-failure",
+      "item_id": "20000000-0000-4000-8000-000000000003",
+      "request_result": "partial",
+      "returned_url": "https://github.com/example/publication-fixture/issues/103",
+      "marker_observations": [
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000003", "url": "https://github.com/example/publication-fixture/issues/103"}
+        ]
+      ],
+      "relationships": [
+        {"name": "parent", "status": "created"},
+        {"name": "blocked-by:104", "status": "failed"}
+      ],
+      "expected": {"item_status": "created", "relationship_statuses": ["created", "failed"], "requires_new_confirmation": false}
+    },
+    {
+      "name": "duplicate-marker-matches",
+      "item_id": "20000000-0000-4000-8000-000000000004",
+      "request_result": "ambiguous",
+      "returned_url": null,
+      "marker_observations": [
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000004", "url": "https://github.com/example/publication-fixture/issues/104"},
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000004", "url": "https://github.com/example/publication-fixture/issues/105"}
+        ]
+      ],
+      "relationships": [],
+      "expected": {"item_status": "ambiguous", "relationship_statuses": [], "requires_new_confirmation": false}
+    },
+    {
+      "name": "indexing-delay-converges",
+      "item_id": "20000000-0000-4000-8000-000000000005",
+      "request_result": "ambiguous",
+      "returned_url": null,
+      "marker_observations": [
+        [],
+        [],
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000005", "url": "https://github.com/example/publication-fixture/issues/106"}
+        ]
+      ],
+      "relationships": [],
+      "expected": {"item_status": "matched", "relationship_statuses": [], "requires_new_confirmation": false}
+    },
+    {
+      "name": "zero-marker-matches",
+      "item_id": "20000000-0000-4000-8000-000000000006",
+      "request_result": "timeout",
+      "returned_url": null,
+      "marker_observations": [[], [], []],
+      "relationships": [],
+      "expected": {"item_status": "failed", "relationship_statuses": [], "requires_new_confirmation": true}
+    },
+    {
+      "name": "one-marker-match",
+      "item_id": "20000000-0000-4000-8000-000000000007",
+      "request_result": "ambiguous",
+      "returned_url": null,
+      "marker_observations": [
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000007", "url": "https://github.com/example/publication-fixture/issues/107"}
+        ]
+      ],
+      "relationships": [],
+      "expected": {"item_status": "matched", "relationship_statuses": [], "requires_new_confirmation": false}
+    },
+    {
+      "name": "multiple-marker-matches",
+      "item_id": "20000000-0000-4000-8000-000000000008",
+      "request_result": "timeout",
+      "returned_url": null,
+      "marker_observations": [
+        [
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000008", "url": "https://github.com/example/publication-fixture/issues/108"},
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000008", "url": "https://github.com/example/publication-fixture/issues/109"},
+          {"operation_id": "11111111-1111-4111-8111-111111111111", "item_id": "20000000-0000-4000-8000-000000000008", "url": "https://github.com/example/publication-fixture/issues/110"}
+        ]
+      ],
+      "relationships": [],
+      "expected": {"item_status": "ambiguous", "relationship_statuses": [], "requires_new_confirmation": false}
+    }
+  ]
+}

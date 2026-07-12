@@ -1,21 +1,21 @@
 ---
 title: Slipway
-description: 面向 AI 辅助软件交付的治理 CLI——在真正干活的仓库里，为本地 AI agent 的工作提供持久的生命周期、当前状态权威与可核验的收尾。
+description: 由用户显式启动、Issue 驱动但不被 GitHub 阻塞的 AI 编程软自动驾驶。
 template: splash
 hero:
-  tagline: 在代码真正落地的那个仓库里，给本地 AI agent 的工作配上持久的生命周期、当前状态权威，以及有证据支撑的收尾。
+  tagline: Objective → 自包含 Change → 可中断 Run；先查事实、逐个澄清、实施、只读 Review、恢复，同时始终由用户掌控。
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
-    - text: 观看动画
-      link: "#watch-demos"
-      icon: right-arrow
-      variant: primary
     - text: 从这里开始
       link: /slipway/zh/start-here/
       icon: right-arrow
+      variant: primary
+    - text: 产品权威
+      link: /slipway/zh/reference/product-overview/
+      icon: document
       variant: minimal
-    - text: 在 GitHub 上查看
+    - text: GitHub
       link: https://github.com/signalridge/slipway
       icon: external
       variant: minimal
@@ -23,52 +23,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Slipway 是一个轻量的治理控制面，服务于本地的 AI 辅助开发。它不取代你的 AI 编码工具、项目看板或 Git，而是把每一次变更绑定到一条生命周期、一份当前权威文件，以及一份会话结束后仍可查证的证据上，让 agent 的工作变得可读、可追溯。
+完整中文产品契约与版本化 machine schema 是实现权威。Slipway 只在显式要求后启动，issue-first 但不把 GitHub 变成 gate，并保留 ad-hoc escape hatch。自包含 Change 是唯一 issue-backed source；Objective 只是可选 planning input，不能执行。
 
-你用自然语言驱动它。一次性跑完 `slipway init` 之后，只要告诉 AI agent 你想做什么，生成的适配器就会把这个请求送进受管生命周期——没有命令序列需要背。一次变更到底有没有做完，由 Slipway 说了算；文档里出现的那些命令，是 agent 替你跑的，你也可以随时自己跑。
-
-<h2 id="watch-demos">观看动画</h2>
-
-这两段短录屏展示最先需要理解的两种节奏：授权仍然有效时继续向前推进，以及需要操作者判断时停下来。
-
-<div class="demo-grid">
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/a8a09c0d-b1eb-43d8-9137-a9fa4eaf601c"></video>
-		<figcaption><strong>自动模式。</strong>授权仍然有效时，节奏性停顿会继续推进。</figcaption>
-	</figure>
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/fc10e83d-d08f-42ad-a51f-f3b3a58586de"></video>
-		<figcaption><strong>交互模式。</strong>需要操作者判断的位置会停下来。</figcaption>
-	</figure>
-</div>
+Run 每次返回一个版本化 Action：`orient → 必要时 clarify → implement → 观察到 diff 时 review → summarize`。每项可 skip，Run 可 stop/resume，Review 不修复，`ended` 只表示自动 queue 为空。
 
 <CardGrid stagger>
-	<Card title="教程" icon="open-book">
-		从零到一条受管变更，一步步带着你跑，命令都能直接复制。
+	<Card title="Issue-first，不是 issue-gated" icon="rocket">
+		使用精确 Objective/Change marker 与 labels；GitHub 不可用、敏感、微小或用户不想建 Issue 时使用 ad-hoc Run。
 
-		[第一个受管变更](/slipway/zh/tutorials/first-governed-change/) ·
-		[接入既有代码库](/slipway/zh/tutorials/onboarding-existing-codebase/)
+		[从这里开始](/slipway/zh/start-here/) · [Issue 工作流](/slipway/zh/reference/issue-workflow/) · [中文契约](/slipway/zh/reference/product-contract/)
 	</Card>
-	<Card title="操作指南" icon="setting">
-		完成某一项具体的运维任务。
+	<Card title="六能力、七命令" icon="puzzle">
+		十个 adapter 精确生成 run、clarify、propose、decompose、implement、只读 review，机器协议全程版本化。
 
-		[安装与刷新适配器](/slipway/zh/how-to/install-and-refresh-adapters/) ·
-		[恢复与排错](/slipway/zh/how-to/recover-and-troubleshoot/)
+		[命令](/slipway/zh/reference/commands/) · [机器协议](/slipway/zh/reference/machine-protocol/) · [适配器](/slipway/zh/reference/adapters/)
 	</Card>
-	<Card title="参考" icon="document">
-		命令、适配器与贡献流程的权威事实。
+	<Card title="恢复、隐私与证据" icon="setting">
+		Journal 可能含 accepted Requirements、goal、answers 与 command summaries；了解 retention、Windows 限制与真实证据缺口。
 
-		[命令](/slipway/zh/reference/commands/) ·
-		[AI 工具适配器](/slipway/zh/reference/ai-tools/)
-	</Card>
-	<Card title="原理" icon="puzzle">
-		受管工作流背后的设计思路。
-
-		[设计](/slipway/zh/explanation/design/) ·
-		[工作流](/slipway/zh/explanation/workflow/)
+		[隐私](/slipway/zh/explanation/runs-and-privacy/) · [Windows](/slipway/zh/reference/windows-rendering-and-durability/) · [证据](/slipway/zh/reference/acceptance-evidence/)
 	</Card>
 </CardGrid>
-
-## 为什么用 Slipway
-
-“做完了”这件事，Slipway 故意让它很难糊弄过去：每个受管阶段都各自产出证据，引擎不会照单全收，而是自己重新推导一遍。先跟着[教程](/slipway/zh/tutorials/first-governed-change/)把这个闭环跑一遍，等需要确切的命令语法时，再去翻[参考](/slipway/zh/reference/commands/)。

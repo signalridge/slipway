@@ -20,7 +20,7 @@ build-release version="dev" commit="unknown":
 [group('build')]
 clean:
     rm -f slipway
-    rm -rf dist/ coverage.txt coverage.html site/ tmp/
+    rm -rf dist/ coverage.txt coverage.html website/dist/ website/.astro/ tmp/
 
 [group('test')]
 test:
@@ -31,29 +31,14 @@ test-race:
     go test -timeout=20m ./... -race -count=1
 
 [group('test')]
+acceptance: build-bin
+    SLIPWAY_BIN="$PWD/slipway" ./tests/acceptance/machine-protocol.sh
+    SLIPWAY_BIN="$PWD/slipway" ./tests/acceptance/adapters.sh
+
+[group('test')]
 coverage:
     go test -timeout=20m ./... -coverprofile=coverage.txt -count=1
     go tool cover -func=coverage.txt
-
-# Run the governed coverage gates locally (fails closed on regression).
-[group('test')]
-coverage-gate:
-    mkdir -p tmp
-    go test -timeout=20m ./... -count=1 \
-        -coverpkg="$(go list ./internal/engine/gate ./internal/engine/governance ./internal/engine/progression ./cmd ./internal/state | paste -sd, -)" \
-        -coverprofile=tmp/coverage-gated.out
-    go run ./internal/coverage/cmd/covergate -target kernel -check -profile tmp/coverage-gated.out
-    go run ./internal/coverage/cmd/covergate -target public-surface -check -profile tmp/coverage-gated.out
-
-# Ratchet committed governed coverage baselines to current (review the diff).
-[group('test')]
-coverage-baseline:
-    mkdir -p tmp
-    go test -timeout=20m ./... -count=1 \
-        -coverpkg="$(go list ./internal/engine/gate ./internal/engine/governance ./internal/engine/progression ./cmd ./internal/state | paste -sd, -)" \
-        -coverprofile=tmp/coverage-gated.out
-    go run ./internal/coverage/cmd/covergate -target kernel -write -profile tmp/coverage-gated.out
-    go run ./internal/coverage/cmd/covergate -target public-surface -write -profile tmp/coverage-gated.out
 
 [group('lint')]
 lint:

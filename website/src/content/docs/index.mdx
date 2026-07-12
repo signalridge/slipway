@@ -1,19 +1,19 @@
 ---
 title: Slipway
-description: Governance CLI for AI-assisted software delivery — a durable lifecycle, current-state authority, and evidence-backed closeout inside the repo where the work happens.
+description: An explicitly invoked, issue-first but never issue-gated soft autopilot for AI coding.
 template: splash
 hero:
-  tagline: Give local AI-agent work a durable lifecycle, current-state authority, and evidence-backed closeout — inside the repository where the work happens.
+  tagline: Objective to self-contained Change to interruptible Run—investigate facts, clarify real decisions, implement, review read-only, and recover while the user stays in control.
   image:
     file: ../../assets/slipway-wordmark.svg
   actions:
-    - text: Watch demos
-      link: "#watch-demos"
-      icon: right-arrow
-      variant: primary
     - text: Start Here
       link: /slipway/start-here/
       icon: right-arrow
+      variant: primary
+    - text: Product Authority
+      link: /slipway/reference/product-overview/
+      icon: document
       variant: minimal
     - text: View on GitHub
       link: https://github.com/signalridge/slipway
@@ -23,64 +23,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Slipway is a small governance control plane for local AI-assisted development. It does
-not replace your AI coding tool, project tracker, or Git — it makes agent work legible
-by binding every change to a lifecycle, a current authority file, and evidence that can
-be inspected after the session ends.
+English is a non-normative summary. The complete Chinese product contract and versioned machine schema are implementation authorities. Slipway starts only when explicitly asked, is issue-first without making GitHub a gate, and preserves an ad-hoc escape hatch. A self-contained Change is the only issue-backed source; an Objective is optional planning input and never executable.
 
-You drive it in plain language. After a one-time `slipway init`, you tell your AI agent
-what you want to build, and the generated adapter routes that request through the governed
-lifecycle — no command sequence to memorize. Slipway stays the authority on whether the
-change is actually done; the commands throughout these docs are what the agent runs for
-you, and what you can run directly whenever you want.
-
-<h2 id="watch-demos">Watch demos</h2>
-
-These short recordings show the two pacing modes most users care about first:
-hands-off progress when authorization is still fresh, and hard stops when operator
-judgment matters.
-
-<div class="demo-grid">
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/fa0eb364-7967-4e74-ae56-e26e9e753b96"></video>
-		<figcaption><strong>Auto mode.</strong> Pacing pauses advance when prior authorization remains fresh.</figcaption>
-	</figure>
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/477ef7f0-cf68-49e1-be6f-76ba804be643"></video>
-		<figcaption><strong>Interactive mode.</strong> Checkpoints stop where operator judgment matters.</figcaption>
-	</figure>
-</div>
+One Run returns one versioned Action at a time: `orient → clarify when needed → implement → review on observed diff → summarize`. Every Action can be skipped, a Run can stop/resume, Review never repairs, and `ended` means only that the automatic queue is empty.
 
 <CardGrid stagger>
-	<Card title="Tutorials" icon="open-book">
-		Guided, copy-pasteable runs from zero to one governed change.
+	<Card title="Issue-first, not issue-gated" icon="rocket">
+		Use exact Objective/Change markers and labels, or start an ad-hoc Run when GitHub is unavailable, sensitive, tiny, or unwanted.
 
-		[First governed change](/slipway/tutorials/first-governed-change/) ·
-		[Onboarding an existing codebase](/slipway/tutorials/onboarding-existing-codebase/)
+		[Start here](/slipway/start-here/) · [Issue workflow](/slipway/reference/issue-workflow/)
 	</Card>
-	<Card title="How-To" icon="setting">
-		Complete a specific operational task.
+	<Card title="Six capabilities, seven commands" icon="puzzle">
+		Ten adapters generate run, clarify, propose, decompose, implement, and read-only review. The machine protocol is versioned.
 
-		[Install & refresh adapters](/slipway/how-to/install-and-refresh-adapters/) ·
-		[Recover & troubleshoot](/slipway/how-to/recover-and-troubleshoot/)
+		[Commands](/slipway/reference/commands/) · [Machine protocol](/slipway/reference/machine-protocol/) · [Adapters](/slipway/reference/adapters/)
 	</Card>
-	<Card title="Reference" icon="document">
-		Authoritative command, adapter, and contributor facts.
+	<Card title="Recovery, privacy, and evidence" icon="setting">
+		Journals may contain accepted Requirements, goals, answers, and command summaries. Understand retention, Windows limits, and honest evidence gaps.
 
-		[Commands](/slipway/reference/commands/) ·
-		[AI tool adapters](/slipway/reference/ai-tools/)
-	</Card>
-	<Card title="Explanation" icon="puzzle">
-		The design reasoning behind the governed workflow.
-
-		[Design](/slipway/explanation/design/) ·
-		[Workflow](/slipway/explanation/workflow/)
+		[Privacy](/slipway/explanation/runs-and-privacy/) · [Windows](/slipway/reference/windows-rendering-and-durability/) · [Evidence](/slipway/reference/acceptance-evidence/)
 	</Card>
 </CardGrid>
-
-## Why Slipway
-
-Completion is deliberately hard to fake: every governed stage owns evidence that the
-engine re-derives instead of trusting. Start with the [tutorials](/slipway/tutorials/first-governed-change/)
-to experience that loop, then reach for the [reference](/slipway/reference/commands/) when
-you need exact command syntax.

@@ -5,6 +5,7 @@ on:
     paths:
       - "docs/**"
       - "website/**"
+      - "tests/acceptance/link_check.py"
       - "README.md"
       - ".github/workflows/docs.yml"
   pull_request:
@@ -12,6 +13,7 @@ on:
     paths:
       - "docs/**"
       - "website/**"
+      - "tests/acceptance/link_check.py"
       - "README.md"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -86,10 +88,26 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: website/package-lock.json
+      - name: Verify npm-only lockfile
+        run: |
+          test -f package-lock.json
+          test ! -e yarn.lock
+          test ! -e pnpm-lock.yaml
+          test ! -e bun.lock
+          test ! -e bun.lockb
       - name: Install dependencies
         run: npm ci
-      - name: Build docs
-        run: npm run build
+      - name: Build docs without missing-entry warnings
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee "${RUNNER_TEMP}/slipway-docs-build.log"
+          warning_pattern='\[WARN\]|Entry .* was not found\.|Could not render .*conflicts with'
+          if grep -E "$warning_pattern" "${RUNNER_TEMP}/slipway-docs-build.log"; then
+            echo '::error::Documentation build emitted a warning'
+            exit 1
+          fi
+      - name: Check Markdown and built website links
+        run: python3 -I ../tests/acceptance/link_check.py --require-site
       - name: Upload Pages artifact
         if: needs.pages-status.outputs.deploy == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

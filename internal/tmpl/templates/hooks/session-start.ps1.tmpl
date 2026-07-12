@@ -1,8 +1,0 @@
-$ErrorActionPreference = "SilentlyContinue"
-
-# Slipway SessionStart launcher for {{.ToolID}}.
-# Behavior lives in `slipway hook session-start`; this file only dispatches.
-
-if ($null -eq (Get-Command {{.ProbeBin}} -ErrorAction SilentlyContinue)) { exit 0 }
-& {{.LaunchPrefix}} hook session-start --tool "{{.ToolID}}" 2>$null
-exit 0

@@ -24,16 +24,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -X github.com/signalridge/slipway/cmd.date=${DATE}" \
     -o /out/slipway .
 
-FROM gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
+FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659
+
+RUN apk add --no-cache ca-certificates git \
+    && git config --system --add safe.directory '*' \
+    && addgroup -g 65532 -S nonroot \
+    && adduser -u 65532 -S nonroot -G nonroot
 
 COPY --from=builder /out/slipway /slipway
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 USER nonroot:nonroot
 ENTRYPOINT ["/slipway"]
 CMD ["--help"]
 
 LABEL org.opencontainers.image.title="slipway"
-LABEL org.opencontainers.image.description="Governance CLI for AI-assisted software delivery"
+LABEL org.opencontainers.image.description="User-controlled soft autopilot for AI coding"
 LABEL org.opencontainers.image.source="https://github.com/signalridge/slipway"
 LABEL org.opencontainers.image.vendor="SignalRidge"
+LABEL org.opencontainers.image.licenses="BSD-3-Clause"

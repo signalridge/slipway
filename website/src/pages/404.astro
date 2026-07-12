@@ -1,0 +1,44 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="robots" content="noindex" />
+		<title>Page not found | Slipway</title>
+		<link rel="icon" href={`${base}/favicon.svg`} />
+		<style>
+			:root {
+				color-scheme: dark;
+				font-family: system-ui, sans-serif;
+				background: #11131a;
+				color: #eef0f6;
+			}
+			body {
+				display: grid;
+				min-height: 100vh;
+				margin: 0;
+				place-items: center;
+			}
+			main {
+				max-width: 40rem;
+				padding: 2rem;
+				text-align: center;
+			}
+			a {
+				color: #9fc5ff;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<p>404</p>
+			<h1>Page not found</h1>
+			<p>The requested Slipway documentation page does not exist.</p>
+			<p><a href={`${base}/`}>Documentation home</a> · <a href={`${base}/start-here/`}>Start here</a></p>
+		</main>
+	</body>
+</html>

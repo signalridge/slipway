@@ -1,21 +1,21 @@
 ---
 title: Slipway
-description: AI 支援によるソフトウェア開発のためのガバナンス CLI。作業が実際に行われるリポジトリの中で、ローカルの AI エージェントに永続的なライフサイクル、現在状態の権威、そして証拠に裏づけられたクローズアウトを与えます。
+description: ユーザーが明示的に起動する、issue-first かつ issue-gated ではない AI coding 用 soft autopilot。
 template: splash
 hero:
-  tagline: コードが実際に書かれるリポジトリの中で、ローカルの AI エージェントの作業に永続的なライフサイクル、現在状態の権威、証拠に裏づけられたクローズアウトを与えます。
+  tagline: Objective → self-contained Change → interruptible Run。Fact investigation、one-by-one clarification、implementation、read-only Review、recovery を user control の下で行います。
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
-    - text: デモを見る
-      link: "#watch-demos"
-      icon: right-arrow
-      variant: primary
     - text: はじめに
       link: /slipway/ja/start-here/
       icon: right-arrow
+      variant: primary
+    - text: 製品 authority
+      link: /slipway/ja/reference/product-overview/
+      icon: document
       variant: minimal
-    - text: GitHub で見る
+    - text: GitHub
       link: https://github.com/signalridge/slipway
       icon: external
       variant: minimal
@@ -23,52 +23,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-Slipway は、ローカルでの AI 支援開発を対象にした小さなガバナンス用コントロールプレーンです。AI コーディングツールやプロジェクト管理ツール、Git を置き換えるものではありません。すべての変更をライフサイクル、現在の権威ファイル、そしてセッションが終わったあとでも確認できる証拠に結びつけることで、エージェントの作業を読み取れるものにします。
+日本語は non-normative summary です。完全な中国語製品契約と versioned machine schema が実装 authority です。Slipway は explicit invocation のみで開始し、issue-first ですが GitHub を gate にせず、ad-hoc escape hatch を残します。Self-contained Change だけが issue-backed source で、Objective は任意 planning input、実行不可です。
 
-操作は自然言語で行います。一度だけ `slipway init` を実行すれば、あとは作りたいものを AI エージェントに伝えるだけで、生成されたアダプターがそのリクエストをガバナンス済みのライフサイクルへ流してくれます。覚えておくべきコマンドの並びはありません。変更が本当に完了したかどうかの判断は、最後まで Slipway が握ります。ドキュメントに出てくるコマンドは、エージェントがあなたの代わりに実行するものであり、好きなときに自分で実行することもできます。
-
-<h2 id="watch-demos">デモを見る</h2>
-
-この 2 つの短い録画では、最初に理解しておきたい 2 つの進み方を示します。承認がまだ有効なときの前進と、操作者の判断が必要な場所での停止です。
-
-<div class="demo-grid">
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/23fe8af5-59de-4f07-898d-675badc86ba1"></video>
-		<figcaption><strong>自動モード。</strong>事前の承認がまだ有効なとき、ペーシング用の停止を進めます。</figcaption>
-	</figure>
-	<figure class="demo-card">
-		<video controls muted playsInline preload="metadata" src="https://github.com/user-attachments/assets/1e0048c0-7da5-41b4-a3da-e25cf2762ee1"></video>
-		<figcaption><strong>対話モード。</strong>操作者の判断が必要な場所で停止します。</figcaption>
-	</figure>
-</div>
+Run は1つずつ versioned Action を返します：`orient → 必要なら clarify → implement → observed diff なら review → summarize`。Action は skip、Run は stop/resume、Review は repair せず、`ended` は automatic queue が空であることだけを示します。
 
 <CardGrid stagger>
-	<Card title="チュートリアル" icon="open-book">
-		ゼロから 1 件のガバナンス変更まで、コマンドをコピーしながら順に進められます。
+	<Card title="Issue-first、not issue-gated" icon="rocket">
+		Exact Objective/Change marker と labels を使い、GitHub unavailable、機微、微小、または Issue 不要なら ad-hoc Run を使います。
 
-		[初めてのガバナンス変更](/slipway/ja/tutorials/first-governed-change/) ·
-		[既存コードベースの導入](/slipway/ja/tutorials/onboarding-existing-codebase/)
+		[はじめに](/slipway/ja/start-here/) · [Issue workflow](/slipway/ja/reference/issue-workflow/)
 	</Card>
-	<Card title="ハウツー" icon="setting">
-		特定の運用タスクを片づけます。
+	<Card title="6 capabilities、7 commands" icon="puzzle">
+		10 adapter は run、clarify、propose、decompose、implement、read-only review だけを生成し、machine protocol は versioned です。
 
-		[アダプターの導入と更新](/slipway/ja/how-to/install-and-refresh-adapters/) ·
-		[復旧とトラブルシューティング](/slipway/ja/how-to/recover-and-troubleshoot/)
+		[Commands](/slipway/ja/reference/commands/) · [Machine protocol](/slipway/ja/reference/machine-protocol/) · [Adapters](/slipway/ja/reference/adapters/)
 	</Card>
-	<Card title="リファレンス" icon="document">
-		コマンド・アダプター・コントリビュートに関する確かな事実。
+	<Card title="Recovery、privacy、evidence" icon="setting">
+		Journal は accepted Requirements、goal、answer、command summary を含み得ます。Retention、Windows limitation、honest evidence gap を確認してください。
 
-		[コマンド](/slipway/ja/reference/commands/) ·
-		[AI ツールアダプター](/slipway/ja/reference/ai-tools/)
-	</Card>
-	<Card title="解説" icon="puzzle">
-		ガバナンスワークフローの背後にある設計の考え方。
-
-		[設計](/slipway/ja/explanation/design/) ·
-		[ワークフロー](/slipway/ja/explanation/workflow/)
+		[Privacy](/slipway/ja/explanation/runs-and-privacy/) · [Windows](/slipway/ja/reference/windows-rendering-and-durability/) · [Evidence](/slipway/ja/reference/acceptance-evidence/)
 	</Card>
 </CardGrid>
-
-## なぜ Slipway なのか
-
-「完了した」とごまかすことは、あえて難しくしてあります。ガバナンス下の各ステージはそれぞれ証拠を持ち、エンジンはそれを鵜呑みにせず、自分で導出し直します。まずは[チュートリアル](/slipway/ja/tutorials/first-governed-change/)でこのループを体験し、正確なコマンド構文が必要になったら[リファレンス](/slipway/ja/reference/commands/)を参照してください。

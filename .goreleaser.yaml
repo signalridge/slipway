@@ -3,7 +3,7 @@ version: 2
 project_name: slipway
 before:
   hooks:
-    - go mod tidy
+    - go mod tidy -diff
 builds:
   - id: slipway
     main: .
@@ -33,6 +33,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - LICENSE
 checksum:
   name_template: checksums.txt
   algorithm: sha256
@@ -99,8 +100,8 @@ homebrew_casks:
       name: homebrew-tap
       token: "{{ .Env.GH_PAT }}"
     homepage: "https://github.com/signalridge/slipway"
-    description: "Governance CLI for AI-assisted software delivery"
-    license: "UNLICENSED"
+    description: "User-controlled soft autopilot for AI coding"
+    license: "BSD-3-Clause"
     skip_upload: auto
     ids:
       - slipway
@@ -121,8 +122,8 @@ scoops:
       name: scoop-bucket
       token: "{{ .Env.GH_PAT }}"
     homepage: "https://github.com/signalridge/slipway"
-    description: "Governance CLI for AI-assisted software delivery"
-    license: UNLICENSED
+    description: "User-controlled soft autopilot for AI coding"
+    license: BSD-3-Clause
     skip_upload: auto
 nfpms:
   - id: slipway
@@ -130,8 +131,8 @@ nfpms:
     vendor: SignalRidge
     homepage: "https://github.com/signalridge/slipway"
     maintainer: "SignalRidge <support@signalridge.com>"
-    description: "Governance CLI for AI-assisted software delivery"
-    license: UNLICENSED
+    description: "User-controlled soft autopilot for AI coding"
+    license: BSD-3-Clause
     formats:
       - deb
       - rpm
@@ -139,19 +140,29 @@ nfpms:
     bindir: /usr/bin
     section: utils
     priority: optional
+    contents:
+      - src: LICENSE
+        dst: /usr/share/licenses/slipway/LICENSE
+        file_info:
+          mode: 0644
+      - src: README.md
+        dst: /usr/share/doc/slipway/README.md
+        file_info:
+          mode: 0644
 aurs:
   - name: slipway-bin
     homepage: "https://github.com/signalridge/slipway"
-    description: "Governance CLI for AI-assisted software delivery"
+    description: "User-controlled soft autopilot for AI coding"
     maintainers:
       - "SignalRidge <support@signalridge.com>"
-    license: UNLICENSED
+    license: BSD-3-Clause
     private_key: "{{ .Env.HOME }}/.ssh/aur_key"
     git_url: "ssh://aur@aur.archlinux.org/slipway-bin.git"
     skip_upload: auto
     package: |-
       install -Dm755 "./slipway" "${pkgdir}/usr/bin/slipway"
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/slipway/README.md"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/slipway/LICENSE"
 dockers_v2:
   - id: slipway
     ids:
@@ -166,8 +177,9 @@ dockers_v2:
       - linux/arm64
     labels:
       org.opencontainers.image.title: slipway
-      org.opencontainers.image.description: Governance CLI for AI-assisted software delivery
+      org.opencontainers.image.description: User-controlled soft autopilot for AI coding
       org.opencontainers.image.source: https://github.com/signalridge/slipway
+      org.opencontainers.image.licenses: BSD-3-Clause
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .Date }}"

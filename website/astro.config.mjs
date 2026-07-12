@@ -2,16 +2,14 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// Content is synced from the repo's `docs/**` (source of truth) into
-// `src/content/docs/` by `scripts/sync-docs.mjs` before every dev/build.
-// https://astro.build/config
 export default defineConfig({
 	site: 'https://signalridge.github.io',
 	base: '/slipway',
 	integrations: [
 		starlight({
+			disable404Route: true,
 			title: 'Slipway',
-			tagline: 'Governance CLI for AI-assisted software delivery',
+			tagline: 'User-controlled soft autopilot for AI coding',
 			logo: { src: './src/assets/slipway-wordmark.svg', replacesTitle: true },
 			favicon: '/favicon.svg',
 			customCss: ['./src/styles/custom.css'],
@@ -27,100 +25,30 @@ export default defineConfig({
 				ja: { label: '日本語', lang: 'ja' },
 			},
 			sidebar: [
-				{
-					label: 'Start Here',
-					translations: { 'zh-CN': '从这里开始', ja: 'はじめに' },
-					slug: 'start-here',
-				},
-				{
-					label: 'Real-World Scenarios',
-					translations: { 'zh-CN': '实战场景', ja: '実践シナリオ' },
-					slug: 'real-world-scenarios',
-				},
-				{
-					label: 'Tutorials',
-					translations: { 'zh-CN': '教程', ja: 'チュートリアル' },
-					items: [
-						{
-							label: 'First Governed Change',
-							translations: { 'zh-CN': '第一个受管变更', ja: '初めてのガバナンス変更' },
-							slug: 'tutorials/first-governed-change',
-						},
-						{
-							label: 'Onboarding an Existing Codebase',
-							translations: { 'zh-CN': '接入既有代码库', ja: '既存コードベースの導入' },
-							slug: 'tutorials/onboarding-existing-codebase',
-						},
-					],
-				},
-				{
-					label: 'How-To',
-					translations: { 'zh-CN': '操作指南', ja: 'ハウツー' },
-					items: [
-						{
-							label: 'Install & Refresh Adapters',
-							translations: { 'zh-CN': '安装与刷新适配器', ja: 'アダプターの導入と更新' },
-							slug: 'how-to/install-and-refresh-adapters',
-						},
-						{
-							label: 'Recover & Troubleshoot',
-							translations: { 'zh-CN': '恢复与排错', ja: '復旧とトラブルシューティング' },
-							slug: 'how-to/recover-and-troubleshoot',
-						},
-					],
-				},
+				{ label: 'Start Here', translations: { 'zh-CN': '从这里开始', ja: 'はじめに' }, slug: 'start-here' },
+				{ label: 'Installation', translations: { 'zh-CN': '安装', ja: 'インストール' }, slug: 'installation' },
 				{
 					label: 'Reference',
 					translations: { 'zh-CN': '参考', ja: 'リファレンス' },
 					items: [
-						{
-							label: 'Commands',
-							translations: { 'zh-CN': '命令', ja: 'コマンド' },
-							slug: 'reference/commands',
-						},
-						{
-							label: 'Subagents',
-							translations: { 'zh-CN': 'Subagent 配置', ja: 'Subagent 設定' },
-							slug: 'reference/subagents',
-						},
-						{
-							label: 'AI Tool Adapters',
-							translations: { 'zh-CN': 'AI 工具适配器', ja: 'AI ツールアダプター' },
-							slug: 'reference/ai-tools',
-						},
-						{
-							label: 'Contributing',
-							translations: { 'zh-CN': '贡献指南', ja: 'コントリビュート' },
-							slug: 'contributing',
-						},
+						{ label: 'Product Authority', translations: { 'zh-CN': '产品权威', ja: '製品 authority' }, slug: 'reference/product-overview' },
+						{ label: 'Issue Workflow', translations: { 'zh-CN': 'Issue 工作流', ja: 'Issue workflow' }, slug: 'reference/issue-workflow' },
+						{ label: 'Commands', translations: { 'zh-CN': '命令', ja: 'コマンド' }, slug: 'reference/commands' },
+						{ label: 'Machine Protocol', translations: { 'zh-CN': '机器协议', ja: 'マシンプロトコル' }, slug: 'reference/machine-protocol' },
+						{ label: 'Host Adapters', translations: { 'zh-CN': '宿主适配器', ja: 'ホストアダプター' }, slug: 'reference/adapters' },
+						{ label: 'Windows', translations: { 'zh-CN': 'Windows', ja: 'Windows' }, slug: 'reference/windows-rendering-and-durability' },
+						{ label: 'Acceptance Evidence', translations: { 'zh-CN': '验收证据', ja: 'Acceptance evidence' }, slug: 'reference/acceptance-evidence' },
 					],
 				},
 				{
 					label: 'Explanation',
 					translations: { 'zh-CN': '原理', ja: '解説' },
 					items: [
-						{
-							label: 'Design',
-							translations: { 'zh-CN': '设计', ja: '設計' },
-							slug: 'explanation/design',
-						},
-						{
-							label: 'Design Philosophy (deep dive)',
-							translations: { 'zh-CN': '设计哲学（深入）', ja: '設計思想（詳説）' },
-							slug: 'design',
-						},
-						{
-							label: 'Workflow',
-							translations: { 'zh-CN': '工作流', ja: 'ワークフロー' },
-							slug: 'explanation/workflow',
-						},
-						{
-							label: 'Governed Workflow (deep dive)',
-							translations: { 'zh-CN': '受管工作流（深入）', ja: 'ガバナンスワークフロー（詳説）' },
-							slug: 'workflow',
-						},
+						{ label: 'Architecture', translations: { 'zh-CN': '架构', ja: 'アーキテクチャ' }, slug: 'explanation/architecture' },
+						{ label: 'Runs and Privacy', translations: { 'zh-CN': '运行与隐私', ja: 'run とプライバシー' }, slug: 'explanation/runs-and-privacy' },
 					],
 				},
+				{ label: 'Contributing', translations: { 'zh-CN': '贡献', ja: 'コントリビュート' }, slug: 'contributing' },
 			],
 		}),
 	],

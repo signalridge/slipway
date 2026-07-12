@@ -1,8 +1,0 @@
-#!/bin/sh
-
-# Slipway SessionStart launcher for {{.ToolID}}.
-# Behavior lives in `slipway hook session-start`; this file only dispatches.
-
-command -v {{.ProbeBin}} >/dev/null 2>&1 || exit 0
-{{.LaunchPrefix}} hook session-start --tool "{{.ToolID}}" 2>/dev/null || true
-exit 0

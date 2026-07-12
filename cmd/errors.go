@@ -1,142 +1,64 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/signalridge/slipway/internal/bootstrap"
-	"github.com/signalridge/slipway/internal/model"
-)
-
-type FailureCategory string
-
-const (
-	categoryInvalidUsage      FailureCategory = "invalid_usage"
-	categoryPrecondition      FailureCategory = "precondition_blocked"
-	categoryStateIntegrity    FailureCategory = "state_integrity"
-	categoryGovernanceBlocked FailureCategory = "governance_blocked"
-	categoryRuntimeFailure    FailureCategory = "runtime_failure"
+	"github.com/signalridge/slipway/internal/autopilot"
 )
 
 const (
-	exitCodeInvalidUsage      = 2
-	exitCodePrecondition      = 3
-	exitCodeStateIntegrity    = 4
-	exitCodeGovernanceBlocked = 5
-	exitCodeRuntimeFailure    = 6
+	exitCodeUsage   = 2
+	exitCodeRuntime = 3
 )
 
-// Execution limits.
-const (
-	// maxAutoNextIterations is the safety cap for governed run loops.
-	maxAutoNextIterations = 20
-	// defaultMaxRetriesPerSkill is the default retry budget per skill execution.
-	defaultMaxRetriesPerSkill = 2
-)
+// CLIError is the stable machine-readable error shape. Next contains typed
+// argv variants; rendered shell text is never machine authority.
+type storageMutationError interface {
+	error
+	StorageMutationPhase() string
+	StorageMutationCommitted() bool
+	StorageMutationProjectionStale() bool
+	StorageMutationNamespaceDetached() bool
+	StorageMutationAmbiguous() bool
+}
 
 type CLIError struct {
-	ErrorCode       string                 `json:"error_code"`
-	Category        FailureCategory        `json:"category"`
-	Message         string                 `json:"message"`
-	Remediation     string                 `json:"remediation"`
-	ExitCode        int                    `json:"exit_code"`
-	Slug            string                 `json:"slug,omitempty"`
-	InvocationRoute *invocationRouteView   `json:"invocation_route,omitempty"`
-	Details         map[string]any         `json:"details,omitempty"`
-	Reasons         []model.ReasonCode     `json:"reasons,omitempty"`
-	Recovery        *model.RecoverySummary `json:"recovery,omitempty"`
+	ContractVersion int            `json:"contract_version"`
+	Code            string         `json:"code"`
+	Message         string         `json:"message"`
+	Next            autopilot.Next `json:"next"`
+	ExitCode        int            `json:"exit_code"`
+	Details         map[string]any `json:"details,omitempty"`
 }
 
-func (e *CLIError) Error() string {
-	if e == nil {
+func (err *CLIError) Error() string {
+	if err == nil {
 		return ""
 	}
-	return e.Message
+	return err.Message
 }
 
-func newCLIError(
-	category FailureCategory,
-	errorCode string,
-	message string,
-	remediation string,
-	slug string,
-	details map[string]any,
-) *CLIError {
-	return newCLIErrorWithReasons(category, errorCode, message, remediation, slug, nil, details)
-}
-
-func newCLIErrorWithReasons(
-	category FailureCategory,
-	errorCode string,
-	message string,
-	remediation string,
-	slug string,
-	reasons []model.ReasonCode,
-	details map[string]any,
-) *CLIError {
+func newUsageError(code, message string, next autopilot.Next) *CLIError {
 	return &CLIError{
-		ErrorCode:   strings.TrimSpace(errorCode),
-		Category:    category,
-		Message:     strings.TrimSpace(message),
-		Remediation: strings.TrimSpace(remediation),
-		ExitCode:    exitCodeForCategory(category),
-		Slug:        strings.TrimSpace(slug),
-		Details:     details,
-		Reasons:     model.NormalizeReasonCodes(reasons),
-		Recovery:    model.BuildRecovery(reasons),
+		ContractVersion: autopilot.ContractVersion,
+		Code:            strings.TrimSpace(code),
+		Message:         strings.TrimSpace(message),
+		Next:            normalizeErrorNext(next),
+		ExitCode:        exitCodeUsage,
 	}
 }
 
-func newInvalidUsageError(errorCode, message, remediation string, details map[string]any) *CLIError {
-	return newCLIError(categoryInvalidUsage, errorCode, message, remediation, "", details)
-}
-
-func newPreconditionError(errorCode, message, remediation, slug string, details map[string]any) *CLIError {
-	return newCLIError(categoryPrecondition, errorCode, message, remediation, slug, details)
-}
-
-func newStateIntegrityError(errorCode, message, remediation, slug string, details map[string]any) *CLIError {
-	return newCLIError(categoryStateIntegrity, errorCode, message, remediation, slug, details)
-}
-
-func newGovernanceBlockedError(errorCode, message, remediation, slug string, details map[string]any) *CLIError {
-	return newCLIError(categoryGovernanceBlocked, errorCode, message, remediation, slug, details)
-}
-
-func newGovernanceBlockedErrorWithReasons(
-	errorCode,
-	message,
-	remediation,
-	slug string,
-	reasons []model.ReasonCode,
-	details map[string]any,
-) *CLIError {
-	return newCLIErrorWithReasons(categoryGovernanceBlocked, errorCode, message, remediation, slug, reasons, details)
-}
-
-func emitCLIError(w io.Writer, err *CLIError) error {
-	if err == nil {
-		return nil
-	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(err)
-}
-
-func exitCodeForCategory(category FailureCategory) int {
-	switch category {
-	case categoryInvalidUsage:
-		return exitCodeInvalidUsage
-	case categoryPrecondition:
-		return exitCodePrecondition
-	case categoryStateIntegrity:
-		return exitCodeStateIntegrity
-	case categoryGovernanceBlocked:
-		return exitCodeGovernanceBlocked
-	default:
-		return exitCodeRuntimeFailure
+func newRuntimeError(code, message string, next autopilot.Next, details map[string]any) *CLIError {
+	return &CLIError{
+		ContractVersion: autopilot.ContractVersion,
+		Code:            strings.TrimSpace(code),
+		Message:         strings.TrimSpace(message),
+		Next:            normalizeErrorNext(next),
+		ExitCode:        exitCodeRuntime,
+		Details:         details,
 	}
 }
 
@@ -144,43 +66,65 @@ func asCLIError(err error) *CLIError {
 	if err == nil {
 		return nil
 	}
-	var typed *CLIError
-	if errors.As(err, &typed) {
-		return typed
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) {
+		return cliErr
 	}
-	var initUsage *bootstrap.InitUsageError
-	if errors.As(err, &initUsage) {
-		return newInvalidUsageError(
-			initUsage.ErrorCode,
-			initUsage.Message,
-			initUsage.Remediation,
-			initUsage.Details,
-		)
+	var protocolErr *autopilot.ProtocolError
+	if errors.As(err, &protocolErr) {
+		return newRuntimeError(protocolErr.Code, protocolErr.Message, protocolErr.Next, protocolErr.Details)
 	}
-
-	msg := strings.TrimSpace(err.Error())
-	lower := strings.ToLower(msg)
-
-	// Cobra-generated flag/arg errors that cannot be wrapped at source.
-	if strings.HasPrefix(lower, "unknown flag") ||
-		strings.HasPrefix(lower, "invalid argument") ||
-		strings.HasPrefix(lower, "required flag") ||
-		strings.HasPrefix(lower, "unknown command") ||
-		strings.HasPrefix(lower, "unknown shorthand flag") {
-		return newInvalidUsageError(
-			"invalid_usage",
-			msg,
-			"Review command help and invoke with supported flags.",
-			nil,
-		)
+	var mutationErr storageMutationError
+	if errors.As(err, &mutationErr) {
+		committed := mutationErr.StorageMutationCommitted()
+		projectionStale := mutationErr.StorageMutationProjectionStale()
+		namespaceDetached := mutationErr.StorageMutationNamespaceDetached()
+		ambiguous := mutationErr.StorageMutationAmbiguous()
+		code := "mutation_not_committed"
+		switch {
+		case namespaceDetached || ambiguous:
+			code = "mutation_outcome_ambiguous"
+		case committed && projectionStale:
+			code = "mutation_committed_projection_stale"
+		case committed:
+			code = "mutation_committed_verification_failed"
+		}
+		return newRuntimeError(code, mutationErr.Error(), defaultErrorNext(), map[string]any{
+			"phase":              mutationErr.StorageMutationPhase(),
+			"committed":          committed,
+			"projection_stale":   projectionStale,
+			"namespace_detached": namespaceDetached,
+			"ambiguous":          ambiguous,
+		})
 	}
+	message := strings.TrimSpace(err.Error())
+	next := defaultErrorNext()
+	lower := strings.ToLower(message)
+	if strings.Contains(lower, "unknown command") ||
+		strings.Contains(lower, "unknown flag") ||
+		strings.Contains(lower, "requires") ||
+		strings.Contains(lower, "accepts") ||
+		strings.Contains(lower, "required flag") {
+		return newUsageError("invalid_usage", message, next)
+	}
+	return newRuntimeError("runtime_error", message, next, nil)
+}
 
-	return newCLIError(
-		categoryRuntimeFailure,
-		"runtime_failure",
-		msg,
-		"Retry the command. If the issue persists, inspect runtime state and logs.",
-		"",
-		nil,
-	)
+func normalizeErrorNext(next autopilot.Next) autopilot.Next {
+	if err := next.Validate(); err == nil {
+		return next
+	}
+	return defaultErrorNext()
+}
+
+func defaultErrorNext() autopilot.Next {
+	workspace, err := os.Getwd()
+	if err != nil {
+		workspace = string(filepath.Separator)
+	}
+	workspace, err = filepath.Abs(workspace)
+	if err != nil {
+		workspace = string(filepath.Separator)
+	}
+	return autopilot.NoneNext(workspace)
 }

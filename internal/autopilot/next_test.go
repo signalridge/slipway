@@ -1,0 +1,271 @@
+package autopilot
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/signalridge/slipway/internal/runstore"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestDeriveNextCoversEveryRunBranch(t *testing.T) {
+	t.Parallel()
+	workspace := filepath.Join(t.TempDir(), "workspace with spaces")
+	workspaceID := "sha256:" + strings.Repeat("a", 64)
+	action := &Action{ActionID: "action-1", Kind: ActionImplement}
+	request := destructiveRequestForTest(t)
+
+	tests := []struct {
+		name       string
+		run        Run
+		operation  NextOperation
+		variantIDs []string
+	}{
+		{
+			name:       "active action",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunActive, CurrentAction: action},
+			operation:  NextOperationAction,
+			variantIDs: []string{"submit-outcome-file", "submit-outcome-stdin", "skip-action"},
+		},
+		{
+			name:       "decision pause",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseDecisionRequired, CurrentAction: action},
+			operation:  NextOperationAnswer,
+			variantIDs: []string{"answer-decision"},
+		},
+		{
+			name: "destructive pause",
+			run: Run{
+				ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseDestructiveConfirm,
+				CurrentAction: action, PendingDestructiveRequest: &request,
+			},
+			operation:  NextOperationAnswer,
+			variantIDs: []string{"confirm-destructive", "decline-or-feedback"},
+		},
+		{
+			name:       "environment pause ad hoc",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseEnvironmentUnavailable, CurrentAction: action},
+			operation:  NextOperationResume,
+			variantIDs: []string{"resume-ad-hoc"},
+		},
+		{
+			name:       "budget pause ad hoc",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseBudgetExhausted},
+			operation:  NextOperationResume,
+			variantIDs: []string{"resume-ad-hoc"},
+		},
+		{
+			name:       "stopped ad hoc",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunStopped, CurrentAction: action},
+			operation:  NextOperationResume,
+			variantIDs: []string{"resume-ad-hoc"},
+		},
+		{
+			name:       "issue-bound resume",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunStopped, PinnedSource: &PinnedSource{}},
+			operation:  NextOperationResume,
+			variantIDs: []string{"refresh-source", "use-pinned-source"},
+		},
+		{
+			name: "valid source candidate",
+			run: Run{
+				ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseDecisionRequired,
+				PinnedSource: &PinnedSource{}, SourceCandidate: &SourceCandidate{CandidateID: "candidate-1", SourceCandidateInput: SourceCandidateInput{Valid: true}},
+			},
+			operation:  NextOperationResume,
+			variantIDs: []string{"keep-pinned", "adopt"},
+		},
+		{
+			name: "invalid source candidate",
+			run: Run{
+				ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseDecisionRequired,
+				PinnedSource: &PinnedSource{}, SourceCandidate: &SourceCandidate{CandidateID: "candidate-2", SourceCandidateInput: SourceCandidateInput{Valid: false}},
+			},
+			operation:  NextOperationResume,
+			variantIDs: []string{"keep-pinned"},
+		},
+		{
+			name:       "ended",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunEnded},
+			operation:  NextOperationNone,
+			variantIDs: []string{},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			next, err := DeriveNext(test.run)
+			require.NoError(t, err)
+			require.NoError(t, next.Validate())
+			assert.Equal(t, test.operation, next.Operation)
+			assert.Equal(t, workspaceID, next.WorkspaceIdentity)
+			ids := make([]string, 0, len(next.Variants))
+			for _, variant := range next.Variants {
+				ids = append(ids, variant.ID)
+				require.Contains(t, variant.BaseArgv, "--root")
+				rootIndex := indexOfString(variant.BaseArgv, "--root")
+				require.GreaterOrEqual(t, rootIndex, 0)
+				require.Less(t, rootIndex+1, len(variant.BaseArgv))
+				assert.Equal(t, workspace, variant.BaseArgv[rootIndex+1])
+				for _, argument := range variant.BaseArgv {
+					assert.False(t, isPseudoValue(argument), argument)
+				}
+			}
+			assert.Equal(t, test.variantIDs, ids)
+			encoded, err := json.Marshal(next)
+			require.NoError(t, err)
+			assert.NotContains(t, string(encoded), `"variants":null`)
+			assert.NotContains(t, string(encoded), `"inputs":null`)
+		})
+	}
+}
+
+func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
+	t.Parallel()
+	workspace := filepath.Join(t.TempDir(), "根 with spaces")
+	next, err := NewCommandNext(
+		NextOperationAnswer,
+		workspace,
+		"typed-answer",
+		[]string{"slipway", "run", "answer", "--run", "run-1", "--root", workspace},
+		[]NextInput{
+			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: true, Choices: []string{"safe", "exact"}},
+			{Name: "scope", Type: NextInputDigest, Flag: "--scope-sha256", Required: true},
+			{Name: "text", Type: NextInputString, Flag: "--text", Required: false},
+		},
+	)
+	require.NoError(t, err)
+	digest := "sha256:" + strings.Repeat("a", 64)
+	text := " spaces ' \" 界\r\n%!&^ "
+	argv, err := next.Resolve("typed-answer", map[string]NextInputValue{
+		"text":  {Type: NextInputString, Value: text},
+		"scope": {Type: NextInputDigest, Value: digest},
+		"mode":  {Type: NextInputEnum, Value: "exact"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"slipway", "run", "answer", "--run", "run-1", "--root", workspace,
+		"--mode", "exact", "--scope-sha256", digest, "--text", text,
+	}, argv)
+}
+
+func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	next, err := NewCommandNext(
+		NextOperationResume,
+		workspace,
+		"resolve",
+		[]string{"slipway", "run", "resume", "run-1", "--root", workspace},
+		[]NextInput{
+			{Name: "path", Type: NextInputPath, Flag: "--source-file", Required: true},
+			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: false, Choices: []string{"one", "two"}},
+			{Name: "digest", Type: NextInputDigest, Flag: "--digest", Required: false},
+		},
+	)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name   string
+		values map[string]NextInputValue
+		want   string
+	}{
+		{name: "missing required", values: map[string]NextInputValue{}, want: "required input"},
+		{name: "unknown input", values: map[string]NextInputValue{"extra": {Type: NextInputString, Value: "x"}}, want: "unknown input"},
+		{name: "wrong type", values: map[string]NextInputValue{"path": {Type: NextInputString, Value: "/tmp/x"}}, want: "requires type path"},
+		{name: "empty", values: map[string]NextInputValue{"path": {Type: NextInputPath, Value: ""}}, want: "nonempty"},
+		{name: "invalid enum", values: map[string]NextInputValue{"path": {Type: NextInputPath, Value: "/tmp/x"}, "mode": {Type: NextInputEnum, Value: "three"}}, want: "must be one of"},
+		{name: "invalid digest", values: map[string]NextInputValue{"path": {Type: NextInputPath, Value: "/tmp/x"}, "digest": {Type: NextInputDigest, Value: "sha256:ABC"}}, want: "lowercase"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := next.Resolve("resolve", test.values)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+}
+
+func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	workspaceID := "sha256:" + strings.Repeat("b", 64)
+	valid := Next{
+		Operation: NextOperationResume, WorkspaceIdentity: workspaceID, workspaceRoot: workspace,
+		Variants: []NextVariant{{
+			ID: "resume", BaseArgv: []string{"slipway", "run", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
+		}},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*Next)
+		want   string
+	}{
+		{name: "invalid workspace identity", mutate: func(next *Next) { next.WorkspaceIdentity = "relative" }, want: "lowercase sha256"},
+		{name: "nil variants", mutate: func(next *Next) { next.Variants = nil }, want: "non-null"},
+		{name: "duplicate variants", mutate: func(next *Next) { next.Variants = append(next.Variants, next.Variants[0]) }, want: "duplicated"},
+		{name: "nil inputs", mutate: func(next *Next) { next.Variants[0].Inputs = nil }, want: "non-null"},
+		{name: "missing root", mutate: func(next *Next) { next.Variants[0].BaseArgv = []string{"slipway", "status"} }, want: "exactly one"},
+		{name: "wrong root", mutate: func(next *Next) { next.Variants[0].BaseArgv[len(next.Variants[0].BaseArgv)-1] = "/other" }, want: "preserve"},
+		{name: "public variants disagree on root", mutate: func(next *Next) {
+			next.workspaceRoot = ""
+			other := cloneNextForTest(*next).Variants[0]
+			other.ID = "other-root"
+			other.BaseArgv[len(other.BaseArgv)-1] = "/other"
+			next.Variants = append(next.Variants, other)
+		}, want: "preserve"},
+		{name: "placeholder", mutate: func(next *Next) { next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "<file>") }, want: "placeholder"},
+		{name: "quoted placeholder", mutate: func(next *Next) { next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, `"FILE"`) }, want: "placeholder"},
+		{name: "invalid flag", mutate: func(next *Next) {
+			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "-v"}}
+		}, want: "invalid flag"},
+		{name: "enum choices missing", mutate: func(next *Next) {
+			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputEnum, Flag: "--value", Choices: []string{}}}
+		}, want: "requires nonempty"},
+		{name: "choices on string", mutate: func(next *Next) {
+			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "--value", Choices: []string{}}}
+		}, want: "only permits choices"},
+		{name: "duplicate input", mutate: func(next *Next) {
+			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "--value"}, {Name: "value", Type: NextInputPath, Flag: "--path"}}
+		}, want: "duplicated"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			next := cloneNextForTest(valid)
+			test.mutate(&next)
+			err := next.Validate()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+}
+
+func cloneNextForTest(next Next) Next {
+	clone := next
+	clone.Variants = make([]NextVariant, len(next.Variants))
+	copy(clone.Variants, next.Variants)
+	for index := range clone.Variants {
+		clone.Variants[index].BaseArgv = append([]string(nil), next.Variants[index].BaseArgv...)
+		clone.Variants[index].Inputs = make([]NextInput, len(next.Variants[index].Inputs))
+		copy(clone.Variants[index].Inputs, next.Variants[index].Inputs)
+	}
+	return clone
+}
+
+func indexOfString(values []string, value string) int {
+	for index, candidate := range values {
+		if candidate == value {
+			return index
+		}
+	}
+	return -1
+}

@@ -1,0 +1,538 @@
+package autopilot
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"reflect"
+	"time"
+
+	"github.com/signalridge/slipway/internal/runstore"
+)
+
+const runEventVersion = 1
+
+type runInitialization struct {
+	Goal              string                     `json:"goal"`
+	Workspace         string                     `json:"workspace"`
+	WorkspaceIdentity runstore.WorkspaceIdentity `json:"workspace_identity"`
+	ReviewEnabled     bool                       `json:"review_enabled"`
+	InitialBudget     int                        `json:"initial_budget"`
+	InitialGit        runstore.GitObservation    `json:"initial_git"`
+	PinnedSource      *PinnedSource              `json:"pinned_source,omitempty"`
+	CreatedAt         time.Time                  `json:"created_at"`
+}
+
+type actionUpdate struct {
+	Index  int          `json:"index"`
+	Record ActionRecord `json:"record"`
+}
+
+type answerUpdate struct {
+	Index        int    `json:"index"`
+	Active       bool   `json:"active"`
+	SupersededBy string `json:"superseded_by,omitempty"`
+}
+
+type gitObservationDelta struct {
+	Observation runstore.GitObservation `json:"observation"`
+}
+
+// runDelta stores only the mutation made by one command. The append-only
+// journal therefore grows with submitted data rather than repeatedly embedding
+// the complete Run projection.
+type runDelta struct {
+	EventVersion    int                `json:"event_version"`
+	ContractVersion int                `json:"contract_version"`
+	RunID           string             `json:"run_id"`
+	Initialize      *runInitialization `json:"initialize,omitempty"`
+
+	State                        *RunState                 `json:"state,omitempty"`
+	PauseReason                  *PauseReason              `json:"pause_reason,omitempty"`
+	RemainingBudget              *int                      `json:"remaining_budget,omitempty"`
+	CurrentActionSet             bool                      `json:"current_action_set,omitempty"`
+	CurrentAction                *Action                   `json:"current_action,omitempty"`
+	CurrentGit                   *gitObservationDelta      `json:"current_git,omitempty"`
+	FinalGitObserved             *bool                     `json:"final_git_observed,omitempty"`
+	PinnedSourceSet              bool                      `json:"pinned_source_set,omitempty"`
+	PinnedSource                 *PinnedSource             `json:"pinned_source,omitempty"`
+	SourceCandidateSet           bool                      `json:"source_candidate_set,omitempty"`
+	SourceCandidate              *SourceCandidate          `json:"source_candidate,omitempty"`
+	LastSourceChoiceSet          bool                      `json:"last_source_choice_set,omitempty"`
+	LastSourceChoice             *SourceChoiceReceipt      `json:"last_source_choice,omitempty"`
+	LastResumeResultSet          bool                      `json:"last_resume_result_set,omitempty"`
+	LastResumeResult             *ResumeResult             `json:"last_resume_result,omitempty"`
+	Summary                      *string                   `json:"summary,omitempty"`
+	PendingDestructiveRequestSet bool                      `json:"pending_destructive_request_set,omitempty"`
+	PendingDestructiveRequest    *DestructiveRequest       `json:"pending_destructive_request,omitempty"`
+	DestructiveGrantSet          bool                      `json:"destructive_grant_set,omitempty"`
+	DestructiveGrant             *DestructiveAuthorization `json:"destructive_grant,omitempty"`
+	DecisionSuggestionsSet       bool                      `json:"decision_suggestions_set,omitempty"`
+	DecisionSuggestions          []SuggestedAction         `json:"decision_suggestions,omitempty"`
+
+	ActionUpdates       []actionUpdate    `json:"action_updates,omitempty"`
+	AnswerUpdates       []answerUpdate    `json:"answer_updates,omitempty"`
+	AnswersAppend       []AnswerRecord    `json:"answers_append,omitempty"`
+	PendingDrop         int               `json:"pending_drop,omitempty"`
+	PendingAppend       []SuggestedAction `json:"pending_append,omitempty"`
+	ObservationsAppend  []string          `json:"observations_append,omitempty"`
+	KnownIssuesAppend   []string          `json:"known_issues_append,omitempty"`
+	UncertaintiesAppend []string          `json:"uncertainties_append,omitempty"`
+	ActivitiesAppend    []Activity        `json:"activities_append,omitempty"`
+	UpdatedAt           time.Time         `json:"updated_at"`
+}
+
+func newRunEvent(eventType string, before, after Run) (runstore.Event, error) {
+	delta, err := diffRun(before, after)
+	if err != nil {
+		return runstore.Event{}, err
+	}
+	return runstore.NewEvent(eventType, delta)
+}
+
+func diffRun(before, after Run) (runDelta, error) {
+	if after.ContractVersion != ContractVersion || after.ID == "" {
+		return runDelta{}, errors.New("cannot journal a run with invalid identity")
+	}
+	if err := after.WorkspaceIdentity.Validate(); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid workspace identity: %w", err)
+	}
+	if after.Workspace != after.WorkspaceIdentity.WorktreeRoot {
+		return runDelta{}, errors.New("cannot journal a run whose workspace root differs from its identity")
+	}
+	if err := after.InitialGit.Validate(); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid initial git observation: %w", err)
+	}
+	if err := after.CurrentGit.Validate(); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid current git observation: %w", err)
+	}
+	if err := validateRunDestructiveState(after); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid destructive run state: %w", err)
+	}
+	if _, err := DeriveNext(after); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal run with invalid next operation: %w", err)
+	}
+	delta := runDelta{
+		EventVersion:    runEventVersion,
+		ContractVersion: ContractVersion,
+		RunID:           after.ID,
+		UpdatedAt:       after.UpdatedAt,
+	}
+	if delta.UpdatedAt.IsZero() {
+		return runDelta{}, errors.New("cannot journal a run without updated_at")
+	}
+	if before.ID == "" {
+		delta.Initialize = &runInitialization{
+			Goal:              after.Goal,
+			Workspace:         after.Workspace,
+			WorkspaceIdentity: after.WorkspaceIdentity,
+			ReviewEnabled:     after.ReviewEnabled,
+			InitialBudget:     after.InitialBudget,
+			InitialGit:        cloneGitObservation(after.InitialGit),
+			PinnedSource:      clonePinnedSource(after.PinnedSource),
+			CreatedAt:         after.CreatedAt,
+		}
+		before = Run{
+			ContractVersion:   after.ContractVersion,
+			ID:                after.ID,
+			Goal:              after.Goal,
+			Workspace:         after.Workspace,
+			WorkspaceIdentity: after.WorkspaceIdentity,
+			ReviewEnabled:     after.ReviewEnabled,
+			InitialBudget:     after.InitialBudget,
+			InitialGit:        cloneGitObservation(after.InitialGit),
+			CurrentGit:        cloneGitObservation(after.InitialGit),
+			PinnedSource:      clonePinnedSource(after.PinnedSource),
+			CreatedAt:         after.CreatedAt,
+		}
+	} else if before.ContractVersion != after.ContractVersion || before.ID != after.ID ||
+		before.Goal != after.Goal || before.Workspace != after.Workspace ||
+		!before.WorkspaceIdentity.Equal(after.WorkspaceIdentity) ||
+		before.ReviewEnabled != after.ReviewEnabled || before.InitialBudget != after.InitialBudget ||
+		!reflect.DeepEqual(before.InitialGit, after.InitialGit) || !before.CreatedAt.Equal(after.CreatedAt) {
+		return runDelta{}, errors.New("immutable run identity changed")
+	}
+
+	if before.State != after.State {
+		delta.State = pointer(after.State)
+	}
+	if before.PauseReason != after.PauseReason {
+		delta.PauseReason = pointer(after.PauseReason)
+	}
+	if before.RemainingBudget != after.RemainingBudget {
+		delta.RemainingBudget = pointer(after.RemainingBudget)
+	}
+	if !reflect.DeepEqual(before.CurrentAction, after.CurrentAction) {
+		delta.CurrentActionSet = true
+		delta.CurrentAction = after.CurrentAction
+	}
+	if gitDelta := diffGitObservation(before.CurrentGit, after.CurrentGit); gitDelta != nil {
+		delta.CurrentGit = gitDelta
+	}
+	if before.FinalGitObserved != after.FinalGitObserved {
+		delta.FinalGitObserved = pointer(after.FinalGitObserved)
+	}
+	if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) {
+		delta.PinnedSourceSet = true
+		delta.PinnedSource = clonePinnedSource(after.PinnedSource)
+	}
+	if !reflect.DeepEqual(before.SourceCandidate, after.SourceCandidate) {
+		delta.SourceCandidateSet = true
+		if after.SourceCandidate != nil {
+			candidate := cloneSourceCandidate(*after.SourceCandidate)
+			delta.SourceCandidate = &candidate
+		}
+	}
+	if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+		delta.LastSourceChoiceSet = true
+		if after.LastSourceChoice != nil {
+			receipt := *after.LastSourceChoice
+			delta.LastSourceChoice = &receipt
+		}
+	}
+	if !reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) {
+		delta.LastResumeResultSet = true
+		if after.LastResumeResult != nil {
+			result := *after.LastResumeResult
+			delta.LastResumeResult = &result
+		}
+	}
+	if before.Summary != after.Summary {
+		delta.Summary = pointer(after.Summary)
+	}
+	if !reflect.DeepEqual(before.PendingDestructiveRequest, after.PendingDestructiveRequest) {
+		delta.PendingDestructiveRequestSet = true
+		delta.PendingDestructiveRequest = cloneDestructiveRequest(after.PendingDestructiveRequest)
+	}
+	if !reflect.DeepEqual(before.DestructiveGrant, after.DestructiveGrant) {
+		delta.DestructiveGrantSet = true
+		delta.DestructiveGrant = cloneDestructiveAuthorization(after.DestructiveGrant)
+	}
+	if !reflect.DeepEqual(before.DecisionSuggestions, after.DecisionSuggestions) {
+		delta.DecisionSuggestionsSet = true
+		delta.DecisionSuggestions = append([]SuggestedAction(nil), after.DecisionSuggestions...)
+	}
+
+	if len(after.Actions) < len(before.Actions) {
+		return runDelta{}, errors.New("run action history shrank")
+	}
+	for index := range after.Actions {
+		if index >= len(before.Actions) || !reflect.DeepEqual(before.Actions[index], after.Actions[index]) {
+			delta.ActionUpdates = append(delta.ActionUpdates, actionUpdate{Index: index, Record: after.Actions[index]})
+		}
+	}
+	var err error
+	if delta.PendingDrop, delta.PendingAppend, err = diffPending(before.PendingActions, after.PendingActions); err != nil {
+		return runDelta{}, err
+	}
+	if delta.AnswerUpdates, delta.AnswersAppend, err = diffAnswers(before.Answers, after.Answers); err != nil {
+		return runDelta{}, err
+	}
+	if delta.ObservationsAppend, err = appendedSuffix(before.Observations, after.Observations, "observation"); err != nil {
+		return runDelta{}, err
+	}
+	if delta.KnownIssuesAppend, err = appendedSuffix(before.KnownIssues, after.KnownIssues, "known issue"); err != nil {
+		return runDelta{}, err
+	}
+	if delta.UncertaintiesAppend, err = appendedSuffix(before.Uncertainties, after.Uncertainties, "uncertainty"); err != nil {
+		return runDelta{}, err
+	}
+	if delta.ActivitiesAppend, err = appendedSuffix(before.Activities, after.Activities, "activity"); err != nil {
+		return runDelta{}, err
+	}
+	return delta, nil
+}
+
+func applyRunEvent(run *Run, event runstore.Event) error {
+	var delta runDelta
+	decoder := json.NewDecoder(bytes.NewReader(event.Data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&delta); err != nil {
+		return fmt.Errorf("decode %s event: %w", event.Type, err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return fmt.Errorf("decode %s event: multiple JSON values", event.Type)
+		}
+		return fmt.Errorf("decode %s event: %w", event.Type, err)
+	}
+	if delta.EventVersion != runEventVersion || delta.ContractVersion != ContractVersion || delta.RunID == "" || delta.UpdatedAt.IsZero() {
+		return fmt.Errorf("invalid %s event envelope", event.Type)
+	}
+	if run.ID == "" {
+		if delta.Initialize == nil || event.Type != "run_started" {
+			return errors.New("run journal does not begin with run_started")
+		}
+		initial := delta.Initialize
+		if initial.Goal == "" || initial.Workspace == "" || initial.InitialBudget < 1 || initial.CreatedAt.IsZero() {
+			return errors.New("run journal has invalid initialization")
+		}
+		if err := initial.WorkspaceIdentity.Validate(); err != nil {
+			return fmt.Errorf("run journal has invalid workspace identity: %w", err)
+		}
+		if initial.Workspace != initial.WorkspaceIdentity.WorktreeRoot {
+			return errors.New("run journal workspace root differs from its identity")
+		}
+		if err := initial.InitialGit.Validate(); err != nil {
+			return fmt.Errorf("run journal has invalid initial git observation: %w", err)
+		}
+		if initial.PinnedSource != nil {
+			if err := validatePinnedSource(*initial.PinnedSource); err != nil {
+				return fmt.Errorf("run journal has invalid pinned source: %w", err)
+			}
+		}
+		*run = Run{
+			ContractVersion:   ContractVersion,
+			ID:                delta.RunID,
+			Goal:              initial.Goal,
+			Workspace:         initial.Workspace,
+			WorkspaceIdentity: initial.WorkspaceIdentity,
+			ReviewEnabled:     initial.ReviewEnabled,
+			InitialBudget:     initial.InitialBudget,
+			InitialGit:        cloneGitObservation(initial.InitialGit),
+			CurrentGit:        cloneGitObservation(initial.InitialGit),
+			PinnedSource:      clonePinnedSource(initial.PinnedSource),
+			CreatedAt:         initial.CreatedAt,
+		}
+	} else if delta.Initialize != nil || run.ID != delta.RunID || run.ContractVersion != delta.ContractVersion {
+		return errors.New("run journal identity or contract version mismatch")
+	}
+
+	if delta.State != nil {
+		run.State = *delta.State
+	}
+	if delta.PauseReason != nil {
+		run.PauseReason = *delta.PauseReason
+	}
+	if delta.RemainingBudget != nil {
+		run.RemainingBudget = *delta.RemainingBudget
+	}
+	if delta.CurrentActionSet {
+		run.CurrentAction = delta.CurrentAction
+	} else if delta.CurrentAction != nil {
+		return errors.New("current_action requires current_action_set")
+	}
+	if delta.CurrentGit != nil {
+		if err := applyGitObservationDelta(&run.CurrentGit, *delta.CurrentGit); err != nil {
+			return err
+		}
+	}
+	if delta.FinalGitObserved != nil {
+		run.FinalGitObserved = *delta.FinalGitObserved
+	}
+	if delta.PinnedSourceSet {
+		if delta.PinnedSource == nil {
+			return errors.New("pinned_source_set cannot clear pinned source")
+		}
+		if err := validatePinnedSource(*delta.PinnedSource); err != nil {
+			return fmt.Errorf("invalid pinned source delta: %w", err)
+		}
+		run.PinnedSource = clonePinnedSource(delta.PinnedSource)
+	} else if delta.PinnedSource != nil {
+		return errors.New("pinned_source requires pinned_source_set")
+	}
+	if delta.SourceCandidateSet {
+		if delta.SourceCandidate == nil {
+			run.SourceCandidate = nil
+		} else {
+			if delta.SourceCandidate.CandidateID == "" || delta.SourceCandidate.CreatedAt.IsZero() {
+				return errors.New("invalid source candidate delta")
+			}
+			if err := validateSourceCandidateInput(delta.SourceCandidate.SourceCandidateInput); err != nil {
+				return fmt.Errorf("invalid source candidate delta: %w", err)
+			}
+			candidate := cloneSourceCandidate(*delta.SourceCandidate)
+			run.SourceCandidate = &candidate
+		}
+	} else if delta.SourceCandidate != nil {
+		return errors.New("source_candidate requires source_candidate_set")
+	}
+	if delta.LastSourceChoiceSet {
+		if delta.LastSourceChoice == nil {
+			run.LastSourceChoice = nil
+		} else {
+			if delta.LastSourceChoice.CandidateID == "" ||
+				(delta.LastSourceChoice.Choice != SourceChoicePinned && delta.LastSourceChoice.Choice != SourceChoiceAdopt) ||
+				delta.LastSourceChoice.ResultingActionID == "" || delta.LastSourceChoice.At.IsZero() {
+				return errors.New("invalid last source choice delta")
+			}
+			receipt := *delta.LastSourceChoice
+			run.LastSourceChoice = &receipt
+		}
+	} else if delta.LastSourceChoice != nil {
+		return errors.New("last_source_choice requires last_source_choice_set")
+	}
+	if delta.LastResumeResultSet {
+		if delta.LastResumeResult == nil || delta.LastResumeResult.Operation == "" {
+			return errors.New("invalid last resume result delta")
+		}
+		result := *delta.LastResumeResult
+		run.LastResumeResult = &result
+	} else if delta.LastResumeResult != nil {
+		return errors.New("last_resume_result requires last_resume_result_set")
+	}
+	if delta.Summary != nil {
+		run.Summary = *delta.Summary
+	}
+	if delta.PendingDestructiveRequestSet {
+		if delta.PendingDestructiveRequest != nil {
+			request, err := NormalizeDestructiveRequest(*delta.PendingDestructiveRequest)
+			if err != nil {
+				return fmt.Errorf("invalid pending destructive request delta: %w", err)
+			}
+			run.PendingDestructiveRequest = &request
+		} else {
+			run.PendingDestructiveRequest = nil
+		}
+	} else if delta.PendingDestructiveRequest != nil {
+		return errors.New("pending_destructive_request requires pending_destructive_request_set")
+	}
+	if delta.DestructiveGrantSet {
+		if delta.DestructiveGrant != nil {
+			if err := validateDestructiveAuthorization(*delta.DestructiveGrant); err != nil {
+				return fmt.Errorf("invalid destructive grant delta: %w", err)
+			}
+			run.DestructiveGrant = cloneDestructiveAuthorization(delta.DestructiveGrant)
+		} else {
+			run.DestructiveGrant = nil
+		}
+	} else if delta.DestructiveGrant != nil {
+		return errors.New("destructive_grant requires destructive_grant_set")
+	}
+	if delta.DecisionSuggestionsSet {
+		run.DecisionSuggestions = append([]SuggestedAction(nil), delta.DecisionSuggestions...)
+	} else if len(delta.DecisionSuggestions) > 0 {
+		return errors.New("decision_suggestions requires decision_suggestions_set")
+	}
+	for _, update := range delta.ActionUpdates {
+		switch {
+		case update.Index < 0 || update.Index > len(run.Actions):
+			return fmt.Errorf("invalid action update index %d", update.Index)
+		case update.Index == len(run.Actions):
+			run.Actions = append(run.Actions, update.Record)
+		default:
+			run.Actions[update.Index] = update.Record
+		}
+	}
+	if delta.PendingDrop < 0 || delta.PendingDrop > len(run.PendingActions) {
+		return errors.New("invalid pending action drop")
+	}
+	run.PendingActions = append(append([]SuggestedAction(nil), run.PendingActions[delta.PendingDrop:]...), delta.PendingAppend...)
+	for _, update := range delta.AnswerUpdates {
+		if update.Index < 0 || update.Index >= len(run.Answers) {
+			return fmt.Errorf("invalid answer update index %d", update.Index)
+		}
+		run.Answers[update.Index].Active = update.Active
+		run.Answers[update.Index].SupersededBy = update.SupersededBy
+	}
+	run.Answers = append(run.Answers, delta.AnswersAppend...)
+	run.Observations = append(run.Observations, delta.ObservationsAppend...)
+	run.KnownIssues = append(run.KnownIssues, delta.KnownIssuesAppend...)
+	run.Uncertainties = append(run.Uncertainties, delta.UncertaintiesAppend...)
+	run.Activities = append(run.Activities, delta.ActivitiesAppend...)
+	run.UpdatedAt = delta.UpdatedAt
+	if err := run.WorkspaceIdentity.Validate(); err != nil {
+		return fmt.Errorf("invalid workspace identity after %s: %w", event.Type, err)
+	}
+	if err := run.InitialGit.Validate(); err != nil {
+		return fmt.Errorf("invalid initial git observation after %s: %w", event.Type, err)
+	}
+	if err := run.CurrentGit.Validate(); err != nil {
+		return fmt.Errorf("invalid current git observation after %s: %w", event.Type, err)
+	}
+	if err := validateRunDestructiveState(*run); err != nil {
+		return fmt.Errorf("invalid destructive run state after %s: %w", event.Type, err)
+	}
+	if _, err := DeriveNext(*run); err != nil {
+		return fmt.Errorf("derive next after %s: %w", event.Type, err)
+	}
+	return nil
+}
+
+func diffGitObservation(before, after runstore.GitObservation) *gitObservationDelta {
+	if reflect.DeepEqual(before, after) {
+		return nil
+	}
+	return &gitObservationDelta{Observation: cloneGitObservation(after)}
+}
+
+func applyGitObservationDelta(observation *runstore.GitObservation, delta gitObservationDelta) error {
+	if err := delta.Observation.Validate(); err != nil {
+		return fmt.Errorf("invalid current git observation delta: %w", err)
+	}
+	*observation = cloneGitObservation(delta.Observation)
+	return nil
+}
+
+func cloneGitObservation(observation runstore.GitObservation) runstore.GitObservation {
+	observation.DirtyFiles = append(make([]string, 0, len(observation.DirtyFiles)), observation.DirtyFiles...)
+	observation.PathObservations = append(make([]runstore.PathObservation, 0, len(observation.PathObservations)), observation.PathObservations...)
+	for index := range observation.PathObservations {
+		if observation.PathObservations[index].Size != nil {
+			size := *observation.PathObservations[index].Size
+			observation.PathObservations[index].Size = &size
+		}
+	}
+	return observation
+}
+
+func diffPending(before, after []SuggestedAction) (int, []SuggestedAction, error) {
+	for drop := 0; drop <= len(before); drop++ {
+		retained := before[drop:]
+		if len(retained) > len(after) {
+			continue
+		}
+		matches := true
+		for index := range retained {
+			if !reflect.DeepEqual(retained[index], after[index]) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return drop, append([]SuggestedAction(nil), after[len(retained):]...), nil
+		}
+	}
+	return 0, nil, errors.New("pending action queue was reordered instead of consumed/appended")
+}
+
+func diffAnswers(before, after []AnswerRecord) ([]answerUpdate, []AnswerRecord, error) {
+	if len(after) < len(before) {
+		return nil, nil, errors.New("run answer history shrank")
+	}
+	updates := make([]answerUpdate, 0)
+	for index := range before {
+		beforeRecord := before[index]
+		afterRecord := after[index]
+		beforeRecord.Active, afterRecord.Active = false, false
+		beforeRecord.SupersededBy, afterRecord.SupersededBy = "", ""
+		if !reflect.DeepEqual(beforeRecord, afterRecord) {
+			return nil, nil, fmt.Errorf("run answer history was rewritten at index %d", index)
+		}
+		if before[index].Active != after[index].Active || before[index].SupersededBy != after[index].SupersededBy {
+			updates = append(updates, answerUpdate{
+				Index:        index,
+				Active:       after[index].Active,
+				SupersededBy: after[index].SupersededBy,
+			})
+		}
+	}
+	return updates, append([]AnswerRecord(nil), after[len(before):]...), nil
+}
+
+func appendedSuffix[T any](before, after []T, name string) ([]T, error) {
+	if len(after) < len(before) {
+		return nil, fmt.Errorf("run %s history was rewritten", name)
+	}
+	for index := range before {
+		if !reflect.DeepEqual(before[index], after[index]) {
+			return nil, fmt.Errorf("run %s history was rewritten", name)
+		}
+	}
+	return append([]T(nil), after[len(before):]...), nil
+}
+
+func pointer[T any](value T) *T { return &value }

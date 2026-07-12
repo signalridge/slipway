@@ -1,33 +1,16 @@
 package cmd
 
 import (
-	"fmt"
+	"encoding/json"
 	"io"
+
+	"github.com/signalridge/slipway/internal/autopilot"
 )
 
-type formatWriter struct {
-	w   io.Writer
-	err error
-}
+const machineContractVersion = autopilot.ContractVersion
 
-func newFormatWriter(w io.Writer) *formatWriter {
-	return &formatWriter{w: w}
-}
-
-func (w *formatWriter) Writef(format string, args ...any) {
-	if w.err != nil {
-		return
-	}
-	_, w.err = fmt.Fprintf(w.w, format, args...)
-}
-
-func (w *formatWriter) Writeln(args ...any) {
-	if w.err != nil {
-		return
-	}
-	_, w.err = fmt.Fprintln(w.w, args...)
-}
-
-func (w *formatWriter) Err() error {
-	return w.err
+func writeJSON(w io.Writer, value any) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	return encoder.Encode(value)
 }

@@ -162,6 +162,27 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           COSIGN_EXPERIMENTAL: "1"
+      - name: Check release artifacts
+        env:
+          TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
+        run: python3 -I tests/acceptance/release_artifacts.py --dist dist --expected-version "${TAG_NAME}"
+      - name: Verify GoReleaser hook preserved module files
+        run: git diff --exit-code -- go.mod go.sum
+      - name: Assert LICENSE is present in every archive
+        run: |
+          archive_count=0
+          while IFS= read -r -d '' archive; do
+            case "$archive" in
+              *.tar.gz) tar -tzf "$archive" | grep -Fxq LICENSE ;;
+              *.zip) unzip -Z1 "$archive" | grep -Fxq LICENSE ;;
+              *) echo "::error::Unsupported archive $archive"; exit 1 ;;
+            esac
+            archive_count=$((archive_count + 1))
+          done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0)
+          if [ "$archive_count" -eq 0 ]; then
+            echo '::error::No release archives were generated'
+            exit 1
+          fi
       - name: Extract version
         id: version
         run: |
@@ -265,6 +286,9 @@ jobs:
       packages: read
       security-events: write
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
       - name: Login to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
@@ -279,6 +303,8 @@ jobs:
           docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
           docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --version
           docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --help
+          docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
+            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" doctor --json
       - name: Run Trivy vulnerability scan
         id: image-ref
         env:
@@ -315,6 +341,82 @@ jobs:
         run: |
           slipway --version
           slipway --help
+
+  verify-scoop:
+    name: Verify Scoop
+    runs-on: windows-latest
+    needs: [release]
+    if: needs.release.outputs.gh_pat_available == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Install from disposable Scoop bucket
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP ('slipway-scoop-' + [Guid]::NewGuid().ToString('N'))
+          $engine = Join-Path $root 'engine'
+          $env:SCOOP = Join-Path $root 'apps'
+          $env:SCOOP_GLOBAL = Join-Path $root 'global'
+          $env:SCOOP_CACHE = Join-Path $root 'cache'
+          $env:SCOOP_HOME = $engine
+          $env:XDG_CONFIG_HOME = Join-Path $root 'config'
+          try {
+            New-Item -ItemType Directory -Force $root | Out-Null
+            git init --quiet $engine
+            git -C $engine remote add origin https://github.com/ScoopInstaller/Scoop.git
+            git -C $engine fetch --quiet --depth=1 origin b588a06e41d920d2123ec70aee682bae14935939
+            git -C $engine checkout --quiet --detach FETCH_HEAD
+            $scoop = Join-Path $engine 'bin/scoop.ps1'
+            & $scoop bucket add slipway-ci https://github.com/signalridge/scoop-bucket.git
+            if ($LASTEXITCODE -ne 0) { throw 'scoop bucket add failed' }
+            & $scoop install slipway-ci/slipway
+            if ($LASTEXITCODE -ne 0) { throw 'scoop install failed' }
+            $binary = Join-Path $env:SCOOP 'apps/slipway/current/slipway.exe'
+            $versionOutput = (& $binary --version | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'installed slipway --version failed' }
+            $expected = $env:VERSION.TrimStart('v')
+            if (-not $versionOutput.Contains("slipway $expected")) {
+              throw "installed Scoop version differs: $versionOutput"
+            }
+            & $binary --help | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'installed slipway --help failed' }
+          } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+  verify-aur:
+    name: Verify AUR
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: needs.release.outputs.aur_key_available == 'true'
+    permissions:
+      contents: read
+    container: archlinux:base-devel@sha256:b21289eb1954872de0dc9f88976627e38611b1817be75e50946c83ab7b9c474d
+    steps:
+      - name: Build and install published slipway-bin as non-root
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git sudo
+          useradd --create-home --shell /bin/bash builder
+          printf 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/slipway-builder
+          chmod 0440 /etc/sudoers.d/slipway-builder
+          sudo -u builder git clone --depth=1 https://aur.archlinux.org/slipway-bin.git /home/builder/slipway-bin
+          expected="${VERSION#v}"
+          actual=$(sed -n "s/^pkgver=//p" /home/builder/slipway-bin/PKGBUILD | tr '_' '-')
+          if [ "$actual" != "$expected" ]; then
+            echo "Published AUR version differs: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          sudo -u builder bash -lc 'cd /home/builder/slipway-bin && makepkg -si --noconfirm --needed'
+          slipway --version | grep -F "slipway $expected"
+          slipway --help >/dev/null
 
   verify-deb:
     name: Verify Debian Package

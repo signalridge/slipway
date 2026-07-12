@@ -14,8 +14,9 @@ src/content/docs/**
 !src/content/docs/zh/index.mdx
 !src/content/docs/ja/
 !src/content/docs/ja/index.mdx
-# synced public assets (copied from ../docs/assets)
+# synced public assets and machine schema (copied from ../docs)
 public/assets/
+public/reference/
 
 # logs
 npm-debug.log*

@@ -1,320 +1,394 @@
 package cmd
 
 import (
+	"errors"
+	"fmt"
+	"io"
+	"os"
 	"strings"
-	"time"
 
-	"github.com/signalridge/slipway/internal/engine/progression"
-	"github.com/signalridge/slipway/internal/model"
-	"github.com/signalridge/slipway/internal/state"
+	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/spf13/cobra"
 )
 
+type protocolStateOutput struct {
+	ContractVersion  int                         `json:"contract_version"`
+	RunID            string                      `json:"run_id"`
+	State            autopilot.RunState          `json:"state"`
+	PauseReason      autopilot.PauseReason       `json:"pause_reason,omitempty"`
+	Summary          string                      `json:"summary,omitempty"`
+	Next             autopilot.Next              `json:"next"`
+	SuggestedActions []autopilot.SuggestedAction `json:"suggested_actions,omitempty"`
+	PinnedSource     *autopilot.PinnedSource     `json:"pinned_source,omitempty"`
+	SourceCandidate  *autopilot.SourceCandidate  `json:"source_candidate,omitempty"`
+	ResumeOperation  string                      `json:"resume_operation,omitempty"`
+	BudgetApplied    *bool                       `json:"budget_applied,omitempty"`
+}
+
 func makeRunCmd() *cobra.Command {
-	var (
-		jsonOutput  bool
-		resume      bool
-		diagnostics bool
-		changeSlug  string
-		auto        bool
-		noAuto      bool
-	)
-
-	cmd := &cobra.Command{
-		Use:   "run",
-		Short: desc("run"),
-		Long: desc("run") + `
-
-Repo-level configuration keys (including execution.auto, which --auto / --no-auto
-override for a single run) are inspected and changed with ` + "`slipway config`" + `
-(list/get/set).`,
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			root, err := projectRootFromCommand(cmd)
+	var root string
+	var sourceFile string
+	var budget int
+	var noReview bool
+	var jsonOutput bool
+	command := &cobra.Command{
+		Use:   "run <goal>",
+		Short: "Start or continue a user-controlled soft-autopilot run",
+		Example: "  slipway run \"<goal>\" --budget 8 --json\n" +
+			"  slipway run \"<bounded goal>\" --source-file FILE --budget 8 --json",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			service, err := openAutopilot(root)
 			if err != nil {
 				return err
 			}
-
-			ref, err := resolveActiveChangeRef(root, changeSlug)
-			if err != nil {
-				return err
+			defer func() { _ = service.Close() }()
+			workspace := service.RepositoryRoot()
+			startNext := runStartNext(workspace, args[0], budget, noReview, true)
+			if command.Flags().Changed("source-file") && sourceFile == "" {
+				return newUsageError("source_file_required", "source-file cannot be empty", startNext)
 			}
-
-			effectiveAuto, err := resolveEffectiveAuto(root, cmd, auto, noAuto)
-			if err != nil {
-				return err
-			}
-
-			return withChangeStateLock(root, ref.Slug, "run", func() error {
-				if err := validateRunEntry(root, ref, resume); err != nil {
-					return err
-				}
-				view, err := runGovernedLoop(root, ref, effectiveAuto)
+			var pinnedSource *autopilot.PinnedSource
+			if sourceFile != "" {
+				imported, err := autopilot.ImportSourceFile(sourceFile)
 				if err != nil {
-					return err
-				}
-				applyNextInvocationWorkspacePath(cmd, root, &view)
-				change, err := state.LoadChange(root, ref.Slug)
-				if err != nil {
-					return err
-				}
-				if !change.InterruptedExecutionAt.IsZero() {
-					beforeChange := change
-					change.InterruptedExecutionAt = time.Time{}
-					if err := state.SaveChange(root, change); err != nil {
-						return err
-					}
-					if err := appendCLILifecycleEvent(root, change, state.LifecycleEvent{
-						Command:       "run",
-						EventType:     "resume.succeeded",
-						Action:        "resumed",
-						Reason:        "interrupted_execution_cleared",
-						Result:        "success",
-						BeforeState:   beforeChange.CurrentState,
-						AfterState:    change.CurrentState,
-						ClearedFields: []string{"interrupted_execution_at"},
-					}); err != nil {
-						return err
+					return &autopilot.ProtocolError{
+						Code:    "invalid_source",
+						Message: sourceImportErrorMessage(err),
+						Next:    startNext,
 					}
 				}
-				if jsonOutput {
-					if diagnostics {
-						return encodeJSONResponse(cmd, view)
-					}
-					return encodeJSONResponse(cmd, buildNextHandoffView(view))
-				}
-				if diagnostics {
-					return encodeJSONResponse(cmd, view)
-				}
-				return writeNextHuman(cmd.OutOrStdout(), view)
+				pinnedSource = &imported
+			}
+			run, err := service.Start(args[0], autopilot.CreateOptions{
+				Budget:        budget,
+				ReviewEnabled: !noReview,
+				PinnedSource:  pinnedSource,
 			})
+			if err != nil {
+				return err
+			}
+			if jsonOutput {
+				return writeProtocolResult(command, run)
+			}
+			if _, err := fmt.Fprintf(command.OutOrStdout(), "Run %s started.\n", run.ID); err != nil {
+				return err
+			}
+			return writeProtocolResult(command, run)
 		},
 	}
-
-	cmd.Flags().BoolVar(&jsonOutput, "json", false, "JSON output")
-	cmd.Flags().BoolVar(&resume, "resume", false, "Resume governed execution from the latest incomplete wave")
-	cmd.Flags().BoolVar(&diagnostics, "diagnostics", false, "Include diagnostic governance/readiness details")
-	cmd.Flags().BoolVar(&auto, "auto", false, "Force bounded auto mode for this run, overriding execution.auto config")
-	cmd.Flags().BoolVar(&noAuto, "no-auto", false, "Force manual advancement for this run, overriding execution.auto config")
-	cmd.MarkFlagsMutuallyExclusive("auto", "no-auto")
-	addChangeSelectorFlags(cmd, &changeSlug, "Explicit change slug")
-	return cmd
+	command.Flags().StringVar(&sourceFile, "source-file", "", "raw GitHub Change source envelope")
+	command.Flags().IntVar(&budget, "budget", autopilot.DefaultBudget, "maximum number of Actions before pausing")
+	command.Flags().BoolVar(&noReview, "no-review", false, "omit the default advisory review")
+	command.Flags().BoolVar(&jsonOutput, "json", false, "emit machine-protocol JSON")
+	command.PersistentFlags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")
+	command.AddCommand(
+		makeRunSubmitCmd(&root),
+		makeRunAnswerCmd(&root),
+		makeRunSkipCmd(&root),
+		makeRunResumeCmd(&root),
+	)
+	return command
 }
 
-// resolveEffectiveAuto resolves the tri-state auto override. `--auto` forces auto
-// for the run; `--no-auto` forces manual. Otherwise the project config value
-// (execution.auto) is the effective setting. The flags are mutually exclusive
-// (enforced by cobra) so at most one is ever Changed. A negative `--no-auto=false`
-// is NOT an affirmative auto override: it falls through to config rather than
-// flipping auto on, so the negative safety flag can never enable auto by itself.
-func resolveEffectiveAuto(root string, cmd *cobra.Command, auto, noAuto bool) (bool, error) {
-	if cmd != nil {
-		if cmd.Flags().Changed("auto") {
-			return auto, nil
-		}
-		if cmd.Flags().Changed("no-auto") && noAuto {
-			return false, nil
-		}
+func makeRunSubmitCmd(root *string) *cobra.Command {
+	var runID, actionID, outcomeFile string
+	var outcomeStdin bool
+	command := &cobra.Command{
+		Use:    "submit",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			service, err := openAutopilot(*root)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			next := nextForRunOrNone(service, runID)
+			fileSet := command.Flags().Changed("outcome-file")
+			stdinSet := command.Flags().Changed("outcome-stdin") && outcomeStdin
+			if fileSet == stdinSet {
+				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", next)
+			}
+			if fileSet && strings.TrimSpace(outcomeFile) == "" {
+				return newUsageError("outcome_file_required", "outcome-file cannot be empty", next)
+			}
+			reader, closeReader, err := outcomeReader(command, outcomeFile, stdinSet)
+			if err != nil {
+				return newUsageError("outcome_unavailable", err.Error(), next)
+			}
+			if closeReader != nil {
+				defer closeReader()
+			}
+			outcome, err := autopilot.DecodeOutcome(reader)
+			if err != nil {
+				var versionErr *autopilot.VersionError
+				if errors.As(err, &versionErr) {
+					return newRuntimeError("contract_version_mismatch", err.Error(), inputlessCommandNext(service.RepositoryRoot(), "refresh-adapters", "slipway", "install", "--refresh", "--root", service.RepositoryRoot()), nil)
+				}
+				return newUsageError("invalid_outcome", err.Error(), next)
+			}
+			run, err := service.Submit(runID, actionID, outcome)
+			if err != nil {
+				return err
+			}
+			return writeProtocolResult(command, run)
+		},
 	}
-	cfg, err := loadConfigAtRoot(root)
-	if err != nil {
-		return false, err
-	}
-	return cfg.Execution.AutoEnabled(), nil
+	command.Flags().StringVar(&runID, "run", "", "run id")
+	command.Flags().StringVar(&actionID, "action", "", "current action id")
+	command.Flags().StringVar(&outcomeFile, "outcome-file", "", "Outcome JSON file")
+	command.Flags().BoolVar(&outcomeStdin, "outcome-stdin", false, "read one Outcome JSON value from stdin")
+	_ = command.MarkFlagRequired("run")
+	_ = command.MarkFlagRequired("action")
+	return command
 }
 
-// isGuardrailSensitive reports whether a change's guardrail domain marks it as a
-// sensitive domain that must keep failing closed to manual review under auto.
-//
-// An empty domain reports non-sensitive on the authority of upstream intake
-// classification: a sensitive change carries a non-empty GuardrailDomain set by
-// the governed intake/plan stages, so a blank domain here means the classifier
-// found no sensitive domain rather than that classification was skipped.
-func isGuardrailSensitive(guardrailDomain string) bool {
-	return strings.TrimSpace(guardrailDomain) != ""
+func makeRunAnswerCmd(root *string) *cobra.Command {
+	var runID, actionID, text, scopeSHA256 string
+	var confirmDestructive bool
+	command := &cobra.Command{
+		Use:    "answer",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			service, err := openAutopilot(*root)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			run, err := service.Answer(runID, actionID, autopilot.AnswerOptions{
+				Text:               text,
+				ConfirmDestructive: confirmDestructive,
+				ScopeSHA256:        scopeSHA256,
+			})
+			if err != nil {
+				return err
+			}
+			return writeProtocolResult(command, run)
+		},
+	}
+	command.Flags().StringVar(&runID, "run", "", "run id")
+	command.Flags().StringVar(&actionID, "action", "", "waiting action id")
+	command.Flags().StringVar(&text, "text", "", "user answer, decline, or optional confirmation note")
+	command.Flags().BoolVar(&confirmDestructive, "confirm-destructive", false, "attest current user confirmation of the exact destructive scope")
+	command.Flags().StringVar(&scopeSHA256, "scope-sha256", "", "exact current destructive scope digest")
+	_ = command.MarkFlagRequired("run")
+	_ = command.MarkFlagRequired("action")
+	return command
 }
 
-func validateRunEntry(root string, ref changeRef, resume bool) error {
-	return validateResumeEntryForCommand(root, ref, resume, "run")
+func makeRunSkipCmd(root *string) *cobra.Command {
+	var runID, actionID string
+	command := &cobra.Command{
+		Use:    "skip",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(command *cobra.Command, _ []string) error {
+			service, err := openAutopilot(*root)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			run, err := service.Skip(runID, actionID)
+			if err != nil {
+				return err
+			}
+			return writeProtocolResult(command, run)
+		},
+	}
+	command.Flags().StringVar(&runID, "run", "", "run id")
+	command.Flags().StringVar(&actionID, "action", "", "current action id")
+	_ = command.MarkFlagRequired("run")
+	_ = command.MarkFlagRequired("action")
+	return command
 }
 
-func validateResumeEntryForCommand(
-	root string,
-	ref changeRef,
-	resume bool,
-	commandName string,
-) error {
-	commandName = strings.TrimSpace(commandName)
-	if commandName == "" {
-		commandName = "run"
-	}
-	change, err := state.LoadChange(root, ref.Slug)
-	if err != nil {
-		return err
-	}
-	execCtx, err := loadExecutionContext(root, change)
-	if err != nil {
-		return err
-	}
+func makeRunResumeCmd(root *string) *cobra.Command {
+	var budget int
+	var sourceFile string
+	var usePinnedSource bool
+	var sourceChoice string
+	var candidateID string
+	command := &cobra.Command{
+		Use:    "resume <run-id>",
+		Hidden: true,
+		Example: "  slipway run resume RUN [--budget N]\n" +
+			"  slipway run resume RUN --source-file FILE [--budget N]\n" +
+			"  slipway run resume RUN --use-pinned-source [--budget N]\n" +
+			"  slipway run resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
+		Args: cobra.ExactArgs(1),
+		RunE: func(command *cobra.Command, args []string) error {
+			service, err := openAutopilot(*root)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			next := nextForResumeOrNone(service, args[0])
+			budgetSet := command.Flags().Changed("budget")
+			if budgetSet && budget == 0 {
+				return newUsageError("invalid_budget", "budget must be at least 1", next)
+			}
+			sourceFileSet := command.Flags().Changed("source-file")
+			choiceSet := command.Flags().Changed("source-choice")
+			candidateSet := command.Flags().Changed("candidate")
+			if sourceFileSet && sourceFile == "" {
+				return newUsageError("source_file_required", "source-file cannot be empty", next)
+			}
+			if choiceSet != candidateSet {
+				return newUsageError("source_choice_requires_candidate", "source-choice and candidate must be provided together", next)
+			}
+			if choiceSet && sourceChoice != string(autopilot.SourceChoicePinned) && sourceChoice != string(autopilot.SourceChoiceAdopt) {
+				return newUsageError("invalid_source_choice", "source-choice must be pinned or adopt", next)
+			}
+			modeCount := 0
+			if sourceFileSet {
+				modeCount++
+			}
+			if usePinnedSource {
+				modeCount++
+			}
+			if choiceSet {
+				modeCount++
+			}
+			if modeCount > 1 {
+				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", next)
+			}
 
-	resumeWaveIndex, err := loadResumableWaveExecution(root, change, execCtx, commandName)
-	if err != nil {
-		if !resumableWavePlanHasStructuralDrift(root, change) {
-			return err
-		}
-		resumeWaveIndex = 0
+			var refreshedSource *autopilot.SourceCandidateInput
+			if sourceFileSet {
+				imported, err := autopilot.ImportSourceCandidateFile(sourceFile)
+				if err != nil {
+					return &autopilot.ProtocolError{
+						Code:    "invalid_source_candidate",
+						Message: sourceImportErrorMessage(err),
+						Next:    next,
+					}
+				}
+				refreshedSource = &imported
+			}
+			var replacementBudget *int
+			if budgetSet {
+				replacement := budget
+				replacementBudget = &replacement
+			}
+			run, err := service.Resume(args[0], autopilot.ResumeOptions{
+				Budget:          replacementBudget,
+				RefreshedSource: refreshedSource,
+				UsePinnedSource: usePinnedSource,
+				SourceChoice:    autopilot.SourceChoice(sourceChoice),
+				CandidateID:     candidateID,
+			})
+			if err != nil {
+				return err
+			}
+			return writeProtocolResult(command, run)
+		},
 	}
-	hasResumeContext := resumeWaveIndex > 0
-	if hasResumeContext && resumableWavePlanHasStructuralDrift(root, change) {
-		hasResumeContext = false
-	}
+	command.Flags().IntVar(&budget, "budget", 0, "replace remaining Action budget (default: preserve or replenish)")
+	command.Flags().StringVar(&sourceFile, "source-file", "", "refreshed raw GitHub Change source envelope")
+	command.Flags().BoolVar(&usePinnedSource, "use-pinned-source", false, "continue explicitly with the pinned source snapshot")
+	command.Flags().StringVar(&sourceChoice, "source-choice", "", "resolve current source candidate: pinned or adopt")
+	command.Flags().StringVar(&candidateID, "candidate", "", "current source candidate ID")
+	return command
+}
 
-	switch {
-	case resume && !hasResumeContext:
-		return newInvalidUsageError(
-			"resume_unavailable",
-			"--resume requested but no resumable governed execution state is available; current_state="+string(change.CurrentState),
-			"Resume only applies to interrupted S2_IMPLEMENT wave execution. For the current state, use `slipway "+commandName+"`, `slipway validate`, or record the required review evidence.",
-			map[string]any{
-				"current_state":    change.CurrentState,
-				"resumable_states": []model.WorkflowState{model.StateS2Implement},
-				"next_action":      "use normal " + commandName + "/validate/review evidence flow for non-resumable states",
-			},
-		)
-	case !resume && hasResumeContext:
-		return newInvalidUsageError(
-			"resume_required",
-			"resumable governed execution detected; use --resume to continue from the latest incomplete wave",
-			"Resume the current incomplete wave with `slipway "+commandName+" --resume`.",
+func openAutopilot(root string) (*autopilot.Service, error) {
+	resolved, err := resolveRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	service, err := autopilot.OpenService(resolved)
+	if err != nil {
+		return nil, newRuntimeError(
+			"runstore_unavailable",
+			err.Error(),
+			inputlessCommandNext(resolved, "run-doctor", "slipway", "doctor", "--root", resolved),
 			nil,
 		)
 	}
-
-	return nil
+	return service, nil
 }
 
-func resumableWavePlanHasStructuralDrift(root string, change model.Change) bool {
-	plan, err := state.LoadWavePlanForChange(root, change)
+func outcomeReader(command *cobra.Command, path string, stdin bool) (io.Reader, func() error, error) {
+	if stdin {
+		return command.InOrStdin(), nil, nil
+	}
+	file, err := os.Open(path)
 	if err != nil {
-		return false
+		return nil, nil, err
 	}
-	currentHash, err := state.CurrentTasksPlanStructuralState(root, change)
+	return file, file.Close, nil
+}
+
+func sourceImportErrorMessage(err error) string {
+	if strings.HasPrefix(err.Error(), "read source file:") {
+		return "source file could not be read safely"
+	}
+	return "source file could not be imported: " + err.Error()
+}
+
+func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
+	if run.State == autopilot.RunActive && run.CurrentAction != nil {
+		return writeJSON(command.OutOrStdout(), run.CurrentAction)
+	}
+	next, err := autopilot.DeriveNext(run)
 	if err != nil {
-		return false
+		return fmt.Errorf("derive next protocol operation: %w", err)
 	}
-	plan.Normalize()
-	planHash := strings.TrimSpace(plan.EffectiveStructuralHash)
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanStructuralHash)
+	output := protocolStateOutput{
+		ContractVersion:  autopilot.ContractVersion,
+		RunID:            run.ID,
+		State:            run.State,
+		PauseReason:      run.PauseReason,
+		Summary:          run.Summary,
+		Next:             next,
+		SuggestedActions: run.DecisionSuggestions,
+		PinnedSource:     run.PinnedSource,
+		SourceCandidate:  run.SourceCandidate,
 	}
-	if planHash == "" {
-		planHash = strings.TrimSpace(plan.TasksPlanHash)
+	if command.Name() == "resume" && run.LastResumeResult != nil {
+		budgetApplied := run.LastResumeResult.BudgetApplied
+		output.ResumeOperation = run.LastResumeResult.Operation
+		output.BudgetApplied = &budgetApplied
 	}
-	return planHash != "" && currentHash != "" && planHash != currentHash
+	return writeJSON(command.OutOrStdout(), output)
 }
 
-func runGovernedLoop(
-	root string,
-	ref changeRef,
-	auto bool,
-) (nextView, error) {
-	buildNext := func() (nextView, error) {
-		view, err := buildNextViewForCommand(root, ref, nextViewOptions{
-			AutoSkipEvidence: true,
-			Command:          "run",
-			Auto:             auto,
-		})
-		return view, err
+func runStartNext(workspace, goal string, budget int, noReview, sourceRequired bool) autopilot.Next {
+	base := []string{"slipway", "run", goal, "--budget", fmt.Sprint(budget), "--json", "--root", workspace}
+	if noReview {
+		base = append(base, "--no-review")
 	}
-	return runGovernedLoopWithBuilder(root, ref, auto, buildNext)
+	inputs := []autopilot.NextInput{}
+	variantID := "retry-run"
+	if sourceRequired {
+		variantID = "start-with-source"
+		inputs = []autopilot.NextInput{{Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true}}
+	}
+	return commandNext(workspace, autopilot.NextOperationResume, variantID, base, inputs)
 }
 
-func runGovernedLoopWithBuilder(
-	root string,
-	ref changeRef,
-	auto bool,
-	buildNext func() (nextView, error),
-) (nextView, error) {
-	const maxIterations = maxAutoNextIterations
-
-	var lastView nextView
-	transitions := make([]progression.AdvanceSummary, 0, maxIterations)
-	delegatedTo := "run"
-	if change, err := state.LoadChange(root, ref.Slug); err == nil {
-		delegatedTo = primaryCommandForState(change.CurrentState)
+func nextForRunOrNone(service *autopilot.Service, runID string) autopilot.Next {
+	run, err := service.Load(runID)
+	if err != nil {
+		return autopilot.NoneNext(service.RepositoryRoot())
 	}
-	for i := 0; i < maxIterations; i++ {
-		view, err := buildNext()
-		if err != nil {
-			return nextView{}, err
-		}
-		setRunDelegation(&view, delegatedTo)
-		lastView = view
-		if view.Advanced != nil && (view.Advanced.Action == "advanced" || view.Advanced.Action == "done_ready") {
-			transitions = append(transitions, *view.Advanced)
-		}
-		if shouldStopRunLoop(view, auto) {
-			break
-		}
+	next, err := autopilot.DeriveNext(run)
+	if err != nil {
+		return autopilot.NoneNext(service.RepositoryRoot())
 	}
-	if len(transitions) > 0 {
-		lastView.AutoTransitions = transitions
-	}
-	return lastView, nil
+	return next
 }
 
-func shouldStopRunLoop(view nextView, auto bool) bool {
-	switch {
-	case view.CurrentState == model.StateDone:
-		return true
-	case view.Advanced != nil && view.Advanced.Action == "done_ready":
-		return true
-	case view.NextSkill != nil:
-		return true
-	case view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0:
-		return true
-	case len(view.Blockers) > 0:
-		return !canAutoContinueRoutineRunBoundary(view, auto)
-	case view.Advanced == nil || view.Advanced.Action == "noop":
-		return true
-	default:
-		return false
+func nextForResumeOrNone(service *autopilot.Service, runID string) autopilot.Next {
+	run, err := service.Load(runID)
+	if err != nil {
+		return autopilot.NoneNext(service.RepositoryRoot())
 	}
-}
-
-func canAutoContinueRoutineRunBoundary(view nextView, auto bool) bool {
-	if !auto {
-		return false
+	next, err := autopilot.DeriveResumeNext(run)
+	if err != nil {
+		return autopilot.NoneNext(service.RepositoryRoot())
 	}
-	if isGuardrailSensitive(view.GuardrailDomain) {
-		return false
-	}
-	if view.Advanced == nil || view.Advanced.Action != "advanced" {
-		return false
-	}
-	if view.NextSkill != nil || (view.ReviewBatch != nil && len(view.ReviewBatch.Skills) > 0) {
-		return false
-	}
-	req := view.ConfirmationRequirement
-	if req.Boundary != "command_required" ||
-		req.Reason != "run_slipway_run_to_advance" ||
-		req.NextActionKind != "command" ||
-		req.NextCommand != "slipway run" ||
-		req.FreshConfirmationRequired ||
-		!req.PriorAuthorizationSufficient {
-		return false
-	}
-
-	sawRunBoundary := false
-	for _, blocker := range view.Blockers {
-		switch strings.TrimSpace(blocker.Code) {
-		case "run_slipway_run_to_advance":
-			sawRunBoundary = true
-		case "no_skill_required":
-			continue
-		default:
-			return false
-		}
-	}
-	return sawRunBoundary
+	return next
 }

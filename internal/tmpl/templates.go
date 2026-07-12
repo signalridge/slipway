@@ -13,10 +13,7 @@ import (
 )
 
 //go:embed templates/_partials/*.tmpl
-//go:embed templates/artifacts/*.md
-//go:embed templates/commands/*.tmpl
-//go:embed templates/hooks/*.tmpl
-//go:embed templates/skills/*/*.md templates/skills/*/*.tmpl
+//go:embed templates/skills/*/*.md
 //go:embed templates/skills/*/references/*.md
 var embeddedTemplates embed.FS
 
@@ -95,14 +92,6 @@ func Render(name string, data any) (string, error) {
 		return "", fmt.Errorf("template %q clone: %w", name, err)
 	}
 	return renderNamed(base, embeddedTemplates, name, data)
-}
-
-func renderFS(templateFS fs.FS, name string, data any) (string, error) {
-	base, err := parsePartialSet(templateFS)
-	if err != nil {
-		return "", err
-	}
-	return renderNamed(base, templateFS, name, data)
 }
 
 // parsePartialSet builds a template that owns every templates/_partials/*.tmpl
