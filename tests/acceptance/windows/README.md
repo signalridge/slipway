@@ -29,4 +29,9 @@ actual Windows argv boundary instead of accepting the binder's lossy rewrite.
 
 A failure throws or exits non-zero with `native Windows acceptance (...) failed`. Set `SLIPWAY_KEEP_WINDOWS_FIXTURE=1` only for local diagnosis; otherwise fixtures are removed. Use only disposable test data.
 
+Each mode emits one `native Windows acceptance metadata:` JSON line before the
+fixture runs. It records the OS, runner image, PowerShell and cmd versions,
+source and checkout revisions, run URL, and SHA-256 digests for the PowerShell
+asset, cmd asset, and tested binary. Retain that line with the completed job.
+
 A Linux/macOS syntax scan or `GOOS=windows` build cannot establish W. The CI workflow is a collector, not pre-recorded evidence: retain the completed `windows-latest` run URL, native OS and shell versions, binary revision, script digests, output, and evaluator notes before changing matrix status from `not collected`.

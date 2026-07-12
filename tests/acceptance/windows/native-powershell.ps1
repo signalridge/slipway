@@ -56,6 +56,10 @@ function Write-Utf8([string]$Path, [string]$Text) {
     [System.IO.File]::WriteAllText($Path, $Text, $script:Utf8NoBom)
 }
 
+function Get-Sha256([string]$Path) {
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
 function Join-NativeOutput($Output) {
     return (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
 }
@@ -321,6 +325,46 @@ $resolvedExe = (Resolve-Path -LiteralPath $SlipwayExe).Path
 Assert-True (Test-Path -LiteralPath $resolvedExe -PathType Leaf) "SlipwayExe is not a file: $SlipwayExe"
 Assert-True ($null -ne (Get-Command git.exe -ErrorAction SilentlyContinue)) 'git.exe is required'
 Assert-True ($null -ne $env:ComSpec) 'COMSPEC is required'
+
+$revision = [Environment]::GetEnvironmentVariable('GITHUB_SHA')
+$serverUrl = [Environment]::GetEnvironmentVariable('GITHUB_SERVER_URL')
+$repositoryName = [Environment]::GetEnvironmentVariable('GITHUB_REPOSITORY')
+$runId = [Environment]::GetEnvironmentVariable('GITHUB_RUN_ID')
+$eventPath = [Environment]::GetEnvironmentVariable('GITHUB_EVENT_PATH')
+$runUrl = 'local'
+if (-not [string]::IsNullOrWhiteSpace($serverUrl) -and
+    -not [string]::IsNullOrWhiteSpace($repositoryName) -and
+    -not [string]::IsNullOrWhiteSpace($runId)) {
+    $runUrl = "$serverUrl/$repositoryName/actions/runs/$runId"
+}
+if ([string]::IsNullOrWhiteSpace($revision)) { $revision = 'local' }
+$sourceRevision = $revision
+if (-not [string]::IsNullOrWhiteSpace($eventPath) -and (Test-Path -LiteralPath $eventPath -PathType Leaf)) {
+    $event = [System.IO.File]::ReadAllText($eventPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    if (($event.PSObject.Properties.Name -contains 'pull_request') -and $null -ne $event.pull_request) {
+        $sourceRevision = [string]$event.pull_request.head.sha
+    }
+}
+$cmdVersionOutput = & $env:ComSpec '/d' '/c' 'ver' 2>&1
+if ($LASTEXITCODE -ne 0) { Fail 'cmd.exe version probe failed' }
+$cmdAsset = Join-Path $PSScriptRoot 'native-cmd.cmd'
+$collectorMetadata = [ordered]@{
+    evidence_version = 1
+    mode = $Mode
+    os_version = [Environment]::OSVersion.VersionString
+    runner_image = [Environment]::GetEnvironmentVariable('ImageOS')
+    runner_image_version = [Environment]::GetEnvironmentVariable('ImageVersion')
+    powershell_edition = [string]$PSVersionTable.PSEdition
+    powershell_version = $PSVersionTable.PSVersion.ToString()
+    cmd_version = (Join-NativeOutput $cmdVersionOutput).Trim()
+    source_revision = $sourceRevision
+    checkout_revision = $revision
+    script_sha256 = (Get-Sha256 $PSCommandPath)
+    cmd_asset_sha256 = (Get-Sha256 $cmdAsset)
+    binary_sha256 = (Get-Sha256 $resolvedExe)
+    run_url = $runUrl
+}
+Write-Output ('native Windows acceptance metadata: ' + ($collectorMetadata | ConvertTo-Json -Compress))
 
 $tempName = 'slipway native % ! & ^ ' + $UnicodeProbe + ' ' + [Guid]::NewGuid().ToString('N')
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) $tempName
