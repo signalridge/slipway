@@ -373,7 +373,8 @@ try {
     $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-TextEqual -Actual ([string]$answeredStatus.answers[-1].text) -Expected $specialAnswer -Message 'journaled answer did not preserve exact special characters or CRLF'
     $normalizedAnswer = $specialAnswer.Replace("`r`n", "`n")
-    Assert-True ($oriented.context.Contains($normalizedAnswer)) 'bounded context did not contain the normalized special-character answer'
+    $indentedAnswer = '  ' + $normalizedAnswer.Replace("`n", "`n  ")
+    Assert-True ($oriented.context.Contains($indentedAnswer)) 'bounded context did not contain the normalized and structurally indented special-character answer'
 
     $implementSuggestion = [ordered]@{ kind = 'implement'; brief = 'Exercise Windows Outcome transport.' }
     $orientOutcome = New-Outcome -ActionId $oriented.action_id -ActionKind $oriented.kind -Status 'completed' -Summary 'Windows argv observed.' -Pause $null -Suggestions @($implementSuggestion)
