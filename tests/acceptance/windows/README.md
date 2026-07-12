@@ -20,7 +20,7 @@ Both modes create a disposable Git repository whose path contains spaces, Unicod
 - material source refresh, current candidate ID, and structured `adopt` recovery;
 - final status readback.
 
-`native-cmd.cmd` intentionally delegates JSON creation/assertions to the stdlib PowerShell available on supported Windows systems. In `Cmd` mode, the driver launches resolved special-character argv and the rendered recovery command through `cmd.exe /d /v:on`; it is not merely the PowerShell mode under another filename.
+`native-cmd.cmd` intentionally delegates JSON creation and assertions to the stdlib PowerShell available on supported Windows systems. That PowerShell process is only the assertion driver: in `Cmd` mode, every non-stdin Slipway invocation crosses `cmd.exe /d /v:on` through a UTF-16LE `EncodedCommand`, including doctor, initial Orient, Outcome files, structured answer/adopt/resume argv, status/stop, source import, and the binary's rendered recovery command. The inner encoded PowerShell explicitly configures UTF-8 native input and output before invoking Slipway. Outcome stdin remains a PowerShell-mode-only assertion; Cmd mode submits the equivalent Outcome through an outcome-file argv that crosses `cmd.exe`.
 
 A failure throws or exits non-zero with `native Windows acceptance (...) failed`. Set `SLIPWAY_KEEP_WINDOWS_FIXTURE=1` only for local diagnosis; otherwise fixtures are removed. Use only disposable test data.
 

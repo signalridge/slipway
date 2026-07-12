@@ -44,6 +44,6 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-The current manifest format is version 2. Version 1 is read only to remove pristine files produced by the retired adapter. Marker-only legacy state is not sufficient proof for deletion. Retired managed Claude/Qwen hook entries and the bounded Codex configuration block are removed precisely; unrelated settings remain.
+The only accepted manifest format is version 2. Any other version fails closed and cannot authorize install, refresh, uninstall, or list. A marker without a current manifest establishes no ownership and leaves the adapter surface unchanged. Host settings are outside adapter ownership and are never modified.
 
 No SessionStart or prompt-submission activation is installed.

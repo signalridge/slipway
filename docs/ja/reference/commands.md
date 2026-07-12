@@ -5,10 +5,10 @@
 > このページは non-normative です。[中国語製品契約](../../zh/reference/product-contract.md)と [machine schema](../../reference/machine-protocol.schema.json) が authority です。Workflow は issue-first で issue-gated ではありません。[Issue workflow](issue-workflow.md)を参照してください。
 
 - `install`: 六つのホスト capability を導入。
-  初回は `--refresh` 不要です。ownership manifest が既にある場合、通常の `install` は管理ファイルを変更せず、修復・更新・version 1 からの安全な切替には `--refresh` を明示します。
+  初回は `--refresh` 不要です。current ownership manifest が既にある場合、通常の `install` は管理ファイルを変更せず、修復・更新には `--refresh` を明示します。marker だけで current manifest がない場合は no-op safety warning を返し、non-current manifest は mutation 前に失敗します。
 - `uninstall`: 未変更の管理ファイルだけを削除。
-- `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。
-- `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。version 1 または不完全な surface は `needs_refresh`/warning になります。
+- `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は fail closed です。
+- `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。non-current manifest は `adapter_manifest_unreadable`、不完全な current surface は `needs_refresh`/warning になります。
 - `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。source 付きでは strict GitHub Change envelope を一度だけ読み、pinned snapshot だけを永続化します。
 - `status [run-id] [--json]`: run を一覧・表示。
 - `stop [run-id] [--json]`: journal を残して停止。
@@ -35,4 +35,4 @@ slipway run resume ID (--source-file FILE | --use-pinned-source | --source-choic
 
 `install/uninstall --json` は常に `{contract_version,hosts,written,removed,preserved,warnings}` を返し、空の配列も省略しません。`list --json` は `{contract_version,hosts:[...]}`、ID なしの `status --json` は `{contract_version,runs:[...]}` で、空リストも versioned object です。ID あり status は flat Run projection のまま、必須の top-level `contract_version` と fresh `next` を持ちます。すべての error に `contract_version` が必須です。
 
-`doctor --json` は `{contract_version,checks:[{code,status,host_id,name,detail}]}` を返し、status は `ok|warning|error` のみです。Repository/adapter の stable code は `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_legacy_manifest`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy` です。GitHub の stable code は `github_cli_unavailable|github_cli_version_unknown|github_cli_rest_fallback_required|github_cli_compatible`、`github_auth_unavailable|github_auth_available`、`github_issue_permissions_ok|github_issue_permissions_limited|github_issue_permissions_unknown` で、`gh <2.94.0` では公式 REST fallback が必要です。Legacy code は `legacy_runtime_residue`、`legacy_cache_residue`、`legacy_scope_root_residue`、`legacy_scopes_residue`、`legacy_locks_residue`、`legacy_processes_residue`、`legacy_repair_backups_residue`、`legacy_unknown_residue` です。Doctor は top-level metadata だけを調べ、内容を読まず migration/delete もしません。GitHub/legacy warning は ad-hoc Run を block せず、それだけなら doctor は成功終了します。
+`doctor --json` は `{contract_version,checks:[{code,status,host_id,name,detail}]}` を返し、status は `ok|warning|error` のみです。Repository/adapter の stable code は `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy` です。GitHub の stable code は `github_cli_unavailable|github_cli_version_unknown|github_cli_rest_fallback_required|github_cli_compatible`、`github_auth_unavailable|github_auth_available`、`github_issue_permissions_ok|github_issue_permissions_limited|github_issue_permissions_unknown` で、`gh <2.94.0` では公式 REST fallback が必要です。Legacy code は `legacy_runtime_residue`、`legacy_cache_residue`、`legacy_scope_root_residue`、`legacy_scopes_residue`、`legacy_locks_residue`、`legacy_processes_residue`、`legacy_repair_backups_residue`、`legacy_unknown_residue` です。Doctor は top-level metadata だけを調べ、内容を読まず migration/delete もしません。GitHub/legacy warning は ad-hoc Run を block せず、それだけなら doctor は成功終了します。

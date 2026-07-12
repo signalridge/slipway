@@ -17,7 +17,6 @@ import (
 
 const (
 	currentManifestVersion = 2
-	legacyManifestVersion  = 1
 	manifestFileName       = "ownership-manifest.json"
 	sentinelFileName       = ".adapter-generated"
 )
@@ -240,14 +239,12 @@ func Doctor(root string) (DoctorReport, error) {
 			continue
 		}
 		if !found {
+			detail := "detected, current ownership manifest is missing"
+			if markerOnlyOwnershipState(root, host) {
+				detail = currentOwnershipMissingWarning(host)
+			}
 			report.Checks = append(report.Checks, DoctorCheck{
-				Code: "adapter_not_installed", Status: "warning", HostID: host.ID, Name: "adapter", Detail: "detected, not installed",
-			})
-			continue
-		}
-		if manifest.Version == legacyManifestVersion {
-			report.Checks = append(report.Checks, DoctorCheck{
-				Code: "adapter_legacy_manifest", Status: "warning", HostID: host.ID, Name: "adapter", Detail: "legacy ownership manifest; run slipway install --refresh",
+				Code: "adapter_not_installed", Status: "warning", HostID: host.ID, Name: "adapter", Detail: detail,
 			})
 			continue
 		}
@@ -296,47 +293,23 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	if err != nil {
 		return plan, err
 	}
+	if !found && !sentinelExpectation.missing {
+		plan.warnings = append(plan.warnings, currentOwnershipMissingWarning(host))
+		return plan, nil
+	}
 	manifestExpectation := plannedFileExpectation{missing: true}
 	if found {
 		manifestExpectation = plannedFileExpectation{sha256: manifest.sourceSHA256}
 	}
 
 	previous := manifestIndex(manifest)
-	legacyPristine := map[string]string{}
 	claimed := map[string]manifestFile{}
 	desiredIndex := map[string]generatedFile{}
 	for _, file := range desired {
 		desiredIndex[file.Relative] = file
 	}
 
-	if found && manifest.Version == legacyManifestVersion {
-		for _, record := range manifest.Files {
-			if isLegacySentinelClaim(host, record.Path) {
-				continue
-			}
-			absolute, err := safeManifestPath(root, host, record.Path)
-			if err != nil {
-				return plan, err
-			}
-			classification, err := classifyFile(absolute, record.SHA256)
-			if err != nil {
-				return plan, err
-			}
-			switch classification {
-			case "pristine":
-				legacyPristine[record.Path] = record.SHA256
-				if _, reused := desiredIndex[record.Path]; !reused {
-					op := fsutil.RemoveFileTransactionOp(absolute).WithExpectedSHA256(record.SHA256)
-					plan.ops = append(plan.ops, op)
-					plan.removed = append(plan.removed, record.Path)
-				}
-			case "modified":
-				plan.preserved = append(plan.preserved, record.Path)
-			}
-		}
-	}
-
-	if found && manifest.Version == currentManifestVersion {
+	if found {
 		for _, record := range manifest.Files {
 			if _, stillDesired := desiredIndex[record.Path]; stillDesired {
 				continue
@@ -367,7 +340,7 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 		desiredHash := hashBytes(file.Data)
 		allowWrite := false
 		var writeExpectation plannedFileExpectation
-		if found && manifest.Version == currentManifestVersion {
+		if found {
 			if record, managed := previous[file.Relative]; managed {
 				classification, err := classifyFile(absolute, record.SHA256)
 				if err != nil {
@@ -380,10 +353,6 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 				allowWrite = true
 				writeExpectation = plannedFileExpectation{missing: classification == "missing", sha256: record.SHA256}
 			}
-		}
-		if legacyHash, pristine := legacyPristine[file.Relative]; pristine {
-			allowWrite = true
-			writeExpectation = plannedFileExpectation{sha256: legacyHash}
 		}
 		if !allowWrite {
 			info, err := os.Lstat(absolute)
@@ -408,24 +377,12 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 		}
 	}
 
-	if settings, warning := safeSettingsCleanup(root, host); settings != nil {
-		absolute := filepath.Join(root, filepath.FromSlash(settings.Relative))
-		op := fsutil.WriteFileTransactionOp(absolute, settings.Data, 0o600).WithExpectedSHA256(settings.sourceSHA256)
-		plan.ops = append(plan.ops, op)
-		plan.removed = append(plan.removed, settings.Relative+" (retired Slipway entries)")
-	} else if warning != "" {
-		plan.warnings = append(plan.warnings, warning)
-	}
-
 	if len(claimed) == 0 {
 		if found {
 			plan.ops = append(plan.ops,
 				manifestExpectation.guard(fsutil.RemoveFileTransactionOp(manifestPath)),
 				sentinelExpectation.guard(fsutil.RemoveFileTransactionOp(sentinelPath)),
 			)
-		}
-		if !found && !sentinelExpectation.missing {
-			plan.warnings = append(plan.warnings, "preserved marker-only legacy adapter for "+host.ID)
 		}
 		return plan, nil
 	}
@@ -449,9 +406,6 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 	}
 	if found {
 		for _, record := range manifest.Files {
-			if manifest.Version == legacyManifestVersion && isLegacySentinelClaim(host, record.Path) {
-				continue
-			}
 			absolute, err := safeManifestPath(root, host, record.Path)
 			if err != nil {
 				return plan, err
@@ -487,16 +441,8 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 			return plan, err
 		}
 		if _, err := os.Lstat(sentinelPath); err == nil {
-			plan.warnings = append(plan.warnings, "preserved marker-only legacy adapter for "+host.ID)
+			plan.warnings = append(plan.warnings, currentOwnershipMissingWarning(host))
 		}
-	}
-	if settings, warning := safeSettingsCleanup(root, host); settings != nil {
-		absolute := filepath.Join(root, filepath.FromSlash(settings.Relative))
-		op := fsutil.WriteFileTransactionOp(absolute, settings.Data, 0o600).WithExpectedSHA256(settings.sourceSHA256)
-		plan.ops = append(plan.ops, op)
-		plan.removed = append(plan.removed, settings.Relative+" (retired Slipway entries)")
-	} else if warning != "" {
-		plan.warnings = append(plan.warnings, warning)
 	}
 	return plan, nil
 }
@@ -553,7 +499,7 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 		}
 		return ownershipManifest{}, false, fmt.Errorf("parse ownership manifest for %s: trailing data: %w", host.ID, err)
 	}
-	if manifest.Version != legacyManifestVersion && manifest.Version != currentManifestVersion {
+	if manifest.Version != currentManifestVersion {
 		return ownershipManifest{}, false, fmt.Errorf("unsupported ownership manifest version %d for %s", manifest.Version, host.ID)
 	}
 	if manifest.ToolID != host.ID {
@@ -580,19 +526,12 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 		manifest.Files[index] = manifestFile{Path: relative, SHA256: hash}
 	}
 	for _, record := range manifest.Files {
-		switch manifest.Version {
-		case legacyManifestVersion:
-			if !legacyV1ClaimAllowed(host, record.Path) {
-				return ownershipManifest{}, false, fmt.Errorf("legacy ownership manifest for %s claims unknown path %q", host.ID, record.Path)
-			}
-		case currentManifestVersion:
-			allowed, err := currentClaimAllowed(host, record.Path)
-			if err != nil {
-				return ownershipManifest{}, false, err
-			}
-			if !allowed {
-				return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s claims unknown managed path %q", host.ID, record.Path)
-			}
+		allowed, err := currentClaimAllowed(host, record.Path)
+		if err != nil {
+			return ownershipManifest{}, false, err
+		}
+		if !allowed {
+			return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s claims unknown managed path %q", host.ID, record.Path)
 		}
 	}
 	manifest.sourceSHA256 = hashBytes(raw)
@@ -658,16 +597,6 @@ func safePath(root, relative, requiredPrefix string) (string, error) {
 	return absolute, nil
 }
 
-func safeSettingsCleanup(root string, host Host) (*settingsChange, string) {
-	if host.SettingsPath == "" || host.SettingsKind == "preserve" {
-		return nil, ""
-	}
-	if _, err := safePath(root, host.SettingsPath, host.OwnershipRoot); err != nil {
-		return nil, "preserved settings for " + host.ID + ": " + err.Error()
-	}
-	return planSettingsCleanup(root, host)
-}
-
 func claimAllowed(host Host, relative string) bool {
 	if host.ID != "copilot" {
 		prefix := filepath.ToSlash(filepath.Clean(filepath.FromSlash(host.OwnershipRoot)))
@@ -677,6 +606,32 @@ func claimAllowed(host Host, relative string) bool {
 		return true
 	}
 	return strings.HasPrefix(relative, ".github/skills/slipway") || strings.HasPrefix(relative, ".github/prompts/slipway-")
+}
+
+func currentClaimAllowed(host Host, relative string) (bool, error) {
+	files, err := generateHostFiles(host)
+	if err != nil {
+		return false, fmt.Errorf("enumerate managed files for %s: %w", host.ID, err)
+	}
+	for _, file := range files {
+		if file.Relative == relative {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func markerOnlyOwnershipState(root string, host Host) bool {
+	_, sentinelPath, err := ownershipPaths(root, host)
+	if err != nil {
+		return false
+	}
+	_, err = os.Lstat(sentinelPath)
+	return err == nil
+}
+
+func currentOwnershipMissingWarning(host Host) string {
+	return "current ownership manifest is missing for " + host.ID + "; marker-only state does not establish file ownership"
 }
 
 func normalizeRelative(name string) (string, error) {

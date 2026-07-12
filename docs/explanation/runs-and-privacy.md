@@ -25,6 +25,8 @@ Action context is bounded at 128 KiB and is not a full replay. Requirements rema
 
 Unix modes protect against ordinary other-user access, not root, backups, malware, or another process under the same UID. Windows uses current-user ACL intent, but inherited ACLs, administrators, backup agents, and same-account processes may still read data; there is no absolute Windows ACL guarantee. Repository owners should define retention, inspect ACLs, protect backups, and avoid publishing `.git/slipway/runs/`.
 
+Namespace mutation has a separate, narrower guarantee. Anchored handles and long-lived identity pins defend parent traversal, identity reuse, and replacements observed at validation checkpoints. Portable POSIX `unlinkat` removes a name relative to a parent descriptor; it does not compare the final directory entry with an already-open leaf handle. Slipway therefore does not claim linearizable exact-object deletion against a continuously racing same-UID watcher in the final validation-to-unlink gap on platforms without an exact native primitive. Private randomized quarantine, atomic no-replace relocation, revalidation, and post-checks minimize the gap and preserve every replacement observed at a checkpoint. Root, malware, and same-account racing through that final syscall gap remain explicit residual limitations.
+
 Deleting a run directory removes Slipway's recovery capability and journal projection only. It does not modify Git, source files, Issue/deployment state, replicas, snapshots, cloud backups, filesystem remnants, or encryption keys. It is not secure erase, backup purge, or key destruction.
 
 ## Commit and recovery semantics

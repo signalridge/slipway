@@ -20,4 +20,4 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-Refresh と uninstall は ownership manifest のハッシュが一致するファイルだけを変更します。ユーザー変更、未知、marker-only、範囲外 path、symlink は保持または安全に拒否されます。version 1 manifest は旧版の未変更ファイルを安全に削除するためだけに読み取ります。SessionStart や prompt-submit の自動入口は導入しません。
+Refresh と uninstall は current version 2 ownership manifest のハッシュが一致するファイルだけを変更します。他の manifest version はすべて fail closed で、install、refresh、uninstall、list を認可しません。ユーザー変更、未知、範囲外 path、symlink は保持または安全に拒否され、marker-only は ownership を確立せず migration や推論も行いません。ホスト settings は一切変更しません。SessionStart や prompt-submit の自動入口は導入しません。

@@ -20,9 +20,10 @@ const (
 )
 
 type transactionFilesystem struct {
-	rootPath string
-	root     *os.Root
-	hooks    FileTransactionHooks
+	rootPath      string
+	root          *os.Root
+	hooks         FileTransactionHooks
+	identityLease *transactionIdentityLease
 }
 
 type fileQuarantine struct {
@@ -138,7 +139,7 @@ func (filesystem *transactionFilesystem) snapshot(path string, kind fileTransact
 	if err != nil {
 		return fileSnapshot{}, fmt.Errorf("snapshot parent %s: %w", filepath.Dir(path), err)
 	}
-	snapshot, err := snapshotPathForTransactionInRoot(parent, base, path, kind)
+	snapshot, err := snapshotPathForTransactionInRoot(parent, base, path, kind, nil)
 	if err != nil {
 		return fileSnapshot{}, err
 	}
@@ -148,14 +149,46 @@ func (filesystem *transactionFilesystem) snapshot(path string, kind fileTransact
 	return snapshot, nil
 }
 
-func snapshotPathForTransactionInRoot(root *os.Root, name, displayPath string, kind fileTransactionOpKind) (fileSnapshot, error) {
-	if kind == fileTransactionOpRemoveAll {
-		return snapshotTreeForTransactionInRoot(root, name, displayPath)
+func (filesystem *transactionFilesystem) snapshotGuard(path string, kind fileTransactionOpKind, lease *transactionIdentityLease) (fileSnapshot, error) {
+	parent, base, err := filesystem.openStableParent(path, false)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fileSnapshot{parentObserved: true}, nil
 	}
-	return snapshotFileForTransactionInRoot(root, name, displayPath)
+	if err != nil {
+		return fileSnapshot{}, err
+	}
+	lease.add(parent)
+	parentInfo, err := rootDirectoryInfo(parent)
+	if err != nil {
+		return fileSnapshot{}, fmt.Errorf("snapshot parent %s: %w", filepath.Dir(path), err)
+	}
+	snapshot, err := snapshotPathForTransactionInRoot(parent, base, path, kind, lease)
+	if err != nil {
+		return fileSnapshot{}, err
+	}
+	snapshot.parentObserved = true
+	snapshot.parentExisted = true
+	snapshot.parentIdentity = parentInfo
+	return snapshot, nil
 }
 
-func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string) (fileSnapshot, error) {
+func snapshotPathForTransactionInRoot(root *os.Root, name, displayPath string, kind fileTransactionOpKind, lease *transactionIdentityLease) (snapshot fileSnapshot, resultErr error) {
+	// A caller-owned lease pins transaction guards for the full transaction.
+	// Read-only validation snapshots get a local lease so every identity remains
+	// pinned until that whole snapshot has been assembled and checked.
+	if lease == nil {
+		lease = &transactionIdentityLease{}
+		defer func() {
+			resultErr = errors.Join(resultErr, lease.close())
+		}()
+	}
+	if kind == fileTransactionOpRemoveAll {
+		return snapshotTreeForTransactionInRoot(root, name, displayPath, lease)
+	}
+	return snapshotFileForTransactionInRoot(root, name, displayPath, lease)
+}
+
+func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string, lease *transactionIdentityLease) (fileSnapshot, error) {
 	info, err := root.Lstat(name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return fileSnapshot{}, nil
@@ -164,18 +197,32 @@ func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string) (
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		target, readErr := root.Readlink(name)
+		pinned, err := openSymlinkIdentity(root, name)
+		if err != nil {
+			return fileSnapshot{}, fmt.Errorf("pin snapshot symlink %s: %w", displayPath, err)
+		}
+		pinnedInfo, statErr := pinned.Stat()
+		if statErr != nil || pinnedInfo.Mode()&os.ModeSymlink == 0 || !os.SameFile(info, pinnedInfo) {
+			_ = pinned.Close()
+			return fileSnapshot{}, errors.Join(fmt.Errorf("snapshot symlink %s changed while pinning", displayPath), statErr)
+		}
+		if err := validateSymlinkTransactionIdentity(pinnedInfo); err != nil {
+			_ = pinned.Close()
+			return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: %w", displayPath, err)
+		}
+		lease.add(pinned)
+		target, readErr := readSymlinkIdentity(pinned)
 		if readErr != nil {
 			return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: %w", displayPath, readErr)
 		}
 		current, statErr := root.Lstat(name)
-		if statErr != nil || current.Mode()&os.ModeSymlink == 0 || !os.SameFile(info, current) {
+		if statErr != nil || current.Mode()&os.ModeSymlink == 0 || !os.SameFile(pinnedInfo, current) {
 			if statErr != nil {
 				return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: %w", displayPath, statErr)
 			}
 			return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: path changed while reading", displayPath)
 		}
-		return fileSnapshot{existed: true, isSymlink: true, linkTarget: target, perm: info.Mode().Perm(), identity: info}, nil
+		return fileSnapshot{existed: true, isSymlink: true, linkTarget: target, perm: info.Mode().Perm(), identity: pinnedInfo}, nil
 	}
 	if !info.Mode().IsRegular() {
 		if info.IsDir() {
@@ -197,21 +244,20 @@ func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string) (
 	}
 	data, readErr := io.ReadAll(file)
 	final, finalStatErr := file.Stat()
-	closeErr := file.Close()
 	current, lstatErr := root.Lstat(name)
 	if readErr != nil {
+		_ = file.Close()
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, readErr)
 	}
 	if finalStatErr != nil || lstatErr != nil || !os.SameFile(info, final) || !os.SameFile(info, current) {
+		_ = file.Close()
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: file changed while reading", displayPath)
 	}
-	if closeErr != nil {
-		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, closeErr)
-	}
+	lease.add(file)
 	return fileSnapshot{existed: true, data: data, perm: info.Mode().Perm(), identity: info}, nil
 }
 
-func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string) (fileSnapshot, error) {
+func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string, lease *transactionIdentityLease) (fileSnapshot, error) {
 	info, err := root.Lstat(name)
 	if errors.Is(err, fs.ErrNotExist) {
 		return fileSnapshot{}, nil
@@ -220,13 +266,18 @@ func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string) (
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return snapshotFileForTransactionInRoot(root, name, displayPath)
+		return snapshotFileForTransactionInRoot(root, name, displayPath, lease)
 	}
 	treeRoot, err := root.OpenRoot(name)
 	if err != nil {
 		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", displayPath, err)
 	}
-	defer treeRoot.Close()
+	retainedTreeRoot := false
+	defer func() {
+		if !retainedTreeRoot {
+			_ = treeRoot.Close()
+		}
+	}()
 	directory, err := treeRoot.Open(".")
 	if err != nil {
 		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", displayPath, err)
@@ -237,6 +288,8 @@ func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string) (
 	if statErr != nil || closeErr != nil || lstatErr != nil || current.Mode()&os.ModeSymlink != 0 || !current.IsDir() || !os.SameFile(info, opened) || !os.SameFile(opened, current) {
 		return fileSnapshot{}, fmt.Errorf("snapshot %s: directory changed while opening", displayPath)
 	}
+	lease.add(treeRoot)
+	retainedTreeRoot = true
 	snapshot := fileSnapshot{existed: true, isDir: true, perm: info.Mode().Perm(), identity: info}
 	err = fs.WalkDir(treeRoot.FS(), ".", func(entryPath string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -254,8 +307,27 @@ func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string) (
 			return fmt.Errorf("snapshot %s: tree contains a symlink or special file", filepath.Join(displayPath, local))
 		}
 		item := fileTreeSnapshotEntry{rel: local, isDir: entryInfo.IsDir(), perm: entryInfo.Mode().Perm(), identity: entryInfo}
-		if !entryInfo.IsDir() {
-			fileSnapshot, err := snapshotFileForTransactionInRoot(treeRoot, local, filepath.Join(displayPath, local))
+		if entryInfo.IsDir() {
+			childRoot, err := treeRoot.OpenRoot(local)
+			if err != nil {
+				return err
+			}
+			directory, err := childRoot.Open(".")
+			if err != nil {
+				_ = childRoot.Close()
+				return err
+			}
+			opened, statErr := directory.Stat()
+			closeErr := directory.Close()
+			current, lstatErr := treeRoot.Lstat(local)
+			if statErr != nil || closeErr != nil || lstatErr != nil || !opened.IsDir() || current.Mode()&os.ModeSymlink != 0 || !current.IsDir() || !os.SameFile(entryInfo, opened) || !os.SameFile(opened, current) {
+				_ = childRoot.Close()
+				return errors.Join(fmt.Errorf("snapshot %s: directory changed while pinning", filepath.Join(displayPath, local)), statErr, closeErr, lstatErr)
+			}
+			lease.add(childRoot)
+			item.identity = opened
+		} else if !entryInfo.IsDir() {
+			fileSnapshot, err := snapshotFileForTransactionInRoot(treeRoot, local, filepath.Join(displayPath, local), lease)
 			if err != nil {
 				return err
 			}
@@ -440,7 +512,7 @@ func (filesystem *transactionFilesystem) quarantineExpected(path string, expecte
 	if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineBeforeValidation, path, quarantine.recoveryPath); err != nil {
 		return nil, true, filesystem.recoverMismatchedQuarantine(quarantine, rollback, fmt.Errorf("after quarantine: %w", err))
 	}
-	actual, err := snapshotPathForTransactionInRoot(quarantine.directory, transactionQuarantineItem, quarantine.recoveryPath, snapshotKind(expected))
+	actual, err := snapshotPathForTransactionInRoot(quarantine.directory, transactionQuarantineItem, quarantine.recoveryPath, snapshotKind(expected), nil)
 	if err != nil || !transactionSnapshotsMatchIgnoringParent(actual, expected, true) {
 		if err == nil {
 			err = errors.New("quarantined path does not match the guarded inode and contents")
@@ -491,6 +563,23 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 			_ = directory.Close()
 			return allocationError(errors.Join(errors.New("transaction quarantine is not private and stable"), statErr, chmodErr, closeErr, lstatErr))
 		}
+		pinnedDirectory, err := directory.OpenRoot(".")
+		if err != nil {
+			_ = directory.Close()
+			return allocationError(fmt.Errorf("pin transaction quarantine directory: %w", err))
+		}
+		pinnedInfo, pinErr := rootDirectoryInfo(pinnedDirectory)
+		if pinErr != nil || !os.SameFile(current, pinnedInfo) {
+			_ = pinnedDirectory.Close()
+			_ = directory.Close()
+			return allocationError(errors.Join(errors.New("transaction quarantine changed while pinning"), pinErr))
+		}
+		if filesystem.identityLease != nil {
+			filesystem.identityLease.add(pinnedDirectory)
+		} else if closeErr := pinnedDirectory.Close(); closeErr != nil {
+			_ = directory.Close()
+			return allocationError(closeErr)
+		}
 		return &fileQuarantine{
 			filesystem:        filesystem,
 			originalPath:      originalPath,
@@ -528,7 +617,7 @@ func (filesystem *transactionFilesystem) recoverMismatchedQuarantine(quarantine 
 	return &FileTransactionRecoveryError{OriginalPath: quarantine.originalPath, RecoveryPath: quarantine.recoveryPath, Rollback: rollback, Cause: errors.Join(cause, fmt.Errorf("reattach without replacement: %w", err))}
 }
 
-func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, data []byte, perm os.FileMode, guard fileSnapshot) (fileSnapshot, bool, error) {
+func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, data []byte, perm os.FileMode, guard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, bool, error) {
 	parent, base, err := filesystem.openStableParent(path, true)
 	if err != nil {
 		return fileSnapshot{}, false, err
@@ -542,6 +631,12 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 		_ = parent.Close()
 		return fileSnapshot{}, false, &FileTransactionRecoveryError{OriginalPath: path, Cause: errors.New("destination parent changed before atomic installation")}
 	}
+	pinnedParent, err := parent.OpenRoot(".")
+	if err != nil {
+		_ = parent.Close()
+		return fileSnapshot{}, false, fmt.Errorf("pin transaction destination parent: %w", err)
+	}
+	lease.add(pinnedParent)
 	stage, err := filesystem.allocateQuarantine(parent, base, path, transactionStageItem)
 	if err != nil {
 		_ = parent.Close()
@@ -568,8 +663,8 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 		return fileSnapshot{}, false, err
 	}
 	info, statErr := file.Stat()
-	closeErr := file.Close()
-	if statErr != nil || closeErr != nil {
+	if statErr != nil {
+		closeErr := file.Close()
 		stage.preserve()
 		return fileSnapshot{}, false, errors.Join(statErr, closeErr)
 	}
@@ -582,6 +677,7 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 		parentExisted:  true,
 		parentIdentity: parentInfo,
 	}
+	lease.add(file)
 	if err := renameNoReplaceRoots(stage.directory, parent, transactionStageItem, base); err != nil {
 		cleanupErr := filesystem.cleanupQuarantine(stage, expected, nil, false)
 		return fileSnapshot{}, false, errors.Join(fmt.Errorf("install without replacement: %w", err), cleanupErr)
@@ -592,7 +688,7 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 	return expected, true, nil
 }
 
-func (filesystem *transactionFilesystem) restoreSnapshotExclusive(path string, snapshot, namespaceGuard fileSnapshot) (fileSnapshot, error) {
+func (filesystem *transactionFilesystem) restoreSnapshotExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
 	if !snapshot.existed {
 		current, err := filesystem.snapshot(path, snapshotKind(snapshot))
 		if err != nil {
@@ -604,15 +700,15 @@ func (filesystem *transactionFilesystem) restoreSnapshotExclusive(path string, s
 		return current, nil
 	}
 	if snapshot.isDir {
-		return filesystem.restoreTreeExclusive(path, snapshot, namespaceGuard)
+		return filesystem.restoreTreeExclusive(path, snapshot, namespaceGuard, lease)
 	}
 	if snapshot.isSymlink {
-		return filesystem.restoreSymlinkExclusive(path, snapshot, namespaceGuard)
+		return filesystem.restoreSymlinkExclusive(path, snapshot, namespaceGuard, lease)
 	}
-	return filesystem.restoreFileExclusive(path, snapshot, namespaceGuard)
+	return filesystem.restoreFileExclusive(path, snapshot, namespaceGuard, lease)
 }
 
-func (filesystem *transactionFilesystem) restoreFileExclusive(path string, snapshot, namespaceGuard fileSnapshot) (fileSnapshot, error) {
+func (filesystem *transactionFilesystem) restoreFileExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
 	parent, base, err := filesystem.openStableParent(path, true)
 	if err != nil {
 		return fileSnapshot{}, err
@@ -643,10 +739,11 @@ func (filesystem *transactionFilesystem) restoreFileExclusive(path string, snaps
 		return fileSnapshot{}, err
 	}
 	info, statErr := file.Stat()
-	closeErr := file.Close()
-	if statErr != nil || closeErr != nil {
+	if statErr != nil {
+		closeErr := file.Close()
 		return fileSnapshot{}, errors.Join(statErr, closeErr)
 	}
+	lease.add(file)
 	if err := syncRootDirectory(parent); err != nil {
 		return fileSnapshot{}, err
 	}
@@ -658,7 +755,7 @@ func (filesystem *transactionFilesystem) restoreFileExclusive(path string, snaps
 	return restored, nil
 }
 
-func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, snapshot, namespaceGuard fileSnapshot) (fileSnapshot, error) {
+func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
 	parent, base, err := filesystem.openStableParent(path, true)
 	if err != nil {
 		return fileSnapshot{}, err
@@ -674,10 +771,26 @@ func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, sn
 	if err := parent.Symlink(snapshot.linkTarget, base); err != nil {
 		return fileSnapshot{}, fmt.Errorf("exclusive symlink create %s: %w", path, err)
 	}
-	info, err := parent.Lstat(base)
-	if err != nil || info.Mode()&os.ModeSymlink == 0 {
-		return fileSnapshot{}, fmt.Errorf("validate restored symlink %s: %w", path, err)
+	pinned, err := openSymlinkIdentity(parent, base)
+	if err != nil {
+		return fileSnapshot{}, fmt.Errorf("pin restored symlink %s: %w", path, err)
 	}
+	info, statErr := pinned.Stat()
+	target, readErr := readSymlinkIdentity(pinned)
+	current, lstatErr := parent.Lstat(base)
+	var kindErr error
+	if statErr == nil {
+		kindErr = validateSymlinkTransactionIdentity(info)
+	}
+	var targetErr error
+	if readErr == nil && target != snapshot.linkTarget {
+		targetErr = errors.New("restored symbolic-link target changed after creation")
+	}
+	if statErr != nil || readErr != nil || kindErr != nil || targetErr != nil || lstatErr != nil || info.Mode()&os.ModeSymlink == 0 || current.Mode()&os.ModeSymlink == 0 || !os.SameFile(info, current) {
+		_ = pinned.Close()
+		return fileSnapshot{}, errors.Join(fmt.Errorf("validate restored symlink %s", path), statErr, readErr, kindErr, targetErr, lstatErr)
+	}
+	lease.add(pinned)
 	if err := syncRootDirectory(parent); err != nil {
 		return fileSnapshot{}, err
 	}
@@ -689,7 +802,7 @@ func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, sn
 	return restored, nil
 }
 
-func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snapshot, namespaceGuard fileSnapshot) (fileSnapshot, error) {
+func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
 	parent, base, err := filesystem.openStableParent(path, true)
 	if err != nil {
 		return fileSnapshot{}, err
@@ -710,16 +823,18 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 	if err != nil {
 		return fileSnapshot{}, err
 	}
-	defer treeRoot.Close()
 	rootFile, err := treeRoot.Open(".")
 	if err != nil {
+		_ = treeRoot.Close()
 		return fileSnapshot{}, err
 	}
-	defer rootFile.Close()
 	opened, err := rootFile.Stat()
-	if err != nil || !os.SameFile(created, opened) {
+	closeErr := rootFile.Close()
+	if err != nil || closeErr != nil || !os.SameFile(created, opened) {
+		_ = treeRoot.Close()
 		return fileSnapshot{}, fmt.Errorf("restored directory %s changed while opening", path)
 	}
+	lease.add(treeRoot)
 	if err := callFileTransactionHook(filesystem.hooks.DuringExclusiveRestore, path, ""); err != nil {
 		return fileSnapshot{}, err
 	}
@@ -731,16 +846,6 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 	restored.parentIdentity = parentInfo
 	restored.entries = slices.Clone(snapshot.entries)
 	roots := map[string]*os.Root{".": treeRoot}
-	var ownedRoots []*os.Root
-	var ownedFiles []*os.File
-	defer func() {
-		for _, file := range ownedFiles {
-			_ = file.Close()
-		}
-		for _, root := range ownedRoots {
-			_ = root.Close()
-		}
-	}()
 
 	for index, item := range snapshot.entries {
 		clean, err := cleanTreeSnapshotPath(item.rel)
@@ -771,14 +876,13 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 				return fileSnapshot{}, err
 			}
 			opened, err := dirFile.Stat()
-			if err != nil || !os.SameFile(info, opened) {
-				_ = dirFile.Close()
+			closeErr := dirFile.Close()
+			if err != nil || closeErr != nil || !os.SameFile(info, opened) {
 				_ = childRoot.Close()
 				return fileSnapshot{}, fmt.Errorf("restored directory %s changed while opening", filepath.Join(path, clean))
 			}
 			roots[clean] = childRoot
-			ownedRoots = append(ownedRoots, childRoot)
-			ownedFiles = append(ownedFiles, dirFile)
+			lease.add(childRoot)
 			restored.entries[index].identity = opened
 			continue
 		}
@@ -799,10 +903,11 @@ func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snaps
 			return fileSnapshot{}, err
 		}
 		info, statErr := file.Stat()
-		closeErr := file.Close()
-		if statErr != nil || closeErr != nil {
+		if statErr != nil {
+			closeErr := file.Close()
 			return fileSnapshot{}, errors.Join(statErr, closeErr)
 		}
+		lease.add(file)
 		restored.entries[index].identity = info
 	}
 	for index := len(snapshot.entries) - 1; index >= 0; index-- {
@@ -858,29 +963,71 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 		quarantine.directoryIdentity == nil || !os.SameFile(private, quarantine.directoryIdentity) {
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(errors.New("quarantine directory is no longer private and transaction-owned"), err))
 	}
-	actual, err := snapshotPathForTransactionInRoot(quarantine.directory, quarantine.itemName, quarantine.recoveryPath, snapshotKind(expected))
+	actual, err := snapshotPathForTransactionInRoot(quarantine.directory, quarantine.itemName, quarantine.recoveryPath, snapshotKind(expected), nil)
 	if err != nil || !transactionSnapshotsMatchIgnoringParent(actual, expected, true) {
 		if err == nil {
 			err = errors.New("quarantined entry changed before cleanup")
 		}
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, err)
 	}
+	if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineValidationBeforeRelocation, quarantine.originalPath, observedPath); err != nil {
+		return preserveQuarantineFailure(quarantine, rollback, observedPath, fmt.Errorf("after quarantine validation: %w", err))
+	}
+	if err := relocateQuarantineItemForCleanup(quarantine); err != nil {
+		return preserveQuarantineFailure(quarantine, rollback, quarantine.recoveryPath, fmt.Errorf("isolate validated quarantine before cleanup: %w", err))
+	}
+	observedPath = quarantine.recoveryPath
+	deletionLease := &transactionIdentityLease{}
+	actual, err = snapshotPathForTransactionInRoot(quarantine.directory, quarantine.itemName, quarantine.recoveryPath, snapshotKind(expected), deletionLease)
+	if err != nil || !transactionSnapshotsMatchIgnoringParent(actual, expected, true) {
+		closeErr := deletionLease.close()
+		if err == nil {
+			err = errors.New("relocated quarantine entry does not match the validated transaction identity")
+		}
+		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(err, closeErr))
+	}
 	if expected.isDir {
 		err = quarantine.directory.RemoveAll(quarantine.itemName)
 	} else {
 		err = quarantine.directory.Remove(quarantine.itemName)
 	}
+	closeErr := deletionLease.close()
 	if err != nil {
-		return preserveQuarantineFailure(quarantine, rollback, observedPath, fmt.Errorf("remove proven transaction quarantine: %w", err))
+		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(fmt.Errorf("remove isolated transaction quarantine: %w", err), closeErr))
 	}
-	missing, verifyErr := snapshotPathForTransactionInRoot(quarantine.directory, quarantine.itemName, quarantine.recoveryPath, snapshotKind(expected))
+	missing, verifyErr := snapshotPathForTransactionInRoot(quarantine.directory, quarantine.itemName, quarantine.recoveryPath, snapshotKind(expected), nil)
 	if verifyErr != nil || missing.existed {
-		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(errors.New("quarantine cleanup post-validation failed"), verifyErr))
+		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(errors.New("quarantine cleanup post-validation failed"), verifyErr, closeErr))
 	}
 	if err := quarantine.removeEmptyDirectory(); err != nil {
-		return &FileTransactionRecoveryError{OriginalPath: quarantine.originalPath, RecoveryPath: quarantine.directoryPath, Rollback: rollback, Cause: err}
+		return errors.Join(&FileTransactionRecoveryError{OriginalPath: quarantine.originalPath, RecoveryPath: quarantine.directoryPath, Rollback: rollback, Cause: err}, closeErr)
 	}
-	return nil
+	return closeErr
+}
+
+func relocateQuarantineItemForCleanup(quarantine *fileQuarantine) (resultErr error) {
+	directory, err := quarantine.directory.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, directory.Close())
+	}()
+	for range 32 {
+		name, err := randomTransactionName(".slipway-delete-")
+		if err != nil {
+			return err
+		}
+		if err := renameNoReplaceAt(directory, quarantine.itemName, directory, name); errors.Is(err, fs.ErrExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		quarantine.itemName = name
+		quarantine.recoveryPath = filepath.Join(quarantine.directoryPath, name)
+		return syncFileDirectory(directory)
+	}
+	return errors.New("isolate quarantine for cleanup: name attempts exhausted")
 }
 
 func transactionQuarantineModeIsPrivate(mode os.FileMode) bool {
@@ -941,6 +1088,27 @@ func (quarantine *fileQuarantine) removeEmptyDirectory() error {
 		}
 		return errors.Join(namespaceErrs...)
 	}
+	if err := relocateQuarantineDirectoryForCleanup(quarantine); err != nil {
+		observedPath := quarantine.directoryPath
+		_, retainedPath := quarantine.refreshRecoveryPath()
+		quarantine.preserve()
+		return &FileTransactionRecoveryError{
+			OriginalPath: quarantine.originalPath,
+			RecoveryPath: filepath.Dir(retainedPath),
+			Cause:        fmt.Errorf("isolate empty transaction quarantine before removal (observed at %s): %w", observedPath, err),
+		}
+	}
+	current, identityErr = quarantine.parent.Lstat(quarantine.directoryName)
+	if identityErr != nil || quarantine.directoryIdentity == nil || !os.SameFile(current, quarantine.directoryIdentity) {
+		observedPath := quarantine.directoryPath
+		_, retainedPath := quarantine.refreshRecoveryPath()
+		quarantine.preserve()
+		return &FileTransactionRecoveryError{
+			OriginalPath: quarantine.originalPath,
+			RecoveryPath: filepath.Dir(retainedPath),
+			Cause:        errors.Join(fmt.Errorf("relocated transaction quarantine changed before removal (observed at %s)", observedPath), identityErr),
+		}
+	}
 	closeDirectoryErr := quarantine.directory.Close()
 	quarantine.directory = nil
 	removeErr := quarantine.parent.Remove(quarantine.directoryName)
@@ -955,6 +1123,32 @@ func (quarantine *fileQuarantine) removeEmptyDirectory() error {
 	quarantine.parent = nil
 	quarantine.closed = true
 	return errors.Join(closeDirectoryErr, removeErr, syncErr, verifyErr, closeParentErr)
+}
+
+func relocateQuarantineDirectoryForCleanup(quarantine *fileQuarantine) (resultErr error) {
+	parent, err := quarantine.parent.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		resultErr = errors.Join(resultErr, parent.Close())
+	}()
+	for range 32 {
+		name, err := randomTransactionName(".slipway-delete-dir-")
+		if err != nil {
+			return err
+		}
+		if err := renameNoReplaceAt(parent, quarantine.directoryName, parent, name); errors.Is(err, fs.ErrExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		quarantine.directoryName = name
+		quarantine.directoryPath = filepath.Join(filepath.Dir(quarantine.directoryPath), name)
+		quarantine.recoveryPath = filepath.Join(quarantine.directoryPath, quarantine.itemName)
+		return syncFileDirectory(parent)
+	}
+	return errors.New("isolate quarantine directory for cleanup: name attempts exhausted")
 }
 
 func (quarantine *fileQuarantine) refreshRecoveryPath() (string, string) {

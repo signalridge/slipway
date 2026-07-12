@@ -31,7 +31,7 @@ Clarify follows the attributed Matt Pocock `grill-me`/`grilling` behavior: inves
 Each capability is a `slipway-<name>/SKILL.md` directory. Every generated skill carries the same untrusted-Issue, trusted-attester, confirmed-publication, and exact destructive-authorization boundaries. Clarify alone receives one `references/decision-interview.md`, adapted from Matt Pocock's MIT-licensed `grill-me` skill with attribution preserved.
 Codex capabilities also contain managed `agents/openai.yaml` policy files with `allow_implicit_invocation: false`; Codex does not honor the generic skill frontmatter for this setting. This keeps every Slipway capability invisible to implicit model selection until the user explicitly invokes it.
 
-Adapters do not install ambient session hooks, prompt-submit hooks, launchers, a global router, or a standalone technical-validation capability. Pi settings are preserved rather than removing generic user skill registrations.
+Adapters do not install ambient session hooks, prompt-submit hooks, launchers, a global router, or a standalone technical-validation capability. Host settings are outside adapter ownership and are never modified by install, refresh, or uninstall.
 
 ## Publication and privacy boundary
 
@@ -41,5 +41,5 @@ Every capability warns that accepted Requirements, goals, answers, and command s
 
 ## Ownership safety
 
-The manifest is stored under `<host-root>/slipway/ownership-manifest.json`. Version 2 records repository-relative paths and SHA-256 hashes. Refresh and uninstall mutate only hash-matching files. Modified, unknown, marker-only, malformed, duplicate, out-of-host, or symlinked surfaces fail safely or are preserved and reported.
-A first install claims only newly created files. Once a manifest exists, updates require `slipway install --refresh`; this keeps an ordinary repeated install from silently switching managed surfaces. A version 1 manifest is read only as proof for deleting or replacing hash-matching legacy files.
+The manifest is stored under `<host-root>/slipway/ownership-manifest.json`. Only version 2 is accepted; every other version is unreadable and cannot authorize install, refresh, uninstall, or list. Version 2 records repository-relative paths and SHA-256 hashes. Refresh and uninstall mutate only hash-matching files. Modified, unknown, malformed, duplicate, out-of-host, or symlinked surfaces fail safely or are preserved and reported.
+A first install claims only newly created files. Once a current manifest exists, updates require `slipway install --refresh`; this keeps an ordinary repeated install from silently switching managed surfaces. A marker without a current manifest establishes no ownership: install, refresh, and uninstall leave the adapter surface unchanged and report the missing current ownership neutrally, without migration or inference.

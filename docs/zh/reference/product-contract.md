@@ -229,7 +229,9 @@ Journal 记录 goal、workspace identity、immutable start Git fingerprint、pin
 
 Mutation 只有 bytes 写完且 journal handle fsync 后 committed；首建还同步 file/run dir/parent entry。Projection 用 temp write+fsync+rename+directory fsync。Journal 已 commit 而 projection 失败必须返回 committed/projection-stale、无 retry command；先 replay，不能盲重试。不支持 directory sync 的平台必须在 doctor/docs 收窄承诺。
 
-同 UID 对手可能替换 parent/run/journal/lock/symlink/junction/reparse point。实现必须使用 anchored root/native handles，保存和复验 directory/leaf identity，不能 check-then-reopen；tail truncate 同 handle；lock 不作为 namespace identity。Swap、lock replacement、tail race、projection-after-commit 与 rollback concurrent edit 都需对抗测试并明确 committed/ambiguous 状态。
+同 UID 对手可能替换 parent/run/journal/lock/symlink/junction/reparse point。实现必须使用 anchored root/native handles，保存和复验 directory/leaf identity，不能 check-then-reopen；tail truncate 同 handle；lock 不作为 namespace identity。Swap、lock replacement、tail race、projection-after-commit 与 rollback concurrent edit 都需对抗测试并明确 committed/ambiguous 状态。Windows 对任何需要重建 symbolic link、却无法在当前权限下证明可精确恢复的 transaction，必须在首次 mutation 前返回 typed fail-closed error；不能先移动对象再依赖 symlink privilege 回滚，也不能把 privilege-dependent Skip 当作唯一证据。
+
+跨平台删除边界必须诚实收窄：Darwin/Linux/POSIX 的 `unlinkat`/目标平台等价调用按 anchored parent handle + leaf pathname 删除，不提供 portable compare-and-unlink，也不能从已打开 leaf handle 线性化删除某个已验证 directory entry。因此，在没有 exact-object native deletion 的平台上，不承诺抵御持续主动的同 UID watcher 在最后一次 leaf identity validation 返回后、pathname unlink/rmdir 取得对象前替换该 entry。实现仍须使用长期 identity pin、私有随机 quarantine、atomic no-replace relocation、relocation 后 revalidation 与 post-check；任何 validation point 观察到 mismatch 都必须保留并报告。Root、malware、同账户持续竞速该最终 syscall gap 是明确 residual limitation，不能用 C test 或随机名字伪装成已消除。
 
 Per-run lock 不锁 Git/Issue/用户。多个 Run 可共存；歧义 stop/resume 要 ID。同 Change 并发只警告。Recovery 重验 canonical workspace；linked worktree B 不能恢复 A 后改 B。删除 run dir 只移除恢复能力，不改变仓库/Issue/交付状态。
 
@@ -241,7 +243,7 @@ Per-run lock 不锁 Git/Issue/用户。多个 Run 可共存；歧义 stop/resume
 
 支持 Claude Code、Codex、GitHub Copilot、Cursor、Kilo Code、Kiro、OpenCode、Pi、Qwen Code、Windsurf。每宿主精确生成六能力，无 ambient hook。Doctor 的 GitHub version/auth/permission 仅 capability warning；GitHub 不可用不使 ad-hoc Run unhealthy。
 
-Versioned host-specific ownership manifest 只认精确生成路径；v1 manifest 仅作为 final legacy release 路径的只读删除证明。伪造、duplicate、out-of-host 或 unknown claim 不能授权删除用户文件。Refresh/uninstall 只删 hash-matching pristine managed files，用户改动保留并报告。Retired hook cleanup 只匹配精确 bare `slipway`/`slipway.exe` 或有 root ownership 的 launcher，不按 basename 删除自定义 executable。所有 mutation 使用 root-anchored transaction/precondition/rollback validation；并发用户改动必须保留。Windows 不依赖 POSIX shell、symlink privilege 或 Unix mode。六能力共享 untrusted Issue、trusted fetch、publication reconciliation、privacy 与 destructive grant 边界。
+Versioned host-specific ownership manifest 只接受当前唯一版本和精确生成路径；任何非当前版本、malformed、duplicate、out-of-host 或 unknown claim 在用于 mutation 前 fail closed。不读取 v1/旧 manifest 作为删除或替换证明，不维护旧路径 inventory，不迁移旧 manifest/marker/settings，也不从旧格式推断 ownership；旧 manifest、marker-only state、retired hooks/settings 与其他未被当前 manifest 认领的内容保持未归属、原样保留，只允许用户显式手工处理。Refresh/uninstall 只依据当前 manifest 删除 hash-matching pristine managed files，用户改动保留并报告。所有 mutation 使用 root-anchored transaction/precondition/rollback validation；在每个 identity validation point 观察到的并发用户改动必须保留并报告，最终 pathname deletion gap 服从上面的 residual limitation，不宣称 linearizable exact-object delete。Windows 不依赖 POSIX shell 或 Unix mode；对无法在当前权限下精确重建的 pre-existing symbolic link，transaction 在 mutation 前安全拒绝，因而不依赖 symlink privilege 完成 rollback。六能力共享 untrusted Issue、trusted fetch、publication reconciliation、privacy 与 destructive grant 边界。
 
 ## 14. 结构化恢复与跨平台 rendering
 
@@ -297,12 +299,12 @@ README、start-here、architecture、commands、machine schema/matrix/hidden com
 | 21 | Bug/refactor granularity；Level/Kind 正交 | G+H |
 | 22 | 未启动 activity 不伪造；零 activity 固定文本 | C+S |
 | 23 | Start fingerprint/current-worktree observation/attribution uncertainty | C+S |
-| 24 | Runstore namespace/swap/tail/projection/rollback attacks | C |
+| 24 | Namespace checkpoints/quarantine relocation/final deletion limitation；Windows symlink pre-mutation fail-closed | C+W |
 | 25 | Structured recovery 可确定 argv，无 placeholder | C+S+W |
 | 26 | Native Windows cmd/PowerShell 与特殊 argv | W |
 | 27 | GitHub 100/50 limits、`gh<2.94` REST fallback/权限 | G+H |
 | 28 | Ten adapters 精确六能力与共享边界 | S+H |
-| 29 | Malicious manifest/custom executable legacy safety | C+S |
+| 29 | Current-only ownership；非当前 manifest/marker/settings 不迁移不删除 | C+S |
 | 30 | Privacy minimization/warning/redaction/purge | C+S |
 | 31 | Legacy namespace coexistence/advisory only | C+S |
 | 32 | Resume budget replacement/candidate not applied | C+S |
@@ -312,7 +314,7 @@ README、start-here、architecture、commands、machine schema/matrix/hidden com
 
 ## 19. 推荐测试与证据
 
-按影响选用：gofmt/diff-check；全量 Go tests；autopilot/runstore/fsutil/adapter race；source fuzz/property/golden；schema matrix/idempotency/stale tests；namespace swap/tail/projection fault tests；vet/testlint/golangci-lint/architecture guards；Linux/Windows cross-build；native Windows argv suite；真实 binary Shell acceptance；十宿主 adapter；host publication fault harness 加隔离 live GitHub fixture；Claude/Codex/Pi 脱敏 prompt matrix；actionlint/yamllint/markdown/link；website sync/build；Nix/Docker/GoReleaser 与包安装 smoke。Executable fixtures 与 transcripts 只放 `tests/acceptance/`；live credential 使用受保护账号/repo，fork 不暴露 secret。缺证据如实记 uncertainty，不改变 Run 路由。
+按影响选用：gofmt/diff-check；全量 Go tests；autopilot/runstore/fsutil/adapter race；source fuzz/property/golden；schema matrix/idempotency/stale tests；namespace swap、quarantine relocation/revalidation、tail/projection fault tests；不可 Skip 的 Windows all-symlink pre-mutation fail-closed policy test与补充 native fixture；vet/testlint/golangci-lint/architecture guards；Linux/Windows cross-build；native Windows argv suite；真实 binary Shell acceptance；十宿主 adapter；host publication fault harness 加隔离 live GitHub fixture；Claude/Codex/Pi 脱敏 prompt matrix；actionlint/yamllint/markdown/link；website sync/build；Nix/Docker/GoReleaser 与包安装 smoke。测试覆盖已定义 validation points，并显式保留最终 pathname deletion residual limitation。Executable fixtures 与 transcripts 只放 `tests/acceptance/`；live credential 使用受保护账号/repo，fork 不暴露 secret。缺证据如实记 uncertainty，不改变 Run 路由。
 
 ## 20. 非目标与信任声明
 

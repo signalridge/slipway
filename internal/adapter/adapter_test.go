@@ -3,7 +3,6 @@ package adapter
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -160,137 +159,81 @@ func TestInstallRequiresRefreshToRepairAnExistingAdapter(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestLegacyManifestIsReadOnlyProofForSafeCutover(t *testing.T) {
-	root := t.TempDir()
+func TestNonCurrentManifestCannotAuthorizeAnyAdapterOperation(t *testing.T) {
 	host, ok := lookupHost("claude")
 	require.True(t, ok)
-	pristineRelative := ".claude/commands/slipway/abort.md"
-	modifiedRelative := ".claude/commands/slipway/review.md"
-	pristine := []byte("old generated\n")
-	modifiedOriginal := []byte("old review\n")
-	sentinel := []byte("generated\n")
-	writeTestFile(t, root, pristineRelative, pristine)
-	writeTestFile(t, root, modifiedRelative, modifiedOriginal)
-	manifest := ownershipManifest{Version: legacyManifestVersion, ToolID: host.ID, Files: []manifestFile{
-		{Path: pristineRelative, SHA256: hashBytes(pristine)},
-		{Path: modifiedRelative, SHA256: hashBytes(modifiedOriginal)},
-		{Path: sentinelRelative(host), SHA256: hashBytes(sentinel)},
-	}}
-	writeTestManifest(t, root, host, manifest)
-	require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(modifiedRelative)), []byte("user review\n"), 0o600))
-
-	report, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
-	require.NoError(t, err)
-	_, err = os.Stat(filepath.Join(root, filepath.FromSlash(pristineRelative)))
-	assert.ErrorIs(t, err, os.ErrNotExist)
-	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(modifiedRelative)))
-	require.NoError(t, err)
-	assert.Equal(t, "user review\n", string(content))
-	assert.Contains(t, report.Preserved, modifiedRelative)
-	current, found, err := loadManifest(root, host)
-	require.NoError(t, err)
-	require.True(t, found)
-	assert.Equal(t, currentManifestVersion, current.Version)
-	_, claimed := manifestIndex(current)[modifiedRelative]
-	assert.False(t, claimed)
-}
-
-func TestLegacyV1ManifestRefreshAndUninstallAcrossHosts(t *testing.T) {
-	representative := map[string]string{
-		"claude":   ".claude/commands/slipway/abort.md",
-		"codex":    ".codex/skills/slipway-abort/SKILL.md",
-		"copilot":  ".github/prompts/slipway-abort.prompt.md",
-		"cursor":   ".cursor/commands/slipway-abort.md",
-		"kilo":     ".kilocode/workflows/slipway-abort.md",
-		"kiro":     ".kiro/skills/slipway-abort/SKILL.md",
-		"opencode": ".opencode/commands/slipway-abort.md",
-		"pi":       ".pi/prompts/slipway-abort.md",
-		"qwen":     ".qwen/skills/slipway-abort/SKILL.md",
-		"windsurf": ".windsurf/workflows/slipway-abort.md",
+	versions := []struct {
+		name    string
+		version int
+	}{
+		{name: "version 1", version: 1},
+		{name: "zero", version: 0},
+		{name: "future", version: currentManifestVersion + 1},
 	}
-	for _, host := range Registry() {
-		host := host
-		legacyRelative := representative[host.ID]
-		require.NotEmpty(t, legacyRelative, host.ID)
-		for _, operation := range []string{"refresh", "uninstall"} {
-			t.Run(host.ID+"/"+operation, func(t *testing.T) {
+	for _, version := range versions {
+		for _, operation := range []string{"install", "refresh", "uninstall", "list"} {
+			t.Run(version.name+"/"+operation, func(t *testing.T) {
 				root := t.TempDir()
-				legacyContent := []byte("legacy generated for " + host.ID + "\n")
-				sentinelContent := []byte("generated\n")
-				writeTestFile(t, root, legacyRelative, legacyContent)
-				writeTestManifest(t, root, host, ownershipManifest{
-					Version: legacyManifestVersion,
+				managedRelative := ".claude/skills/slipway-run/SKILL.md"
+				settingsRelative := ".claude/settings.json"
+				managedContent := []byte("non-current claimed file\n")
+				settingsContent := []byte(`{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"slipway hook session-start --tool claude"}]}]},"theme":"user"}` + "\n")
+				writeTestFile(t, root, managedRelative, managedContent)
+				writeTestFile(t, root, settingsRelative, settingsContent)
+				writeRawManifest(t, root, host, ownershipManifest{
+					Version: version.version,
 					ToolID:  host.ID,
-					Files: []manifestFile{
-						{Path: legacyRelative, SHA256: hashBytes(legacyContent)},
-						{Path: sentinelRelative(host), SHA256: hashBytes(sentinelContent)},
-					},
+					Files:   []manifestFile{{Path: managedRelative, SHA256: hashBytes(managedContent)}},
 				})
+				_, sentinelPath, err := ownershipPaths(root, host)
+				require.NoError(t, err)
+				sentinelContent := []byte("marker-only state\n")
+				require.NoError(t, os.WriteFile(sentinelPath, sentinelContent, 0o600))
+				manifestPath, _, err := ownershipPaths(root, host)
+				require.NoError(t, err)
+				manifestContent, err := os.ReadFile(manifestPath)
+				require.NoError(t, err)
 
 				switch operation {
+				case "install":
+					_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}})
 				case "refresh":
-					report, err := Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
-					require.NoError(t, err)
-					assert.Contains(t, report.Removed, legacyRelative)
-					manifest, found, err := loadManifest(root, host)
-					require.NoError(t, err)
-					require.True(t, found)
-					assert.Equal(t, currentManifestVersion, manifest.Version)
+					_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
 				case "uninstall":
-					report, err := Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
-					require.NoError(t, err)
-					assert.Contains(t, report.Removed, legacyRelative)
-					sentinelCount := 0
-					for _, removed := range report.Removed {
-						if removed == sentinelRelative(host) {
-							sentinelCount++
-						}
-					}
-					assert.Equal(t, 1, sentinelCount, "sentinel must be scheduled exactly once")
+					_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
+				case "list":
+					_, err = List(root)
 				}
-				_, err := os.Stat(filepath.Join(root, filepath.FromSlash(legacyRelative)))
-				assert.ErrorIs(t, err, os.ErrNotExist)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "unsupported ownership manifest version")
+				assertFileContent(t, root, managedRelative, managedContent)
+				assertFileContent(t, root, settingsRelative, settingsContent)
+				assertFileContent(t, root, relativeToRoot(root, manifestPath), manifestContent)
+				assertFileContent(t, root, relativeToRoot(root, sentinelPath), sentinelContent)
+				assert.NoFileExists(t, filepath.Join(root, ".claude/skills/slipway-review/SKILL.md"))
+
+				doctor, doctorErr := Doctor(root)
+				require.NoError(t, doctorErr)
+				check := doctorCheckForHost(doctor, host.ID)
+				assert.Equal(t, "adapter_manifest_unreadable", check.Code)
+				assert.Equal(t, "error", check.Status)
+				assert.Contains(t, check.Detail, "unsupported ownership manifest version")
 			})
 		}
 	}
 }
 
-func TestListAndDoctorRequireCurrentCompleteManagedSurface(t *testing.T) {
+func TestListAndDoctorReportCurrentManagedSurfaceHealth(t *testing.T) {
 	root := t.TempDir()
-	host, ok := lookupHost("claude")
-	require.True(t, ok)
-	legacyRelative := ".claude/commands/slipway/abort.md"
-	legacyContent := []byte("old generated\n")
-	writeTestFile(t, root, legacyRelative, legacyContent)
-	writeTestManifest(t, root, host, ownershipManifest{
-		Version: legacyManifestVersion,
-		ToolID:  host.ID,
-		Files:   []manifestFile{{Path: legacyRelative, SHA256: hashBytes(legacyContent)}},
-	})
-
+	_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
+	require.NoError(t, err)
 	statuses, err := List(root)
-	require.NoError(t, err)
-	legacyStatus := statuses[0]
-	assert.Equal(t, "claude", legacyStatus.ID)
-	assert.False(t, legacyStatus.Installed)
-	assert.True(t, legacyStatus.NeedsRefresh)
-	assert.Empty(t, legacyStatus.Capabilities)
-	doctor, err := Doctor(root)
-	require.NoError(t, err)
-	legacyCheck := doctorCheckForHost(doctor, "claude")
-	assert.Equal(t, "adapter_legacy_manifest", legacyCheck.Code)
-	assert.Equal(t, "warning", legacyCheck.Status)
-	assert.Contains(t, legacyCheck.Detail, "slipway install --refresh")
-
-	_, err = Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
-	require.NoError(t, err)
-	statuses, err = List(root)
 	require.NoError(t, err)
 	currentStatus := statuses[0]
 	assert.True(t, currentStatus.Installed)
 	assert.False(t, currentStatus.NeedsRefresh)
 	assert.Len(t, currentStatus.Capabilities, len(capabilityNames))
-	doctor, err = Doctor(root)
+	doctor, err := Doctor(root)
 	require.NoError(t, err)
 	healthyCheck := doctorCheckForHost(doctor, "claude")
 	assert.Equal(t, "adapter_healthy", healthyCheck.Code)
@@ -332,7 +275,7 @@ func TestInstallRejectsPoisonedManifestBeforeChangingAnyHost(t *testing.T) {
 	writeTestFile(t, root, ".claude/README", []byte("detected\n"))
 	host, ok := lookupHost("codex")
 	require.True(t, ok)
-	manifest := ownershipManifest{Version: legacyManifestVersion, ToolID: host.ID, Files: []manifestFile{{Path: "../outside", SHA256: strings.Repeat("0", 64)}}}
+	manifest := ownershipManifest{Version: currentManifestVersion, ToolID: host.ID, Files: []manifestFile{{Path: "../outside", SHA256: strings.Repeat("0", 64)}}}
 	writeRawManifest(t, root, host, manifest)
 
 	_, err := Install(InstallOptions{Root: root, Tools: []string{"claude", "codex"}})
@@ -342,40 +285,42 @@ func TestInstallRejectsPoisonedManifestBeforeChangingAnyHost(t *testing.T) {
 	assert.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
-func TestOwnershipManifestCannotAuthorizeUnknownUserFile(t *testing.T) {
-	for _, version := range []int{legacyManifestVersion, currentManifestVersion} {
-		for _, operation := range []string{"install", "refresh", "uninstall"} {
-			t.Run(fmt.Sprintf("v%d/%s", version, operation), func(t *testing.T) {
-				root := t.TempDir()
-				host, ok := lookupHost("claude")
-				require.True(t, ok)
-				unknownRelative := ".claude/custom.txt"
-				unknownContent := []byte("user-owned content\n")
-				writeTestFile(t, root, unknownRelative, unknownContent)
-				writeTestManifest(t, root, host, ownershipManifest{
-					Version: version,
-					ToolID:  host.ID,
-					Files:   []manifestFile{{Path: unknownRelative, SHA256: hashBytes(unknownContent)}},
-				})
-
-				var err error
-				switch operation {
-				case "install":
-					_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}})
-				case "refresh":
-					_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
-				case "uninstall":
-					_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
-				}
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "unknown")
-				content, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(unknownRelative)))
-				require.NoError(t, readErr)
-				assert.Equal(t, unknownContent, content)
-				_, statErr := os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
-				assert.ErrorIs(t, statErr, os.ErrNotExist)
+func TestCurrentManifestCannotAuthorizeUnknownUserFile(t *testing.T) {
+	for _, operation := range []string{"install", "refresh", "uninstall", "list"} {
+		t.Run(operation, func(t *testing.T) {
+			root := t.TempDir()
+			host, ok := lookupHost("claude")
+			require.True(t, ok)
+			unknownRelative := ".claude/custom.txt"
+			settingsRelative := ".claude/settings.json"
+			unknownContent := []byte("user-owned content\n")
+			settingsContent := []byte("{\"theme\":\"user\"}\n")
+			writeTestFile(t, root, unknownRelative, unknownContent)
+			writeTestFile(t, root, settingsRelative, settingsContent)
+			writeTestManifest(t, root, host, ownershipManifest{
+				Version: currentManifestVersion,
+				ToolID:  host.ID,
+				Files:   []manifestFile{{Path: unknownRelative, SHA256: hashBytes(unknownContent)}},
 			})
-		}
+
+			var err error
+			switch operation {
+			case "install":
+				_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}})
+			case "refresh":
+				_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
+			case "uninstall":
+				_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
+			case "list":
+				_, err = List(root)
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "unknown managed path")
+			assertFileContent(t, root, unknownRelative, unknownContent)
+			assertFileContent(t, root, settingsRelative, settingsContent)
+			_, statErr := os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
+			assert.ErrorIs(t, statErr, os.ErrNotExist)
+		})
 	}
 }
 
@@ -397,7 +342,7 @@ func TestInstallRejectsDuplicateAndOutOfHostManifestClaims(t *testing.T) {
 			root := t.TempDir()
 			host, ok := lookupHost("claude")
 			require.True(t, ok)
-			writeRawManifest(t, root, host, ownershipManifest{Version: legacyManifestVersion, ToolID: host.ID, Files: test.files})
+			writeRawManifest(t, root, host, ownershipManifest{Version: currentManifestVersion, ToolID: host.ID, Files: test.files})
 			_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.want)
@@ -405,15 +350,15 @@ func TestInstallRejectsDuplicateAndOutOfHostManifestClaims(t *testing.T) {
 	}
 }
 
-func TestLegacyManifestWithTrailingDataCannotAuthorizeDeletion(t *testing.T) {
+func TestCurrentManifestWithTrailingDataCannotAuthorizeDeletion(t *testing.T) {
 	root := t.TempDir()
 	host, ok := lookupHost("claude")
 	require.True(t, ok)
-	managedRelative := ".claude/skills/slipway-old/SKILL.md"
-	managedContent := []byte("legacy generated\n")
+	managedRelative := ".claude/skills/slipway-run/SKILL.md"
+	managedContent := []byte("claimed generated file\n")
 	writeTestFile(t, root, managedRelative, managedContent)
 	manifest := ownershipManifest{
-		Version: legacyManifestVersion,
+		Version: currentManifestVersion,
 		ToolID:  host.ID,
 		Files:   []manifestFile{{Path: managedRelative, SHA256: hashBytes(managedContent)}},
 	}
@@ -524,27 +469,6 @@ func TestAdapterPlanPreconditionsPreserveConcurrentUserChanges(t *testing.T) {
 		require.NoError(t, statErr, "earlier removals must roll back")
 	})
 
-	t.Run("settings file", func(t *testing.T) {
-		root := t.TempDir()
-		settingsPath := filepath.Join(root, ".claude", "settings.json")
-		require.NoError(t, os.MkdirAll(filepath.Dir(settingsPath), 0o700))
-		managed := []byte(`{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"slipway hook session-start --tool claude"}]}]}}`)
-		require.NoError(t, os.WriteFile(settingsPath, managed, 0o600))
-		plan, err := planInstall(root, host, true)
-		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(settingsPath, []byte("{\"theme\":\"user\"}\n"), 0o600))
-
-		err = fsutil.ApplyFileTransactionWithin(root, plan.ops)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, fsutil.ErrFileTransactionPrecondition)
-		content, readErr := os.ReadFile(settingsPath)
-		require.NoError(t, readErr)
-		assert.Equal(t, "{\"theme\":\"user\"}\n", string(content))
-		generated := filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md")
-		_, statErr := os.Stat(generated)
-		assert.ErrorIs(t, statErr, os.ErrNotExist)
-	})
-
 	for _, targetName := range []string{"manifest", "sentinel"} {
 		t.Run(targetName, func(t *testing.T) {
 			root := t.TempDir()
@@ -573,23 +497,88 @@ func TestAdapterPlanPreconditionsPreserveConcurrentUserChanges(t *testing.T) {
 	}
 }
 
-func TestMarkerOnlyLegacyStatePreservesUnknownFiles(t *testing.T) {
-	root := t.TempDir()
+func TestMarkerOnlyStateDoesNotEstablishOwnership(t *testing.T) {
 	host, ok := lookupHost("claude")
 	require.True(t, ok)
-	_, sentinel, err := ownershipPaths(root, host)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Dir(sentinel), 0o700))
-	require.NoError(t, os.WriteFile(sentinel, []byte("generated\n"), 0o600))
-	unknown := ".claude/skills/slipway-run/SKILL.md"
-	writeTestFile(t, root, unknown, []byte("unknown owner\n"))
+	for _, operation := range []string{"install", "refresh", "uninstall"} {
+		t.Run(operation, func(t *testing.T) {
+			root := t.TempDir()
+			manifestPath, sentinelPath, err := ownershipPaths(root, host)
+			require.NoError(t, err)
+			require.NoError(t, os.MkdirAll(filepath.Dir(sentinelPath), 0o700))
+			sentinelContent := []byte("unowned marker\n")
+			require.NoError(t, os.WriteFile(sentinelPath, sentinelContent, 0o600))
+			unknownRelative := ".claude/skills/slipway-run/SKILL.md"
+			settingsRelative := ".claude/settings.json"
+			unknownContent := []byte("unknown owner\n")
+			settingsContent := []byte("{\"theme\":\"user\"}\n")
+			writeTestFile(t, root, unknownRelative, unknownContent)
+			writeTestFile(t, root, settingsRelative, settingsContent)
 
-	report, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
-	require.NoError(t, err)
-	assert.Contains(t, report.Preserved, unknown)
-	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(unknown)))
-	require.NoError(t, err)
-	assert.Equal(t, "unknown owner\n", string(content))
+			var report ChangeReport
+			switch operation {
+			case "install":
+				report, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}})
+			case "refresh":
+				report, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
+			case "uninstall":
+				report, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
+			}
+			require.NoError(t, err)
+			assert.Empty(t, report.Written)
+			assert.Empty(t, report.Removed)
+			warning := strings.Join(report.Warnings, "\n")
+			assert.Contains(t, warning, "current ownership manifest is missing")
+			assert.Contains(t, warning, "marker-only state does not establish file ownership")
+			assert.NotContains(t, warning, "legacy")
+			assertFileContent(t, root, unknownRelative, unknownContent)
+			assertFileContent(t, root, settingsRelative, settingsContent)
+			assertFileContent(t, root, relativeToRoot(root, sentinelPath), sentinelContent)
+			assert.NoFileExists(t, manifestPath)
+			assert.NoFileExists(t, filepath.Join(root, ".claude/skills/slipway-review/SKILL.md"))
+
+			statuses, listErr := List(root)
+			require.NoError(t, listErr)
+			assert.False(t, statuses[0].Installed)
+			assert.Empty(t, statuses[0].Capabilities)
+			doctor, doctorErr := Doctor(root)
+			require.NoError(t, doctorErr)
+			check := doctorCheckForHost(doctor, host.ID)
+			assert.Equal(t, "adapter_not_installed", check.Code)
+			assert.Equal(t, "warning", check.Status)
+			assert.Contains(t, check.Detail, "current ownership manifest is missing")
+			assert.Contains(t, check.Detail, "does not establish file ownership")
+			assert.NotContains(t, check.Detail, "legacy")
+		})
+	}
+}
+
+func TestCurrentAdapterOperationsLeaveHostSettingsUntouched(t *testing.T) {
+	tests := []struct {
+		hostID   string
+		relative string
+		content  []byte
+	}{
+		{hostID: "claude", relative: ".claude/settings.json", content: []byte(`{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"slipway hook session-start --tool claude"}]}]},"theme":"user"}` + "\n")},
+		{hostID: "codex", relative: ".codex/config.toml", content: []byte("# BEGIN SLIPWAY MANAGED CODEX HOOKS\nuser = true\n# END SLIPWAY MANAGED CODEX HOOKS\n")},
+		{hostID: "pi", relative: ".pi/settings.json", content: []byte("{\"skills\":[\"user-owned\"]}\n")},
+		{hostID: "qwen", relative: ".qwen/settings.json", content: []byte(`{"hooks":{"SessionStart":{"command":"slipway hook session-start --tool qwen"}},"user":true}` + "\n")},
+	}
+	for _, test := range tests {
+		t.Run(test.hostID, func(t *testing.T) {
+			root := t.TempDir()
+			writeTestFile(t, root, test.relative, test.content)
+			_, err := Install(InstallOptions{Root: root, Tools: []string{test.hostID}})
+			require.NoError(t, err)
+			assertFileContent(t, root, test.relative, test.content)
+			_, err = Install(InstallOptions{Root: root, Tools: []string{test.hostID}, Refresh: true})
+			require.NoError(t, err)
+			assertFileContent(t, root, test.relative, test.content)
+			_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{test.hostID}})
+			require.NoError(t, err)
+			assertFileContent(t, root, test.relative, test.content)
+		})
+	}
 }
 
 func TestTransactionFailureReportDoesNotClaimIncompleteChanges(t *testing.T) {
@@ -648,4 +637,11 @@ func writeTestFile(t *testing.T, root, relative string, content []byte) {
 	path := filepath.Join(root, filepath.FromSlash(relative))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 	require.NoError(t, os.WriteFile(path, content, 0o600))
+}
+
+func assertFileContent(t *testing.T, root, relative string, expected []byte) {
+	t.Helper()
+	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+	require.NoError(t, err)
+	assert.Equal(t, expected, content)
 }

@@ -23,9 +23,10 @@ if errorlevel 1 (
   exit /b 2
 )
 
-rem The PowerShell file is the shared JSON assertion driver. In Cmd mode it
-rem resolves structured Next argv, executes special values through cmd.exe
-rem /d /v:on, and executes the binary's own rendered recovery command there.
+rem The PowerShell file is the shared JSON assertion driver. In Cmd mode every
+rem non-stdin Slipway invocation crosses cmd.exe /d /v:on through a UTF-16LE
+rem EncodedCommand, including direct commands, structured Next argv, Outcome
+rem files, source imports, status reads, and the rendered recovery command.
 powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0native-powershell.ps1" -SlipwayExe "%SLIPWAY_EXE%" -Mode Cmd
 if errorlevel 1 exit /b %errorlevel%
 

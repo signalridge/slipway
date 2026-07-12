@@ -11,7 +11,7 @@ slipway install [--root PATH] [--tool ID]... [--refresh] [--json]
 ```
 
 Installs six explicit host capabilities. Without `--tool`, uses detected hosts. `--tool all` selects every supported host. With `--json`, install returns exactly `{contract_version,hosts,written,removed,preserved,warnings}`; every list is present even when empty.
-A first install does not require `--refresh`. If an ownership manifest already exists, plain `install` leaves it unchanged; use `--refresh` to repair missing pristine files, update owned capabilities, or switch safely from a version 1 manifest.
+A first install does not require `--refresh`. If a current ownership manifest already exists, plain `install` leaves it unchanged; use `--refresh` to repair missing pristine files or update owned capabilities. A marker without a current manifest produces a no-op safety warning. Any non-current manifest is unreadable and the command fails without mutation.
 
 ## `slipway uninstall`
 
@@ -23,13 +23,13 @@ Removes only hash-matching managed files. Modified files are preserved and repor
 
 ## `slipway list`
 
-Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. A version 1 or incomplete managed surface is not reported as healthy. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":1,"hosts":[]}`.
+Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":1,"hosts":[]}`.
 
 ## `slipway doctor`
 
 Diagnoses Git repository discovery, manifests, generated files, host installation state, GitHub CLI/auth/repository permissions, and legacy runstore residue. JSON is exactly `{contract_version,checks:[{code,status,host_id,name,detail}]}`; every check has all five fields and `status` is `ok|warning|error`.
 
-Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_legacy_manifest`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
+Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
 
 GitHub codes are `github_cli_unavailable`, `github_cli_version_unknown`, `github_cli_rest_fallback_required`, `github_cli_compatible`, `github_auth_unavailable`, `github_auth_available`, `github_issue_permissions_ok`, `github_issue_permissions_limited`, and `github_issue_permissions_unknown`. `gh` older than 2.94.0 requires the official REST fallback for parent/sub-issue/dependency operations. Authentication and API output are never copied into the report.
 

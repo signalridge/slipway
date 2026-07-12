@@ -17,6 +17,10 @@ cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 
 资产覆盖 doctor、initial Orient、issue source、Outcome file/stdin（平台支持处）、decision answer、ad-hoc resume、current-candidate keep/adopt 和特殊 argv。Workflow wiring 只是 W collector；必须有同一次已完成的 `windows-latest` 运行记录两个脚本都成功后才能记录 W。本次本地修改不宣称已取得该运行；静态语法或 cross-build 不能冒充 W。
 
+## Symbolic-link transaction 边界
+
+Windows file transaction 通过 anchored reparse-point handle 检查 symbolic link；但重建 file 或 directory link 可能需要检查/移动既有对象时并不需要的创建权限。因此 Slipway 对所有 pre-existing Windows symbolic link 在第一次 transaction mutation 前返回 typed error，不会先移动 link、再依赖 symlink privilege 回滚。不可 Skip 的 policy test 无需创建 link 即证明该 fail-closed 决策；runner 有权限时的 native fixture 只作补充。
+
 ## Crash durability 与 ACL
 
 Windows 会 flush journal/lock/projection files，但目前没有 Unix 同等级的 run-directory fsync。Doctor 明示 `level:"file_fsync_only"`、`directory_sync:false`、`limitation:"directory_fsync_unsupported"`；file flush 不等于新建/rename directory entry 的相同 crash guarantee。

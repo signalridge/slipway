@@ -37,6 +37,83 @@ printf '# Adapter acceptance\n' > "$REPO/README.md"
 git -C "$REPO" add README.md
 git -C "$REPO" commit -qm initial
 
+NONCURRENT_REPO="$TMP_ROOT/noncurrent-manifest-repository"
+NONCURRENT_BEFORE="$TMP_ROOT/noncurrent-manifest-before"
+mkdir -p "$NONCURRENT_REPO"
+git -C "$NONCURRENT_REPO" init -q
+git -C "$NONCURRENT_REPO" config user.email acceptance@example.invalid
+git -C "$NONCURRENT_REPO" config user.name 'Slipway Acceptance'
+printf '# Non-current manifest acceptance\n' > "$NONCURRENT_REPO/README.md"
+git -C "$NONCURRENT_REPO" add README.md
+git -C "$NONCURRENT_REPO" commit -qm initial
+python3 -I - "$NONCURRENT_REPO" "$NONCURRENT_BEFORE" <<'PY'
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import sys
+
+repo = Path(sys.argv[1])
+before = Path(sys.argv[2])
+claimed = repo / ".claude/skills/slipway-run/SKILL.md"
+claimed.parent.mkdir(parents=True, exist_ok=True)
+claimed.write_bytes(b"version 1 claimed file\n")
+settings = repo / ".claude/settings.json"
+settings.write_bytes(
+    b'{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"slipway hook session-start --tool claude"}]}]},"custom":"user"}\n'
+)
+ownership = repo / ".claude/slipway"
+ownership.mkdir(parents=True, exist_ok=True)
+manifest = {
+    "version": 1,
+    "tool_id": "claude",
+    "files": [{"path": ".claude/skills/slipway-run/SKILL.md", "sha256": hashlib.sha256(claimed.read_bytes()).hexdigest()}],
+}
+(ownership / "ownership-manifest.json").write_text(json.dumps(manifest, separators=(",", ":")) + "\n", encoding="utf-8")
+(ownership / ".adapter-generated").write_bytes(b"unowned marker\n")
+shutil.copytree(repo / ".claude", before)
+PY
+
+assert_noncurrent_manifest_unchanged() {
+  python3 -I - "$NONCURRENT_REPO/.claude" "$NONCURRENT_BEFORE" <<'PY'
+from pathlib import Path
+import sys
+
+actual_root = Path(sys.argv[1])
+expected_root = Path(sys.argv[2])
+
+def snapshot(root):
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+actual = snapshot(actual_root)
+expected = snapshot(expected_root)
+assert actual == expected, {
+    "missing": sorted(set(expected) - set(actual)),
+    "unexpected": sorted(set(actual) - set(expected)),
+    "changed": sorted(path for path in set(actual) & set(expected) if actual[path] != expected[path]),
+}
+PY
+}
+
+if "$BIN" install --root "$NONCURRENT_REPO" --tool claude --refresh --json > "$TMP_ROOT/noncurrent-refresh.json" 2> "$TMP_ROOT/noncurrent-refresh.err"; then
+  fail 'version 1 manifest unexpectedly authorized refresh'
+fi
+assert_noncurrent_manifest_unchanged
+
+if "$BIN" uninstall --root "$NONCURRENT_REPO" --tool claude --json > "$TMP_ROOT/noncurrent-uninstall.json" 2> "$TMP_ROOT/noncurrent-uninstall.err"; then
+  fail 'version 1 manifest unexpectedly authorized uninstall'
+fi
+assert_noncurrent_manifest_unchanged
+
+if "$BIN" list --root "$NONCURRENT_REPO" --json > "$TMP_ROOT/noncurrent-list.json" 2> "$TMP_ROOT/noncurrent-list.err"; then
+  fail 'version 1 manifest unexpectedly authorized list'
+fi
+assert_noncurrent_manifest_unchanged
+
 python3 -I - "$REPO" <<'PY'
 from pathlib import Path
 import sys

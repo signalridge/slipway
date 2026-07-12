@@ -9,7 +9,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 reads BOM-less scripts through the legacy code page.
+# Keep this source ASCII and make every native stream/probe explicitly UTF-8.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $Utf8NoBom
+[Console]::InputEncoding = $Utf8NoBom
+[Console]::OutputEncoding = $Utf8NoBom
+$UnicodeProbe = [char]0x754C
 
 function Fail([string]$Message) {
     throw "native Windows acceptance ($Mode) failed: $Message"
@@ -33,6 +39,9 @@ function Invoke-SlipwayDirect {
         [string]$StdinText,
         [switch]$UseStdin
     )
+    if ($Mode -eq 'Cmd') {
+        Fail 'Cmd mode attempted to bypass cmd.exe for a Slipway invocation'
+    }
     if ($UseStdin) {
         $output = $StdinText | & $script:Exe @CommandArgs 2>&1
     } else {
@@ -53,11 +62,17 @@ function Quote-PowerShellLiteral([string]$Value) {
 function Invoke-SlipwayViaCmd {
     param([string[]]$CommandArgs)
     $parts = New-Object System.Collections.Generic.List[string]
+    $parts.Add('$ErrorActionPreference = ''Stop'';')
+    $parts.Add('$innerUtf8NoBom = New-Object System.Text.UTF8Encoding($false);')
+    $parts.Add('$OutputEncoding = $innerUtf8NoBom;')
+    $parts.Add('[Console]::InputEncoding = $innerUtf8NoBom;')
+    $parts.Add('[Console]::OutputEncoding = $innerUtf8NoBom;')
     $parts.Add('&')
     $parts.Add((Quote-PowerShellLiteral $script:Exe))
     foreach ($value in $CommandArgs) {
         $parts.Add((Quote-PowerShellLiteral $value))
     }
+    $parts.Add('; exit $LASTEXITCODE')
     $encoded = [Convert]::ToBase64String(
         [Text.Encoding]::Unicode.GetBytes(($parts -join ' '))
     )
@@ -172,9 +187,9 @@ Assert-True (Test-Path -LiteralPath $resolvedExe -PathType Leaf) "SlipwayExe is 
 Assert-True ($null -ne (Get-Command git.exe -ErrorAction SilentlyContinue)) 'git.exe is required'
 Assert-True ($null -ne $env:ComSpec) 'COMSPEC is required'
 
-$tempName = 'slipway native % ! & ^ 界 ' + [Guid]::NewGuid().ToString('N')
+$tempName = 'slipway native % ! & ^ ' + $UnicodeProbe + ' ' + [Guid]::NewGuid().ToString('N')
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) $tempName
-$repo = Join-Path $tempRoot 'repository with spaces % ! & ^ 界'
+$repo = Join-Path $tempRoot ('repository with spaces % ! & ^ ' + $UnicodeProbe)
 $tools = Join-Path $tempRoot 'tools'
 $script:Exe = Join-Path $tools 'slipway.exe'
 
@@ -193,12 +208,12 @@ try {
     & git.exe -C $repo commit -qm initial
     if ($LASTEXITCODE -ne 0) { Fail 'initial git commit failed' }
 
-    $doctor = (Invoke-SlipwayDirect -CommandArgs @('doctor', '--root', $repo, '--json')) | ConvertFrom-Json
+    $doctor = (Invoke-ResolvedArgv -CommandArgs @('doctor', '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-True ($doctor.contract_version -eq 1) 'doctor did not return contract_version 1'
     Assert-True ($null -ne $doctor.checks) 'doctor checks are missing'
 
-    $goal = "spaces `"double`" and 'single' 界`r`npercent % bang ! amp & caret ^"
-    $start = (Invoke-SlipwayDirect -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
+    $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
+    $start = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
     Assert-True ($start.kind -eq 'orient') 'ad-hoc start did not return Orient'
     Assert-True ($start.goal -eq $goal) 'special-character goal did not preserve exact text'
 
@@ -208,17 +223,17 @@ try {
         destructive_request = $null
     }
     $decisionOutcome = New-Outcome -ActionId $start.action_id -ActionKind $start.kind -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
-    $outcomePath = Join-Path $tempRoot 'outcome file % ! & ^ 界.json'
+    $outcomePath = Join-Path $tempRoot ('outcome file % ! & ^ ' + $UnicodeProbe + '.json')
     Write-Utf8 $outcomePath (($decisionOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
     $paused = (Invoke-ResolvedArgv -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
     Assert-True ($paused.state -eq 'paused') 'Outcome file did not pause the Run'
     Assert-True ($paused.next.operation -eq 'answer') 'decision pause did not return structured answer next'
 
-    $specialAnswer = "answer spaces `"double`" and 'single' 界`r`npercent % bang ! amp & caret ^"
+    $specialAnswer = "answer spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
     $orientedText = Invoke-NextVariant -Next $paused.next -VariantId 'answer-decision' -InputValues @{ text = $specialAnswer }
     $oriented = $orientedText | ConvertFrom-Json
     Assert-True ($oriented.kind -eq 'orient') 'structured answer did not fresh-Orient'
-    $answeredStatus = (Invoke-SlipwayDirect -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-True ($answeredStatus.answers[-1].text -eq $specialAnswer) 'journaled answer did not preserve exact special characters or CRLF'
     $normalizedAnswer = $specialAnswer.Replace("`r`n", "`n")
     Assert-True ($oriented.context.Contains($normalizedAnswer)) 'bounded context did not contain the normalized special-character answer'
@@ -227,16 +242,18 @@ try {
     $orientOutcome = New-Outcome -ActionId $oriented.action_id -ActionKind $oriented.kind -Status 'completed' -Summary 'Windows argv observed.' -Pause $null -Suggestions @($implementSuggestion)
     $orientJson = ($orientOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n"
     if ($Mode -eq 'PowerShell') {
+        # stdin transport is intentionally PowerShell-only. Cmd mode exercises
+        # the same Outcome through an outcome-file argv that crosses cmd.exe.
         $implementedText = Invoke-SlipwayDirect -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
     } else {
         $secondOutcomePath = Join-Path $tempRoot 'cmd outcome file.json'
         Write-Utf8 $secondOutcomePath $orientJson
-        $implementedText = Invoke-SlipwayViaCmd -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
+        $implementedText = Invoke-ResolvedArgv -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
     }
     $implemented = $implementedText | ConvertFrom-Json
     Assert-True ($implemented.kind -eq 'implement') 'Outcome transport did not return Implement'
 
-    $stopDisplay = Invoke-SlipwayDirect -CommandArgs @('stop', $start.run_id, '--root', $repo)
+    $stopDisplay = Invoke-ResolvedArgv -CommandArgs @('stop', $start.run_id, '--root', $repo)
     $resumeLines = @($stopDisplay -split "`r?`n" | Where-Object { $_ -like '- resume-ad-hoc:*' })
     Assert-True ($resumeLines.Count -eq 1) 'human stop output lacks one resume-ad-hoc command'
     $rendered = $resumeLines[0].Substring($resumeLines[0].IndexOf(':') + 1).Trim()
@@ -255,10 +272,10 @@ try {
     $resumed = $resumeText | ConvertFrom-Json
     Assert-True ($resumed.kind -eq 'orient') 'rendered recovery command did not return fresh Orient'
 
-    $sourcePath = Join-Path $tempRoot 'source file % ! & ^ 界.json'
+    $sourcePath = Join-Path $tempRoot ('source file % ! & ^ ' + $UnicodeProbe + '.json')
     $sourceInitial = New-SourceEnvelope -RequirementText 'Keep the initial Windows requirement.' -UpdatedAt '2026-07-12T09:00:00Z'
     Write-Utf8 $sourcePath (($sourceInitial | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $sourceStart = (Invoke-SlipwayDirect -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
+    $sourceStart = (Invoke-ResolvedArgv -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
     Assert-True ($sourceStart.kind -eq 'orient') 'source-file start did not Orient'
     Assert-True ($sourceStart.source.kind -eq 'change_issue') 'source identity is missing'
     Assert-True ($sourceStart.requirements.requirements_markdown -match 'initial Windows') 'accepted Requirements missing from Action'
@@ -276,7 +293,7 @@ try {
     Assert-True ($adopted.kind -eq 'orient') 'current-candidate adopt did not Orient'
     Assert-True ($adopted.requirements.requirements_markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements'
 
-    $status = (Invoke-SlipwayDirect -CommandArgs @('status', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    $status = (Invoke-ResolvedArgv -CommandArgs @('status', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-True (-not ($status.PSObject.Properties.Name -contains 'source_candidate')) 'candidate remained current after adopt'
     Assert-True ($status.last_source_choice.candidate_id -eq $candidateId) 'status lost candidate choice identity'
     Assert-True ($status.last_source_choice.choice -eq 'adopt') 'status lost candidate choice'

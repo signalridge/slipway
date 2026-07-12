@@ -4,13 +4,13 @@
 
 配置先は `.claude/skills`、`.codex/skills`、`.github/skills`、`.cursor/skills`、`.kilocode/skills`、`.kiro/skills`、`.opencode/skills`、`.pi/skills`、`.qwen/skills`、`.windsurf/skills` です。
 
-ambient session hook、prompt-submit hook、launcher、global router、独立した技術検査 capability は生成しません。すべての生成 skill は共通の untrusted Issue、trusted attester、confirmed publication、exact destructive authorization boundary を持ちます。Clarify だけが一つの decision interview reference を含み、Matt Pocock の MIT `grill-me` 由来の attribution を保持します。
+ambient session hook、prompt-submit hook、launcher、global router、独立した技術検査 capability は生成しません。ホスト settings は adapter ownership の対象外であり、install、refresh、uninstall は一切変更しません。すべての生成 skill は共通の untrusted Issue、trusted attester、confirmed publication、exact destructive authorization boundary を持ちます。Clarify だけが一つの decision interview reference を含み、Matt Pocock の MIT `grill-me` 由来の attribution を保持します。
 
 Clarify は Matt Pocock `grill-me`/`grilling` の fact investigation、dependency order、one question+recommendation、changed shared-understanding confirmation、stateless、immediate wrap-up を保ちます。暗黙の clarification-document capability はありません。
 Codex の各 capability には管理対象の `agents/openai.yaml` も配置し、`allow_implicit_invocation: false` を設定します。Codex は汎用 frontmatter の同等設定を解釈しないため、このポリシーによりユーザーが明示的に呼び出すまで Slipway capability は暗黙選択されません。
 
-version 2 ownership manifest は path と SHA-256 を記録します。Refresh/uninstall はハッシュ一致ファイルだけを扱い、ユーザー変更ファイルは保持して管理対象から外します。
-初回導入は新規作成ファイルだけを管理対象にします。manifest が存在した後の更新には `slipway install --refresh` が必要です。version 1 manifest は、ハッシュ一致する旧ファイルの削除・置換の根拠としてのみ読み取ります。
+version 2 ownership manifest だけを受け付けます。他の version はすべて unreadable とし、install、refresh、uninstall、list を認可しません。Version 2 は path と SHA-256 を記録します。Refresh/uninstall はハッシュ一致ファイルだけを扱い、ユーザー変更ファイルは保持して管理対象から外します。
+初回導入は新規作成ファイルだけを管理対象にします。current manifest が存在した後の更新には `slipway install --refresh` が必要です。marker だけで current manifest がない状態は ownership を確立しません。install、refresh、uninstall は surface を変更せず、migration や推論をせずに current ownership の欠落を中立的に報告します。
 
 ## Publication と privacy boundary
 

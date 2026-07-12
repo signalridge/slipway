@@ -34,6 +34,72 @@ func TestRenameNoReplaceNeverOverwritesExistingDestination(t *testing.T) {
 	assert.Equal(t, "user destination", string(newContent))
 }
 
+func TestTransactionLeaseOwnsGuardAndStageIdentities(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	t.Run("guard", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "managed.txt")
+		require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		lease := &transactionIdentityLease{}
+		t.Cleanup(func() { require.NoError(t, root.Close()) })
+		t.Cleanup(func() { require.NoError(t, lease.close()) })
+		filesystem := &transactionFilesystem{rootPath: dir, root: root, identityLease: lease}
+
+		snapshot, err := filesystem.snapshotGuard(path, fileTransactionOpWrite, lease)
+		require.NoError(t, err)
+		require.NotNil(t, snapshot.identity)
+		assert.True(t, transactionLeaseOwnsFileIdentity(lease, snapshot.identity), "guard identity must have a live owned file handle")
+	})
+
+	t.Run("stage before failed install cleanup", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "managed.txt")
+		require.NoError(t, os.WriteFile(path, []byte("user destination"), 0o600))
+		root, err := os.OpenRoot(dir)
+		require.NoError(t, err)
+		lease := &transactionIdentityLease{}
+		t.Cleanup(func() { require.NoError(t, root.Close()) })
+		t.Cleanup(func() { require.NoError(t, lease.close()) })
+		observed := false
+		stopCleanup := errors.New("stop after identity observation")
+		filesystem := &transactionFilesystem{
+			rootPath:      dir,
+			root:          root,
+			identityLease: lease,
+			hooks: FileTransactionHooks{DuringQuarantineCleanup: func(_, recovery string) error {
+				observed = true
+				info, err := os.Lstat(recovery)
+				require.NoError(t, err)
+				assert.True(t, transactionLeaseOwnsFileIdentity(lease, info), "stage identity must remain owned before failed-install cleanup")
+				return stopCleanup
+			}},
+		}
+
+		_, applied, err := filesystem.writeFileAtomicNoReplace(path, []byte("transaction"), 0o600, fileSnapshot{}, lease)
+		require.ErrorIs(t, err, stopCleanup)
+		assert.False(t, applied)
+		assert.True(t, observed)
+	})
+}
+
+func transactionLeaseOwnsFileIdentity(lease *transactionIdentityLease, expected os.FileInfo) bool {
+	for _, closer := range lease.closers {
+		file, ok := closer.(*os.File)
+		if !ok {
+			continue
+		}
+		info, err := file.Stat()
+		if err == nil && os.SameFile(info, expected) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRootedAtomicWritePreservesConcurrentDestinationChanges(t *testing.T) {
 	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")

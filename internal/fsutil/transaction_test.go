@@ -327,6 +327,7 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
 	failure := errors.New("later operation failed")
 	guardCalls := 0
+	identityReused := false
 
 	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
@@ -341,19 +342,137 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 			if guardCalls != 2 {
 				return nil
 			}
+			beforeReplacement, err := os.Lstat(path)
+			if err != nil {
+				return err
+			}
 			if err := os.Remove(path); err != nil {
 				return err
 			}
-			return os.WriteFile(path, []byte("transaction"), 0o600)
+			if err := os.WriteFile(path, []byte("transaction"), 0o600); err != nil {
+				return err
+			}
+			afterReplacement, err := os.Lstat(path)
+			if err != nil {
+				return err
+			}
+			identityReused = os.SameFile(beforeReplacement, afterReplacement)
+			return nil
 		},
 	})
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrFileTransactionRollbackPrecondition)
+	assert.False(t, identityReused, "the transaction identity lease must keep a removed object from being reused")
 	content, readErr := os.ReadFile(path)
 	require.NoError(t, readErr)
 	assert.Equal(t, "transaction", string(content))
 	assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
+}
+
+func TestFailedInstallPinsStageBeforeCleanupValidation(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	stageCleanupObserved := false
+	identityReused := false
+
+	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
+	}, FileTransactionHooks{
+		AfterQuarantineBeforeValidation: func(original, _ string) error {
+			if original != path {
+				return nil
+			}
+			return os.WriteFile(path, []byte("user destination"), 0o600)
+		},
+		DuringQuarantineCleanup: func(original, recovery string) error {
+			if original != path || filepath.Base(recovery) != transactionStageItem {
+				return nil
+			}
+			stageCleanupObserved = true
+			beforeReplacement, err := os.Lstat(recovery)
+			if err != nil {
+				return err
+			}
+			if err := os.Remove(recovery); err != nil {
+				return err
+			}
+			if err := os.WriteFile(recovery, []byte("transaction"), 0o600); err != nil {
+				return err
+			}
+			afterReplacement, err := os.Lstat(recovery)
+			if err != nil {
+				return err
+			}
+			identityReused = os.SameFile(beforeReplacement, afterReplacement)
+			return nil
+		},
+	})
+
+	require.Error(t, err)
+	assert.True(t, stageCleanupObserved)
+	assert.False(t, identityReused, "the staged identity must remain pinned throughout failed-install cleanup")
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "user destination", string(content))
+	recoveries := collectRecoveryErrors(err)
+	require.NotEmpty(t, recoveries)
+	assertRecoveryContains(t, recoveries, "transaction")
+	assertRecoveryContains(t, recoveries, "before")
+	assertReportedRecoveryArtifactsPrivate(t, err, recoveries)
+}
+
+func TestCleanupPreservesEntryReplacedAfterValidation(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	hookObserved := false
+	identityReused := false
+
+	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
+	}, FileTransactionHooks{AfterQuarantineValidationBeforeRelocation: func(original, recovery string) error {
+		if original != path {
+			return nil
+		}
+		hookObserved = true
+		beforeReplacement, err := os.Lstat(recovery)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(recovery); err != nil {
+			return err
+		}
+		if err := os.WriteFile(recovery, []byte("before"), 0o600); err != nil {
+			return err
+		}
+		afterReplacement, err := os.Lstat(recovery)
+		if err != nil {
+			return err
+		}
+		identityReused = os.SameFile(beforeReplacement, afterReplacement)
+		return nil
+	}})
+
+	require.Error(t, err)
+	var cleanupErr *FileTransactionCleanupError
+	require.ErrorAs(t, err, &cleanupErr)
+	assert.True(t, hookObserved)
+	assert.False(t, identityReused, "the validated quarantine identity must remain pinned through relocation")
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "transaction", string(content), "the requested mutation was already committed")
+	recoveries := collectRecoveryErrors(err)
+	require.NotEmpty(t, recoveries)
+	assertRecoveryContains(t, recoveries, "before")
+	assertReportedRecoveryArtifactsPrivate(t, err, recoveries)
 }
 
 func TestRollbackPreservesUserEditsInsideQuarantineAndAtDestination(t *testing.T) {

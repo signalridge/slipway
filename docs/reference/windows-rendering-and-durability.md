@@ -17,6 +17,10 @@ cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 
 The scripts cover doctor, initial Orient, issue source import, Outcome file/stdin where supported, decision answer, ad-hoc resume, current-candidate keep/adopt recovery, and special argv. See the [acceptance matrix](../../tests/acceptance/README.md). Workflow wiring is only a W collector. Status remains not collected until a completed `windows-latest` execution records both scripts; this local change does not claim that run, and syntax checks or cross-builds are not W evidence.
 
+## Symbolic-link transaction boundary
+
+Windows file transactions inspect symbolic links through anchored reparse-point handles, but recreating either a file or directory link can require a privilege that was not needed to inspect or move the existing object. Slipway therefore rejects every pre-existing Windows symbolic link with a typed error before the first transaction mutation. It never moves a link and then depends on symbolic-link creation privilege to roll it back. A non-skippable policy test proves that fail-closed decision without creating a link; native link fixtures supplement it when the runner can create them.
+
 ## Crash durability
 
 Journal, lock, and projection files are flushed. Windows does not currently provide the same run-directory fsync guarantee used on Unix. Doctor reports `level:"file_fsync_only"`, `directory_sync:false`, and `limitation:"directory_fsync_unsupported"`. A successful file flush therefore does not claim equal crash durability for a newly created or renamed directory entry.

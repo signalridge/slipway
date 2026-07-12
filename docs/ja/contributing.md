@@ -12,4 +12,4 @@ go build ./...
 git diff --check
 ```
 
-CLI、マシンプロトコル、生成 capability、文書、テストを同時に整合させます。Adapter 変更は十ホスト、ownership version 1 の安全移行、ユーザー変更保持、settings の精密 cleanup、path traversal、symlink、rollback をテストします。Run 変更は transition、冪等性、古い Action、budget、stop/resume、linked worktree、journal interruption、concurrency をテストします。
+CLI、マシンプロトコル、生成 capability、文書、テストを同時に整合させます。Adapter 変更は十ホスト、current-only manifest rejection、marker-only no-op、ユーザー変更と settings の保持、path traversal、symlink、rollback をテストします。Run 変更は transition、冪等性、古い Action、budget、stop/resume、linked worktree、journal interruption、concurrency をテストします。

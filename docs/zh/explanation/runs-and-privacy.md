@@ -16,6 +16,8 @@ Action context 限 128 KiB，不是完整 replay。Requirements 独立保留；a
 
 Unix mode 不防 root、backup、malware 或同 UID 进程。Windows 采用 current-user ACL 意图，但 inherited ACL、管理员、backup agent 与同账户进程仍可能访问，不能承诺绝对 Windows ACL 隔离。仓库 owner 应定义 retention，检查 ACL，保护 backups，并避免发布 `.git/slipway/runs/`。
 
+Namespace mutation 的保证更窄：anchored handles 与长期 identity pin 防 parent traversal、identity reuse，并在 validation checkpoint 检出 replacement；portable POSIX `unlinkat` 只按 parent descriptor + leaf name 删除，不能把最终 directory entry 与已打开 leaf handle 做 compare-and-unlink。因此，在没有 exact native primitive 的平台上，Slipway 不承诺抵御持续同 UID watcher 在最后一次 validation 与 unlink 之间的替换。私有随机 quarantine、atomic no-replace relocation、revalidation 与 post-check 会缩小窗口，并保留每个 checkpoint 观察到的 replacement；root、malware 与同账户进程持续竞速最终 syscall gap 是明确 residual limitation。
+
 删除 run directory 只移除 Slipway 恢复能力和 projection，不改变 Git/source/Issue/deployment，也不会清理 replicas、snapshots、cloud backups、filesystem remnants 或 encryption keys。它不是 secure erase、backup purge 或 key destruction。
 
 ## Commit 与恢复语义

@@ -44,6 +44,11 @@ var ErrFileTransactionConcurrentEdit = errors.New("file transaction concurrent e
 // this guarantee is unavailable.
 var ErrFileTransactionNoReplaceUnsupported = errors.New("atomic no-replace rename unsupported")
 
+// ErrFileTransactionSymlinkUnsupported identifies a symbolic-link kind that
+// cannot be restored exactly on the current platform. The transaction fails
+// before mutation rather than guessing a different link kind.
+var ErrFileTransactionSymlinkUnsupported = errors.New("exact symbolic-link transaction unsupported")
+
 // FileTransactionOp describes one ordered file mutation in a file transaction.
 type FileTransactionOp struct {
 	kind           fileTransactionOpKind
@@ -61,7 +66,7 @@ func WriteFileTransactionOp(path string, data []byte, perm os.FileMode) FileTran
 }
 
 // RemoveFileTransactionOp returns a transaction operation that removes one file
-// or symbolic link when it exists.
+// or an exactly restorable symbolic link when it exists.
 func RemoveFileTransactionOp(path string) FileTransactionOp {
 	return FileTransactionOp{kind: fileTransactionOpRemove, path: path}
 }
@@ -95,14 +100,15 @@ type FileTransactionHook func(originalPath, recoveryPath string) error
 // FileTransactionHooks exposes exact transaction windows for adversarial tests.
 // Hooks belong to one transaction; no package-global mutation is involved.
 type FileTransactionHooks struct {
-	BeforeMutation                   FileTransactionHook
-	AfterMutation                    FileTransactionHook
-	AfterGuardBeforeQuarantine       FileTransactionHook
-	AfterQuarantineBeforeValidation  FileTransactionHook
-	AfterValidationBeforeRestore     FileTransactionHook
-	DuringExclusiveRestore           FileTransactionHook
-	AfterRestoreBeforePostValidation FileTransactionHook
-	DuringQuarantineCleanup          FileTransactionHook
+	BeforeMutation                            FileTransactionHook
+	AfterMutation                             FileTransactionHook
+	AfterGuardBeforeQuarantine                FileTransactionHook
+	AfterQuarantineBeforeValidation           FileTransactionHook
+	AfterValidationBeforeRestore              FileTransactionHook
+	DuringExclusiveRestore                    FileTransactionHook
+	AfterRestoreBeforePostValidation          FileTransactionHook
+	DuringQuarantineCleanup                   FileTransactionHook
+	AfterQuarantineValidationBeforeRelocation FileTransactionHook
 }
 
 // ApplyFileTransaction applies ordered file writes/removes. If an operation
@@ -236,8 +242,9 @@ func (err *FileTransactionError) Unwrap() error {
 	return errors.Join(joined...)
 }
 
-// FileTransactionCleanupError means all requested mutations committed, but a
-// private transaction quarantine could not be proven safe to remove.
+// FileTransactionCleanupError means all requested mutations committed, but
+// post-commit cleanup such as quarantine removal or identity-handle release
+// did not complete.
 type FileTransactionCleanupError struct {
 	Errors []error
 }
@@ -246,7 +253,7 @@ func (err *FileTransactionCleanupError) Error() string {
 	if err == nil {
 		return ""
 	}
-	return fmt.Sprintf("file transaction committed but quarantine cleanup is incomplete: %v", errors.Join(err.Errors...))
+	return fmt.Sprintf("file transaction committed but post-commit cleanup is incomplete: %v", errors.Join(err.Errors...))
 }
 
 func (err *FileTransactionCleanupError) Unwrap() error {
@@ -256,19 +263,40 @@ func (err *FileTransactionCleanupError) Unwrap() error {
 	return errors.Join(err.Errors...)
 }
 
-func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *transactionFilesystem) error {
+func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *transactionFilesystem) (resultErr error) {
+	identityLease := &transactionIdentityLease{}
+	filesystem.identityLease = identityLease
+	defer func() {
+		filesystem.identityLease = nil
+		closeErr := identityLease.close()
+		if closeErr == nil {
+			return
+		}
+		if resultErr == nil {
+			resultErr = &FileTransactionCleanupError{Errors: []error{closeErr}}
+			return
+		}
+		var cleanupErr *FileTransactionCleanupError
+		if errors.As(resultErr, &cleanupErr) {
+			cleanupErr.Errors = append(cleanupErr.Errors, closeErr)
+			return
+		}
+		resultErr = errors.Join(resultErr, closeErr)
+	}()
 	if err := validateFileTransactionOps(ops); err != nil {
 		return err
 	}
 	applied := make([]*appliedFileTransactionOp, 0, len(ops))
 	for _, op := range ops {
-		before, err := filesystem.snapshot(op.path, op.kind)
+		guardLease := &transactionIdentityLease{}
+		before, err := filesystem.snapshotGuard(op.path, op.kind, guardLease)
 		if err != nil {
-			return transactionFailure(err, applied, filesystem)
+			return transactionFailure(errors.Join(err, guardLease.close()), applied, filesystem)
 		}
 		if err := checkFileTransactionPrecondition(op, before); err != nil {
-			return transactionFailure(err, applied, filesystem)
+			return transactionFailure(errors.Join(err, guardLease.close()), applied, filesystem)
 		}
+		identityLease.absorb(guardLease)
 		item := &appliedFileTransactionOp{op: op, before: before, after: expectedPostTransactionSnapshot(op)}
 		applied = append(applied, item)
 		if err := callFileTransactionHook(filesystem.hooks.BeforeMutation, op.path, ""); err != nil {
@@ -287,7 +315,7 @@ func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *tra
 
 		switch op.kind {
 		case fileTransactionOpWrite:
-			installed, appliedWrite, writeErr := filesystem.writeFileAtomicNoReplace(op.path, op.data, op.perm, before)
+			installed, appliedWrite, writeErr := filesystem.writeFileAtomicNoReplace(op.path, op.data, op.perm, before, identityLease)
 			item.mutationApplied = appliedWrite
 			if appliedWrite {
 				item.after = installed
@@ -366,7 +394,7 @@ func rollbackFileTransactionItem(item *appliedFileTransactionOp, filesystem *tra
 		preserveQuarantine(item.beforeQuarantine)
 		return rollbackRecoveryError(item, currentQuarantine, fmt.Errorf("after quarantine validation: %w", err))
 	}
-	restored, err := filesystem.restoreSnapshotExclusive(item.op.path, item.before, item.after)
+	restored, err := filesystem.restoreSnapshotExclusive(item.op.path, item.before, item.after, filesystem.identityLease)
 	if err != nil {
 		preserveQuarantine(currentQuarantine)
 		preserveQuarantine(item.beforeQuarantine)

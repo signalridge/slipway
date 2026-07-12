@@ -15,6 +15,10 @@ cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 
 CI matrix は `slipway.exe` を build して両方の native entry point を実行します。Scripts は doctor、initial Orient、issue source、Outcome file/stdin（対応する shell）、decision answer、ad-hoc resume、current-candidate keep/adopt、special argv を検査します。Workflow wiring は W collector にすぎず、同じ completed `windows-latest` run で両方が成功するまでは not collected です。この local change はその run を取得済みとは主張しません。
 
+## Symbolic-link transaction の境界
+
+Windows file transaction は anchored reparse-point handle で symbolic link を検査しますが、file link と directory link の再作成には既存 object の検査・移動には不要だった権限が必要な場合があります。そのため Slipway はすべての pre-existing Windows symbolic link を最初の transaction mutation 前に typed error で拒否し、link を移動した後で symlink creation privilege に rollback を依存させません。Skip できない policy test は link を作らずにこの fail-closed 判断を証明し、native fixture は runner が作成可能な場合の補足です。
+
 ## Crash durability と ACL
 
 Windows は journal/lock/projection file を flush しますが Unix と同じ run-directory fsync は提供しません。Doctor は `level:"file_fsync_only"`、`directory_sync:false`、`limitation:"directory_fsync_unsupported"` を返し、新規/rename directory entry に同等の crash durability を主張しません。

@@ -16,6 +16,8 @@ Action context は 128 KiB に制限され full replay ではありません。R
 
 Unix mode は root、backup、malware、same UID process を防ぎません。Windows は current-user ACL intent を使いますが inherited ACL、administrator、backup agent、same-account process がアクセスできる可能性があり、absolute ACL isolation は保証しません。Owner は retention を定義し、ACL と backup を確認し、`.git/slipway/runs/` を publish しないでください。
 
+Namespace mutation の保証はさらに限定されます。Anchored handle と長寿命 identity pin は parent traversal、identity reuse、validation checkpoint で観測した replacement を防御・検出しますが、portable POSIX `unlinkat` は parent descriptor と leaf name で削除し、最後の directory entry と既に開いた leaf handle を compare-and-unlink できません。Exact native primitive がない platform では、最後の validation と unlink の間を継続的に競争する same-UID watcher に対する linearizable exact-object deletion を主張しません。Private randomized quarantine、atomic no-replace relocation、revalidation、post-check で window を縮小し、checkpoint で観測した replacement は保存・報告します。Root、malware、same-account process が最後の syscall gap を競争することは明示的な residual limitation です。
+
 run directory の削除は Slipway recovery capability と projection だけを除きます。Git/source/Issue/deployment、replica、snapshot、cloud backup、filesystem remnant、encryption key は変わりません。Secure erase、backup purge、key destruction ではありません。
 
 ## Commit と recovery

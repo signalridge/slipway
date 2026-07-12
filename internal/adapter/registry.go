@@ -22,20 +22,18 @@ type Host struct {
 	SkillsDir     string   `json:"skills_dir"`
 	OwnershipRoot string   `json:"ownership_root"`
 	DetectPaths   []string `json:"detect_paths"`
-	SettingsPath  string   `json:"settings_path,omitempty"`
-	SettingsKind  string   `json:"settings_kind,omitempty"`
 }
 
 var hosts = []Host{
-	{ID: "claude", SkillsDir: ".claude/skills", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}, SettingsPath: ".claude/settings.json", SettingsKind: "json-hooks"},
-	{ID: "codex", SkillsDir: ".codex/skills", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}, SettingsPath: ".codex/config.toml", SettingsKind: "codex-block"},
+	{ID: "claude", SkillsDir: ".claude/skills", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
+	{ID: "codex", SkillsDir: ".codex/skills", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
 	{ID: "copilot", SkillsDir: ".github/skills", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot"}},
 	{ID: "cursor", SkillsDir: ".cursor/skills", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
 	{ID: "kilo", SkillsDir: ".kilocode/skills", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
 	{ID: "kiro", SkillsDir: ".kiro/skills", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},
 	{ID: "opencode", SkillsDir: ".opencode/skills", OwnershipRoot: ".opencode", DetectPaths: []string{".opencode"}},
-	{ID: "pi", SkillsDir: ".pi/skills", OwnershipRoot: ".pi", DetectPaths: []string{".pi"}, SettingsPath: ".pi/settings.json", SettingsKind: "preserve"},
-	{ID: "qwen", SkillsDir: ".qwen/skills", OwnershipRoot: ".qwen", DetectPaths: []string{".qwen"}, SettingsPath: ".qwen/settings.json", SettingsKind: "json-hooks"},
+	{ID: "pi", SkillsDir: ".pi/skills", OwnershipRoot: ".pi", DetectPaths: []string{".pi"}},
+	{ID: "qwen", SkillsDir: ".qwen/skills", OwnershipRoot: ".qwen", DetectPaths: []string{".qwen"}},
 	{ID: "windsurf", SkillsDir: ".windsurf/skills", OwnershipRoot: ".windsurf", DetectPaths: []string{".windsurf"}},
 }
 

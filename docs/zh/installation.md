@@ -20,4 +20,4 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-Refresh 和 uninstall 只修改 ownership manifest 中哈希仍匹配的文件。用户修改、未知、marker-only、路径越界或 symlink 表面会被保留或安全拒绝。version 1 manifest 只读，用于安全删除旧版本仍保持原样的文件。不会安装 SessionStart 或 prompt-submit 自动入口。
+Refresh 和 uninstall 只修改 current version 2 ownership manifest 中哈希仍匹配的文件。其他任何 manifest 版本都会 fail closed，不能授权 install、refresh、uninstall 或 list。用户修改、未知、路径越界或 symlink 表面会被保留或安全拒绝；marker-only 不建立 ownership，也不会触发迁移或推断。宿主 settings 永不修改。不会安装 SessionStart 或 prompt-submit 自动入口。

@@ -27,4 +27,4 @@ go build ./...
 git diff --check
 ```
 
-Also exercise built-binary help and JSON behavior after public changes. Adapter changes should test every host path, version-1 safe removal, modified-file preservation, settings cleanup, traversal, symlinks, and rollback. Run changes should test transition tables, idempotency, stale Actions, budget exhaustion, stop/resume, linked worktrees, journal crashes, and concurrent submissions.
+Also exercise built-binary help and JSON behavior after public changes. Adapter changes should test every host path, current-only manifest rejection, marker-only no-op behavior, modified-file and settings preservation, traversal, symlinks, and rollback. Run changes should test transition tables, idempotency, stale Actions, budget exhaustion, stop/resume, linked worktrees, journal crashes, and concurrent submissions.
