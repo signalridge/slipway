@@ -15,14 +15,6 @@ func ReadFileNoSymlink(path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- direct symlink targets are rejected with Lstat before reading.
 }
 
-// WriteFileNoSymlink writes a file after rejecting direct symlink paths.
-func WriteFileNoSymlink(path string, data []byte, perm os.FileMode) error {
-	if err := requireRegularNonSymlink(path, true); err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, perm) // #nosec G306 G703 -- direct symlink targets are rejected with Lstat before writing.
-}
-
 func requireRegularNonSymlink(path string, allowMissing bool) error {
 	info, err := os.Lstat(path)
 	if err != nil {

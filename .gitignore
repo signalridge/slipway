@@ -1,5 +1,7 @@
 # Binaries
 slipway
+/bin/
+/dist/
 *.exe
 *.dll
 *.so

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,14 +63,14 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 
 	actionJSON, stderr, err := executeForTest(t, "run", "inspect output shapes", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	action := exactJSONObject(
+	mutation := exactJSONObject(t, actionJSON, "contract_version", "run_id", "state", "action", "next")
+	assertContractVersion(t, mutation)
+	exactRawJSONObject(
 		t,
-		actionJSON,
+		mutation["action"],
 		"contract_version", "run_id", "action_id", "kind", "goal", "brief", "context", "remaining_budget",
 	)
-	assertContractVersion(t, action)
-	var decodedAction autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(actionJSON), &decodedAction))
+	decodedAction := decodeMutationAction(t, actionJSON)
 
 	statusJSON, stderr, err := executeForTest(t, "status", decodedAction.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
@@ -86,7 +85,7 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 
 	stopJSON, stderr, err := executeForTest(t, "stop", decodedAction.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "next")
+	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "action", "next")
 	assertContractVersion(t, stop)
 
 	uninstallJSON, stderr, err := executeForTest(t, "uninstall", "--root", repository, "--tool", "claude", "--json")

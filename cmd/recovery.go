@@ -17,7 +17,7 @@ func commandNext(workspace string, operation autopilot.NextOperation, variantID 
 }
 
 func inputlessCommandNext(workspace, variantID string, argv ...string) autopilot.Next {
-	return commandNext(workspace, autopilot.NextOperationResume, variantID, argv, []autopilot.NextInput{})
+	return commandNext(workspace, autopilot.NextOperationCommand, variantID, argv, []autopilot.NextInput{})
 }
 
 func writeHumanNext(writer io.Writer, next autopilot.Next) error {

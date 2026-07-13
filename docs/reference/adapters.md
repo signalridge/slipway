@@ -19,7 +19,7 @@ Clarify follows the attributed Matt Pocock `grill-me`/`grilling` behavior: inves
 | --- | --- | --- |
 | `claude` | `.claude/skills` | `.claude` |
 | `codex` | `.codex/skills` | `.codex` |
-| `copilot` | `.github/skills` | `.github/copilot` |
+| `copilot` | `.github/skills` | `.github/copilot`, `.github/prompts`, `.github/skills` |
 | `cursor` | `.cursor/skills` | `.cursor` |
 | `kilo` | `.kilocode/skills` | `.kilocode` |
 | `kiro` | `.kiro/skills` | `.kiro` |

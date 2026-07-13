@@ -536,9 +536,10 @@
       "properties": {
         "contract_version": { "const": 2 },
         "run_id": { "type": "string", "minLength": 1 },
-        "state": { "enum": ["paused", "stopped", "ended"] },
+        "state": { "enum": ["active", "paused", "stopped", "ended"] },
         "pause_reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable", "budget_exhausted"] },
         "summary": { "type": "string", "minLength": 1 },
+        "action": { "$ref": "#/$defs/action" },
         "next": { "$ref": "#/$defs/next" },
         "suggested_actions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
         "pinned_source": { "$ref": "#/$defs/pinnedSource" },
@@ -656,7 +657,7 @@
       "additionalProperties": false,
       "required": ["operation", "workspace_identity", "variants"],
       "properties": {
-        "operation": { "enum": ["action", "answer", "resume", "none"] },
+        "operation": { "enum": ["action", "answer", "resume", "start", "command", "none"] },
         "workspace_identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "variants": { "type": "array", "items": { "$ref": "#/$defs/nextVariant" } }
       },
@@ -669,7 +670,7 @@
         },
         {
           "properties": {
-            "operation": { "enum": ["action", "answer", "resume"] },
+            "operation": { "enum": ["action", "answer", "resume", "start", "command"] },
             "variants": { "minItems": 1 }
           }
         }

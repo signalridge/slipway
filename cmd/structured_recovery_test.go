@@ -15,8 +15,7 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "choose a channel", "--root", repository, "--budget", "8", "--json", "--no-review")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 
 	waiting := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeNeedsInput, "channel decision required")
 	waiting.Pause = &autopilot.Pause{Reason: autopilot.PauseDecisionRequired, Question: "Which channel?"}
@@ -46,14 +45,12 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 
 	stdout, stderr, err = executeForTest(t, "_machine", "answer", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--text", "stable")
 	require.NoError(t, err, stderr)
-	var reoriented autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &reoriented))
+	reoriented := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, reoriented.Kind)
 
 	stdout, stderr, err = executeForTest(t, "_machine", "answer", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--text", "stable")
 	require.NoError(t, err, stderr)
-	var retried autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &retried))
+	retried := decodeMutationAction(t, stdout)
 	assert.Equal(t, reoriented.ActionID, retried.ActionID)
 
 	stdout, stderr, err = executeForTest(t, "_machine", "answer", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--text", "different")
@@ -72,15 +69,14 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "delete exact target", "--root", repository, "--budget", "10", "--json", "--no-review")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 	runID := action.RunID
 
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Delete only after exact confirmation."}}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	originatingActionID := action.ActionID
 
 	targets := []autopilot.DestructiveTarget{{Kind: autopilot.DestructiveTargetPath, Value: "/absolute/target with spaces"}}
@@ -112,7 +108,7 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 
 	stdout, stderr, err = executeForTest(t, "_machine", "answer", "--root", repository, "--run", runID, "--action", originatingActionID, "--confirm-destructive", "--scope-sha256", digest, "--text", "confirmed")
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 	require.NotNil(t, action.DestructiveAuthorization)
 	authorization := action.DestructiveAuthorization

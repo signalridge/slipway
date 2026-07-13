@@ -1,21 +1,99 @@
 # Installation
 
+Primary installation paths are Go, GitHub Release archives and Linux packages, the GHCR container image, and the repository Nix flake. Homebrew, Scoop, and AUR are optional channels described below.
+
 ## Go
 
 ```bash
 go install github.com/signalridge/slipway@latest
 ```
 
-Release archives and packages are published on [GitHub Releases](https://github.com/signalridge/slipway/releases). Container and Nix builds remain available through the repository release assets and flake.
+## Direct archive
+
+Download the archive for your OS and architecture from [GitHub Releases](https://github.com/signalridge/slipway/releases), download `checksums.txt`, verify the archive, extract it, and place `slipway` on `PATH`. Linux and macOS archives use `.tar.gz`; Windows archives use `.zip`.
+
+For example, the following installs the latest Linux `amd64` archive:
+
+```bash
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/signalridge/slipway/releases/latest)"
+tag="${release_url##*/}"
+version="${tag#v}"
+archive="slipway_${version}_linux_amd64.tar.gz"
+base_url="https://github.com/signalridge/slipway/releases/download/${tag}"
+
+curl -fLO "${base_url}/${archive}"
+curl -fLO "${base_url}/checksums.txt"
+grep -F " ${archive}" checksums.txt | sha256sum --check -
+tar -xzf "${archive}"
+sudo install -m 0755 slipway /usr/local/bin/slipway
+```
+
+Use `darwin` and the appropriate architecture for macOS (with `shasum -a 256 --check -` in place of `sha256sum`), or verify the Windows `.zip` hash from `checksums.txt` with `Get-FileHash` before using `Expand-Archive` and moving `slipway.exe` to a directory on `PATH`.
+
+## Linux packages
+
+Download the package for your architecture from [GitHub Releases](https://github.com/signalridge/slipway/releases), then run the command for your distribution from the download directory:
+
+```bash
+# Debian or Ubuntu
+sudo apt install ./slipway*.deb
+
+# Fedora, RHEL, or another RPM-based distribution
+sudo dnf install ./slipway*.rpm
+
+# Alpine
+sudo apk add --allow-untrusted ./slipway*.apk
+```
 
 ## Container
 
-The published image includes Git because repository discovery and run observation depend on it. On Linux, run with your host UID/GID when the command must write capabilities or journals into a mounted worktree:
+Versioned container images are published to [GitHub Container Registry](https://github.com/signalridge/slipway/pkgs/container/slipway):
+
+```bash
+docker pull ghcr.io/signalridge/slipway:<version>
+docker run --rm ghcr.io/signalridge/slipway:<version> --version
+```
+
+The image includes Git because repository discovery and run observation depend on it. On Linux, run with your host UID/GID when the command must write capabilities or journals into a mounted worktree:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" \
   -v "$PWD:/workspace" -w /workspace \
   ghcr.io/signalridge/slipway:<version> install --tool claude
+```
+
+## Nix
+
+The repository flake supports one-off runs and profile installation:
+
+```bash
+nix run github:signalridge/slipway
+nix profile install github:signalridge/slipway
+```
+
+## Optional package-manager channels
+
+Homebrew, Scoop, and AUR are optional release outputs. GoReleaser uses `skip_upload: auto` for them: Homebrew and Scoop publishing requires the `GH_PAT` secret, while AUR publishing requires an AUR SSH key. A release may therefore omit updates to these channels when the corresponding secret is unavailable; this does not make them release gates.
+
+### Homebrew cask
+
+```bash
+brew install --cask signalridge/tap/slipway
+```
+
+### Scoop
+
+```powershell
+scoop bucket add signalridge https://github.com/signalridge/scoop-bucket
+scoop install signalridge/slipway
+```
+
+### AUR
+
+Install the optional `slipway-bin` package with an AUR helper:
+
+```bash
+yay -S slipway-bin
 ```
 
 ## Install host capabilities

@@ -1,6 +1,6 @@
-# Slipway 产品契约（中文权威）
+# Slipway 产品契约（v2 参考快照）
 
-> 本页是 [Issue #434](https://github.com/signalridge/slipway/issues/434) 当前正文的仓库内权威版本，覆盖其 20 个规范章节。**本中文契约与版本化的 [machine protocol JSON Schema](../../reference/machine-protocol.schema.json) 共同构成实现权威。** 英文和日文页面仅为 non-normative 导航摘要；机器字段与合法组合冲突时以对应版本的 schema 为准，产品语义冲突时以本页为准。
+> 本页是 v2 实现（[ADR-0001](../../decisions/0001-source-bundle-v2.md) 所定义的 manifest-addressed source bundle）的**非权威参考快照**，描述当前分支已采纳的 v2 设计；它**不是** [Issue #434](https://github.com/signalridge/slipway/issues/434) 的权威正文，也不是实现权威。[Issue #434](https://github.com/signalridge/slipway/issues/434) 的 live 正文仍是 v1，v2 是对其 source/protocol 章节的预期 supersession（待 Issue 正式修订或 PR 合并后生效）。机器字段的实现权威是 [machine-protocol.schema.json](../../reference/machine-protocol.schema.json)；产品语义的最终权威是 Issue #434 修订后的正文。在 v2 正式并入 Issue 前，本页用于让仓库内代码、文档和测试保持内部一致。
 
 Slipway 是一个由用户显式启动、Issue 驱动但不被 GitHub 阻塞、CLI 调度、可中断恢复的 AI coding 软自动驾驶：
 

@@ -110,7 +110,7 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 		}},
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "protocolState"), marshalTestJSON(t, map[string]any{
-		"contract_version": ContractVersion, "run_id": "run-1", "state": "paused", "pause_reason": "decision_required", "next": next,
+		"contract_version": ContractVersion, "run_id": "run-1", "state": "active", "action": testAction(), "next": next,
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "cliError"), marshalTestJSON(t, map[string]any{
 		"contract_version": ContractVersion, "code": "invalid_usage", "message": "invalid", "next": next, "exit_code": 2,

@@ -262,13 +262,17 @@ func Doctor(root string) (DoctorReport, error) {
 			return DoctorReport{}, err
 		}
 		switch {
-		case !inspection.Complete:
+		case !inspection.Complete || inspection.SentinelMissing:
 			report.Checks = append(report.Checks, DoctorCheck{
-				Code: "adapter_refresh_required", Status: "warning", HostID: host.ID, Name: "adapter", Detail: "managed capability set is incomplete or outdated; run slipway install --refresh",
+				Code: "adapter_refresh_required", Status: "warning", HostID: host.ID, Name: "adapter", Detail: "managed capability set or generated sentinel is incomplete or outdated; run slipway install --refresh",
 			})
 		case inspection.Modified > 0:
+			detail := fmt.Sprintf("%d managed files changed or missing", inspection.Modified)
+			if inspection.SentinelModified {
+				detail = "generated sentinel was modified; run slipway install --refresh to restore it"
+			}
 			report.Checks = append(report.Checks, DoctorCheck{
-				Code: "adapter_modified", Status: "warning", HostID: host.ID, Name: "adapter", Detail: fmt.Sprintf("%d managed files changed or missing", inspection.Modified),
+				Code: "adapter_modified", Status: "warning", HostID: host.ID, Name: "adapter", Detail: detail,
 			})
 		default:
 			report.Checks = append(report.Checks, DoctorCheck{
@@ -807,9 +811,11 @@ func uniqueSorted(values []string) []string {
 }
 
 type managedSurfaceInspection struct {
-	Complete     bool
-	Modified     int
-	HealthyFiles map[string]bool
+	Complete         bool
+	Modified         int
+	HealthyFiles     map[string]bool
+	SentinelMissing  bool
+	SentinelModified bool
 }
 
 func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (managedSurfaceInspection, error) {
@@ -830,6 +836,27 @@ func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (
 			continue
 		}
 		inspection.HealthyFiles[record.Path] = true
+	}
+	// The sentinel (.adapter-generated) is the generated support surface that
+	// install/refresh/uninstall maintain alongside the v2 ownership manifest. It
+	// is not ownership authority (the manifest is), but health must honestly
+	// reflect its state: a missing or modified sentinel means the generated
+	// surface is incomplete and refresh is required.
+	_, sentinelPath, err := ownershipPaths(root, host)
+	if err != nil {
+		return managedSurfaceInspection{}, err
+	}
+	sentinelClassification, err := classifyFile(sentinelPath, hashBytes([]byte(generatedSentinelContent)))
+	if err != nil {
+		return managedSurfaceInspection{}, err
+	}
+	switch sentinelClassification {
+	case "missing":
+		inspection.SentinelMissing = true
+		inspection.Modified++
+	case "modified":
+		inspection.SentinelModified = true
+		inspection.Modified++
 	}
 	return inspection, nil
 }

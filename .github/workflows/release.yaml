@@ -273,8 +273,16 @@ jobs:
       - name: Build package
         run: nix build .#slipway
       - name: Verify binary
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
         run: |
-          ./result/bin/slipway --version
+          expected_version="${TAG_NAME#v}"
+          version_output="$(./result/bin/slipway --version)"
+          printf '%s\n' "$version_output"
+          if [[ "$version_output" != *"$expected_version"* ]]; then
+            printf '::error::Nix binary version does not include %s.\n' "$expected_version"
+            exit 1
+          fi
           ./result/bin/slipway --help
 
   verify-container:

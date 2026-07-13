@@ -19,10 +19,12 @@ import (
 type NextOperation string
 
 const (
-	NextOperationAction NextOperation = "action"
-	NextOperationAnswer NextOperation = "answer"
-	NextOperationResume NextOperation = "resume"
-	NextOperationNone   NextOperation = "none"
+	NextOperationAction  NextOperation = "action"
+	NextOperationAnswer  NextOperation = "answer"
+	NextOperationResume  NextOperation = "resume"
+	NextOperationStart   NextOperation = "start"
+	NextOperationCommand NextOperation = "command"
+	NextOperationNone    NextOperation = "none"
 )
 
 // NextInputType describes one value that a host must append to a variant.
@@ -77,7 +79,9 @@ var (
 
 // Validate checks that Next can be expanded without shell interpretation.
 func (next Next) Validate() error {
-	if next.Operation != NextOperationAction && next.Operation != NextOperationAnswer && next.Operation != NextOperationResume && next.Operation != NextOperationNone {
+	switch next.Operation {
+	case NextOperationAction, NextOperationAnswer, NextOperationResume, NextOperationStart, NextOperationCommand, NextOperationNone:
+	default:
 		return fmt.Errorf("next.operation %q is unsupported", next.Operation)
 	}
 	if !validSHA256(next.WorkspaceIdentity) {
@@ -121,6 +125,58 @@ func (next Next) Validate() error {
 		if err := validateNextVariant(workspaceRoot, variant, index); err != nil {
 			return err
 		}
+		if err := validateNextOperationFamily(next.Operation, variant); err != nil {
+			return fmt.Errorf("next.variants[%d]: %w", index, err)
+		}
+	}
+	return nil
+}
+
+// validateNextOperationFamily couples each Next operation to the argv grammar
+// its variants may carry. The coarse operation label is advertised as semantic
+// authority, so it must agree with base_argv instead of letting any producer
+// label, for example, a read-only status retry as operation "resume".
+// validateNextOperationFamily couples each Next operation to the argv grammar
+// its variants may carry. The coarse operation label is advertised as semantic
+// authority, so it must agree with base_argv instead of letting any producer
+// label, for example, a read-only status retry as operation "resume".
+//
+// The skip-action variant is a universal escape hatch available on every waiting
+// Action regardless of operation, so it is exempt from the grammar check.
+func validateNextOperationFamily(operation NextOperation, variant NextVariant) error {
+	if variant.ID == "skip-action" {
+		return nil
+	}
+	argv := variant.BaseArgv
+	switch operation {
+	case NextOperationAction:
+		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "submit" {
+			return errors.New("operation action requires base_argv slipway _machine submit ...")
+		}
+	case NextOperationAnswer:
+		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "answer" {
+			return errors.New("operation answer requires base_argv slipway _machine answer ...")
+		}
+	case NextOperationResume:
+		if len(argv) < 3 || argv[1] != "_machine" || argv[2] != "resume" {
+			return errors.New("operation resume requires base_argv slipway _machine resume ...")
+		}
+	case NextOperationStart:
+		if len(argv) < 2 || argv[1] != "run" {
+			return errors.New("operation start requires base_argv slipway run ...")
+		}
+	case NextOperationCommand:
+		if len(argv) < 2 {
+			return errors.New("operation command requires a nonempty slipway base_argv")
+		}
+		// Command covers read-only or advisory recovery commands that are not a
+		// Run mutation (status, doctor, list, install --refresh). It must never
+		// carry the _machine/submit/answer/resume grammar owned by other ops.
+		if argv[1] == "_machine" {
+			return errors.New("operation command must not carry _machine mutation grammar")
+		}
+	case NextOperationNone:
+		// Validated above; no variant reaches here.
 	}
 	return nil
 }

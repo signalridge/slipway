@@ -16,7 +16,12 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        version = if (self ? shortRev) then self.shortRev else "dev";
+        version =
+          let
+            manifest = builtins.fromJSON (builtins.readFile ./.release-please-manifest.json);
+          in
+          manifest."." or "dev";
+        commit = self.shortRev or "unknown";
         go_1_26_5 = pkgs.go_1_26.overrideAttrs (finalAttrs: previousAttrs: {
           version = "1.26.5";
           src = pkgs.fetchurl {
@@ -41,7 +46,7 @@
               "-s"
               "-w"
               "-X github.com/signalridge/slipway/cmd.version=${version}"
-              "-X github.com/signalridge/slipway/cmd.commit=${version}"
+              "-X github.com/signalridge/slipway/cmd.commit=${commit}"
               "-X github.com/signalridge/slipway/cmd.date=1970-01-01T00:00:00Z"
             ];
 

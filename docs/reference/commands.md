@@ -23,7 +23,7 @@ Removes only hash-matching managed files. Modified files are preserved and repor
 
 ## `slipway list`
 
-Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
+Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface (missing/modified capability file or generated `.adapter-generated` sentinel) is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
 
 ## `slipway doctor`
 
@@ -72,7 +72,7 @@ The first resume form is ad-hoc only. Issue-bound resume requires exactly one so
 slipway status [run-id] [--root ROOT] [--json]
 ```
 
-Without an ID, lists all journals in the Git common directory, including runs from linked worktrees. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":2,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
+Without an ID, lists only runs whose canonical workspace identity matches the current workspace. Runs from other linked worktrees do not appear; they can be resumed or changed only from their original workspace. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":2,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
 
 ## `slipway stop`
 

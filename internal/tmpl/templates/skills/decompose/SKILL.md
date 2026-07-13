@@ -14,6 +14,8 @@ Produce the smallest tracer-bullet Changes that each have one observable result,
 
 Show a numbered decomposition before writing: every Change's complete effective Requirements, delivery result, acceptance examples, blockers, exact labels, parent relation, expected revision, and publication item UUID. Use GitHub native sub-issues for Objective-to-Change and native blocked-by dependencies for Change-to-Change. Keep one hierarchy level, stop before 100 sub-issues or 50 dependencies in either direction, and report the platform limit instead of hiding overflow in prose.
 
+GitHub `closed` status does not prove that a blocker Change was actually delivered. The planning frontier may use that state as a signal, but it must remain advisory rather than locked; the user retains authority to override it.
+
 ## GitHub compatibility, transfer, and publication
 
 Detect `gh --version`. For `gh >= 2.94.0`, use first-class parent/sub-issue/dependency operations; otherwise use the official REST API with existing authentication or report `environment_unavailable`. Never make a local relationship graph authoritative. Follow redirects or transfers only within `github.com`; refetch repository/Issue node IDs, canonical URL, labels, parent, dependencies, and revisions, preserve the old URL alias, and still compare body marker and source/Requirements revisions. Do not trust cross-host redirects.

@@ -121,3 +121,31 @@ runtime alias.
   ref a hard source dependency and weakens the Issue-first product boundary.
 - A second manifest comment adds another mutable object and fetch without removing
   the need for an Issue-body HEAD.
+
+## Publication note
+
+This rewrite is an intentionally breaking v2 wire/storage/machine-protocol change
+(see Consequences). When merging the accompanying PR via squash merge, the commit
+MUST carry the Conventional Commits breaking marker so release-please classifies
+the release notes correctly and bumps the version accordingly.
+
+Squash commit title:
+
+```text
+feat!: complete issue #434 source bundle v2 rewrite
+```
+
+Squash commit body footer:
+
+```text
+BREAKING CHANGE: replaces the v1 source protocol, machine protocol
+contract_version 1, and prior run storage format with the manifest-addressed
+source bundle v2, contract_version 2, and the new runstore layout. Existing
+v1 issue-bound Runs and journals are not migrated; start a new Run after
+upgrading. The hidden `_machine` protocol surface, public CLI command set, and
+adapter ownership manifest version 2 are unchanged in shape but versioned
+independently.
+```
+
+This note records the merge-time metadata decision only; it does not add a
+runtime gate, migration step, or compatibility alias.

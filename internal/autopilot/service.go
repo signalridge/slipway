@@ -264,7 +264,11 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 		UpdatedAt:         now,
 	}
 	recordAcceptedSourceComments(&run, run.PinnedSource)
-	if err := issueAction(&run, ActionOrient, "Investigate repository facts, relevant code, Git state, and build/test/lint conventions before deciding what to do."); err != nil {
+	durableRun := runBeforeMutation(run)
+	if err := issueAction(&run, durableRun, ActionOrient, "Investigate repository facts, relevant code, Git state, and build/test/lint conventions before deciding what to do."); err != nil {
+		if protocolErr, ok := err.(*ProtocolError); ok {
+			protocolErr.Next = startRunNext(workspace, goal, pinnedSource != nil)
+		}
 		return Run{}, err
 	}
 	event, err := newRunEvent("run_started", Run{}, run)
@@ -404,7 +408,7 @@ func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, er
 			return nil, nil, &ProtocolError{Code: "invalid_outcome", Message: err.Error(), Next: mustDeriveNext(run)}
 		}
 		before := runBeforeMutation(run)
-		if err := acceptOutcome(&run, outcome, payloadSHA256); err != nil {
+		if err := acceptOutcome(&run, before, outcome, payloadSHA256); err != nil {
 			return nil, nil, err
 		}
 		if err := service.validateRunWorkspace(run); err != nil {
@@ -503,7 +507,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			run.DecisionSuggestions = nil
 			run.PendingActions = nil
 			run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
-			if err := issueAction(&run, ActionOrient, "Re-orient after the user's decision before selecting further work."); err != nil {
+			if err := issueAction(&run, before, ActionOrient, "Re-orient after the user's decision before selecting further work."); err != nil {
 				return nil, nil, err
 			}
 		case PauseDestructiveConfirm:
@@ -525,7 +529,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 				run.DecisionSuggestions = nil
 				run.PendingActions = nil
 				run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
-				if err := issueAction(&run, ActionOrient, "Reconsider non-destructive alternatives after destructive scope was declined or received feedback; do not perform the requested destructive operation."); err != nil {
+				if err := issueAction(&run, before, ActionOrient, "Reconsider non-destructive alternatives after destructive scope was declined or received feedback; do not perform the requested destructive operation."); err != nil {
 					return nil, nil, err
 				}
 				break
@@ -561,7 +565,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
 			run.PendingDestructiveRequest = cloneDestructiveRequest(&request)
 			run.DestructiveGrant = cloneDestructiveAuthorization(&authorization)
-			if err := issueAction(&run, ActionImplement, "Perform only the exact destructively authorized scope. If any target or impact changes, stop and return a fresh destructive request."); err != nil {
+			if err := issueAction(&run, before, ActionImplement, "Perform only the exact destructively authorized scope. If any target or impact changes, stop and return a fresh destructive request."); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -588,6 +592,7 @@ func (service *Service) Skip(runID, actionID string) (Run, error) {
 		if run.CurrentAction == nil || run.CurrentAction.ActionID != actionID {
 			return protocolRunError(*run, "stale_action", "action_id is not the current action")
 		}
+		durableRun := runBeforeMutation(*run)
 		kind := run.CurrentAction.Kind
 		run.DecisionSuggestions = nil
 		run.PendingActions = nil
@@ -603,7 +608,7 @@ func (service *Service) Skip(runID, actionID string) (Run, error) {
 		}
 		clearDestructiveState(run)
 		run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
-		return transitionAfterSkip(run, kind)
+		return transitionAfterSkip(run, durableRun, kind)
 	})
 }
 
@@ -646,9 +651,6 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 			return runstore.UpdateResult{}, err
 		}
 
-		if run.State == RunEnded {
-			return runstore.UpdateResult{}, protocolRunError(run, "run_already_ended", "ended run cannot be resumed")
-		}
 		if run.SourceCandidate == nil && normalized.RefreshedSource == nil && !normalized.UsePinnedSource && normalized.SourceChoice != "" && normalized.CandidateID != "" {
 			if run.LastSourceChoice != nil && run.LastSourceChoice.CandidateID == normalized.CandidateID {
 				if run.LastSourceChoice.Choice != normalized.SourceChoice {
@@ -658,6 +660,9 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 				return runstore.UpdateResult{Projection: run}, nil
 			}
 		}
+		if run.State == RunEnded {
+			return runstore.UpdateResult{}, protocolRunError(run, "run_already_ended", "ended run cannot be resumed")
+		}
 
 		materials := []runstore.Material(nil)
 		if normalized.RefreshedSource != nil && normalized.RefreshedSource.Snapshot != nil {
@@ -665,7 +670,7 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 			normalized.RefreshedSource.Snapshot.materials = nil
 		}
 		before := runBeforeMutation(run)
-		eventType, mutated, resumeErr := resumeRun(&run, normalized)
+		eventType, mutated, resumeErr := resumeRun(&run, before, normalized)
 		if resumeErr != nil {
 			return runstore.UpdateResult{}, resumeErr
 		}
@@ -725,7 +730,7 @@ func normalizeResumeOptions(workspace string, options ResumeOptions) (ResumeOpti
 	return normalized, nil
 }
 
-func resumeRun(run *Run, options ResumeOptions) (string, bool, error) {
+func resumeRun(run *Run, durableRun Run, options ResumeOptions) (string, bool, error) {
 	if run.PinnedSource == nil {
 		if options.RefreshedSource != nil || options.UsePinnedSource || options.SourceChoice != "" || options.CandidateID != "" {
 			return "", false, resumeProtocolError(*run, "source_mode_not_allowed", "ad-hoc run resume does not accept source options")
@@ -733,7 +738,7 @@ func resumeRun(run *Run, options ResumeOptions) (string, bool, error) {
 		invalidateOutstandingResumeState(run)
 		applyResumeBudget(run, options.Budget)
 		run.LastResumeResult = &ResumeResult{Operation: ResumeOperationAdHoc, BudgetApplied: true}
-		if err := issueAction(run, ActionOrient, "Re-investigate the current worktree after interruption before choosing the next action."); err != nil {
+		if err := issueAction(run, durableRun, ActionOrient, "Re-investigate the current worktree after interruption before choosing the next action."); err != nil {
 			return "", false, err
 		}
 		return "run_resumed", true, nil
@@ -749,7 +754,7 @@ func resumeRun(run *Run, options ResumeOptions) (string, bool, error) {
 		if options.CandidateID != run.SourceCandidate.CandidateID {
 			return "", false, protocolRunError(*run, "stale_source_candidate", "candidate_id is not the current source candidate")
 		}
-		return resolveSourceCandidate(run, options)
+		return resolveSourceCandidate(run, durableRun, options)
 	}
 
 	if options.SourceChoice != "" || options.CandidateID != "" {
@@ -769,15 +774,15 @@ func resumeRun(run *Run, options ResumeOptions) (string, bool, error) {
 		applyResumeBudget(run, options.Budget)
 		run.Observations = append(run.Observations, ResumeOperationSourceRefreshSkipped)
 		run.LastResumeResult = &ResumeResult{Operation: ResumeOperationSourceRefreshSkipped, BudgetApplied: true}
-		if err := issueAction(run, ActionOrient, "Re-orient using the explicitly retained pinned source because refresh was skipped or unavailable."); err != nil {
+		if err := issueAction(run, durableRun, ActionOrient, "Re-orient using the explicitly retained pinned source because refresh was skipped or unavailable."); err != nil {
 			return "", false, err
 		}
 		return ResumeOperationSourceRefreshSkipped, true, nil
 	}
-	return refreshIssueSource(run, *options.RefreshedSource, options.Budget)
+	return refreshIssueSource(run, durableRun, *options.RefreshedSource, options.Budget)
 }
 
-func refreshIssueSource(run *Run, refreshed SourceCandidateInput, budget *int) (string, bool, error) {
+func refreshIssueSource(run *Run, durableRun Run, refreshed SourceCandidateInput, budget *int) (string, bool, error) {
 	current := clonePinnedSourceValue(*run.PinnedSource)
 	if refreshed.Provider != current.Provider || refreshed.Host != current.Host {
 		return "", false, resumeProtocolError(*run, "source_provider_mismatch", "refreshed source provider and host must match the pinned source")
@@ -879,13 +884,13 @@ func refreshIssueSource(run *Run, refreshed SourceCandidateInput, budget *int) (
 		run.Observations = append(run.Observations, "source_refreshed_unchanged")
 	}
 	run.LastResumeResult = &ResumeResult{Operation: ResumeOperationSourceRefreshed, BudgetApplied: true}
-	if err := issueAction(run, ActionOrient, "Re-orient against the refreshed source snapshot before selecting further work."); err != nil {
+	if err := issueAction(run, durableRun, ActionOrient, "Re-orient against the refreshed source snapshot before selecting further work."); err != nil {
 		return "", false, err
 	}
 	return ResumeOperationSourceRefreshed, true, nil
 }
 
-func resolveSourceCandidate(run *Run, options ResumeOptions) (string, bool, error) {
+func resolveSourceCandidate(run *Run, durableRun Run, options ResumeOptions) (string, bool, error) {
 	candidate := cloneSourceCandidate(*run.SourceCandidate)
 	if options.SourceChoice == SourceChoiceAdopt && !candidate.Valid {
 		return "", false, resumeProtocolError(*run, "invalid_source_candidate_choice", "invalid source candidate cannot be adopted")
@@ -912,7 +917,7 @@ func resolveSourceCandidate(run *Run, options ResumeOptions) (string, bool, erro
 	applyResumeBudget(run, options.Budget)
 	run.Observations = append(run.Observations, operation)
 	run.LastResumeResult = &ResumeResult{Operation: operation, BudgetApplied: true, CandidateID: candidate.CandidateID}
-	if err := issueAction(run, ActionOrient, "Re-orient after the explicit source amendment decision before selecting further work."); err != nil {
+	if err := issueAction(run, durableRun, ActionOrient, "Re-orient after the explicit source amendment decision before selecting further work."); err != nil {
 		return "", false, err
 	}
 	actionID := ""
@@ -1420,7 +1425,7 @@ func (service *Service) mutate(runID, eventType string, callback func(*Run) erro
 	return result, err
 }
 
-func acceptOutcome(run *Run, outcome Outcome, payloadSHA256 string) error {
+func acceptOutcome(run *Run, durableRun Run, outcome Outcome, payloadSHA256 string) error {
 	action := *run.CurrentAction
 	if err := validateDecisionSupersession(*run, outcome); err != nil {
 		return err
@@ -1461,10 +1466,10 @@ func acceptOutcome(run *Run, outcome Outcome, payloadSHA256 string) error {
 	if !observeGitAfterAction(run, action.Kind, outcome) {
 		return nil
 	}
-	return transitionFrom(run, action.Kind, outcome)
+	return transitionFrom(run, durableRun, action.Kind, outcome)
 }
 
-func transitionFrom(run *Run, kind ActionKind, outcome Outcome) error {
+func transitionFrom(run *Run, durableRun Run, kind ActionKind, outcome Outcome) error {
 	if kind == ActionReview {
 		run.ReviewPending = false
 	}
@@ -1504,7 +1509,7 @@ func transitionFrom(run *Run, kind ActionKind, outcome Outcome) error {
 	if len(run.PendingActions) > 0 && transition.Next == run.PendingActions[0].Kind && transition.Brief == run.PendingActions[0].Brief {
 		run.PendingActions = run.PendingActions[1:]
 	}
-	return issueAction(run, transition.Next, transition.Brief)
+	return issueAction(run, durableRun, transition.Next, transition.Brief)
 }
 
 const (
@@ -1561,12 +1566,12 @@ func recordImplementationDiscrepancy(run *Run, outcome Outcome, changed bool) {
 	}
 }
 
-func issueAction(run *Run, kind ActionKind, brief string) error {
+func issueAction(run *Run, durableRun Run, kind ActionKind, brief string) error {
 	var authorization *DestructiveAuthorization
 	if run.DestructiveGrant != nil && kind == ActionImplement && run.PendingDestructiveRequest != nil {
 		if err := validateDestructiveGrant(*run.DestructiveGrant, *run.PendingDestructiveRequest, run.DestructiveGrant.OriginatingActionID); err != nil {
 			clearDestructiveState(run)
-			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(*run)}
+			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
 		}
 		authorization = cloneDestructiveAuthorization(run.DestructiveGrant)
 	} else {
@@ -1581,13 +1586,7 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 		run.CurrentAction = nil
 		return nil
 	}
-	if strings.TrimSpace(brief) == "" {
-		brief = defaultBrief(kind)
-	}
-	if kind == ActionImplement && !strings.Contains(brief, "Repair-attempt limit:") {
-		brief = strings.TrimSpace(brief) + " Repair-attempt limit: 3."
-	}
-	brief = attributionAwareBrief(*run, kind, brief)
+	brief = composeActionBrief(*run, kind, brief)
 	action := Action{
 		ContractVersion:          ContractVersion,
 		RunID:                    run.ID,
@@ -1614,22 +1613,22 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 	encodedContextLimit, err := actionContextEncodedLimit(action)
 	if err != nil {
 		clearDestructiveState(run)
-		return actionProtocolError(*run, err)
+		return actionProtocolError(durableRun, err)
 	}
 	context, err := buildContextWithinEncodedLimit(*run, encodedContextLimit)
 	if err != nil {
 		clearDestructiveState(run)
-		return actionProtocolError(*run, err)
+		return actionProtocolError(durableRun, err)
 	}
 	action.Context = context
 	if err := action.Validate(); err != nil {
 		clearDestructiveState(run)
-		return actionProtocolError(*run, err)
+		return actionProtocolError(durableRun, err)
 	}
 	if authorization != nil {
 		if err := validateDestructiveGrant(*authorization, *run.PendingDestructiveRequest, authorization.OriginatingActionID); err != nil {
 			clearDestructiveState(run)
-			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(*run)}
+			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
 		}
 	}
 	run.RemainingBudget = remaining
@@ -1657,12 +1656,12 @@ func actionContextEncodedLimit(action Action) (int, error) {
 	return limit, nil
 }
 
-func actionProtocolError(run Run, err error) *ProtocolError {
+func actionProtocolError(durableRun Run, err error) *ProtocolError {
 	code := "invalid_action"
 	if errors.Is(err, errActionTooLarge) {
 		code = "action_too_large"
 	}
-	return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveResumeNext(run)}
+	return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
 }
 
 func actionRequirements(workspace, runID, actionID string, source PinnedSource) ActionRequirements {
@@ -1729,6 +1728,24 @@ func defaultBrief(kind ActionKind) string {
 	default:
 		return "Perform the requested action and report observations honestly."
 	}
+}
+
+func composeActionBrief(run Run, kind ActionKind, brief string) string {
+	brief = strings.TrimSpace(brief)
+	if brief == "" {
+		brief = defaultBrief(kind)
+	}
+
+	suffix := ""
+	if kind == ActionImplement && !strings.Contains(brief, "Repair-attempt limit:") {
+		suffix = " Repair-attempt limit: 3."
+	}
+
+	brief = attributionAwareBrief(run, kind, brief)
+	if suffix == "" {
+		return truncateUTF8WithMarker(brief, maxActionBriefBytes)
+	}
+	return truncateUTF8WithMarker(brief, maxActionBriefBytes-len(suffix)) + suffix
 }
 
 func attributionAwareBrief(run Run, kind ActionKind, brief string) string {
@@ -2493,11 +2510,11 @@ func validateRunDestructiveState(run Run) error {
 	return nil
 }
 
-func transitionAfterSkip(run *Run, kind ActionKind) error {
+func transitionAfterSkip(run *Run, durableRun Run, kind ActionKind) error {
 	switch kind {
 	case ActionReview:
 		run.ReviewPending = false
-		return issueAction(run, ActionSummarize, "Summarize the run after the user skipped advisory Review.")
+		return issueAction(run, durableRun, ActionSummarize, "Summarize the run after the user skipped advisory Review.")
 	case ActionSummarize:
 		return endAfterSummarySkip(run)
 	case ActionOrient, ActionClarify, ActionImplement:
@@ -2516,9 +2533,9 @@ func transitionAfterSkip(run *Run, kind ActionKind) error {
 		}
 		if run.ReviewPending {
 			run.PendingActions = nil
-			return issueAction(run, ActionReview, "Review the complete observed start-to-current Git difference after the prior Action was skipped; report findings only.")
+			return issueAction(run, durableRun, ActionReview, "Review the complete observed start-to-current Git difference after the prior Action was skipped; report findings only.")
 		}
-		return issueAction(run, ActionSummarize, "Summarize observed facts after the prior Action was skipped.")
+		return issueAction(run, durableRun, ActionSummarize, "Summarize observed facts after the prior Action was skipped.")
 	default:
 		return endAfterSummarySkip(run)
 	}
@@ -2585,7 +2602,7 @@ func startRunNext(workspace, goal string, sourceRequired bool) Next {
 		variantID = "start-with-source"
 		inputs = []NextInput{{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}}
 	}
-	next, err := NewCommandNext(NextOperationResume, workspace, variantID, base, inputs)
+	next, err := NewCommandNext(NextOperationStart, workspace, variantID, base, inputs)
 	if err != nil {
 		return NoneNext(workspace)
 	}
@@ -2594,7 +2611,7 @@ func startRunNext(workspace, goal string, sourceRequired bool) Next {
 
 func refreshInstallNext(workspace string) Next {
 	next, err := NewCommandNext(
-		NextOperationResume,
+		NextOperationCommand,
 		workspace,
 		"refresh-adapters",
 		[]string{"slipway", "install", "--refresh", "--root", workspace},

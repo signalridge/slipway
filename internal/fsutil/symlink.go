@@ -68,21 +68,6 @@ func PathWithin(root, path string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel))
 }
 
-// SymlinkTargetContainsLink reports whether targetDir contains the symlink's
-// parent directory after resolving existing filesystem components.
-func SymlinkTargetContainsLink(targetDir, linkPath string) bool {
-	linkParent, err := realExistingPath(filepath.Dir(linkPath))
-	if err != nil {
-		return PathWithin(targetDir, filepath.Dir(linkPath))
-	}
-	return PathWithin(targetDir, linkParent)
-}
-
-// RealExistingPath returns an absolute, clean path after resolving symlinks.
-func RealExistingPath(path string) (string, error) {
-	return realExistingPath(path)
-}
-
 func realExistingPath(path string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {

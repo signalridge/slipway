@@ -2,12 +2,9 @@ package fsutil
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strings"
 	"syscall"
 	"time"
 )
@@ -128,46 +125,4 @@ func isWindowsSharingViolation(err error) bool {
 		return errno == errWindowsSharingViolation || errno == errWindowsAccessDenied
 	}
 	return false
-}
-
-// CleanupAtomicTempArtifactsOlderThan removes temp files created by
-// WriteFileAtomic only after they are old enough to be considered abandoned.
-func CleanupAtomicTempArtifactsOlderThan(root string, staleAfter time.Duration, now time.Time) ([]string, error) {
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	deleted := make([]string, 0)
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !strings.HasPrefix(d.Name(), ".tmp-") {
-			return nil
-		}
-		if staleAfter > 0 {
-			info, err := d.Info()
-			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					return nil
-				}
-				return err
-			}
-			if now.Sub(info.ModTime()) < staleAfter {
-				return nil
-			}
-		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) { // #nosec G122 -- path is selected by WalkDir under the caller-owned temp root and limited to .tmp-* cleanup.
-			return err
-		}
-		deleted = append(deleted, path)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	slices.Sort(deleted)
-	return deleted, nil
 }

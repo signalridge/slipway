@@ -1,14 +1,82 @@
 # 安装
 
+主要安装方式是 Go、[GitHub Releases](https://github.com/signalridge/slipway/releases) 的直接压缩包和 Linux 软件包、GHCR 容器镜像，以及仓库的 Nix flake。Homebrew、Scoop 和 AUR 是可选渠道。
+
+## Go
+
 ```bash
 go install github.com/signalridge/slipway@latest
-slipway install --tool claude
+```
+
+## 直接压缩包
+
+从 GitHub Releases 下载对应 OS/架构的压缩包和 `checksums.txt`，校验后解压，并把二进制文件放入 `PATH`。以下是 Linux `amd64` 示例：
+
+```bash
+release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/signalridge/slipway/releases/latest)"
+tag="${release_url##*/}"
+version="${tag#v}"
+archive="slipway_${version}_linux_amd64.tar.gz"
+base_url="https://github.com/signalridge/slipway/releases/download/${tag}"
+curl -fLO "${base_url}/${archive}"
+curl -fLO "${base_url}/checksums.txt"
+grep -F " ${archive}" checksums.txt | sha256sum --check -
+tar -xzf "${archive}"
+sudo install -m 0755 slipway /usr/local/bin/slipway
+```
+
+macOS 请选择 `darwin` 的 `.tar.gz`；Windows 请选择 `.zip`，先用 `Get-FileHash` 与 `checksums.txt` 对照，再用 `Expand-Archive` 解压。
+
+## Linux 软件包
+
+下载对应架构的软件包后，在下载目录运行适合当前发行版的命令：
+
+```bash
+sudo apt install ./slipway*.deb
+sudo dnf install ./slipway*.rpm
+sudo apk add --allow-untrusted ./slipway*.apk
+```
+
+## 容器
+
+带版本号的镜像发布到 [GHCR](https://github.com/signalridge/slipway/pkgs/container/slipway)：
+
+```bash
+docker pull ghcr.io/signalridge/slipway:<version>
+docker run --rm ghcr.io/signalridge/slipway:<version> --version
 ```
 
 容器镜像包含 Git。Linux 上向挂载 worktree 写入 capability 或 journal 时，请传入宿主 UID/GID：
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace ghcr.io/signalridge/slipway:<version> install --tool claude
+```
+
+## Nix
+
+```bash
+nix run github:signalridge/slipway
+nix profile install github:signalridge/slipway
+```
+
+## 可选包管理渠道
+
+Homebrew 和 Scoop 依赖 `GH_PAT` secret，AUR 依赖 AUR SSH key；它们都使用 GoReleaser 的 `skip_upload: auto`。缺少对应 secret 时，某次 release 可能不会更新这些渠道。它们是可选渠道，不是 release gate。
+
+```bash
+brew install --cask signalridge/tap/slipway
+yay -S slipway-bin
+```
+
+```powershell
+scoop bucket add signalridge https://github.com/signalridge/scoop-bucket
+scoop install signalridge/slipway
+```
+
+## 安装宿主 capability
+
+```bash
+slipway install --tool claude
 ```
 
 支持 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`；可以重复 `--tool` 或使用 `--tool all`。不指定时只安装检测到的宿主。

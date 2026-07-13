@@ -148,9 +148,81 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 
 	_, err := service.Start(strings.Repeat("g", maxActionBytes), CreateOptions{Budget: 4, ReviewEnabled: false})
 	assertProtocolError(t, err, "action_too_large")
+	var protocolErr *ProtocolError
+	require.ErrorAs(t, err, &protocolErr)
+	assert.Equal(t, NextOperationStart, protocolErr.Next.Operation)
+	require.Len(t, protocolErr.Next.Variants, 1)
+	assert.Equal(t, "retry-run", protocolErr.Next.Variants[0].ID)
+	assert.NotEqual(t, "resume-ad-hoc", protocolErr.Next.Variants[0].ID)
+	assert.NotEqual(t, "refresh-source", protocolErr.Next.Variants[0].ID)
+
 	runs, listErr := service.List()
 	require.NoError(t, listErr)
 	assert.Empty(t, runs)
+}
+
+func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	goal := strings.Repeat("g", maxActionBytes-maxActionBriefBytes/2)
+	run, err := service.Start(goal, CreateOptions{Budget: 4, ReviewEnabled: false})
+	require.NoError(t, err)
+	require.NotNil(t, run.CurrentAction)
+	actionID := run.CurrentAction.ActionID
+	before, err := service.Load(run.ID)
+	require.NoError(t, err)
+
+	outcome := withEnvelope(actionID, ActionOrient, Outcome{
+		Status:  OutcomeCompleted,
+		Summary: "facts gathered",
+		SuggestedActions: []SuggestedAction{{
+			Kind:  ActionImplement,
+			Brief: strings.Repeat("b", maxSuggestedActionBriefBytes),
+		}},
+	})
+	_, err = service.Submit(run.ID, actionID, outcome)
+	assertProtocolError(t, err, "action_too_large")
+	var protocolErr *ProtocolError
+	require.ErrorAs(t, err, &protocolErr)
+	assert.Equal(t, NextOperationResume, protocolErr.Next.Operation)
+	require.Len(t, protocolErr.Next.Variants, 1)
+	variant := protocolErr.Next.Variants[0]
+	assert.Equal(t, "resume-ad-hoc", variant.ID)
+	assert.Equal(t, []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}, variant.BaseArgv)
+
+	persisted, loadErr := service.Load(run.ID)
+	require.NoError(t, loadErr)
+	assert.Equal(t, before, persisted)
+	require.NotNil(t, persisted.CurrentAction)
+	assert.Equal(t, actionID, persisted.CurrentAction.ActionID)
+	record := findActionRecord(&persisted, actionID)
+	require.NotNil(t, record)
+	assert.False(t, record.Voided)
+}
+
+func TestServiceAcceptsMaxSizeImplementSuggestionBrief(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 4, false)
+
+	suggestionBrief := strings.Repeat("界", maxSuggestedActionBriefBytes/len("界"))
+	suggestionBrief += strings.Repeat("x", maxSuggestedActionBriefBytes-len(suggestionBrief))
+	require.Len(t, suggestionBrief, maxSuggestedActionBriefBytes)
+
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeCompleted,
+		Summary: "facts gathered",
+		SuggestedActions: []SuggestedAction{{
+			Kind:  ActionImplement,
+			Brief: suggestionBrief,
+		}},
+	})
+	require.NotNil(t, run.CurrentAction)
+	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
+	assert.LessOrEqual(t, len(run.CurrentAction.Brief), maxActionBriefBytes)
+	assert.True(t, utf8.ValidString(run.CurrentAction.Brief))
+	assert.Contains(t, run.CurrentAction.Brief, "Repair-attempt limit:")
+	assert.True(t, strings.HasSuffix(run.CurrentAction.Brief, " Repair-attempt limit: 3."))
 }
 
 func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
@@ -1836,6 +1908,62 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 	assert.NotContains(t, eventLines[len(eventLines)-1], historicalAnswer, "source adoption must not reserialize cumulative answer history")
 	assert.NotContains(t, string(events), changeSourceMarker)
 	assert.NotContains(t, string(events), "Implementation checklist")
+}
+
+func TestServiceSourceChoiceExactReplayAfterRunEnded(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 10)
+
+	envelope := validSourceEnvelope()
+	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Preserve source-choice receipts after completion.\n")
+	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
+	candidate := sourceCandidateForTest(t, envelope)
+	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	require.NoError(t, err)
+	require.NotNil(t, paused.SourceCandidate)
+	candidateID := paused.SourceCandidate.CandidateID
+
+	adopted, err := service.Resume(run.ID, ResumeOptions{
+		SourceChoice: SourceChoiceAdopt,
+		CandidateID:  candidateID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, RunActive, adopted.State)
+	require.NotNil(t, adopted.LastSourceChoice)
+	assert.Equal(t, candidateID, adopted.LastSourceChoice.CandidateID)
+	assert.Equal(t, SourceChoiceAdopt, adopted.LastSourceChoice.Choice)
+
+	run = submitCurrent(t, service, adopted, Outcome{Status: OutcomeCompleted, Summary: "source accepted"})
+	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:         OutcomeCompleted,
+		Summary:        "nothing to change",
+		Implementation: implementationReport(ImplementationNotNeeded),
+	})
+	require.Equal(t, ActionSummarize, run.CurrentAction.Kind)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reported"})
+	require.Equal(t, RunEnded, run.State)
+
+	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+
+	replayed, err := service.Resume(run.ID, ResumeOptions{
+		SourceChoice: SourceChoiceAdopt,
+		CandidateID:  candidateID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, run, replayed)
+
+	_, err = service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoicePinned, CandidateID: candidateID})
+	assertProtocolError(t, err, "source_choice_conflict")
+	_, err = service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoiceAdopt, CandidateID: "stale-candidate-id"})
+	assertProtocolError(t, err, "run_already_ended")
+
+	journalAfter, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Equal(t, journalBefore, journalAfter, "exact source-choice replay must not append a journal event")
 }
 
 func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {

@@ -11,12 +11,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type protocolStateOutput struct {
+// mutationEnvelope is the single versioned shape for every successful run mutation.
+// Active runs carry a non-null action plus derived submit/skip next variants;
+// other states retain action when a current Action remains and otherwise omit it.
+// This keeps the public surface uniform so a host never has to guess what follows.
+type mutationEnvelope struct {
 	ContractVersion  int                         `json:"contract_version"`
 	RunID            string                      `json:"run_id"`
 	State            autopilot.RunState          `json:"state"`
 	PauseReason      autopilot.PauseReason       `json:"pause_reason,omitempty"`
 	Summary          string                      `json:"summary,omitempty"`
+	Action           *autopilot.Action           `json:"action,omitempty"`
 	Next             autopilot.Next              `json:"next"`
 	SuggestedActions []autopilot.SuggestedAction `json:"suggested_actions,omitempty"`
 	PinnedSource     *autopilot.PinnedSource     `json:"pinned_source,omitempty"`
@@ -24,6 +29,10 @@ type protocolStateOutput struct {
 	ResumeOperation  string                      `json:"resume_operation,omitempty"`
 	BudgetApplied    *bool                       `json:"budget_applied,omitempty"`
 }
+
+// protocolStateOutput remains as an alias for tests that decode non-active
+// projections; its JSON shape is identical to mutationEnvelope.
+type protocolStateOutput = mutationEnvelope
 
 func makeRunCmd() *cobra.Command {
 	var root string
@@ -38,6 +47,12 @@ func makeRunCmd() *cobra.Command {
 			"  slipway run \"<bounded goal>\" --source-file FILE --budget 8 --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			if err := autopilot.ValidateBudget(budget); err != nil {
+				return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
+			}
+			if command.Flags().Changed("source-file") && sourceFile == "" {
+				return newUsageError("source_file_required", "source-file cannot be empty", defaultErrorNext())
+			}
 			service, err := openAutopilot(root)
 			if err != nil {
 				return err
@@ -45,9 +60,6 @@ func makeRunCmd() *cobra.Command {
 			defer func() { _ = service.Close() }()
 			workspace := service.RepositoryRoot()
 			startNext := runStartNext(workspace, args[0], budget, noReview, true)
-			if command.Flags().Changed("source-file") && sourceFile == "" {
-				return newUsageError("source_file_required", "source-file cannot be empty", startNext)
-			}
 			var pinnedSource *autopilot.PinnedSource
 			if sourceFile != "" {
 				imported, err := autopilot.ImportSourceFile(sourceFile)
@@ -71,10 +83,15 @@ func makeRunCmd() *cobra.Command {
 			if jsonOutput {
 				return writeProtocolResult(command, run)
 			}
-			if _, err := fmt.Fprintf(command.OutOrStdout(), "Run %s started.\n", run.ID); err != nil {
+			next, err := autopilot.DeriveNext(run)
+			if err != nil {
+				return fmt.Errorf("derive next protocol operation: %w", err)
+			}
+			writer := command.OutOrStdout()
+			if err := writeHumanRunStart(writer, run); err != nil {
 				return err
 			}
-			return writeProtocolResult(command, run)
+			return writeHumanNext(writer, next)
 		},
 	}
 	command.Flags().StringVar(&sourceFile, "source-file", "", "raw GitHub Change source envelope")
@@ -85,6 +102,23 @@ func makeRunCmd() *cobra.Command {
 	return command
 }
 
+func writeHumanRunStart(writer io.Writer, run autopilot.Run) error {
+	currentAction := "none"
+	if run.CurrentAction != nil {
+		currentAction = fmt.Sprintf("%s (%s)", run.CurrentAction.Kind, run.CurrentAction.ActionID)
+	}
+	_, err := fmt.Fprintf(
+		writer,
+		"Run %s started.\nState: %s\nGoal: %s\nBudget remaining: %d\nCurrent action: %s\n",
+		run.ID,
+		run.State,
+		run.Goal,
+		run.RemainingBudget,
+		currentAction,
+	)
+	return err
+}
+
 func makeRunSubmitCmd(root *string) *cobra.Command {
 	var runID, actionID, outcomeFile string
 	var outcomeStdin bool
@@ -93,20 +127,26 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			fileSet := command.Flags().Changed("outcome-file")
+			stdinSet := command.Flags().Changed("outcome-stdin") && outcomeStdin
+			if runID == "" {
+				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
+			}
+			if actionID == "" {
+				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
+			}
+			if fileSet == stdinSet {
+				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", defaultErrorNext())
+			}
+			if fileSet && strings.TrimSpace(outcomeFile) == "" {
+				return newUsageError("outcome_file_required", "outcome-file cannot be empty", defaultErrorNext())
+			}
 			service, err := openAutopilot(*root)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = service.Close() }()
 			next := nextForRunOrNone(service, runID)
-			fileSet := command.Flags().Changed("outcome-file")
-			stdinSet := command.Flags().Changed("outcome-stdin") && outcomeStdin
-			if fileSet == stdinSet {
-				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", next)
-			}
-			if fileSet && strings.TrimSpace(outcomeFile) == "" {
-				return newUsageError("outcome_file_required", "outcome-file cannot be empty", next)
-			}
 			reader, closeReader, err := outcomeReader(command, outcomeFile, stdinSet)
 			if err != nil {
 				return newUsageError("outcome_unavailable", err.Error(), next)
@@ -146,6 +186,12 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			if runID == "" {
+				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
+			}
+			if actionID == "" {
+				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
+			}
 			service, err := openAutopilot(*root)
 			if err != nil {
 				return err
@@ -179,6 +225,12 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
+			if runID == "" {
+				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
+			}
+			if actionID == "" {
+				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
+			}
 			service, err := openAutopilot(*root)
 			if err != nil {
 				return err
@@ -213,27 +265,26 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			"  slipway _machine resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			service, err := openAutopilot(*root)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = service.Close() }()
-			next := nextForResumeOrNone(service, args[0])
 			budgetSet := command.Flags().Changed("budget")
-			if budgetSet && budget == 0 {
-				return newUsageError("invalid_budget", "budget must be at least 1", next)
-			}
 			sourceFileSet := command.Flags().Changed("source-file")
 			choiceSet := command.Flags().Changed("source-choice")
 			candidateSet := command.Flags().Changed("candidate")
-			if sourceFileSet && sourceFile == "" {
-				return newUsageError("source_file_required", "source-file cannot be empty", next)
+			if args[0] == "" {
+				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
 			}
-			if choiceSet != candidateSet {
-				return newUsageError("source_choice_requires_candidate", "source-choice and candidate must be provided together", next)
+			if budgetSet {
+				if err := autopilot.ValidateBudget(budget); err != nil {
+					return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
+				}
+			}
+			if sourceFileSet && sourceFile == "" {
+				return newUsageError("source_file_required", "source-file cannot be empty", defaultErrorNext())
+			}
+			if choiceSet != candidateSet || (candidateSet && candidateID == "") {
+				return newUsageError("source_choice_requires_candidate", "source-choice and candidate must be provided together", defaultErrorNext())
 			}
 			if choiceSet && sourceChoice != string(autopilot.SourceChoicePinned) && sourceChoice != string(autopilot.SourceChoiceAdopt) {
-				return newUsageError("invalid_source_choice", "source-choice must be pinned or adopt", next)
+				return newUsageError("invalid_source_choice", "source-choice must be pinned or adopt", defaultErrorNext())
 			}
 			modeCount := 0
 			if sourceFileSet {
@@ -246,9 +297,15 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 				modeCount++
 			}
 			if modeCount > 1 {
-				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", next)
+				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", defaultErrorNext())
 			}
 
+			service, err := openAutopilot(*root)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			next := nextForResumeOrNone(service, args[0])
 			var refreshedSource *autopilot.SourceCandidateInput
 			if sourceFileSet {
 				imported, err := autopilot.ImportSourceCandidateFile(sourceFile)
@@ -342,19 +399,17 @@ func sourceImportErrorMessage(err error) string {
 }
 
 func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
-	if run.State == autopilot.RunActive && run.CurrentAction != nil {
-		return writeJSON(command.OutOrStdout(), run.CurrentAction)
-	}
 	next, err := autopilot.DeriveNext(run)
 	if err != nil {
 		return fmt.Errorf("derive next protocol operation: %w", err)
 	}
-	output := protocolStateOutput{
+	output := mutationEnvelope{
 		ContractVersion:  autopilot.ContractVersion,
 		RunID:            run.ID,
 		State:            run.State,
 		PauseReason:      run.PauseReason,
 		Summary:          run.Summary,
+		Action:           run.CurrentAction,
 		Next:             next,
 		SuggestedActions: run.DecisionSuggestions,
 		PinnedSource:     run.PinnedSource,
@@ -379,7 +434,7 @@ func runStartNext(workspace, goal string, budget int, noReview, sourceRequired b
 		variantID = "start-with-source"
 		inputs = []autopilot.NextInput{{Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true}}
 	}
-	return commandNext(workspace, autopilot.NextOperationResume, variantID, base, inputs)
+	return commandNext(workspace, autopilot.NextOperationStart, variantID, base, inputs)
 }
 
 func nextForRunOrNone(service *autopilot.Service, runID string) autopilot.Next {

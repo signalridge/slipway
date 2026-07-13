@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/signalridge/slipway/internal/fsutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,8 +90,7 @@ func TestLegacyRunstoreResidueIsAdvisoryAndUntouchedByCommands(t *testing.T) {
 
 	runJSON, stderr, err := executeForTest(t, "run", "inspect legacy isolation", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(runJSON), &action))
+	action := decodeMutationAction(t, runJSON)
 	require.NotEmpty(t, action.RunID)
 	statusListJSON, stderr, err := executeForTest(t, "status", "--root", repository, "--json")
 	require.NoError(t, err, stderr)

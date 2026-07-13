@@ -18,8 +18,7 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "update README", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, action.Kind)
 	assert.Equal(t, autopilot.ContractVersion, action.ContractVersion)
 
@@ -28,12 +27,12 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	outcomePath := writeOutcome(t, orient)
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 
 	stdout, stderr, err = executeForTest(t, "_machine", "skip", "--root", repository, "--run", action.RunID, "--action", action.ActionID)
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
 
 	stdout, stderr, err = executeForTest(t, "stop", action.RunID, "--root", repository, "--json")
@@ -46,16 +45,29 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository)
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, action.Kind)
+}
+
+func TestRunHumanOutputIsSummaryOnly(t *testing.T) {
+	repository := newCLIRepository(t)
+	stdout, stderr, err := executeForTest(t, "run", "summarize human output", "--root", repository)
+	require.NoError(t, err, stderr)
+	assert.Regexp(t, `(?m)^Run .+ started\.$`, stdout)
+	assert.Contains(t, stdout, "State: active\n")
+	assert.Contains(t, stdout, "Goal: summarize human output\n")
+	assert.Regexp(t, `(?m)^Budget remaining: [0-9]+$`, stdout)
+	assert.Regexp(t, `(?m)^Current action: orient \(.+\)$`, stdout)
+	assert.Contains(t, stdout, "Next choices:\n")
+	assert.NotContains(t, stdout, `"contract_version"`)
+	assert.NotContains(t, stdout, "{")
 }
 
 func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json", "--no-review")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 
 	outcome := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	outcome.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the inspected change."}}
@@ -63,7 +75,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	require.NoError(t, err)
 	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 
 	bad := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "edited")
@@ -101,8 +113,7 @@ func TestSubmitRejectsInvalidOutcomeShapeBeforeWritingJournal(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 
 	valid, err := json.Marshal(machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
 	require.NoError(t, err)
@@ -137,8 +148,7 @@ func TestSubmitRejectsSymlinkOutcomeFileBeforeWritingJournal(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 
 	target := writeOutcome(t, machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
 	link := filepath.Join(t.TempDir(), "outcome.json")
@@ -166,34 +176,61 @@ func TestRunRejectsExplicitZeroBudget(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"invalid_budget"`)
+	assert.Contains(t, stderr, `"exit_code":2`)
 }
 
 func TestRunResumeRejectsExplicitZeroBudget(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "inspect", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository, "--budget", "0")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"invalid_budget"`)
+	assert.Contains(t, stderr, `"exit_code":2`)
+}
+
+func TestMachineUsageValidationPrecedesRunstoreOpen(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		args []string
+	}{
+		{name: "run budget", code: "invalid_budget", args: []string{"run", "inspect", "--budget", "1001", "--json"}},
+		{name: "submit mode", code: "outcome_mode_required", args: []string{"_machine", "submit", "--run", "run-1", "--action", "action-1"}},
+		{name: "answer run", code: "run_id_required", args: []string{"_machine", "answer", "--run", "", "--action", "action-1"}},
+		{name: "skip action", code: "action_id_required", args: []string{"_machine", "skip", "--run", "run-1", "--action", ""}},
+		{name: "resume source pair", code: "source_choice_requires_candidate", args: []string{"_machine", "resume", "run-1", "--source-choice", "adopt"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := newCLIRepository(t)
+			args := append(append([]string(nil), test.args...), "--root", repository)
+			stdout, stderr, err := executeForTest(t, args...)
+			require.Error(t, err)
+			assert.Empty(t, stdout)
+			assert.Contains(t, stderr, `"code":"`+test.code+`"`)
+			assert.Contains(t, stderr, `"exit_code":2`)
+			_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+			require.ErrorIs(t, statErr, os.ErrNotExist)
+		})
+	}
 }
 
 func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "change", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 	runID := action.RunID
 
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the change."}}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 
 	require.NoError(t, os.WriteFile(filepath.Join(repository, "change.go"), []byte("package sample\n"), 0o600))
 	implementation := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "changed")
@@ -206,7 +243,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 	}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, implementation))
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionReview, action.Kind)
 
 	review := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "finding reported")
@@ -221,8 +258,18 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 	}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, review))
 	require.NoError(t, err, stderr)
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
+}
+
+func decodeMutationAction(t *testing.T, payload string) autopilot.Action {
+	t.Helper()
+	var envelope mutationEnvelope
+	require.NoError(t, json.Unmarshal([]byte(payload), &envelope))
+	require.Equal(t, autopilot.ContractVersion, envelope.ContractVersion)
+	require.NotNil(t, envelope.Action)
+	require.Equal(t, envelope.RunID, envelope.Action.RunID)
+	return *envelope.Action
 }
 
 func machineOutcome(actionID string, actionKind autopilot.ActionKind, status autopilot.OutcomeStatus, summary string) autopilot.Outcome {
@@ -286,8 +333,7 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 	stdout, stderr, err := executeForTest(t, "run", "implement accepted requirements", "--root", repository, "--source-file", sourcePath, "--json")
 	require.NoError(t, err, stderr)
 	require.NoError(t, os.Remove(sourcePath))
-	var action autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
+	action := decodeMutationAction(t, stdout)
 	require.NotNil(t, action.Source)
 	require.NotNil(t, action.Requirements)
 	assert.Equal(t, envelope.CanonicalURL, action.Source.CanonicalURL)
@@ -358,8 +404,7 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	stdout, stderr, err := executeForTest(t, "run", "implement accepted requirements", "--root", repository, "--source-file", startPath, "--budget", "8", "--json")
 	require.NoError(t, err, stderr)
 	require.NoError(t, os.Remove(startPath))
-	var initial autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &initial))
+	initial := decodeMutationAction(t, stdout)
 
 	amended := cliSourceEnvelope()
 	setCLISourceSection(&amended, "requirements", "\n# Requirements\n\nKeep the amended CLI contract.\n")
@@ -404,8 +449,7 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
 	require.NoError(t, err, stderr)
-	var adopted autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &adopted))
+	adopted := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, adopted.Kind)
 	assert.Equal(t, 4, adopted.RemainingBudget)
 	require.NotNil(t, adopted.Source)
@@ -445,8 +489,7 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 	sourcePath := writeCLISource(t, cliSourceEnvelope())
 	stdout, stderr, err := executeForTest(t, "run", "issue-bound", "--root", issueRepository, "--source-file", sourcePath, "--json")
 	require.NoError(t, err, stderr)
-	var issueAction autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &issueAction))
+	issueAction := decodeMutationAction(t, stdout)
 
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository)
 	require.Error(t, err)
@@ -455,16 +498,14 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--use-pinned-source")
 	require.NoError(t, err, stderr)
-	var refreshed autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &refreshed))
+	refreshed := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, refreshed.Kind)
 	require.NotNil(t, refreshed.Source)
 
 	adHocRepository := newCLIRepository(t)
 	stdout, stderr, err = executeForTest(t, "run", "ad-hoc", "--root", adHocRepository, "--json")
 	require.NoError(t, err, stderr)
-	var adHocAction autopilot.Action
-	require.NoError(t, json.Unmarshal([]byte(stdout), &adHocAction))
+	adHocAction := decodeMutationAction(t, stdout)
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", adHocAction.RunID, "--root", adHocRepository, "--use-pinned-source")
 	require.Error(t, err)
 	assert.Empty(t, stdout)

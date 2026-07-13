@@ -287,6 +287,55 @@ func TestListAndDoctorReportCurrentManagedSurfaceHealth(t *testing.T) {
 	}
 }
 
+func TestListAndDoctorReportSentinelHealth(t *testing.T) {
+	t.Parallel()
+
+	host, ok := lookupHost("claude")
+	require.True(t, ok)
+
+	t.Run("missing sentinel reports refresh required", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
+		require.NoError(t, err)
+
+		_, sentinelPath, err := ownershipPaths(root, host)
+		require.NoError(t, err)
+		require.NoError(t, os.Remove(sentinelPath))
+
+		statuses, err := List(root)
+		require.NoError(t, err)
+		assert.True(t, statuses[0].NeedsRefresh, "missing sentinel must surface as needs_refresh")
+
+		doctor, err := Doctor(root)
+		require.NoError(t, err)
+		check := doctorCheckForHost(doctor, "claude")
+		assert.Equal(t, "adapter_refresh_required", check.Code)
+		assert.NotEqual(t, "adapter_healthy", check.Code)
+	})
+
+	t.Run("modified sentinel reports adapter modified", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
+		require.NoError(t, err)
+
+		_, sentinelPath, err := ownershipPaths(root, host)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(sentinelPath, []byte("user marker\n"), 0o600))
+
+		statuses, err := List(root)
+		require.NoError(t, err)
+		assert.True(t, statuses[0].NeedsRefresh, "modified sentinel must surface as needs_refresh")
+
+		doctor, err := Doctor(root)
+		require.NoError(t, err)
+		check := doctorCheckForHost(doctor, "claude")
+		assert.Equal(t, "adapter_modified", check.Code)
+		assert.Contains(t, check.Detail, "sentinel")
+	})
+}
+
 func doctorCheckForHost(report DoctorReport, hostID string) DoctorCheck {
 	for _, check := range report.Checks {
 		if check.HostID == hostID {
