@@ -5,14 +5,40 @@
   "description": "Strict trusted-host observation containing an Issue body and, when its manifest is valid, exactly the referenced comments; an invalid head uses an empty comments array.",
   "$ref": "#/$defs/rawSourceEnvelope",
   "$defs": {
+    "nonEmptyPlainText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$"
+    },
+    "nonEmptyMarkdownText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$"
+    },
+    "githubNodeID": {
+      "allOf": [
+        { "$ref": "#/$defs/nonEmptyPlainText" },
+        { "pattern": "^\\S+$" }
+      ]
+    },
+    "githubIssueURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$"
+    },
+    "githubCommentURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$"
+    },
     "sourceParent": {
       "type": "object",
       "additionalProperties": false,
       "required": ["repository_id", "issue_id", "canonical_url"],
       "properties": {
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
-        "canonical_url": { "type": "string", "format": "uri" }
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" }
       }
     },
     "rawSourceComment": {
@@ -20,13 +46,13 @@
       "additionalProperties": false,
       "required": ["node_id", "database_id", "url", "updated_at", "author_id", "is_minimized", "body"],
       "properties": {
-        "node_id": { "type": "string", "minLength": 1 },
+        "node_id": { "$ref": "#/$defs/githubNodeID" },
         "database_id": { "type": "integer", "minimum": 1 },
-        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/" },
+        "url": { "$ref": "#/$defs/githubCommentURL" },
         "updated_at": { "type": "string", "format": "date-time" },
-        "author_id": { "type": "string", "minLength": 1 },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
         "is_minimized": { "type": "boolean" },
-        "body": { "type": "string", "minLength": 1 }
+        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" }
       }
     },
     "rawSourceEnvelope": {
@@ -40,15 +66,15 @@
         "source_version": { "const": 2 },
         "provider": { "const": "github" },
         "host": { "const": "github.com" },
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
         "issue_number": { "type": "integer", "minimum": 1 },
-        "canonical_url": { "type": "string", "format": "uri" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" },
         "updated_at": { "type": "string", "format": "date-time" },
         "fetched_at": { "type": "string", "format": "date-time" },
-        "title": { "type": "string", "minLength": 1 },
-        "body": { "type": "string", "minLength": 1 },
-        "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1 } },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "comments": {
           "type": "array",

@@ -3,6 +3,7 @@ package runstore
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +64,7 @@ func TestObserveGitDetectsRetargetedUntrackedSymlink(t *testing.T) {
 	assert.Equal(t, digestBytes([]byte("b.txt")), changedLink.ContentSHA256)
 }
 
-func TestObserveGitBoundsOversizeUntrackedFileWithoutContentHash(t *testing.T) {
+func TestObserveGitSamplesOversizeUntrackedFileContent(t *testing.T) {
 	repository := createRepository(t)
 	path := filepath.Join(repository, "large.bin")
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
@@ -75,9 +76,55 @@ func TestObserveGitBoundsOversizeUntrackedFileWithoutContentHash(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, observation.PathObservations, 1)
 	assert.Equal(t, "oversize", observation.PathObservations[0].Observation)
-	assert.Empty(t, observation.PathObservations[0].ContentSHA256)
+	assert.True(t, validSHA256(observation.PathObservations[0].ContentSHA256))
 	require.NotNil(t, observation.PathObservations[0].Size)
 	assert.Equal(t, MaxObservedFileBytes+1, *observation.PathObservations[0].Size)
+}
+
+func TestObserveGitDetectsEqualLengthOversizeRewrite(t *testing.T) {
+	repository := createRepository(t)
+	path := filepath.Join(repository, "large.bin")
+	size := int(MaxObservedFileBytes + 1)
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{'a'}, size), 0o600))
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	require.Len(t, initial.PathObservations, 1)
+
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{'b'}, size), 0o600))
+	current, err := ObserveGit(repository)
+	require.NoError(t, err)
+	require.Len(t, current.PathObservations, 1)
+	assert.NotEqual(t, initial.PathObservations[0].ContentSHA256, current.PathObservations[0].ContentSHA256)
+	assert.True(t, current.ChangedFrom(initial))
+}
+
+func TestObserveGitBoundsPathDetailsWithoutLosingCompleteFingerprint(t *testing.T) {
+	repository := createRepository(t)
+	const count = 200
+	var lastPath string
+	for index := 0; index < count; index++ {
+		name := fmt.Sprintf("%03d-%s.txt", index, strings.Repeat("x", 230))
+		lastPath = filepath.Join(repository, name)
+		require.NoError(t, os.WriteFile(lastPath, []byte("a"), 0o600))
+	}
+
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.Equal(t, count, initial.PathCount)
+	assert.True(t, initial.DetailsTruncated)
+	assert.Less(t, len(initial.PathObservations), initial.PathCount)
+	assert.Len(t, initial.DirtyFiles, len(initial.PathObservations))
+	assert.True(t, validSHA256(initial.PathFingerprint))
+	encoded, err := json.Marshal(initial)
+	require.NoError(t, err)
+	assert.Less(t, len(encoded), 1<<20)
+
+	require.NoError(t, os.WriteFile(lastPath, []byte("b"), 0o600))
+	current, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.Equal(t, initial.PathCount, current.PathCount)
+	assert.NotEqual(t, initial.PathFingerprint, current.PathFingerprint)
+	assert.True(t, current.ChangedFrom(initial))
 }
 
 func TestStoreUsesGitCommonDirectoryAndPrivateJournalFiles(t *testing.T) {
@@ -112,6 +159,56 @@ func TestStoreUsesGitCommonDirectoryAndPrivateJournalFiles(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
 }
 
+func TestFirstEventAcceptsCompleteJSONWithoutTrailingNewlineReadOnly(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "run-one")
+	require.NoError(t, err)
+	journal, err := os.ReadFile(paths.JournalFile)
+	require.NoError(t, err)
+	require.True(t, bytes.HasSuffix(journal, []byte{'\n'}))
+	withoutNewline := bytes.TrimSuffix(journal, []byte{'\n'})
+	require.NoError(t, os.WriteFile(paths.JournalFile, withoutNewline, 0o600))
+
+	first, err := store.FirstEvent("run-one")
+	require.NoError(t, err)
+	assert.Equal(t, event.Type, first.Type)
+	assert.JSONEq(t, string(event.Data), string(first.Data))
+	unchanged, err := os.ReadFile(paths.JournalFile)
+	require.NoError(t, err)
+	assert.Equal(t, withoutNewline, unchanged, "FirstEvent must not repair or mutate the journal")
+}
+
+func TestExistingRunOperationsRecreateMissingLockAfterReadOnlyValidation(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "run-one")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(paths.LockFile))
+
+	_, err = store.FirstEvent("run-one")
+	require.NoError(t, err)
+	_, statErr := os.Lstat(paths.LockFile)
+	assert.ErrorIs(t, statErr, os.ErrNotExist, "immutable first-event validation must remain read-only")
+
+	require.NoError(t, store.Visit("run-one", func(Event) error { return nil }))
+	lockInfo, err := os.Lstat(paths.LockFile)
+	require.NoError(t, err)
+	assert.True(t, lockInfo.Mode().IsRegular())
+}
+
 func TestJournalIgnoresOnlyAnInterruptedFinalRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "journal.jsonl")
 	first, err := NewEvent("first", map[string]int{"value": 1})
@@ -144,6 +241,32 @@ func TestJournalIgnoresOnlyAnInterruptedFinalRecord(t *testing.T) {
 	_, err = readAllJournal(path)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "event 2")
+}
+
+func TestDecodeJournalEventRejectsDuplicateKeys(t *testing.T) {
+	t.Parallel()
+	at := time.Now().UTC().Format(time.RFC3339Nano)
+	tests := []struct {
+		name string
+		raw  []byte
+	}{
+		{
+			name: "event envelope",
+			raw:  []byte(fmt.Sprintf(`{"sequence":1,"type":"run_started","type":"invented","at":%q,"data":{"value":1}}`, at)),
+		},
+		{
+			name: "nested data",
+			raw:  []byte(fmt.Sprintf(`{"sequence":1,"type":"run_started","at":%q,"data":{"value":1,"value":2}}`, at)),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := decodeJournalEvent(test.raw, 1)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "duplicate object key")
+		})
+	}
 }
 
 func TestJournalBoundsOversizedRecordsAndRepairsOversizedInterruptedTail(t *testing.T) {

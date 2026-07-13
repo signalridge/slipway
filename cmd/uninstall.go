@@ -20,7 +20,7 @@ func makeUninstallCmd() *cobra.Command {
 			}
 			report, err := adapter.Uninstall(adapter.UninstallOptions{Root: resolved, Tools: tools})
 			if err != nil {
-				return newRuntimeError("uninstall_failed", err.Error(), inputlessCommandNext(resolved, "retry-uninstall", "slipway", "uninstall", "--root", resolved), nil)
+				return adapterMutationError("uninstall_failed", err, resolved, report)
 			}
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), makeChangeReportOutput(report))

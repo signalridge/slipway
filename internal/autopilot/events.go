@@ -85,6 +85,53 @@ type runDelta struct {
 	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
+func validRunEventType(eventType string) bool {
+	switch eventType {
+	case "run_started", "outcome_submitted", "answer_recorded", "action_skipped", "run_stopped", "run_resumed",
+		ResumeOperationSourceRefreshed, ResumeOperationSourceCandidate,
+		ResumeOperationSourceRefreshSkipped, ResumeOperationSourceAmended, ResumeOperationSourcePinned:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateRunEventMutation(eventType string, before, after Run, delta runDelta) error {
+	switch eventType {
+	case "run_started":
+		if before.ID != "" || delta.Initialize == nil {
+			return errors.New("run_started must initialize one run")
+		}
+	case "outcome_submitted":
+		for _, update := range delta.ActionUpdates {
+			if update.Index < len(before.Actions) && before.Actions[update.Index].Outcome == nil && update.Record.Outcome != nil {
+				return nil
+			}
+		}
+		return errors.New("outcome_submitted must record a new action outcome")
+	case "answer_recorded":
+		if len(delta.AnswersAppend) != 1 {
+			return errors.New("answer_recorded must append exactly one answer")
+		}
+	case "action_skipped":
+		for _, update := range delta.ActionUpdates {
+			if update.Index < len(before.Actions) && !before.Actions[update.Index].Skipped && update.Record.Skipped {
+				return nil
+			}
+		}
+		return errors.New("action_skipped must mark one existing action skipped")
+	case "run_stopped":
+		if after.State != RunStopped {
+			return errors.New("run_stopped must enter stopped state")
+		}
+	case "run_resumed":
+		if after.LastResumeResult == nil || after.LastResumeResult.Operation != ResumeOperationAdHoc {
+			return errors.New("run_resumed must record the ad-hoc resume operation")
+		}
+	}
+	return nil
+}
+
 func newRunEvent(eventType string, before, after Run) (runstore.Event, error) {
 	delta, err := diffRun(eventType, before, after)
 	if err != nil {
@@ -259,6 +306,9 @@ func diffRun(eventType string, before, after Run) (runDelta, error) {
 }
 
 func applyRunEvent(run *Run, event runstore.Event) error {
+	if !validRunEventType(event.Type) {
+		return fmt.Errorf("unsupported run journal event type %q", event.Type)
+	}
 	before := runBeforeMutation(*run)
 	var delta runDelta
 	decoder := json.NewDecoder(bytes.NewReader(event.Data))
@@ -472,6 +522,16 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	if err := validateRunSourceTransition(event.Type, before, *run); err != nil {
 		return fmt.Errorf("invalid source transition after %s: %w", event.Type, err)
 	}
+	if err := validateRunEventMutation(event.Type, before, *run, delta); err != nil {
+		return fmt.Errorf("invalid %s event mutation: %w", event.Type, err)
+	}
+	canonicalDelta, err := diffRun(event.Type, before, *run)
+	if err != nil {
+		return fmt.Errorf("reconstruct canonical %s event: %w", event.Type, err)
+	}
+	if !reflect.DeepEqual(delta, canonicalDelta) {
+		return fmt.Errorf("non-canonical delta for %s event", event.Type)
+	}
 	recordAcceptedSourceComments(run, run.PinnedSource)
 	if _, err := DeriveNext(*run); err != nil {
 		return fmt.Errorf("derive next after %s: %w", event.Type, err)
@@ -519,9 +579,20 @@ func validateActionHistoryTransition(before, after Run) error {
 				return fmt.Errorf("action record %d has a malformed outcome payload digest", index)
 			}
 		}
+		if record.ReviewProjection != nil {
+			if record.Action.Kind != ActionReview || !record.Skipped || record.Outcome != nil ||
+				record.ReviewProjection.Result != ReviewNotRun || len(record.ReviewProjection.Findings) != 0 ||
+				len(record.ReviewProjection.Uncertainties) != 0 {
+				return fmt.Errorf("action record %d has an invalid skipped-review projection", index)
+			}
+			if err := validateReview(*record.ReviewProjection); err != nil {
+				return fmt.Errorf("action record %d has an invalid review projection: %w", index, err)
+			}
+		}
 
 		if index >= len(before.Actions) {
-			if record.Outcome != nil || record.OutcomePayloadSHA256 != "" || record.Voided || record.Skipped {
+			if record.Outcome != nil || record.OutcomePayloadSHA256 != "" || record.ReviewProjection != nil ||
+				record.Voided || record.Skipped {
 				return fmt.Errorf("new action record %d must begin pending and non-void", index)
 			}
 			continue
@@ -550,6 +621,12 @@ func validateActionHistoryTransition(before, after Run) error {
 		}
 		if prior.Outcome == nil && record.Outcome != nil && prior.Action.ActionID != currentActionID {
 			return fmt.Errorf("action record %d completed a non-current action", index)
+		}
+		if prior.ReviewProjection != nil && !reflect.DeepEqual(prior.ReviewProjection, record.ReviewProjection) {
+			return fmt.Errorf("action record %d rewrote its review projection", index)
+		}
+		if prior.ReviewProjection == nil && record.ReviewProjection != nil && prior.Action.ActionID != currentActionID {
+			return fmt.Errorf("action record %d projected review status for a non-current action", index)
 		}
 	}
 	return nil
@@ -606,7 +683,7 @@ func diffAnswers(before, after []AnswerRecord) ([]answerUpdate, []AnswerRecord, 
 	if len(after) < len(before) {
 		return nil, nil, errors.New("run answer history shrank")
 	}
-	updates := make([]answerUpdate, 0)
+	var updates []answerUpdate
 	for index := range before {
 		beforeRecord := before[index]
 		afterRecord := after[index]

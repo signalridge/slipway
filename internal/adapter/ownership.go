@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	currentManifestVersion = 2
-	manifestFileName       = "ownership-manifest.json"
-	sentinelFileName       = ".adapter-generated"
+	currentManifestVersion   = 2
+	manifestFileName         = "ownership-manifest.json"
+	sentinelFileName         = ".adapter-generated"
+	generatedSentinelContent = "generated\n"
 )
 
 type manifestFile struct {
@@ -60,12 +61,20 @@ type HostStatus struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+type DoctorDurability struct {
+	Level         string `json:"level"`
+	FileSync      bool   `json:"file_sync"`
+	DirectorySync bool   `json:"directory_sync"`
+	Limitation    string `json:"limitation,omitempty"`
+}
+
 type DoctorCheck struct {
-	Code   string `json:"code"`
-	Status string `json:"status"`
-	HostID string `json:"host_id"`
-	Name   string `json:"name"`
-	Detail string `json:"detail"`
+	Code       string            `json:"code"`
+	Status     string            `json:"status"`
+	HostID     string            `json:"host_id"`
+	Name       string            `json:"name"`
+	Detail     string            `json:"detail"`
+	Durability *DoctorDurability `json:"durability,omitempty"`
 }
 
 type DoctorReport struct {
@@ -289,13 +298,21 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	if err != nil {
 		return plan, err
 	}
-	sentinelExpectation, err := observeRegularFileExpectation(sentinelPath)
+	sentinelClassification, err := classifyFile(sentinelPath, hashBytes([]byte(generatedSentinelContent)))
 	if err != nil {
 		return plan, err
 	}
-	if !found && !sentinelExpectation.missing {
+	if !found && sentinelClassification != "missing" {
 		plan.warnings = append(plan.warnings, currentOwnershipMissingWarning(host))
 		return plan, nil
+	}
+	sentinelWritable := sentinelClassification != "modified"
+	sentinelExpectation := plannedFileExpectation{missing: sentinelClassification == "missing"}
+	if sentinelClassification == "pristine" {
+		sentinelExpectation.sha256 = hashBytes([]byte(generatedSentinelContent))
+	}
+	if found && !sentinelWritable {
+		plan.preserved = append(plan.preserved, relativeToRoot(root, sentinelPath))
 	}
 	manifestExpectation := plannedFileExpectation{missing: true}
 	if found {
@@ -379,10 +396,12 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 
 	if len(claimed) == 0 {
 		if found {
-			plan.ops = append(plan.ops,
-				manifestExpectation.guard(fsutil.RemoveFileTransactionOp(manifestPath)),
-				sentinelExpectation.guard(fsutil.RemoveFileTransactionOp(sentinelPath)),
-			)
+			plan.ops = append(plan.ops, manifestExpectation.guard(fsutil.RemoveFileTransactionOp(manifestPath)))
+			plan.removed = append(plan.removed, relativeToRoot(root, manifestPath))
+			if sentinelWritable && sentinelClassification != "missing" {
+				plan.ops = append(plan.ops, sentinelExpectation.guard(fsutil.RemoveFileTransactionOp(sentinelPath)))
+				plan.removed = append(plan.removed, relativeToRoot(root, sentinelPath))
+			}
 		}
 		return plan, nil
 	}
@@ -390,11 +409,12 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	if err != nil {
 		return plan, err
 	}
-	plan.ops = append(plan.ops,
-		manifestExpectation.guard(fsutil.WriteFileTransactionOp(manifestPath, encoded, 0o600)),
-		sentinelExpectation.guard(fsutil.WriteFileTransactionOp(sentinelPath, []byte("generated\n"), 0o600)),
-	)
-	plan.written = append(plan.written, relativeToRoot(root, manifestPath), relativeToRoot(root, sentinelPath))
+	plan.ops = append(plan.ops, manifestExpectation.guard(fsutil.WriteFileTransactionOp(manifestPath, encoded, 0o600)))
+	plan.written = append(plan.written, relativeToRoot(root, manifestPath))
+	if sentinelWritable {
+		plan.ops = append(plan.ops, sentinelExpectation.guard(fsutil.WriteFileTransactionOp(sentinelPath, []byte(generatedSentinelContent), 0o600)))
+		plan.written = append(plan.written, relativeToRoot(root, sentinelPath))
+	}
 	return plan, nil
 }
 
@@ -426,15 +446,19 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		sentinelExpectation, err := observeRegularFileExpectation(sentinelPath)
+		plan.ops = append(plan.ops, fsutil.RemoveFileTransactionOp(manifestPath).WithExpectedSHA256(manifest.sourceSHA256))
+		plan.removed = append(plan.removed, relativeToRoot(root, manifestPath))
+		sentinelClassification, err := classifyFile(sentinelPath, hashBytes([]byte(generatedSentinelContent)))
 		if err != nil {
 			return plan, err
 		}
-		plan.ops = append(plan.ops,
-			fsutil.RemoveFileTransactionOp(manifestPath).WithExpectedSHA256(manifest.sourceSHA256),
-			sentinelExpectation.guard(fsutil.RemoveFileTransactionOp(sentinelPath)),
-		)
-		plan.removed = append(plan.removed, relativeToRoot(root, manifestPath), relativeToRoot(root, sentinelPath))
+		switch sentinelClassification {
+		case "pristine":
+			plan.ops = append(plan.ops, fsutil.RemoveFileTransactionOp(sentinelPath).WithExpectedSHA256(hashBytes([]byte(generatedSentinelContent))))
+			plan.removed = append(plan.removed, relativeToRoot(root, sentinelPath))
+		case "modified":
+			plan.preserved = append(plan.preserved, relativeToRoot(root, sentinelPath))
+		}
 	} else {
 		_, sentinelPath, err := ownershipPaths(root, host)
 		if err != nil {
@@ -486,6 +510,9 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	if err != nil {
 		return ownershipManifest{}, false, err
 	}
+	if err := rejectDuplicateJSONKeys(raw); err != nil {
+		return ownershipManifest{}, false, fmt.Errorf("parse ownership manifest for %s: %w", host.ID, err)
+	}
 	decoder := json.NewDecoder(strings.NewReader(string(raw)))
 	decoder.DisallowUnknownFields()
 	var manifest ownershipManifest
@@ -504,6 +531,9 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	}
 	if manifest.ToolID != host.ID {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s belongs to %s", host.ID, manifest.ToolID)
+	}
+	if manifest.Files == nil {
+		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s requires a non-null files array", host.ID)
 	}
 	seen := map[string]struct{}{}
 	for index := range manifest.Files {
@@ -690,24 +720,6 @@ func hashBytes(data []byte) string {
 type plannedFileExpectation struct {
 	missing bool
 	sha256  string
-}
-
-func observeRegularFileExpectation(path string) (plannedFileExpectation, error) {
-	info, err := os.Lstat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return plannedFileExpectation{missing: true}, nil
-	}
-	if err != nil {
-		return plannedFileExpectation{}, err
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return plannedFileExpectation{}, fmt.Errorf("transaction input %s is not a regular file", path)
-	}
-	hash, err := hashRegularFile(path)
-	if err != nil {
-		return plannedFileExpectation{}, err
-	}
-	return plannedFileExpectation{sha256: hash}, nil
 }
 
 func (expectation plannedFileExpectation) guard(op fsutil.FileTransactionOp) fsutil.FileTransactionOp {

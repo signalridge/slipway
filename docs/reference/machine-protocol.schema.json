@@ -17,6 +17,32 @@
     { "$ref": "#/$defs/statusList" }
   ],
   "$defs": {
+    "nonEmptyPlainText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$"
+    },
+    "nonEmptyMarkdownText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$"
+    },
+    "githubNodeID": {
+      "allOf": [
+        { "$ref": "#/$defs/nonEmptyPlainText" },
+        { "pattern": "^\\S+$" }
+      ]
+    },
+    "githubIssueURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$"
+    },
+    "githubCommentURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$"
+    },
     "changeReport": {
       "type": "object",
       "additionalProperties": false,
@@ -51,6 +77,17 @@
         "hosts": { "type": "array", "items": { "$ref": "#/$defs/hostStatus" } }
       }
     },
+    "doctorDurability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "file_sync", "directory_sync"],
+      "properties": {
+        "level": { "enum": ["file_and_directory_fsync", "file_fsync_only"] },
+        "file_sync": { "type": "boolean" },
+        "directory_sync": { "type": "boolean" },
+        "limitation": { "type": "string", "minLength": 1 }
+      }
+    },
     "doctorCheck": {
       "type": "object",
       "additionalProperties": false,
@@ -60,7 +97,8 @@
         "status": { "enum": ["ok", "warning", "error"] },
         "host_id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
-        "detail": { "type": "string", "minLength": 1 }
+        "detail": { "type": "string", "minLength": 1 },
+        "durability": { "$ref": "#/$defs/doctorDurability" }
       }
     },
     "doctorReport": {
@@ -77,13 +115,13 @@
       "additionalProperties": false,
       "required": ["node_id", "database_id", "url", "updated_at", "author_id", "is_minimized", "body"],
       "properties": {
-        "node_id": { "type": "string", "minLength": 1 },
+        "node_id": { "$ref": "#/$defs/githubNodeID" },
         "database_id": { "type": "integer", "minimum": 1 },
-        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/" },
+        "url": { "$ref": "#/$defs/githubCommentURL" },
         "updated_at": { "type": "string", "format": "date-time" },
-        "author_id": { "type": "string", "minLength": 1 },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
         "is_minimized": { "type": "boolean" },
-        "body": { "type": "string", "minLength": 1 }
+        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" }
       }
     },
     "rawSourceEnvelope": {
@@ -97,15 +135,15 @@
         "source_version": { "const": 2 },
         "provider": { "const": "github" },
         "host": { "const": "github.com" },
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
         "issue_number": { "type": "integer", "minimum": 1 },
-        "canonical_url": { "type": "string", "format": "uri" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" },
         "updated_at": { "type": "string", "format": "date-time" },
         "fetched_at": { "type": "string", "format": "date-time" },
-        "title": { "type": "string", "minLength": 1 },
-        "body": { "type": "string", "minLength": 1 },
-        "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1 } },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "comments": {
           "type": "array",
@@ -120,9 +158,9 @@
       "additionalProperties": false,
       "required": ["repository_id", "issue_id", "canonical_url"],
       "properties": {
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
-        "canonical_url": { "type": "string", "format": "uri" }
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" }
       }
     },
     "sourceSectionProvenance": {
@@ -350,8 +388,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "version", "head", "index_fingerprint", "status_fingerprint", "snapshot_hash", "dirty_files",
-        "path_observations"
+        "version", "head", "index_fingerprint", "status_fingerprint", "snapshot_hash", "path_count",
+        "path_fingerprint", "details_truncated", "dirty_files", "path_observations"
       ],
       "properties": {
         "version": { "const": 1 },
@@ -359,6 +397,9 @@
         "index_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "status_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "snapshot_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "path_count": { "type": "integer", "minimum": 0 },
+        "path_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "details_truncated": { "type": "boolean" },
         "dirty_files": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "path_observations": { "type": "array", "items": { "$ref": "#/$defs/pathObservation" } }
       }
@@ -388,9 +429,52 @@
         "action": { "$ref": "#/$defs/action" },
         "outcome": { "$ref": "#/$defs/outcome" },
         "outcome_payload_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "review_projection": {
+          "allOf": [
+            { "$ref": "#/$defs/review" },
+            {
+              "properties": {
+                "result": { "const": "not_run" },
+                "findings": { "maxItems": 0 },
+                "uncertainties": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
         "voided": { "type": "boolean" },
         "skipped": { "type": "boolean" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["review_projection"] },
+          "then": {
+            "required": ["skipped"],
+            "properties": {
+              "action": {
+                "allOf": [
+                  { "$ref": "#/$defs/action" },
+                  { "properties": { "kind": { "const": "review" } } }
+                ]
+              },
+              "skipped": { "const": true }
+            },
+            "not": {
+              "anyOf": [
+                { "required": ["outcome"] },
+                { "required": ["outcome_payload_sha256"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "required": ["outcome"] },
+          "then": { "required": ["outcome_payload_sha256"] }
+        },
+        {
+          "if": { "required": ["outcome_payload_sha256"] },
+          "then": { "required": ["outcome"] }
+        }
+      ]
     },
     "runStatus": {
       "type": "object",
@@ -505,12 +589,21 @@
         "refreshed_issue_id": { "type": "string", "minLength": 1 }
       }
     },
+    "adapterMutationErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report"],
+      "properties": {
+        "report": { "$ref": "#/$defs/changeReport" }
+      }
+    },
     "errorDetails": {
       "oneOf": [
         { "$ref": "#/$defs/mutationErrorDetails" },
         { "$ref": "#/$defs/runStateErrorDetails" },
         { "$ref": "#/$defs/workspaceIdentityErrorDetails" },
-        { "$ref": "#/$defs/sourceIssueMismatchErrorDetails" }
+        { "$ref": "#/$defs/sourceIssueMismatchErrorDetails" },
+        { "$ref": "#/$defs/adapterMutationErrorDetails" }
       ]
     },
     "cliError": {
@@ -688,7 +781,7 @@
       "additionalProperties": false,
       "required": ["request_id", "targets", "impact", "scope_sha256"],
       "properties": {
-        "request_id": { "type": "string", "minLength": 1 },
+        "request_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
         "targets": {
           "type": "array",
           "minItems": 1,
@@ -712,7 +805,7 @@
         "confirmed_at"
       ],
       "properties": {
-        "request_id": { "type": "string", "minLength": 1 },
+        "request_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
         "originating_action_id": { "type": "string", "minLength": 1 },
         "scope_version": { "const": 1 },
         "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
@@ -875,8 +968,15 @@
             { "$ref": "#/$defs/destructiveRequest" },
             { "type": "null" }
           ]
+        },
+        "supersedes_answer_action_id": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["supersedes_answer_action_id"] },
+          "then": { "properties": { "reason": { "const": "decision_required" } } }
         }
-      }
+      ]
     },
     "nonDestructivePause": {
       "allOf": [
@@ -917,7 +1017,7 @@
       "additionalProperties": false,
       "required": ["result", "findings", "uncertainties"],
       "properties": {
-        "result": { "enum": ["no_findings_reported", "findings_reported", "inconclusive", "error"] },
+        "result": { "enum": ["no_findings_reported", "findings_reported", "inconclusive", "error", "not_run"] },
         "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
         "uncertainties": { "type": "array", "items": { "type": "string" } }
       }

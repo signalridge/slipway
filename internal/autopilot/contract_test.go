@@ -88,6 +88,9 @@ func TestOutcomeValidationRejectsIllegalMatrixCombinations(t *testing.T) {
 		{name: "destructive pause outside implement", kind: ActionOrient, outcome: pausedTestOutcome(PauseDestructiveConfirm, &destructive), want: "only valid for implement"},
 		{name: "destructive pause without request", kind: ActionImplement, outcome: pausedTestOutcome(PauseDestructiveConfirm, nil), want: "requires destructive_request"},
 		{name: "request on decision pause", kind: ActionImplement, outcome: pausedTestOutcome(PauseDecisionRequired, &destructive), want: "only valid for destructive"},
+		{name: "blank decision supersession", kind: ActionOrient, outcome: withDecisionSupersession(pausedTestOutcome(PauseDecisionRequired, nil), " "), want: "supersedes_answer_action_id is required"},
+		{name: "supersession on environment pause", kind: ActionOrient, outcome: withDecisionSupersession(pausedTestOutcome(PauseEnvironmentUnavailable, nil), "prior-action"), want: "only valid for decision_required"},
+		{name: "supersession on destructive pause", kind: ActionImplement, outcome: withDecisionSupersession(pausedTestOutcome(PauseDestructiveConfirm, &destructive), "prior-action"), want: "only valid for decision_required"},
 		{name: "needs input suggestion", kind: ActionOrient, outcome: withSuggestion(pausedTestOutcome(PauseDecisionRequired, nil), ActionClarify), want: "empty suggested_actions"},
 		{name: "implement suggestion", kind: ActionImplement, outcome: withSuggestion(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), ActionSummarize), want: "implement outcomes cannot suggest"},
 		{name: "summary suggestion", kind: ActionSummarize, outcome: withSuggestion(testOutcome(OutcomeCompleted), ActionClarify), want: "summarize outcomes cannot suggest"},
@@ -308,11 +311,25 @@ func TestDestructiveScopeCanonicalizationRejectsAmbiguousTargets(t *testing.T) {
 		{Kind: DestructiveTargetPath, Value: "/tmp/\"quoted\""},
 	}
 	impact := "delete <records>&\npermanently"
-	digest, err := ComputeDestructiveScopeSHA256("request-1", targets, impact)
+	digest, err := ComputeDestructiveScopeSHA256("11111111-1111-4111-8111-111111111111", targets, impact)
 	require.NoError(t, err)
-	canonical := "{\"impact\":\"delete <records>&\\npermanently\",\"request_id\":\"request-1\",\"scope_version\":1,\"targets\":[{\"kind\":\"external_resource\",\"value\":\"service/<prod>&\u2028\"},{\"kind\":\"path\",\"value\":\"/tmp/\\\"quoted\\\"\"}]}"
+	canonical := "{\"impact\":\"delete <records>&\\npermanently\",\"request_id\":\"11111111-1111-4111-8111-111111111111\",\"scope_version\":1,\"targets\":[{\"kind\":\"external_resource\",\"value\":\"service/<prod>&\u2028\"},{\"kind\":\"path\",\"value\":\"/tmp/\\\"quoted\\\"\"}]}"
 	want := fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(canonical)))
 	assert.Equal(t, want, digest)
+
+	for name, requestID := range map[string]string{
+		"non uuid":  "request-1",
+		"nil uuid":  "00000000-0000-0000-0000-000000000000",
+		"non rfc":   "11111111-1111-4111-7111-111111111111",
+		"uppercase": "11111111-1111-4111-8111-AAAAAAAAAAAA",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ComputeDestructiveScopeSHA256(requestID, targets, impact)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "canonical lowercase non-nil RFC UUID")
+		})
+	}
 
 	tests := []struct {
 		name    string
@@ -331,7 +348,7 @@ func TestDestructiveScopeCanonicalizationRejectsAmbiguousTargets(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := ComputeDestructiveScopeSHA256("request-1", test.targets, "delete")
+			_, err := ComputeDestructiveScopeSHA256("11111111-1111-4111-8111-111111111111", test.targets, "delete")
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.want)
 		})
@@ -461,9 +478,9 @@ func testActionRequirements() ActionRequirements {
 func destructiveRequestForTest(t *testing.T) DestructiveRequest {
 	t.Helper()
 	targets := []DestructiveTarget{{Kind: DestructiveTargetPath, Value: "/absolute/target"}}
-	digest, err := ComputeDestructiveScopeSHA256("request-1", targets, "permanent deletion")
+	digest, err := ComputeDestructiveScopeSHA256("11111111-1111-4111-8111-111111111111", targets, "permanent deletion")
 	require.NoError(t, err)
-	return DestructiveRequest{RequestID: "request-1", Targets: targets, Impact: "permanent deletion", ScopeSHA256: digest}
+	return DestructiveRequest{RequestID: "11111111-1111-4111-8111-111111111111", Targets: targets, Impact: "permanent deletion", ScopeSHA256: digest}
 }
 
 func destructiveAuthorizationForTest(t *testing.T) DestructiveAuthorization {
@@ -545,6 +562,11 @@ func withAttempts(outcome Outcome, attempts int) Outcome {
 
 func withPause(outcome Outcome, reason PauseReason, request *DestructiveRequest) Outcome {
 	outcome.Pause = &Pause{Reason: reason, Question: "question", DestructiveRequest: request}
+	return outcome
+}
+
+func withDecisionSupersession(outcome Outcome, actionID string) Outcome {
+	outcome.Pause.SupersedesAnswerActionID = &actionID
 	return outcome
 }
 

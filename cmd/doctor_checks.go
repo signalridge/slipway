@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/signalridge/slipway/internal/adapter"
+	"github.com/signalridge/slipway/internal/autopilot"
 )
 
 const (
@@ -74,6 +75,24 @@ func collectDoctorReport(ctx context.Context, root string, runner doctorCommandR
 	if err != nil {
 		return adapter.DoctorReport{}, err
 	}
+	capability := autopilot.PlatformDurability()
+	status := "ok"
+	code := "runstore_durability_full"
+	if !capability.DirectorySync {
+		status = "warning"
+		code = "runstore_durability_limited"
+	}
+	detail := fmt.Sprintf("%s (file sync: %t, directory sync: %t)", capability.Level, capability.FileSync, capability.DirectorySync)
+	if capability.Limitation != "" {
+		detail += "; " + capability.Limitation
+	}
+	report.Checks = append(report.Checks, adapter.DoctorCheck{
+		Code: code, Status: status, HostID: "-", Name: "runstore durability", Detail: detail,
+		Durability: &adapter.DoctorDurability{
+			Level: capability.Level, FileSync: capability.FileSync,
+			DirectorySync: capability.DirectorySync, Limitation: capability.Limitation,
+		},
+	})
 	report.Checks = append(report.Checks, githubDoctorChecks(ctx, root, runner)...)
 	return report, nil
 }

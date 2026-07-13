@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -9,8 +10,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
+	"github.com/signalridge/slipway/internal/runstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -159,16 +162,65 @@ func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
 	runGit(t, repository, "worktree", "add", "-q", "-b", "foreign-list-test", foreignRoot)
 	foreignService := openTestService(t, foreignRoot)
 	foreign := startTestRun(t, foreignService, 4, false)
+	foreignDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", foreign.ID)
+	foreignLock := filepath.Join(foreignDirectory, "run.lock")
+	require.NoError(t, os.Remove(foreignLock))
+	foreignJournal := filepath.Join(foreignDirectory, "journal.jsonl")
+	journal, err := os.OpenFile(foreignJournal, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = journal.WriteString(`{"interrupted"`)
+	require.NoError(t, err)
+	require.NoError(t, journal.Close())
+	foreignBefore, err := os.ReadFile(foreignJournal)
+	require.NoError(t, err)
+
+	_, err = service.Load(foreign.ID)
+	assertProtocolError(t, err, "workspace_identity_mismatch")
+	foreignAfterLoad, err := os.ReadFile(foreignJournal)
+	require.NoError(t, err)
+	assert.Equal(t, foreignBefore, foreignAfterLoad, "foreign status must not repair another worktree's journal")
 
 	corruptDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "corrupt-list-test")
 	require.NoError(t, os.MkdirAll(corruptDirectory, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(corruptDirectory, "journal.jsonl"), []byte("not-json\n"), 0o600))
+	incompleteDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "incomplete-list-test")
+	require.NoError(t, os.MkdirAll(incompleteDirectory, 0o700))
 
 	runs, err := service.List()
 	require.NoError(t, err)
 	require.Len(t, runs, 1)
 	assert.Equal(t, local.ID, runs[0].ID)
 	assert.NotEqual(t, foreign.ID, runs[0].ID)
+	foreignAfterList, err := os.ReadFile(foreignJournal)
+	require.NoError(t, err)
+	assert.Equal(t, foreignBefore, foreignAfterList, "listing must not repair a foreign journal tail")
+	for _, directory := range []string{foreignDirectory, corruptDirectory, incompleteDirectory} {
+		_, statErr := os.Stat(filepath.Join(directory, "run.lock"))
+		assert.ErrorIs(t, statErr, os.ErrNotExist, "read-only preflight must not create a lock before local ownership is established")
+	}
+}
+
+func TestServiceLoadRecreatesMissingLockForValidatedLocalRun(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 4, false)
+	runDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID)
+	lockPath := filepath.Join(runDirectory, "run.lock")
+	journalPath := filepath.Join(runDirectory, "journal.jsonl")
+	require.NoError(t, os.Remove(lockPath))
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+
+	loaded, err := service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, run.ID, loaded.ID)
+
+	journalAfter, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Equal(t, journalBefore, journalAfter)
+	lockInfo, err := os.Lstat(lockPath)
+	require.NoError(t, err)
+	assert.True(t, lockInfo.Mode().IsRegular())
 }
 
 func TestServiceRejectsHostSkippedReviewStatus(t *testing.T) {
@@ -427,6 +479,10 @@ func TestServiceSkipReviewRecordsSkippedWorkAndEnds(t *testing.T) {
 	require.NotNil(t, reviewRecord)
 	assert.True(t, reviewRecord.Skipped)
 	assert.Nil(t, reviewRecord.Outcome)
+	require.NotNil(t, reviewRecord.ReviewProjection)
+	assert.Equal(t, ReviewNotRun, reviewRecord.ReviewProjection.Result)
+	assert.Empty(t, reviewRecord.ReviewProjection.Findings)
+	assert.Empty(t, reviewRecord.ReviewProjection.Uncertainties)
 
 	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reported"})
 	assert.Equal(t, RunEnded, run.State)
@@ -473,6 +529,57 @@ func TestServiceSkipPausedDecisionPreservesQuestionAndRecordsSkip(t *testing.T) 
 	assert.True(t, waitingRecord.Skipped)
 	require.NotNil(t, waitingRecord.Outcome)
 	assert.Equal(t, OutcomeNeedsInput, waitingRecord.Outcome.Status)
+}
+
+func TestServiceSkipPausedEnvironmentActionUsesStructuredControl(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 8, false)
+	waitingID := run.CurrentAction.ActionID
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "The local environment is unavailable",
+		Pause:   pauseReport(PauseEnvironmentUnavailable, "Retry after the environment recovers.", nil),
+	})
+	next, err := DeriveNext(run)
+	require.NoError(t, err)
+	require.Equal(t, "skip-action", next.Variants[len(next.Variants)-1].ID)
+
+	run, err = service.Skip(run.ID, waitingID)
+	require.NoError(t, err)
+	require.NotNil(t, run.CurrentAction)
+	assert.Equal(t, ActionSummarize, run.CurrentAction.Kind)
+}
+
+func TestServiceSkipPausedDestructiveActionClearsRequest(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 8, false)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeCompleted,
+		Summary: "Implementation is ready",
+		SuggestedActions: []SuggestedAction{{
+			Kind:  ActionImplement,
+			Brief: "Apply the change.",
+		}},
+	})
+	waitingID := run.CurrentAction.ActionID
+	request := destructiveRequestForTest(t)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "The exact destructive scope needs confirmation",
+		Pause:   pauseReport(PauseDestructiveConfirm, "Confirm the exact scope.", &request),
+	})
+	next, err := DeriveNext(run)
+	require.NoError(t, err)
+	require.Equal(t, "skip-action", next.Variants[len(next.Variants)-1].ID)
+
+	run, err = service.Skip(run.ID, waitingID)
+	require.NoError(t, err)
+	assert.Nil(t, run.PendingDestructiveRequest)
+	assert.Nil(t, run.DestructiveGrant)
+	require.NotNil(t, run.CurrentAction)
+	assert.Equal(t, ActionSummarize, run.CurrentAction.Kind)
 }
 
 func TestServiceDuplicateSubmitIsIdempotentAndConflictingDuplicateIsRejected(t *testing.T) {
@@ -725,6 +832,66 @@ func TestRunJournalStoresLinearDeltasInsteadOfRepeatedProjections(t *testing.T) 
 	}
 }
 
+func TestRunJournalRejectsUnknownAndMislabeledEventTypes(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 4, false)
+	_, err := service.Submit(run.ID, run.CurrentAction.ActionID, withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{
+		Status: OutcomeCompleted, Summary: "orientation complete",
+	}))
+	require.NoError(t, err)
+
+	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
+	content, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	lines := bytes.Split(bytes.TrimSpace(content), []byte("\n"))
+	require.GreaterOrEqual(t, len(lines), 2)
+	var first, second runstore.Event
+	require.NoError(t, json.Unmarshal(lines[0], &first))
+	require.NoError(t, json.Unmarshal(lines[1], &second))
+
+	var replay Run
+	unknown := first
+	unknown.Type = "invented_event"
+	err = applyRunEvent(&replay, unknown)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported run journal event type")
+
+	var nonCanonicalData map[string]any
+	require.NoError(t, json.Unmarshal(first.Data, &nonCanonicalData))
+	nonCanonicalData["answers_append"] = []any{}
+	nonCanonical := first
+	nonCanonical.Data, err = json.Marshal(nonCanonicalData)
+	require.NoError(t, err)
+	replay = Run{}
+	err = applyRunEvent(&replay, nonCanonical)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-canonical delta")
+	replay = Run{}
+
+	require.NoError(t, applyRunEvent(&replay, first))
+	second.Type = "action_skipped"
+	err = applyRunEvent(&replay, second)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "action_skipped must mark one existing action skipped")
+}
+
+func TestRunResumedJournalEventRequiresAdHocResumeReceipt(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 4, false)
+	before := runBeforeMutation(run)
+	after := runBeforeMutation(run)
+	after.UpdatedAt = after.UpdatedAt.Add(time.Second)
+	event, err := newRunEvent("run_resumed", before, after)
+	require.NoError(t, err)
+
+	replayed := runBeforeMutation(before)
+	err = applyRunEvent(&replayed, event)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "run_resumed must record the ad-hoc resume operation")
+}
+
 func TestBuildContextRetainsActiveDecisionsAndOutcomeProjectionsWithinBoundedUTF8(t *testing.T) {
 	t.Parallel()
 	criticalAnswer := "Use the user-selected durable storage option."
@@ -878,10 +1045,10 @@ func TestServiceStructuredDestructiveGrantIsExactIdempotentAndScopeBound(t *test
 		{Kind: DestructiveTargetPath, Value: "/absolute/target"},
 		{Kind: DestructiveTargetPath, Value: "/absolute/target/two"},
 	}
-	expandedDigest, err := ComputeDestructiveScopeSHA256("request-2", expandedTargets, "delete two targets permanently")
+	expandedDigest, err := ComputeDestructiveScopeSHA256("22222222-2222-4222-8222-222222222222", expandedTargets, "delete two targets permanently")
 	require.NoError(t, err)
 	expanded := DestructiveRequest{
-		RequestID: "request-2", Targets: expandedTargets,
+		RequestID: "22222222-2222-4222-8222-222222222222", Targets: expandedTargets,
 		Impact: "delete two targets permanently", ScopeSHA256: expandedDigest,
 	}
 	paused := submitCurrent(t, service, authorized, Outcome{
@@ -1870,6 +2037,47 @@ func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *test
 	require.NotNil(t, paused.SourceCandidate.Snapshot)
 	assert.Equal(t, []string{oldURL}, paused.SourceCandidate.Snapshot.URLAliases)
 	assert.NotEqual(t, transferRun.PinnedSource.RequirementsRevision, paused.SourceCandidate.RequirementsRevision)
+}
+
+func TestServicePinnedTransferChoiceKeepsRequirementsAndUpdatesProjection(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 10)
+	original := clonePinnedSourceValue(*run.PinnedSource)
+
+	transferEnvelope := validSourceEnvelope()
+	transferEnvelope.RepositoryID = "R_kgDOTransferredPinned"
+	transferEnvelope.IssueNumber = 99
+	transferEnvelope.CanonicalURL = "https://github.com/signalridge/slipway-next/issues/99"
+	for index := range transferEnvelope.Comments {
+		transferEnvelope.Comments[index].URL = transferEnvelope.CanonicalURL + "#issuecomment-" + jsonNumber(transferEnvelope.Comments[index].DatabaseID)
+	}
+	setEnvelopeSection(t, &transferEnvelope, "requirements", "\n# Requirements\n\n- Candidate requirements that remain unadopted.\n")
+	setEnvelopeParentRequirementsRevision(t, &transferEnvelope, original.RequirementsRevision)
+	candidate := sourceCandidateForTest(t, transferEnvelope)
+	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	require.NoError(t, err)
+	require.NotNil(t, paused.SourceCandidate)
+
+	resolved, err := service.Resume(run.ID, ResumeOptions{
+		SourceChoice: SourceChoicePinned,
+		CandidateID:  paused.SourceCandidate.CandidateID,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resolved.PinnedSource)
+	assert.Equal(t, original.ManifestRevision, resolved.PinnedSource.ManifestRevision)
+	assert.Equal(t, original.RequirementsRevision, resolved.PinnedSource.RequirementsRevision)
+	assert.Equal(t, original.Sections, resolved.PinnedSource.Sections)
+	assert.Equal(t, transferEnvelope.RepositoryID, resolved.PinnedSource.RepositoryID)
+	assert.Equal(t, transferEnvelope.IssueNumber, resolved.PinnedSource.IssueNumber)
+	assert.Equal(t, transferEnvelope.CanonicalURL, resolved.PinnedSource.CanonicalURL)
+	assert.Equal(t, []string{original.CanonicalURL}, resolved.PinnedSource.URLAliases)
+	assert.NotEqual(t, original.SourceRevision, resolved.PinnedSource.SourceRevision)
+
+	loaded, err := service.Load(run.ID)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.PinnedSource)
+	assert.Equal(t, resolved.PinnedSource, loaded.PinnedSource)
 }
 
 func TestServiceResumeUsesImportedSourceAfterEphemeralFileRemoval(t *testing.T) {

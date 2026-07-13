@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/signalridge/slipway/internal/autopilot"
@@ -33,6 +34,10 @@ func makeStatusCmd() *cobra.Command {
 			if len(args) == 1 {
 				run, err := service.Load(args[0])
 				if err != nil {
+					var protocolErr *autopilot.ProtocolError
+					if errors.As(err, &protocolErr) {
+						return err
+					}
 					return newRuntimeError(
 						"run_not_found",
 						err.Error(),

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 const ContractVersion = 2
@@ -23,6 +25,8 @@ const (
 	maxActionBytes               = 256 << 10
 	DestructiveScopeVersion      = 1
 )
+
+var errActionTooLarge = errors.New("encoded action exceeds")
 
 type ActionKind string
 
@@ -189,9 +193,10 @@ type SuggestedAction struct {
 }
 
 type Pause struct {
-	Reason             PauseReason         `json:"reason"`
-	Question           string              `json:"question"`
-	DestructiveRequest *DestructiveRequest `json:"destructive_request"`
+	Reason                   PauseReason         `json:"reason"`
+	Question                 string              `json:"question"`
+	DestructiveRequest       *DestructiveRequest `json:"destructive_request"`
+	SupersedesAnswerActionID *string             `json:"supersedes_answer_action_id,omitempty"`
 }
 
 type Implementation struct {
@@ -297,7 +302,7 @@ func (action Action) Validate() error {
 		return fmt.Errorf("encode action: %w", err)
 	}
 	if len(encoded) > maxActionBytes {
-		return fmt.Errorf("encoded action exceeds %d bytes", maxActionBytes)
+		return fmt.Errorf("%w %d bytes", errActionTooLarge, maxActionBytes)
 	}
 	return nil
 }
@@ -415,12 +420,23 @@ func encodeAction(action Action) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func encodedJSONStringSize(value string) (int, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return 0, err
+	}
+	return buffer.Len() - 1, nil // json.Encoder appends one newline.
+}
+
 // ComputeDestructiveScopeSHA256 returns the SHA-256 of the canonical destructive
 // scope. Callers must supply a nonempty, duplicate-free target list already
 // sorted bytewise by (kind, value).
 func ComputeDestructiveScopeSHA256(requestID string, targets []DestructiveTarget, impact string) (string, error) {
-	if err := requireNonEmptyUTF8("request_id", requestID); err != nil {
-		return "", err
+	parsedRequestID, err := uuid.Parse(requestID)
+	if err != nil || parsedRequestID == uuid.Nil || parsedRequestID.Variant() != uuid.RFC4122 || parsedRequestID.String() != requestID {
+		return "", errors.New("request_id must be a canonical lowercase non-nil RFC UUID")
 	}
 	if err := requireNonEmptyUTF8("impact", impact); err != nil {
 		return "", err
@@ -799,9 +815,21 @@ func validatePause(kind ActionKind, pause Pause) error {
 		return err
 	}
 	switch pause.Reason {
-	case PauseDecisionRequired, PauseEnvironmentUnavailable:
+	case PauseDecisionRequired:
 		if pause.DestructiveRequest != nil {
 			return errors.New("pause.destructive_request is only valid for destructive_confirmation_required")
+		}
+		if pause.SupersedesAnswerActionID != nil {
+			if err := requireNonEmptyUTF8("pause.supersedes_answer_action_id", *pause.SupersedesAnswerActionID); err != nil {
+				return err
+			}
+		}
+	case PauseEnvironmentUnavailable:
+		if pause.DestructiveRequest != nil {
+			return errors.New("pause.destructive_request is only valid for destructive_confirmation_required")
+		}
+		if pause.SupersedesAnswerActionID != nil {
+			return errors.New("pause.supersedes_answer_action_id is only valid for decision_required")
 		}
 	case PauseDestructiveConfirm:
 		if kind != ActionImplement {
@@ -809,6 +837,9 @@ func validatePause(kind ActionKind, pause Pause) error {
 		}
 		if pause.DestructiveRequest == nil {
 			return errors.New("destructive_confirmation_required requires destructive_request")
+		}
+		if pause.SupersedesAnswerActionID != nil {
+			return errors.New("pause.supersedes_answer_action_id is only valid for decision_required")
 		}
 		if _, err := NormalizeDestructiveRequest(*pause.DestructiveRequest); err != nil {
 			return err

@@ -32,9 +32,9 @@ func TestTreeSnapshotRejectsSpecialFilesWithoutMutation(t *testing.T) {
 	assert.NotZero(t, info.Mode()&os.ModeNamedPipe)
 }
 
-func TestFailedGuardSnapshotReleasesScopedHandlesBeforeRollback(t *testing.T) {
+func TestFailedPreflightGuardSnapshotReleasesScopedHandles(t *testing.T) {
 	if os.Getenv(guardSnapshotRlimitHelper) != "1" {
-		command := exec.Command(os.Args[0], "-test.run=^TestFailedGuardSnapshotReleasesScopedHandlesBeforeRollback$")
+		command := exec.Command(os.Args[0], "-test.run=^TestFailedPreflightGuardSnapshotReleasesScopedHandles$")
 		command.Env = append(os.Environ(), guardSnapshotRlimitHelper+"=1")
 		output, err := command.CombinedOutput()
 		require.NoError(t, err, string(output))
@@ -53,7 +53,7 @@ func TestFailedGuardSnapshotReleasesScopedHandlesBeforeRollback(t *testing.T) {
 	var original unix.Rlimit
 	require.NoError(t, unix.Getrlimit(unix.RLIMIT_NOFILE, &original))
 	if original.Cur < 64 {
-		t.Skipf("RLIMIT_NOFILE is already too small for deterministic rollback exercise: %d", original.Cur)
+		t.Skipf("RLIMIT_NOFILE is already too small for deterministic preflight exercise: %d", original.Cur)
 	}
 	limited := original
 	limited.Cur = 64
@@ -67,8 +67,7 @@ func TestFailedGuardSnapshotReleasesScopedHandlesBeforeRollback(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, unix.EMFILE), "large guard snapshot must hit the scoped descriptor limit: %v", err)
 	var transactionErr *FileTransactionError
-	require.ErrorAs(t, err, &transactionErr)
-	assert.Empty(t, transactionErr.RollbackErrs, "closing the failed guard sublease must leave descriptors available for rollback")
+	assert.False(t, errors.As(err, &transactionErr), "preflight must fail before rollback is needed")
 	content, readErr := os.ReadFile(managed)
 	require.NoError(t, readErr)
 	assert.Equal(t, "before", string(content))

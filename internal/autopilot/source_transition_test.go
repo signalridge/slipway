@@ -37,7 +37,7 @@ func TestRunEventReplayRejectsInvalidSourceTransitions(t *testing.T) {
 			PinnedSource:    candidate.Snapshot,
 			UpdatedAt:       run.UpdatedAt.Add(time.Second),
 		}
-		event, err := runstore.NewEvent("forged_source_refresh", delta)
+		event, err := runstore.NewEvent(ResumeOperationSourceAmended, delta)
 		require.NoError(t, err)
 
 		replayed := runBeforeMutation(run)
@@ -130,17 +130,20 @@ func TestRunEventReplayRejectsMalformedResumeReceipts(t *testing.T) {
 	base := startIssueTestRun(t, service, 6)
 
 	tests := []struct {
-		name   string
-		result ResumeResult
-		want   string
+		name      string
+		eventType string
+		result    ResumeResult
+		want      string
 	}{
 		{
-			name:   "unknown operation",
-			result: ResumeResult{Operation: "invented", BudgetApplied: true},
-			want:   "unknown operation",
+			name:      "unknown operation",
+			eventType: ResumeOperationSourceRefreshed,
+			result:    ResumeResult{Operation: "invented", BudgetApplied: true},
+			want:      "unknown operation",
 		},
 		{
-			name: "candidate receipt without candidate",
+			name:      "candidate receipt without candidate",
+			eventType: ResumeOperationSourceCandidate,
 			result: ResumeResult{
 				Operation:     ResumeOperationSourceCandidate,
 				BudgetApplied: false,
@@ -149,7 +152,8 @@ func TestRunEventReplayRejectsMalformedResumeReceipts(t *testing.T) {
 			want: "source candidate receipt is inconsistent",
 		},
 		{
-			name: "refresh receipt with candidate id",
+			name:      "refresh receipt with candidate id",
+			eventType: ResumeOperationSourceRefreshed,
 			result: ResumeResult{
 				Operation:     ResumeOperationSourceRefreshed,
 				BudgetApplied: true,
@@ -169,7 +173,7 @@ func TestRunEventReplayRejectsMalformedResumeReceipts(t *testing.T) {
 				LastResumeResult:    &test.result,
 				UpdatedAt:           run.UpdatedAt.Add(time.Second),
 			}
-			event, err := runstore.NewEvent("forged_resume_receipt", delta)
+			event, err := runstore.NewEvent(test.eventType, delta)
 			require.NoError(t, err)
 
 			err = applyRunEvent(&run, event)
@@ -206,7 +210,7 @@ func TestRunEventReplayRejectsCurrentActionCatalogDrift(t *testing.T) {
 		}},
 		UpdatedAt: run.UpdatedAt.Add(time.Second),
 	}
-	event, err := runstore.NewEvent("forged_action_catalog", delta)
+	event, err := runstore.NewEvent("action_skipped", delta)
 	require.NoError(t, err)
 
 	replayed := runBeforeMutation(run)
@@ -287,7 +291,7 @@ func TestRunEventReplayRejectsProjectionChangeOutsideRefresh(t *testing.T) {
 		PinnedSource:    refreshed.Snapshot,
 		UpdatedAt:       run.UpdatedAt.Add(time.Second),
 	}
-	event, err := runstore.NewEvent("forged_projection", delta)
+	event, err := runstore.NewEvent("action_skipped", delta)
 	require.NoError(t, err)
 
 	replayed := runBeforeMutation(run)

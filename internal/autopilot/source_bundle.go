@@ -242,7 +242,7 @@ func validateSourceManifest(manifest SourceManifest) error {
 			return fmt.Errorf("%s.role %q is unsupported", field, section.Role)
 		}
 		roles[section.Role]++
-		if err := validateC0Text(field+".title", section.Title, false); err != nil {
+		if err := validateTextControls(field+".title", section.Title, false); err != nil {
 			return err
 		}
 		if strings.TrimSpace(section.Title) == "" || len(section.Title) > maxSourceSectionTitleBytes {
@@ -333,7 +333,7 @@ func parseSourceSection(key, body string) (string, error) {
 			fmt.Sprintf("manifest section %q payload must be valid utf-8", key),
 		)
 	}
-	if err := validateC0Text("section payload", payload, true); err != nil {
+	if err := validateTextControls("section payload", payload, true); err != nil {
 		return "", newSourceBundleError(SourceClassificationSectionInvalid, err.Error())
 	}
 	return payload, nil
@@ -357,11 +357,11 @@ func validateRawSourceComment(
 		field + ".url":        comment.URL,
 		field + ".updated_at": comment.UpdatedAt,
 	} {
-		if err := validateC0Text(name, value, false); err != nil {
+		if err := validateTextControls(name, value, false); err != nil {
 			return err
 		}
 	}
-	if err := validateC0Text(field+".body", comment.Body, true); err != nil {
+	if err := validateTextControls(field+".body", comment.Body, true); err != nil {
 		return err
 	}
 	if _, err := time.Parse(time.RFC3339, comment.UpdatedAt); err != nil {
@@ -411,7 +411,7 @@ func validatePinnedSections(sections []PinnedSourceSection) error {
 		if !validSourceSectionRole(section.Role) {
 			return fmt.Errorf("%s.role is invalid", field)
 		}
-		if err := validateC0Text(field+".title", section.Title, false); err != nil {
+		if err := validateTextControls(field+".title", section.Title, false); err != nil {
 			return err
 		}
 		if strings.TrimSpace(section.Title) == "" || len(section.Title) > maxSourceSectionTitleBytes {
@@ -441,7 +441,7 @@ func validatePinnedSections(sections []PinnedSourceSection) error {
 		if err := validateGitHubNodeID(field+".provenance.author_id", provenance.AuthorID); err != nil {
 			return err
 		}
-		if err := validateC0Text(field+".provenance.url", provenance.URL, false); err != nil {
+		if err := validateTextControls(field+".provenance.url", provenance.URL, false); err != nil {
 			return err
 		}
 		if _, err := time.Parse(time.RFC3339, provenance.ObservedUpdatedAt); err != nil {
@@ -561,7 +561,7 @@ func manifestFromPinnedSource(source PinnedSource) SourceManifest {
 // must declare for one normalized GitHub comment body.
 func ComputeSourceCommentBodySHA256(body string) (string, error) {
 	normalized := normalizeLineEndings(body)
-	if err := validateC0Text("comment body", normalized, true); err != nil {
+	if err := validateTextControls("comment body", normalized, true); err != nil {
 		return "", err
 	}
 	return commentBodyRevision(normalized), nil

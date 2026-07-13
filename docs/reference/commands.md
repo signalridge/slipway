@@ -27,7 +27,7 @@ Lists every adapter with `detected`, `installed`, `needs_refresh`, and capabilit
 
 ## `slipway doctor`
 
-Diagnoses Git repository discovery, manifests, generated files, host installation state, GitHub CLI/auth/repository permissions, and legacy runstore residue. JSON is exactly `{contract_version,checks:[{code,status,host_id,name,detail}]}`; every check has all five fields and `status` is `ok|warning|error`.
+Diagnoses Git repository discovery, manifests, generated files, host installation state, runstore durability, GitHub CLI/auth/repository permissions, and legacy runstore residue. JSON is `{contract_version,checks:[...]}`; every check has `{code,status,host_id,name,detail}` and `status` is `ok|warning|error`. The `runstore_durability_full|runstore_durability_limited` check additionally includes `durability:{level,file_sync,directory_sync,limitation?}`.
 
 Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
 

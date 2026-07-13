@@ -179,6 +179,9 @@ func (store *Store) create(runID string, event Event, projection any, materials 
 		if err := syncAnchoredDirectory(run.root, run.identity, store.hooks, faultSyncRunDirectory); err != nil {
 			return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("sync new journal entry: %w", err))
 		}
+		if PlatformDurability().DirectorySync {
+			tracker.markJournalCommitted()
+		}
 		if err := transaction.validate(PhaseNamespaceVerify, faultValidateRun); err != nil {
 			return err
 		}
@@ -208,6 +211,29 @@ func (store *Store) Visit(runID string, consume func(Event) error) error {
 		_, err := visitJournal(transaction.journalContext(), journalFileName, consume)
 		return err
 	})
+}
+
+// FirstEvent reads only the immutable initialization record. It never creates a
+// lock file, waits for a writer, or repairs an interrupted journal tail.
+func (store *Store) FirstEvent(runID string) (Event, error) {
+	run, err := store.openRunRoot(runID)
+	if err != nil {
+		return Event{}, err
+	}
+	defer run.Close()
+	context := journalContext{
+		root:  run.root,
+		hooks: store.hooks,
+		validate: func(_ MutationPhase, point faultPoint) error {
+			if point != faultValidateRun {
+				if err := store.hooks.at(point); err != nil {
+					return err
+				}
+			}
+			return run.validate()
+		},
+	}
+	return readFirstJournalEvent(context, journalFileName)
 }
 
 // UpdateStream serializes a streaming replay/mutate/append transaction. Events

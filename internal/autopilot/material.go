@@ -42,6 +42,9 @@ func (service *Service) ReadActionMaterial(
 	if _, err := service.validateOpenWorkspace(); err != nil {
 		return ActionMaterial{}, err
 	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
+		return ActionMaterial{}, err
+	}
 
 	var run Run
 	var section ActionRequirementSection

@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -32,7 +33,7 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 			"Source Bundle v2 envelope", "fetch exactly those comments", "overrides and discards that pending suggestion", "Redact recognized credentials while preserving command identity",
 		},
 		"slipway-propose": {
-			"exactly one `level:change`", "exactly one `level:objective`", "exactly one `kind:*`",
+			"exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`",
 			"official GitHub REST API", "same-host redirect or transfer", "100 sub-issues", "50 blocking",
 			"timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`", "two confirmations", "second current confirmation", "public repository has no per-Issue private switch",
 		},
@@ -110,6 +111,22 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 	assert.NotContains(t, generated.String(), "slipway check")
 }
 
+func TestCopilotDetectionRecognizesItsSupportedProjectSurfaces(t *testing.T) {
+	host, ok := lookupHost("copilot")
+	require.True(t, ok)
+	for _, relative := range []string{".github/copilot", ".github/prompts", ".github/skills"} {
+		t.Run(relative, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(relative)), 0o700))
+			assert.True(t, hostDetected(root, host))
+			selected, err := resolveHosts(root, nil, true)
+			require.NoError(t, err)
+			require.Len(t, selected, 1)
+			assert.Equal(t, "copilot", selected[0].ID)
+		})
+	}
+}
+
 func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {
 	root := t.TempDir()
 	_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
@@ -117,13 +134,19 @@ func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {
 	modifiedRelative := ".claude/skills/slipway-implement/SKILL.md"
 	modifiedPath := filepath.Join(root, filepath.FromSlash(modifiedRelative))
 	require.NoError(t, os.WriteFile(modifiedPath, []byte("user version\n"), 0o600))
+	_, sentinelPath, err := ownershipPaths(root, hosts[0])
+	require.NoError(t, err)
+	sentinelRelative := relativeToRoot(root, sentinelPath)
+	require.NoError(t, os.WriteFile(sentinelPath, []byte("user marker\n"), 0o600))
 
 	refreshed, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
 	require.NoError(t, err)
 	assert.Contains(t, refreshed.Preserved, modifiedRelative)
+	assert.Contains(t, refreshed.Preserved, sentinelRelative)
 	content, err := os.ReadFile(modifiedPath)
 	require.NoError(t, err)
 	assert.Equal(t, "user version\n", string(content))
+	assertFileContent(t, root, sentinelRelative, []byte("user marker\n"))
 	manifest, found, err := loadManifest(root, hosts[0])
 	require.NoError(t, err)
 	require.True(t, found)
@@ -135,7 +158,10 @@ func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {
 	content, err = os.ReadFile(modifiedPath)
 	require.NoError(t, err)
 	assert.Equal(t, "user version\n", string(content))
+	assertFileContent(t, root, sentinelRelative, []byte("user marker\n"))
+	assert.Contains(t, uninstalled.Preserved, sentinelRelative)
 	assert.NotContains(t, uninstalled.Removed, modifiedRelative)
+	assert.NotContains(t, uninstalled.Removed, sentinelRelative)
 	_, err = os.Stat(filepath.Join(root, ".claude/skills/slipway-run/SKILL.md"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -375,6 +401,62 @@ func TestCurrentManifestWithTrailingDataCannotAuthorizeDeletion(t *testing.T) {
 	content, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(managedRelative)))
 	require.NoError(t, readErr)
 	assert.Equal(t, managedContent, content)
+}
+
+func TestMalformedOwnershipManifestCannotAuthorizeAdapterMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  func([]byte) []byte
+		want string
+	}{
+		{
+			name: "duplicate files key",
+			raw: func(valid []byte) []byte {
+				return append(bytes.TrimSuffix(bytes.TrimSpace(valid), []byte("}")), []byte(`,"files":null}`)...)
+			},
+			want: "duplicate object key",
+		},
+		{
+			name: "null files",
+			raw: func(_ []byte) []byte {
+				return []byte(`{"version":2,"tool_id":"claude","files":null}`)
+			},
+			want: "non-null files array",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
+			require.NoError(t, err)
+			host, ok := lookupHost("claude")
+			require.True(t, ok)
+			manifestPath, sentinelPath, err := ownershipPaths(root, host)
+			require.NoError(t, err)
+			valid, err := os.ReadFile(manifestPath)
+			require.NoError(t, err)
+			raw := test.raw(valid)
+			require.NoError(t, os.WriteFile(manifestPath, raw, 0o600))
+			managedPath := filepath.Join(root, ".claude/skills/slipway-run/SKILL.md")
+			managedBefore, err := os.ReadFile(managedPath)
+			require.NoError(t, err)
+			sentinelBefore, err := os.ReadFile(sentinelPath)
+			require.NoError(t, err)
+
+			_, installErr := Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
+			require.ErrorContains(t, installErr, test.want)
+			_, uninstallErr := Uninstall(UninstallOptions{Root: root, Tools: []string{"claude"}})
+			require.ErrorContains(t, uninstallErr, test.want)
+			_, listErr := List(root)
+			require.ErrorContains(t, listErr, test.want)
+			managedAfter, err := os.ReadFile(managedPath)
+			require.NoError(t, err)
+			assert.Equal(t, managedBefore, managedAfter)
+			sentinelAfter, err := os.ReadFile(sentinelPath)
+			require.NoError(t, err)
+			assert.Equal(t, sentinelBefore, sentinelAfter)
+		})
+	}
 }
 
 func TestInstallRejectsSymlinkedHostPathWithoutWritingThroughIt(t *testing.T) {

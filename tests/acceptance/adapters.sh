@@ -183,7 +183,7 @@ specific = {
         "Source Bundle v2 envelope", "fetch exactly those comments", "Redact recognized credentials while preserving command identity",
     ],
     "slipway-propose": [
-        "exactly one `level:change`", "exactly one `level:objective`", "exactly one `kind:*`",
+        "exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`",
         "official GitHub REST API", "same-host redirect or transfer", "100 sub-issues", "50 blocking",
         "timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`",
         "public repository has no per-Issue private switch",
@@ -294,7 +294,12 @@ with open(sys.argv[2], encoding="utf-8") as stream:
 assert set(doctor) == {"contract_version", "checks"}, doctor
 assert doctor["contract_version"] == 2, doctor
 for check in doctor["checks"]:
-    assert set(check) == {"code", "status", "host_id", "name", "detail"}, check
+    expected = {"code", "status", "host_id", "name", "detail"}
+    if check["code"] in {"runstore_durability_full", "runstore_durability_limited"}:
+        expected.add("durability")
+        assert set(check["durability"]) <= {"level", "file_sync", "directory_sync", "limitation"}, check
+        assert {"level", "file_sync", "directory_sync"} <= set(check["durability"]), check
+    assert set(check) == expected, check
     assert check["code"], check
     assert check["status"] in {"ok", "warning", "error"}, check
 adapters = [check for check in doctor["checks"] if check["name"] == "adapter"]

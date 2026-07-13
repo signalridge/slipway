@@ -27,7 +27,7 @@ type Host struct {
 var hosts = []Host{
 	{ID: "claude", SkillsDir: ".claude/skills", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
 	{ID: "codex", SkillsDir: ".codex/skills", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
-	{ID: "copilot", SkillsDir: ".github/skills", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot"}},
+	{ID: "copilot", SkillsDir: ".github/skills", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot", ".github/prompts", ".github/skills"}},
 	{ID: "cursor", SkillsDir: ".cursor/skills", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
 	{ID: "kilo", SkillsDir: ".kilocode/skills", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
 	{ID: "kiro", SkillsDir: ".kiro/skills", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},

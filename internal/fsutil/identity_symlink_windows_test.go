@@ -99,6 +99,36 @@ func TestWindowsExistingSymlinkRemainsUntouchedWhenTransactionFailsClosed(t *tes
 	}
 }
 
+func TestWindowsLaterSymlinkFailsBeforeEarlierMutation(t *testing.T) {
+	directory := t.TempDir()
+	first := filepath.Join(directory, "first.txt")
+	target := filepath.Join(directory, "target.txt")
+	require.NoError(t, os.WriteFile(first, []byte("before"), 0o600))
+	require.NoError(t, os.WriteFile(target, []byte("target"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+	if err := root.Symlink("target.txt", "link"); errors.Is(err, windows.ERROR_PRIVILEGE_NOT_HELD) {
+		t.Skip("native fixture creation requires an unavailable Windows privilege; transaction-wide preflight is covered by the non-skippable policy assertion")
+	} else {
+		require.NoError(t, err)
+	}
+
+	var mutationStarted bool
+	err = ApplyFileTransactionWithHooks([]FileTransactionOp{
+		WriteFileTransactionOp(first, []byte("after"), 0o600),
+		RemoveFileTransactionOp(filepath.Join(directory, "link")),
+	}, FileTransactionHooks{BeforeMutation: func(_, _ string) error {
+		mutationStarted = true
+		return nil
+	}})
+	require.ErrorIs(t, err, ErrFileTransactionSymlinkUnsupported)
+	assert.False(t, mutationStarted)
+	content, readErr := os.ReadFile(first)
+	require.NoError(t, readErr)
+	assert.Equal(t, "before", string(content))
+}
+
 func TestOpenSymlinkIdentityRejectsOtherEntries(t *testing.T) {
 	directory := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "regular.txt"), []byte("regular"), 0o600))

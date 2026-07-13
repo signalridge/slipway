@@ -98,6 +98,7 @@ type ActionRecord struct {
 	Action               Action   `json:"action"`
 	Outcome              *Outcome `json:"outcome,omitempty"`
 	OutcomePayloadSHA256 string   `json:"outcome_payload_sha256,omitempty"`
+	ReviewProjection     *Review  `json:"review_projection,omitempty"`
 	Voided               bool     `json:"voided,omitempty"`
 	Skipped              bool     `json:"skipped,omitempty"`
 }
@@ -283,10 +284,31 @@ func (service *Service) Load(runID string) (Run, error) {
 	if _, err := service.validateOpenWorkspace(); err != nil {
 		return Run{}, err
 	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
+		return Run{}, err
+	}
 	var run Run
 	if err := service.store.Visit(runID, func(event runstore.Event) error {
 		return applyRunEvent(&run, event)
 	}); err != nil {
+		return Run{}, err
+	}
+	if run.ID != runID {
+		return Run{}, errors.New("run journal identity mismatch")
+	}
+	if err := service.validateRunWorkspace(run); err != nil {
+		return Run{}, err
+	}
+	return run, nil
+}
+
+func (service *Service) loadOwnedRunHeader(runID string) (Run, error) {
+	event, err := service.store.FirstEvent(runID)
+	if err != nil {
+		return Run{}, err
+	}
+	var run Run
+	if err := applyRunEvent(&run, event); err != nil {
 		return Run{}, err
 	}
 	if run.ID != runID {
@@ -308,6 +330,9 @@ func (service *Service) List() ([]Run, error) {
 	}
 	runs := make([]Run, 0, len(ids))
 	for _, id := range ids {
+		if _, err := service.loadOwnedRunHeader(id); err != nil {
+			continue
+		}
 		var run Run
 		loadErr := service.store.Visit(id, func(event runstore.Event) error {
 			return applyRunEvent(&run, event)
@@ -331,6 +356,9 @@ func (service *Service) List() ([]Run, error) {
 
 func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, error) {
 	if _, err := service.validateOpenWorkspace(); err != nil {
+		return Run{}, err
+	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
 		return Run{}, err
 	}
 	payloadSHA256, err := outcomePayloadSHA256(outcome)
@@ -397,6 +425,9 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 	if _, err := service.validateOpenWorkspace(); err != nil {
 		return Run{}, err
 	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
+		return Run{}, err
+	}
 	options.Text = strings.TrimSpace(options.Text)
 	if !utf8.ValidString(options.Text) {
 		return Run{}, &ProtocolError{Code: "invalid_answer", Message: "answer text must be valid utf-8", Next: NoneNext(service.store.RepositoryRoot())}
@@ -459,6 +490,11 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			}
 			if options.Text == "" {
 				return nil, nil, protocolRunError(run, "answer_required", "decision answer requires text")
+			}
+			if supersededActionID := decisionSupersessionForAction(run, actionID); supersededActionID != "" {
+				if !markAnswerSuperseded(&run, supersededActionID, actionID) {
+					return nil, nil, protocolRunError(run, "invalid_decision_supersession", "superseded answer is no longer active")
+				}
 			}
 			voidCurrentAction(&run)
 			clearDestructiveState(&run)
@@ -557,6 +593,13 @@ func (service *Service) Skip(runID, actionID string) (Run, error) {
 		run.PendingActions = nil
 		if record := findActionRecord(run, actionID); record != nil {
 			record.Skipped = true
+			if kind == ActionReview {
+				record.ReviewProjection = &Review{
+					Result:        ReviewNotRun,
+					Findings:      []Finding{},
+					Uncertainties: []string{},
+				}
+			}
 		}
 		clearDestructiveState(run)
 		run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
@@ -581,6 +624,9 @@ func (service *Service) Stop(runID string) (Run, error) {
 
 func (service *Service) Resume(runID string, options ResumeOptions) (Run, error) {
 	if _, err := service.validateOpenWorkspace(); err != nil {
+		return Run{}, err
+	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
 		return Run{}, err
 	}
 	normalized, err := normalizeResumeOptions(service.store.RepositoryRoot(), options)
@@ -856,6 +902,9 @@ func resolveSourceCandidate(run *Run, options ResumeOptions) (string, bool, erro
 			markActiveAnswersSuperseded(run, oldRequirementsRevision, "requirements:"+run.PinnedSource.RequirementsRevision)
 		}
 		operation = ResumeOperationSourceAmended
+	} else {
+		projected, _ := mergeRefreshedProjection(*run.PinnedSource, candidate.SourceCandidateInput)
+		run.PinnedSource = &projected
 	}
 	recordAcceptedSourceComments(run, run.PinnedSource)
 	invalidateOutstandingResumeState(run)
@@ -899,6 +948,36 @@ func markAnswerSuperseded(run *Run, actionID, replacingActionID string) bool {
 		}
 	}
 	return false
+}
+
+func validateDecisionSupersession(run Run, outcome Outcome) error {
+	if outcome.Pause == nil || outcome.Pause.SupersedesAnswerActionID == nil {
+		return nil
+	}
+	actionID := *outcome.Pause.SupersedesAnswerActionID
+	answer := findAnswerRecord(run, actionID)
+	if answer == nil {
+		return protocolRunError(run, "invalid_decision_supersession", "supersedes_answer_action_id does not identify a recorded answer")
+	}
+	if !answer.Active || answer.ConfirmDestructive {
+		return protocolRunError(run, "invalid_decision_supersession", "supersedes_answer_action_id must identify an active non-authorization answer")
+	}
+	if run.PinnedSource == nil {
+		if answer.RequirementsRevision != "" {
+			return protocolRunError(run, "invalid_decision_supersession", "superseded answer does not belong to the current ad-hoc requirements context")
+		}
+	} else if answer.RequirementsRevision != run.PinnedSource.RequirementsRevision {
+		return protocolRunError(run, "invalid_decision_supersession", "superseded answer does not belong to the current requirements revision")
+	}
+	return nil
+}
+
+func decisionSupersessionForAction(run Run, actionID string) string {
+	record := findActionRecord(&run, actionID)
+	if record == nil || record.Outcome == nil || record.Outcome.Pause == nil || record.Outcome.Pause.SupersedesAnswerActionID == nil {
+		return ""
+	}
+	return *record.Outcome.Pause.SupersedesAnswerActionID
 }
 
 func newSourceCandidate(input SourceCandidateInput) SourceCandidate {
@@ -1100,8 +1179,9 @@ func validateCandidateResolution(eventType string, before, after Run) error {
 		if after.LastResumeResult.Operation != ResumeOperationSourcePinned {
 			return errors.New("pinned source choice has the wrong resume operation")
 		}
-		if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) {
-			return errors.New("pinned source choice mutated the pinned source")
+		expected, _ := mergeRefreshedProjection(*before.PinnedSource, candidate.SourceCandidateInput)
+		if !reflect.DeepEqual(&expected, after.PinnedSource) {
+			return errors.New("pinned source choice must retain accepted content while applying the candidate projection")
 		}
 	case SourceChoiceAdopt:
 		if eventType != ResumeOperationSourceAmended {
@@ -1234,6 +1314,13 @@ func mergeRefreshedProjection(current PinnedSource, refreshed SourceCandidateInp
 	projected.CanonicalURL = refreshed.CanonicalURL
 	projected.URLAliases = append(make([]string, 0, len(aliases)), aliases...)
 	projected.Parent = cloneSourceParent(refreshed.Parent)
+	projected.SourceRevision = sourceRevisionFromIdentity(
+		projected.Host,
+		projected.RepositoryID,
+		projected.IssueID,
+		projected.Title,
+		projected.ManifestRevision,
+	)
 
 	refreshed = cloneSourceCandidateInput(refreshed)
 	refreshed.URLAliases = append(make([]string, 0, len(aliases)), aliases...)
@@ -1301,6 +1388,9 @@ func (service *Service) mutate(runID, eventType string, callback func(*Run) erro
 	if _, err := service.validateOpenWorkspace(); err != nil {
 		return Run{}, err
 	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
+		return Run{}, err
+	}
 	var run Run
 	var result Run
 	err := service.store.UpdateStream(runID, func(event runstore.Event) error {
@@ -1332,6 +1422,9 @@ func (service *Service) mutate(runID, eventType string, callback func(*Run) erro
 
 func acceptOutcome(run *Run, outcome Outcome, payloadSHA256 string) error {
 	action := *run.CurrentAction
+	if err := validateDecisionSupersession(*run, outcome); err != nil {
+		return err
+	}
 	record := findActionRecord(run, action.ActionID)
 	if record == nil {
 		return errors.New("current action is missing from run history")
@@ -1495,11 +1588,6 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 		brief = strings.TrimSpace(brief) + " Repair-attempt limit: 3."
 	}
 	brief = attributionAwareBrief(*run, kind, brief)
-	context, err := buildContext(*run)
-	if err != nil {
-		clearDestructiveState(run)
-		return &ProtocolError{Code: "invalid_action", Message: err.Error(), Next: mustDeriveResumeNext(*run)}
-	}
 	action := Action{
 		ContractVersion:          ContractVersion,
 		RunID:                    run.ID,
@@ -1507,7 +1595,6 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 		Kind:                     kind,
 		Goal:                     run.Goal,
 		Brief:                    brief,
-		Context:                  context,
 		DestructiveAuthorization: authorization,
 		RemainingBudget:          remaining,
 	}
@@ -1524,13 +1611,20 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 		requirements := actionRequirements(run.Workspace, action.RunID, action.ActionID, pinned)
 		action.Requirements = &requirements
 	}
-	if err := action.Validate(); err != nil {
-		code := "invalid_action"
-		if strings.Contains(err.Error(), "encoded action exceeds") {
-			code = "action_too_large"
-		}
+	encodedContextLimit, err := actionContextEncodedLimit(action)
+	if err != nil {
 		clearDestructiveState(run)
-		return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveResumeNext(*run)}
+		return actionProtocolError(*run, err)
+	}
+	context, err := buildContextWithinEncodedLimit(*run, encodedContextLimit)
+	if err != nil {
+		clearDestructiveState(run)
+		return actionProtocolError(*run, err)
+	}
+	action.Context = context
+	if err := action.Validate(); err != nil {
+		clearDestructiveState(run)
+		return actionProtocolError(*run, err)
 	}
 	if authorization != nil {
 		if err := validateDestructiveGrant(*authorization, *run.PendingDestructiveRequest, authorization.OriginatingActionID); err != nil {
@@ -1544,6 +1638,31 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 	run.Actions = append(run.Actions, ActionRecord{Action: action})
 	run.CurrentAction = &action
 	return nil
+}
+
+func actionContextEncodedLimit(action Action) (int, error) {
+	action.Context = ""
+	encoded, err := encodeAction(action)
+	if err != nil {
+		return 0, fmt.Errorf("encode action without context: %w", err)
+	}
+	emptyStringSize, err := encodedJSONStringSize("")
+	if err != nil {
+		return 0, fmt.Errorf("encode empty action context: %w", err)
+	}
+	limit := maxActionBytes - len(encoded) + emptyStringSize
+	if limit < emptyStringSize {
+		return 0, fmt.Errorf("%w %d bytes", errActionTooLarge, maxActionBytes)
+	}
+	return limit, nil
+}
+
+func actionProtocolError(run Run, err error) *ProtocolError {
+	code := "invalid_action"
+	if errors.Is(err, errActionTooLarge) {
+		code = "action_too_large"
+	}
+	return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveResumeNext(run)}
 }
 
 func actionRequirements(workspace, runID, actionID string, source PinnedSource) ActionRequirements {
@@ -1619,8 +1738,8 @@ func attributionAwareBrief(run Run, kind ActionKind, brief string) string {
 	var builder strings.Builder
 	builder.WriteString(strings.TrimSpace(brief))
 	builder.WriteString(" Attribution is uncertain: concurrent user edits, another Run, or tools may have contributed to the observed start-to-current difference.")
-	fmt.Fprintf(&builder, " Pre-existing dirty path observations at Run start (count=%d; initial_snapshot=%s; full records remain in Run status):", len(run.InitialGit.PathObservations), run.InitialGit.SnapshotHash)
-	if len(run.InitialGit.PathObservations) == 0 {
+	fmt.Fprintf(&builder, " Pre-existing dirty path observations at Run start (count=%d; retained=%d; path_fingerprint=%s; initial_snapshot=%s):", run.InitialGit.PathCount, len(run.InitialGit.PathObservations), run.InitialGit.PathFingerprint, run.InitialGit.SnapshotHash)
+	if run.InitialGit.PathCount == 0 {
 		builder.WriteString(" none.")
 	} else {
 		for _, item := range run.InitialGit.PathObservations {
@@ -1632,6 +1751,9 @@ func attributionAwareBrief(run Run, kind ActionKind, brief string) string {
 				fmt.Fprintf(&builder, "; content_sha256=%s", item.ContentSHA256)
 			}
 			builder.WriteString("];")
+		}
+		if run.InitialGit.DetailsTruncated {
+			fmt.Fprintf(&builder, " %d additional path detail(s) omitted from the bounded projection;", run.InitialGit.PathCount-len(run.InitialGit.PathObservations))
 		}
 	}
 	return truncateUTF8WithMarker(builder.String(), maxActionBriefBytes)
@@ -1665,6 +1787,10 @@ type contextClass struct {
 }
 
 func buildContext(run Run) (string, error) {
+	return buildContextWithinEncodedLimit(run, int(^uint(0)>>1))
+}
+
+func buildContextWithinEncodedLimit(run Run, maxEncodedBytes int) (string, error) {
 	decisions := &contextClass{heading: "Decisions:", omittedKey: "decisions", candidates: make([]*contextCandidate, 0)}
 	recent := &contextClass{heading: "Recent outcome:", omittedKey: "recent outcomes", candidates: make([]*contextCandidate, 0, 1)}
 	earlier := &contextClass{heading: "Earlier outcomes:", omittedKey: "earlier outcomes", candidates: make([]*contextCandidate, 0)}
@@ -1725,25 +1851,29 @@ func buildContext(run Run) (string, error) {
 
 	for _, candidate := range priority {
 		candidate.selected = candidate.content
-		if rendered := renderContext(classes); len(rendered) <= maxActionContextBytes {
+		fits, err := renderedContextFits(classes, maxEncodedBytes)
+		if err != nil {
+			return "", err
+		}
+		if fits {
 			continue
 		}
 		candidate.selected = ""
 		marker := contextTruncationMarker(candidate.content)
 		candidate.selected = marker + "\n"
-		rendered := renderContext(classes)
-		if len(rendered) > maxActionContextBytes {
+		fits, err = renderedContextFits(classes, maxEncodedBytes)
+		if err != nil {
+			return "", err
+		}
+		if !fits {
 			candidate.selected = ""
 			break
 		}
-		availablePrefix := maxActionContextBytes - len(rendered)
-		if availablePrefix > len(candidate.content) {
-			availablePrefix = len(candidate.content)
+		prefix, err := maxFittingContextPrefix(candidate, classes, marker, maxEncodedBytes)
+		if err != nil {
+			return "", err
 		}
-		for availablePrefix > 0 && !utf8.ValidString(candidate.content[:availablePrefix]) {
-			availablePrefix--
-		}
-		candidate.selected = candidate.content[:availablePrefix] + marker + "\n"
+		candidate.selected = candidate.content[:prefix] + marker + "\n"
 		break
 	}
 
@@ -1754,7 +1884,64 @@ func buildContext(run Run) (string, error) {
 	if !utf8.ValidString(context) {
 		return "", errors.New("context must be valid utf-8")
 	}
+	encodedSize, err := encodedJSONStringSize(context)
+	if err != nil {
+		return "", fmt.Errorf("encode action context: %w", err)
+	}
+	if encodedSize > maxEncodedBytes {
+		return "", fmt.Errorf("%w %d bytes after bounded context projection", errActionTooLarge, maxActionBytes)
+	}
 	return context, nil
+}
+
+func renderedContextFits(classes []*contextClass, maxEncodedBytes int) (bool, error) {
+	context := renderContext(classes)
+	if len(context) > maxActionContextBytes {
+		return false, nil
+	}
+	encodedSize, err := encodedJSONStringSize(context)
+	if err != nil {
+		return false, fmt.Errorf("encode action context: %w", err)
+	}
+	return encodedSize <= maxEncodedBytes, nil
+}
+
+func maxFittingContextPrefix(candidate *contextCandidate, classes []*contextClass, marker string, maxEncodedBytes int) (int, error) {
+	limit := min(len(candidate.content), maxActionContextBytes)
+	boundaries := make([]int, 1, limit+1)
+	for index := range candidate.content {
+		if index == 0 {
+			continue
+		}
+		if index > limit {
+			break
+		}
+		boundaries = append(boundaries, index)
+	}
+	if len(candidate.content) <= limit && boundaries[len(boundaries)-1] != len(candidate.content) {
+		boundaries = append(boundaries, len(candidate.content))
+	}
+
+	var fitErr error
+	firstTooLarge := sort.Search(len(boundaries), func(index int) bool {
+		candidate.selected = candidate.content[:boundaries[index]] + marker + "\n"
+		fits, err := renderedContextFits(classes, maxEncodedBytes)
+		if err != nil {
+			fitErr = err
+			return true
+		}
+		return !fits
+	})
+	if fitErr != nil {
+		return 0, fitErr
+	}
+	if firstTooLarge == 0 {
+		return 0, nil
+	}
+	if firstTooLarge == len(boundaries) {
+		return boundaries[len(boundaries)-1], nil
+	}
+	return boundaries[firstTooLarge-1], nil
 }
 
 func renderOutcomeContextItem(record ActionRecord) string {
@@ -1925,8 +2112,8 @@ func finalSummary(run Run) string {
 	if len(run.Uncertainties) > 0 {
 		builder.WriteString("Uncertainties:\n- " + strings.Join(run.Uncertainties, "\n- ") + "\n")
 	}
-	if len(run.InitialGit.PathObservations) > 0 {
-		builder.WriteString("Pre-existing dirty path observations at Run start:\n")
+	if run.InitialGit.PathCount > 0 {
+		fmt.Fprintf(&builder, "Pre-existing dirty path observations at Run start (count=%d; retained=%d; path_fingerprint=%s):\n", run.InitialGit.PathCount, len(run.InitialGit.PathObservations), run.InitialGit.PathFingerprint)
 		for _, item := range run.InitialGit.PathObservations {
 			fmt.Fprintf(&builder, "- %s [%s %s; %s", item.Path, item.Category, item.State, item.Observation)
 			if item.Size != nil {
@@ -1937,6 +2124,9 @@ func finalSummary(run Run) string {
 			}
 			builder.WriteString("]\n")
 		}
+		if run.InitialGit.DetailsTruncated {
+			fmt.Fprintf(&builder, "- %d additional path detail(s) omitted from the bounded projection.\n", run.InitialGit.PathCount-len(run.InitialGit.PathObservations))
+		}
 	}
 	return builder.String()
 }
@@ -1945,6 +2135,12 @@ func runBeforeMutation(run Run) Run {
 	run.Actions = append([]ActionRecord(nil), run.Actions...)
 	for index := range run.Actions {
 		run.Actions[index].Action.DestructiveAuthorization = cloneDestructiveAuthorization(run.Actions[index].Action.DestructiveAuthorization)
+		if run.Actions[index].ReviewProjection != nil {
+			review := *run.Actions[index].ReviewProjection
+			review.Findings = append([]Finding{}, review.Findings...)
+			review.Uncertainties = append([]string{}, review.Uncertainties...)
+			run.Actions[index].ReviewProjection = &review
+		}
 		if run.Actions[index].Outcome != nil {
 			outcome := *run.Actions[index].Outcome
 			if outcome.Pause != nil && outcome.Pause.DestructiveRequest != nil {

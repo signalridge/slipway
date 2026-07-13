@@ -26,11 +26,12 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stdout), &state))
 	assert.Equal(t, autopilot.RunPaused, state.State)
 	assert.Equal(t, autopilot.NextOperationAnswer, state.Next.Operation)
-	require.Len(t, state.Next.Variants, 1)
+	require.Len(t, state.Next.Variants, 2)
 	variant := state.Next.Variants[0]
 	assert.Equal(t, "answer-decision", variant.ID)
 	assert.NotEmpty(t, state.Next.WorkspaceIdentity)
 	assert.Equal(t, []autopilot.NextInput{{Name: "text", Type: autopilot.NextInputString, Flag: "--text", Required: true}}, variant.Inputs)
+	assert.Equal(t, "skip-action", state.Next.Variants[1].ID)
 	canonicalRepository, err := filepath.EvalSymlinks(repository)
 	require.NoError(t, err)
 	assert.Contains(t, variant.BaseArgv, canonicalRepository)
@@ -83,10 +84,10 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	originatingActionID := action.ActionID
 
 	targets := []autopilot.DestructiveTarget{{Kind: autopilot.DestructiveTargetPath, Value: "/absolute/target with spaces"}}
-	digest, err := autopilot.ComputeDestructiveScopeSHA256("request-cli-1", targets, "delete the target permanently")
+	digest, err := autopilot.ComputeDestructiveScopeSHA256("33333333-3333-4333-8333-333333333333", targets, "delete the target permanently")
 	require.NoError(t, err)
 	request := &autopilot.DestructiveRequest{
-		RequestID: "request-cli-1", Targets: targets,
+		RequestID: "33333333-3333-4333-8333-333333333333", Targets: targets,
 		Impact: "delete the target permanently", ScopeSHA256: digest,
 	}
 	pause := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeNeedsInput, "confirmation required")
@@ -99,13 +100,14 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	require.NoError(t, json.Unmarshal([]byte(stdout), &state))
 	assert.Equal(t, autopilot.PauseDestructiveConfirm, state.PauseReason)
 	assert.Equal(t, autopilot.NextOperationAnswer, state.Next.Operation)
-	require.Len(t, state.Next.Variants, 2)
+	require.Len(t, state.Next.Variants, 3)
 	confirm := state.Next.Variants[0]
 	assert.Equal(t, "confirm-destructive", confirm.ID)
 	assert.Contains(t, confirm.BaseArgv, "--confirm-destructive")
 	assert.Contains(t, confirm.BaseArgv, digest)
 	assert.Equal(t, []autopilot.NextInput{{Name: "text", Type: autopilot.NextInputString, Flag: "--text", Required: false}}, confirm.Inputs)
 	assert.Equal(t, "decline-or-feedback", state.Next.Variants[1].ID)
+	assert.Equal(t, "skip-action", state.Next.Variants[2].ID)
 	assert.NotContains(t, stdout, "next_command")
 
 	stdout, stderr, err = executeForTest(t, "_machine", "answer", "--root", repository, "--run", runID, "--action", originatingActionID, "--confirm-destructive", "--scope-sha256", digest, "--text", "confirmed")

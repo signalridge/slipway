@@ -343,6 +343,8 @@ func DeriveNext(run Run) (Next, error) {
 		return decisionNext(run)
 	case run.State == RunPaused && run.PauseReason == PauseDestructiveConfirm:
 		return destructiveNext(run)
+	case run.State == RunPaused && run.PauseReason == PauseEnvironmentUnavailable && run.CurrentAction != nil:
+		return environmentNext(run)
 	default:
 		return resumeNext(run)
 	}
@@ -378,13 +380,26 @@ func actionNext(run Run) (Next, error) {
 				BaseArgv: append(append([]string(nil), fixed...), "--outcome-stdin"),
 				Inputs:   []NextInput{},
 			},
-			{
-				ID:       "skip-action",
-				BaseArgv: []string{"slipway", "_machine", "skip", "--run", run.ID, "--action", actionID, "--root", run.Workspace},
-				Inputs:   []NextInput{},
-			},
+			skipActionVariant(run),
 		},
 	}
+	return validatedNext(next)
+}
+
+func skipActionVariant(run Run) NextVariant {
+	return NextVariant{
+		ID:       "skip-action",
+		BaseArgv: []string{"slipway", "_machine", "skip", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+		Inputs:   []NextInput{},
+	}
+}
+
+func environmentNext(run Run) (Next, error) {
+	next, err := resumeNext(run)
+	if err != nil {
+		return Next{}, err
+	}
+	next.Variants = append(next.Variants, skipActionVariant(run))
 	return validatedNext(next)
 }
 
@@ -393,11 +408,14 @@ func decisionNext(run Run) (Next, error) {
 		Operation:         NextOperationAnswer,
 		WorkspaceIdentity: run.WorkspaceIdentity.ID,
 		workspaceRoot:     run.Workspace,
-		Variants: []NextVariant{{
-			ID:       "answer-decision",
-			BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
-			Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
-		}},
+		Variants: []NextVariant{
+			{
+				ID:       "answer-decision",
+				BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
+			},
+			skipActionVariant(run),
+		},
 	}
 	return validatedNext(next)
 }
@@ -425,6 +443,7 @@ func destructiveNext(run Run) (Next, error) {
 				BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
 			},
+			skipActionVariant(run),
 		},
 	}
 	return validatedNext(next)

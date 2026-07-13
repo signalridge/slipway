@@ -569,7 +569,7 @@ import hashlib
 import json
 scope = {
     "impact": "delete the exact acceptance target permanently",
-    "request_id": "acceptance-request-1",
+    "request_id": "44444444-4444-4444-8444-444444444444",
     "scope_version": 1,
     "targets": [{"kind": "path", "value": "/absolute/acceptance target"}],
 }
@@ -584,7 +584,7 @@ print(json.dumps({
     "pause_reason": "destructive_confirmation_required",
     "question": "Confirm the exact acceptance target?",
     "destructive_request": {
-        "request_id": "acceptance-request-1",
+        "request_id": "44444444-4444-4444-8444-444444444444",
         "targets": [{"kind": "path", "value": "/absolute/acceptance target"}],
         "impact": "delete the exact acceptance target permanently",
         "scope_sha256": sys.argv[1],
@@ -612,7 +612,7 @@ import hashlib
 import json
 scope = {
     "impact": "delete the exact acceptance target permanently",
-    "request_id": "acceptance-request-2",
+    "request_id": "55555555-5555-4555-8555-555555555555",
     "scope_version": 1,
     "targets": [{"kind": "path", "value": "/absolute/acceptance target"}],
 }
@@ -627,7 +627,7 @@ print(json.dumps({
     "pause_reason": "destructive_confirmation_required",
     "question": "Confirm the fresh exact acceptance target?",
     "destructive_request": {
-        "request_id": "acceptance-request-2",
+        "request_id": "55555555-5555-4555-8555-555555555555",
         "targets": [{"kind": "path", "value": "/absolute/acceptance target"}],
         "impact": "delete the exact acceptance target permanently",
         "scope_sha256": sys.argv[1],

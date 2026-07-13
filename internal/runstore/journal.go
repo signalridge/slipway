@@ -165,6 +165,47 @@ func visitJournal(context journalContext, name string, visit func(Event) error) 
 	return count, nil
 }
 
+func readFirstJournalEvent(context journalContext, name string) (Event, error) {
+	if err := context.check(PhaseReplay, faultValidateRun); err != nil {
+		return Event{}, err
+	}
+	file, _, err := openRegularFileInRoot(context.root, name, os.O_RDONLY, 0o600, false)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Event{}, errors.New("run journal is missing")
+	}
+	if err != nil {
+		return Event{}, fmt.Errorf("open journal: %w", err)
+	}
+	defer file.Close()
+	if err := context.hooks.at(faultJournalOpened); err != nil {
+		return Event{}, fmt.Errorf("inspect opened journal: %w", err)
+	}
+	if err := verifyJournalHandle(context, name, file, PhaseReplay); err != nil {
+		return Event{}, err
+	}
+	line, _, complete, readErr := readBoundedJournalRecord(bufio.NewReaderSize(file, 64<<10))
+	if errors.Is(readErr, errJournalRecordTooLarge) {
+		return Event{}, fmt.Errorf("decode journal event 1: record exceeds %d bytes", maxJournalRecordBytes)
+	}
+	if errors.Is(readErr, io.EOF) && len(line) == 0 {
+		return Event{}, errors.New("run journal is empty")
+	}
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return Event{}, fmt.Errorf("read first journal event: %w", readErr)
+	}
+	event, err := decodeJournalEvent(line, 1)
+	if err != nil {
+		if !complete {
+			return Event{}, fmt.Errorf("first journal event is incomplete: %w", err)
+		}
+		return Event{}, err
+	}
+	if err := verifyJournalHandle(context, name, file, PhaseReplay); err != nil {
+		return Event{}, err
+	}
+	return event, nil
+}
+
 func readBoundedJournalRecord(reader *bufio.Reader) (line []byte, consumed int64, complete bool, err error) {
 	var buffer bytes.Buffer
 	tooLarge := false
@@ -202,6 +243,9 @@ func readBoundedJournalRecord(reader *bufio.Reader) (line []byte, consumed int64
 }
 
 func decodeJournalEvent(line []byte, expectedSequence int) (Event, error) {
+	if err := validateJournalJSONStructure(line); err != nil {
+		return Event{}, fmt.Errorf("decode journal event %d: %w", expectedSequence, err)
+	}
 	var event Event
 	decoder := json.NewDecoder(bytes.NewReader(line))
 	decoder.DisallowUnknownFields()
@@ -334,7 +378,9 @@ func appendEncodedJournalContext(context journalContext, name string, encoded []
 	if err := file.Sync(); err != nil {
 		return context.tracker.fail(PhaseJournalSync, false, fmt.Errorf("sync journal: %w", err))
 	}
-	context.tracker.markJournalCommitted()
+	if journalIdentity.exists {
+		context.tracker.markJournalCommitted()
+	}
 	if err := context.hooks.at(faultJournalAfterSync); err != nil {
 		return context.tracker.fail(PhaseJournalVerify, false, err)
 	}

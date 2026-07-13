@@ -263,6 +263,21 @@ func (err *FileTransactionCleanupError) Unwrap() error {
 	return errors.Join(err.Errors...)
 }
 
+func preflightFileTransaction(ops []FileTransactionOp, filesystem *transactionFilesystem) error {
+	for _, op := range ops {
+		guardLease := &transactionIdentityLease{}
+		before, err := filesystem.snapshotGuard(op.path, op.kind, guardLease)
+		if err == nil {
+			err = checkFileTransactionPrecondition(op, before)
+		}
+		err = errors.Join(err, guardLease.close())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *transactionFilesystem) (resultErr error) {
 	identityLease := &transactionIdentityLease{}
 	filesystem.identityLease = identityLease
@@ -284,6 +299,9 @@ func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *tra
 		resultErr = errors.Join(resultErr, closeErr)
 	}()
 	if err := validateFileTransactionOps(ops); err != nil {
+		return err
+	}
+	if err := preflightFileTransaction(ops, filesystem); err != nil {
 		return err
 	}
 	applied := make([]*appliedFileTransactionOp, 0, len(ops))

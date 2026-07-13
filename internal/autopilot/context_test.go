@@ -143,6 +143,86 @@ func TestMarkAnswerSupersededTargetsOneExplicitPriorDecision(t *testing.T) {
 	assert.False(t, markAnswerSuperseded(&run, "prior", "another"), "an inactive decision cannot be superseded twice")
 }
 
+func TestDecisionPauseExplicitlySupersedesOnlyTheNamedAnswer(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run, err := service.Start("choose storage and deployment", CreateOptions{Budget: 10, ReviewEnabled: false})
+	require.NoError(t, err)
+
+	firstActionID := run.CurrentAction.ActionID
+	firstPause := withEnvelope(firstActionID, run.CurrentAction.Kind, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "storage needs a user decision",
+		Pause:   &Pause{Reason: PauseDecisionRequired, Question: "Which storage engine should we use?"},
+	})
+	run, err = service.Submit(run.ID, firstActionID, firstPause)
+	require.NoError(t, err)
+	run, err = service.Answer(run.ID, firstActionID, AnswerOptions{Text: "Use SQLite."})
+	require.NoError(t, err)
+
+	replacementActionID := run.CurrentAction.ActionID
+	replacementPause := withEnvelope(replacementActionID, run.CurrentAction.Kind, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "the storage decision needs revision",
+		Pause: &Pause{
+			Reason:                   PauseDecisionRequired,
+			Question:                 "Should PostgreSQL replace the earlier SQLite choice?",
+			SupersedesAnswerActionID: &firstActionID,
+		},
+	})
+	run, err = service.Submit(run.ID, replacementActionID, replacementPause)
+	require.NoError(t, err)
+	run, err = service.Answer(run.ID, replacementActionID, AnswerOptions{Text: "Use PostgreSQL instead."})
+	require.NoError(t, err)
+
+	independentActionID := run.CurrentAction.ActionID
+	independentPause := withEnvelope(independentActionID, run.CurrentAction.Kind, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "deployment needs an independent decision",
+		Pause:   &Pause{Reason: PauseDecisionRequired, Question: "Which deployment region should we use?"},
+	})
+	run, err = service.Submit(run.ID, independentActionID, independentPause)
+	require.NoError(t, err)
+	run, err = service.Answer(run.ID, independentActionID, AnswerOptions{Text: "Use eu-west-1."})
+	require.NoError(t, err)
+
+	require.Len(t, run.Answers, 3)
+	assert.False(t, run.Answers[0].Active)
+	assert.Equal(t, replacementActionID, run.Answers[0].SupersededBy)
+	assert.True(t, run.Answers[1].Active)
+	assert.True(t, run.Answers[2].Active)
+	require.NotNil(t, run.CurrentAction)
+	assert.NotContains(t, run.CurrentAction.Context, "Use SQLite.")
+	assert.Contains(t, run.CurrentAction.Context, "Use PostgreSQL instead.")
+	assert.Contains(t, run.CurrentAction.Context, "Use eu-west-1.")
+}
+
+func TestDecisionPauseRejectsUnknownSupersededAnswer(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run, err := service.Start("choose storage", CreateOptions{Budget: 4, ReviewEnabled: false})
+	require.NoError(t, err)
+
+	unknown := "missing-action"
+	outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "storage needs a revised decision",
+		Pause: &Pause{
+			Reason:                   PauseDecisionRequired,
+			Question:                 "Should the prior choice change?",
+			SupersedesAnswerActionID: &unknown,
+		},
+	})
+	_, err = service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
+	assertProtocolError(t, err, "invalid_decision_supersession")
+
+	replayed, loadErr := service.Load(run.ID)
+	require.NoError(t, loadErr)
+	require.NotNil(t, replayed.CurrentAction)
+	assert.Equal(t, run.CurrentAction.ActionID, replayed.CurrentAction.ActionID)
+	assert.Nil(t, findActionRecord(&replayed, run.CurrentAction.ActionID).Outcome)
+}
+
 func TestMarkActiveAnswersSupersededIsDeterministicAndContextExcludesThem(t *testing.T) {
 	t.Parallel()
 	revision := "sha256:" + strings.Repeat("c", 64)
@@ -209,4 +289,47 @@ func TestLargeNeedsInputOutcomeCannotDeadlockNextAction(t *testing.T) {
 	encoded, err := encodeAction(*continued.CurrentAction)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(encoded), maxActionBytes)
+}
+
+func TestIssueActionShrinksContextToItsEncodedBudget(t *testing.T) {
+	tests := []struct {
+		name     string
+		fragment string
+	}{
+		{name: "quotes and backslashes", fragment: `\"`},
+		{name: "unicode line separators", fragment: "x\u2028\u2029"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := newTestRepository(t)
+			service := openTestService(t, repository)
+			source := mustParseSource(t, validSourceEnvelope())
+			run, err := service.Start(strings.Repeat("g", 30<<10), CreateOptions{Budget: 4, ReviewEnabled: false, PinnedSource: &source})
+			require.NoError(t, err)
+
+			summary := strings.Repeat(test.fragment, (300<<10)/len(test.fragment))
+			outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{
+				Status:  OutcomeCompleted,
+				Summary: summary,
+				SuggestedActions: []SuggestedAction{{
+					Kind:  ActionImplement,
+					Brief: "Apply the confirmed change.",
+				}},
+			})
+			continued, err := service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
+			require.NoError(t, err)
+			require.NotNil(t, continued.CurrentAction)
+			assert.Equal(t, ActionImplement, continued.CurrentAction.Kind)
+			assert.Contains(t, continued.CurrentAction.Context, "...[truncated original_bytes=")
+			assert.LessOrEqual(t, len(continued.CurrentAction.Context), maxActionContextBytes)
+			encoded, err := encodeAction(*continued.CurrentAction)
+			require.NoError(t, err)
+			assert.LessOrEqual(t, len(encoded), maxActionBytes)
+
+			replayed, err := service.Load(run.ID)
+			require.NoError(t, err)
+			require.NotNil(t, replayed.CurrentAction)
+			assert.Equal(t, continued.CurrentAction.Context, replayed.CurrentAction.Context)
+		})
+	}
 }

@@ -405,8 +405,9 @@ func TestFirstCreationSyncFaultsHaveTruthfulCommitClassification(t *testing.T) {
 		}}
 		err := createOneRun(store, "00000000-0000-4000-8000-000000000342")
 		mutationErr := requireMutationError(t, err)
-		assert.True(t, mutationErr.Committed)
-		assert.True(t, mutationErr.ProjectionStale)
+		assert.False(t, mutationErr.Committed)
+		assert.True(t, mutationErr.Ambiguous)
+		assert.False(t, mutationErr.ProjectionStale)
 	})
 	t.Run("runs parent after projection", func(t *testing.T) {
 		store := openAdversarialStore(t)
@@ -419,7 +420,13 @@ func TestFirstCreationSyncFaultsHaveTruthfulCommitClassification(t *testing.T) {
 		}}
 		err := createOneRun(store, "00000000-0000-4000-8000-000000000343")
 		mutationErr := requireMutationError(t, err)
-		assert.True(t, mutationErr.Committed)
+		if PlatformDurability().DirectorySync {
+			assert.True(t, mutationErr.Committed)
+			assert.False(t, mutationErr.Ambiguous)
+		} else {
+			assert.False(t, mutationErr.Committed)
+			assert.True(t, mutationErr.Ambiguous)
+		}
 		assert.False(t, mutationErr.ProjectionStale)
 	})
 }

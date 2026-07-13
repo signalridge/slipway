@@ -29,9 +29,15 @@ const (
 	WorkspaceIdentityVersion = 1
 	// GitObservationVersion is the serialized Git observation contract.
 	GitObservationVersion = 1
-	// MaxObservedFileBytes bounds regular-file content hashing. Larger files are
-	// recorded as oversize without reading their content.
+	// MaxObservedFileBytes is the threshold for a full regular-file digest.
+	// Larger files use a bounded, domain-separated sample fingerprint.
 	MaxObservedFileBytes int64 = 16 << 20
+
+	// maxGitObservationDetailBytes bounds the persisted prefix of dirty-path
+	// details. The complete set still contributes to PathFingerprint.
+	maxGitObservationDetailBytes = 512 << 10
+
+	oversizeFileSampleBytes int64 = 64 << 10
 )
 
 type Paths struct {
@@ -53,7 +59,7 @@ type WorkspaceIdentity struct {
 
 // PathObservation is a metadata-only record for one dirty or untracked path.
 // Content is never retained; regular content and symlink targets are represented
-// only by a digest when they can be read within the configured bound.
+// by a full digest or, for oversize files, a bounded sample fingerprint.
 type PathObservation struct {
 	Path          string `json:"path"`
 	Category      string `json:"category"`
@@ -63,14 +69,19 @@ type PathObservation struct {
 	ContentSHA256 string `json:"content_sha256,omitempty"`
 }
 
-// GitObservation is a deterministic, metadata-only snapshot of current Git and
-// worktree state. DirtyFiles and PathObservations are always sorted and non-nil.
+// GitObservation records a bounded, exact identity for the observed worktree
+// state. DirtyFiles and PathObservations are a sorted, non-nil prefix of the
+// complete dirty-path set. PathCount and PathFingerprint cover the complete set;
+// DetailsTruncated states explicitly when the prefix omits details.
 type GitObservation struct {
 	Version           int               `json:"version"`
 	Head              string            `json:"head"`
 	IndexFingerprint  string            `json:"index_fingerprint"`
 	StatusFingerprint string            `json:"status_fingerprint"`
 	SnapshotHash      string            `json:"snapshot_hash"`
+	PathCount         int               `json:"path_count"`
+	PathFingerprint   string            `json:"path_fingerprint"`
+	DetailsTruncated  bool              `json:"details_truncated"`
 	DirtyFiles        []string          `json:"dirty_files"`
 	PathObservations  []PathObservation `json:"path_observations"`
 }
@@ -280,13 +291,26 @@ func ObserveGit(root string) (GitObservation, error) {
 		Head:              head,
 		IndexFingerprint:  digestBytes(index),
 		StatusFingerprint: digestBytes(status),
-		DirtyFiles:        make([]string, 0, len(paths)),
-		PathObservations:  make([]PathObservation, 0, len(paths)),
+		PathCount:         len(paths),
+		DirtyFiles:        make([]string, 0, min(len(paths), 128)),
+		PathObservations:  make([]PathObservation, 0, min(len(paths), 128)),
 	}
+	pathHasher := sha256.New()
+	writeHashSection(pathHasher, "path_count", []byte(strconv.Itoa(len(paths))))
+	detailBytes := 0
 	for _, path := range paths {
-		observation.DirtyFiles = append(observation.DirtyFiles, path.path)
-		observation.PathObservations = append(observation.PathObservations, observePath(rootHandle, path))
+		item := observePath(rootHandle, path)
+		writePathObservationHash(pathHasher, item)
+		cost := estimatedPathObservationJSONBytes(item)
+		if !observation.DetailsTruncated && detailBytes+cost <= maxGitObservationDetailBytes {
+			observation.DirtyFiles = append(observation.DirtyFiles, path.path)
+			observation.PathObservations = append(observation.PathObservations, item)
+			detailBytes += cost
+		} else {
+			observation.DetailsTruncated = true
+		}
 	}
+	observation.PathFingerprint = hashDigest(pathHasher)
 	observation.SnapshotHash = gitSnapshotHash(observation)
 	if err := observation.Validate(); err != nil {
 		return GitObservation{}, fmt.Errorf("validate git observation: %w", err)
@@ -308,11 +332,23 @@ func (observation GitObservation) Validate() error {
 	if !validSHA256(observation.StatusFingerprint) {
 		return errors.New("git observation status_fingerprint must be a lowercase sha256 digest")
 	}
+	if observation.PathCount < 0 {
+		return errors.New("git observation path_count cannot be negative")
+	}
+	if !validSHA256(observation.PathFingerprint) {
+		return errors.New("git observation path_fingerprint must be a lowercase sha256 digest")
+	}
 	if observation.DirtyFiles == nil || observation.PathObservations == nil {
 		return errors.New("git observation arrays must be non-null")
 	}
 	if len(observation.DirtyFiles) != len(observation.PathObservations) {
 		return errors.New("git observation dirty files and path observations must correspond")
+	}
+	if observation.PathCount < len(observation.PathObservations) {
+		return errors.New("git observation path_count cannot be smaller than retained path details")
+	}
+	if observation.DetailsTruncated != (observation.PathCount > len(observation.PathObservations)) {
+		return errors.New("git observation details_truncated must state whether path details were omitted")
 	}
 	for index, path := range observation.DirtyFiles {
 		if err := validateObservedPath(path); err != nil {
@@ -329,11 +365,11 @@ func (observation GitObservation) Validate() error {
 			return fmt.Errorf("path observation %q requires valid category and state", path)
 		}
 		switch item.Observation {
-		case "regular", "symlink":
+		case "regular", "symlink", "oversize":
 			if !validSHA256(item.ContentSHA256) {
 				return fmt.Errorf("path observation %q requires a content digest", path)
 			}
-		case "missing", "non_regular", "unreadable", "oversize":
+		case "missing", "non_regular", "unreadable":
 			if item.ContentSHA256 != "" {
 				return fmt.Errorf("path observation %q cannot retain a content digest for %s", path, item.Observation)
 			}
@@ -342,6 +378,12 @@ func (observation GitObservation) Validate() error {
 		}
 		if item.Size != nil && *item.Size < 0 {
 			return fmt.Errorf("path observation %q has negative size", path)
+		}
+	}
+	if !observation.DetailsTruncated {
+		expectedFingerprint := pathObservationFingerprint(observation.PathObservations)
+		if observation.PathFingerprint != expectedFingerprint {
+			return errors.New("git observation path_fingerprint does not match path details")
 		}
 	}
 	if !validSHA256(observation.SnapshotHash) {
@@ -483,6 +525,35 @@ func mergeTokenList(left, right string) string {
 	return strings.Join(values, ",")
 }
 
+func hashOversizeFileSamples(file *os.File, size int64) (string, error) {
+	if size <= MaxObservedFileBytes {
+		return "", errors.New("oversize sample requires an oversize file")
+	}
+	hasher := sha256.New()
+	writeHashSection(hasher, "mode", []byte("oversize_samples_v1"))
+	writeHashSection(hasher, "size", []byte(strconv.FormatInt(size, 10)))
+	offsets := []int64{0, max(0, size/2-oversizeFileSampleBytes/2), max(0, size-oversizeFileSampleBytes)}
+	lastOffset := int64(-1)
+	for _, offset := range offsets {
+		if offset == lastOffset {
+			continue
+		}
+		lastOffset = offset
+		length := min(oversizeFileSampleBytes, size-offset)
+		buffer := make([]byte, int(length))
+		read, err := file.ReadAt(buffer, offset)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+		if int64(read) != length {
+			return "", errors.New("oversize file size changed while sampling")
+		}
+		writeHashSection(hasher, "offset", []byte(strconv.FormatInt(offset, 10)))
+		writeHashSection(hasher, "sample", buffer)
+	}
+	return hashDigest(hasher), nil
+}
+
 func observePath(root *os.Root, item statusPath) PathObservation {
 	result := PathObservation{Path: item.path, Category: item.category, State: item.state}
 	name := filepath.FromSlash(item.path)
@@ -511,9 +582,6 @@ func observePath(root *os.Root, item statusPath) PathObservation {
 	case !info.Mode().IsRegular():
 		result.Observation = "non_regular"
 		return result
-	case info.Size() > MaxObservedFileBytes:
-		result.Observation = "oversize"
-		return result
 	}
 
 	file, err := root.Open(name)
@@ -527,28 +595,70 @@ func observePath(root *os.Root, item statusPath) PathObservation {
 		result.Observation = "unreadable"
 		return result
 	}
-	result.Size = int64Pointer(openedInfo.Size())
+
+	observation := "regular"
+	var contentSHA256 string
+	var readErr error
 	if openedInfo.Size() > MaxObservedFileBytes {
-		_ = file.Close()
-		result.Observation = "oversize"
-		return result
+		observation = "oversize"
+		contentSHA256, readErr = hashOversizeFileSamples(file, openedInfo.Size())
+	} else {
+		hasher := sha256.New()
+		var written int64
+		written, readErr = io.Copy(hasher, io.LimitReader(file, openedInfo.Size()+1))
+		if readErr == nil && written == openedInfo.Size() {
+			contentSHA256 = hashDigest(hasher)
+		} else if readErr == nil {
+			readErr = errors.New("regular file size changed while hashing")
+		}
 	}
-	content, readErr := io.ReadAll(io.LimitReader(file, MaxObservedFileBytes+1))
+
+	finalInfo, finalStatErr := file.Stat()
 	closeErr := file.Close()
-	if readErr != nil || closeErr != nil {
+	currentInfo, currentErr := root.Lstat(name)
+	if readErr != nil || finalStatErr != nil || closeErr != nil || currentErr != nil ||
+		!finalInfo.Mode().IsRegular() || !currentInfo.Mode().IsRegular() ||
+		!os.SameFile(openedInfo, finalInfo) || !os.SameFile(openedInfo, currentInfo) ||
+		openedInfo.Size() != finalInfo.Size() || currentInfo.Size() != finalInfo.Size() ||
+		!openedInfo.ModTime().Equal(finalInfo.ModTime()) || !currentInfo.ModTime().Equal(finalInfo.ModTime()) {
 		result.Observation = "unreadable"
 		result.ContentSHA256 = ""
 		return result
 	}
-	if int64(len(content)) > MaxObservedFileBytes {
-		result.Observation = "oversize"
-		result.ContentSHA256 = ""
-		return result
-	}
-	result.Observation = "regular"
-	result.Size = int64Pointer(int64(len(content)))
-	result.ContentSHA256 = digestBytes(content)
+	result.Observation = observation
+	result.Size = int64Pointer(finalInfo.Size())
+	result.ContentSHA256 = contentSHA256
 	return result
+}
+
+func estimatedPathObservationJSONBytes(item PathObservation) int {
+	// JSON may expand a UTF-8 path through escaping. This conservative estimate
+	// covers both the dirty_files entry and the duplicate path in the structured
+	// observation, plus fixed keys and metadata.
+	return 12*len(item.Path) + 6*(len(item.Category)+len(item.State)+len(item.Observation)) +
+		len(item.ContentSHA256) + 256
+}
+
+func writePathObservationHash(hasher hash.Hash, item PathObservation) {
+	writeHashSection(hasher, "path", []byte(item.Path))
+	writeHashSection(hasher, "category", []byte(item.Category))
+	writeHashSection(hasher, "state", []byte(item.State))
+	writeHashSection(hasher, "observation", []byte(item.Observation))
+	size := "unknown"
+	if item.Size != nil {
+		size = strconv.FormatInt(*item.Size, 10)
+	}
+	writeHashSection(hasher, "size", []byte(size))
+	writeHashSection(hasher, "content_sha256", []byte(item.ContentSHA256))
+}
+
+func pathObservationFingerprint(items []PathObservation) string {
+	hasher := sha256.New()
+	writeHashSection(hasher, "path_count", []byte(strconv.Itoa(len(items))))
+	for _, item := range items {
+		writePathObservationHash(hasher, item)
+	}
+	return hashDigest(hasher)
 }
 
 func gitSnapshotHash(observation GitObservation) string {
@@ -557,22 +667,12 @@ func gitSnapshotHash(observation GitObservation) string {
 	writeHashSection(hasher, "head", []byte(observation.Head))
 	writeHashSection(hasher, "index_fingerprint", []byte(observation.IndexFingerprint))
 	writeHashSection(hasher, "status_fingerprint", []byte(observation.StatusFingerprint))
-	writeHashSection(hasher, "dirty_count", []byte(strconv.Itoa(len(observation.DirtyFiles))))
-	for _, path := range observation.DirtyFiles {
-		writeHashSection(hasher, "dirty_path", []byte(path))
-	}
-	writeHashSection(hasher, "path_observation_count", []byte(strconv.Itoa(len(observation.PathObservations))))
+	writeHashSection(hasher, "path_count", []byte(strconv.Itoa(observation.PathCount)))
+	writeHashSection(hasher, "path_fingerprint", []byte(observation.PathFingerprint))
+	writeHashSection(hasher, "details_truncated", []byte(strconv.FormatBool(observation.DetailsTruncated)))
+	writeHashSection(hasher, "retained_path_count", []byte(strconv.Itoa(len(observation.PathObservations))))
 	for _, item := range observation.PathObservations {
-		writeHashSection(hasher, "path", []byte(item.Path))
-		writeHashSection(hasher, "category", []byte(item.Category))
-		writeHashSection(hasher, "state", []byte(item.State))
-		writeHashSection(hasher, "observation", []byte(item.Observation))
-		size := "unknown"
-		if item.Size != nil {
-			size = strconv.FormatInt(*item.Size, 10)
-		}
-		writeHashSection(hasher, "size", []byte(size))
-		writeHashSection(hasher, "content_sha256", []byte(item.ContentSHA256))
+		writePathObservationHash(hasher, item)
 	}
 	return hashDigest(hasher)
 }

@@ -51,7 +51,15 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 	checks := rawJSONArray(t, doctor, "checks")
 	require.NotEmpty(t, checks)
 	for _, check := range checks {
-		exactRawJSONObject(t, check, "code", "status", "host_id", "name", "detail")
+		var identity struct {
+			Code string `json:"code"`
+		}
+		require.NoError(t, json.Unmarshal(check, &identity))
+		keys := []string{"code", "status", "host_id", "name", "detail"}
+		if identity.Code == "runstore_durability_full" || identity.Code == "runstore_durability_limited" {
+			keys = append(keys, "durability")
+		}
+		exactRawJSONObject(t, check, keys...)
 	}
 
 	actionJSON, stderr, err := executeForTest(t, "run", "inspect output shapes", "--root", repository, "--json")

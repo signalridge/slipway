@@ -178,7 +178,7 @@ func TestObservePathRecordsMissingUnreadableNonRegularAndOversize(t *testing.T) 
 	assert.Equal(t, "oversize", oversize.Observation)
 	require.NotNil(t, oversize.Size)
 	assert.Equal(t, MaxObservedFileBytes+1, *oversize.Size)
-	assert.Empty(t, oversize.ContentSHA256)
+	assert.True(t, validSHA256(oversize.ContentSHA256))
 
 	if runtime.GOOS != "windows" {
 		unreadablePath := filepath.Join(repository, "unreadable.txt")

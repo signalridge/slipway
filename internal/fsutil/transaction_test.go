@@ -161,6 +161,34 @@ func TestFileTransactionPreconditionsPreservePlannedUserPaths(t *testing.T) {
 	assert.Equal(t, "user edit", string(content))
 }
 
+func TestFileTransactionPreflightsAllOperationsBeforeFirstMutation(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.txt")
+	later := filepath.Join(dir, "later.txt")
+	require.NoError(t, os.WriteFile(first, []byte("first-before"), 0o600))
+	require.NoError(t, os.WriteFile(later, []byte("later-before"), 0o600))
+
+	var mutationPaths []string
+	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+		WriteFileTransactionOp(first, []byte("first-after"), 0o600),
+		WriteFileTransactionOp(later, []byte("later-after"), 0o600).
+			WithExpectedSHA256(testSHA256([]byte("different-content"))),
+	}, FileTransactionHooks{
+		BeforeMutation: func(path, _ string) error {
+			mutationPaths = append(mutationPaths, path)
+			return nil
+		},
+	})
+	require.ErrorIs(t, err, ErrFileTransactionPrecondition)
+	assert.Empty(t, mutationPaths, "preflight failure must happen before the first mutation hook")
+	firstContent, readErr := os.ReadFile(first)
+	require.NoError(t, readErr)
+	assert.Equal(t, "first-before", string(firstContent))
+	laterContent, readErr := os.ReadFile(later)
+	require.NoError(t, readErr)
+	assert.Equal(t, "later-before", string(laterContent))
+}
+
 func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")

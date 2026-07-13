@@ -192,6 +192,54 @@ func TestParseSourceRejectsV1AndMalformedManifest(t *testing.T) {
 	}
 }
 
+func TestParseSourceRejectsDELAndC1Controls(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*RawSourceEnvelope)
+	}{
+		{name: "title del", mutate: func(envelope *RawSourceEnvelope) { envelope.Title += "\u007f" }},
+		{name: "label c1", mutate: func(envelope *RawSourceEnvelope) { envelope.Labels[0] += "\u0085" }},
+		{name: "section body c1", mutate: func(envelope *RawSourceEnvelope) { envelope.Comments[0].Body += "\u009f" }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope := validSourceEnvelope()
+			test.mutate(&envelope)
+			raw, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			_, err = ParseSource(raw)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "disallowed control")
+		})
+	}
+}
+
+func TestParseSourceRejectsExplicitDefaultPortsConsistently(t *testing.T) {
+	tests := []struct {
+		name   string
+		want   string
+		mutate func(*RawSourceEnvelope)
+	}{
+		{name: "issue url", want: "explicit port", mutate: func(envelope *RawSourceEnvelope) {
+			envelope.CanonicalURL = strings.Replace(envelope.CanonicalURL, "github.com/", "github.com:443/", 1)
+		}},
+		{name: "comment url", want: "issue comment url", mutate: func(envelope *RawSourceEnvelope) {
+			envelope.Comments[0].URL = strings.Replace(envelope.Comments[0].URL, "github.com/", "github.com:443/", 1)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope := validSourceEnvelope()
+			test.mutate(&envelope)
+			raw, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			_, err = ParseSource(raw)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+}
+
 func TestSourceProjectionCollectionsAreBounded(t *testing.T) {
 	t.Parallel()
 

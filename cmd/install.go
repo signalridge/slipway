@@ -45,7 +45,7 @@ func makeInstallCmd() *cobra.Command {
 			}
 			report, err := adapter.Install(adapter.InstallOptions{Root: resolved, Tools: tools, Refresh: refresh})
 			if err != nil {
-				return newRuntimeError("install_failed", err.Error(), installNext(resolved, tools), nil)
+				return adapterMutationError("install_failed", err, resolved, report)
 			}
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), makeChangeReportOutput(report))
@@ -60,12 +60,13 @@ func makeInstallCmd() *cobra.Command {
 	return cmd
 }
 
-func installNext(root string, tools []string) autopilot.Next {
-	arguments := []string{"slipway", "install", "--root", root, "--refresh"}
-	for _, tool := range tools {
-		arguments = append(arguments, "--tool", tool)
-	}
-	return inputlessCommandNext(root, "refresh-install", arguments...)
+func adapterMutationError(code string, err error, root string, report adapter.ChangeReport) *CLIError {
+	return newRuntimeError(
+		code,
+		err.Error(),
+		autopilot.NoneNext(root),
+		map[string]any{"report": makeChangeReportOutput(report)},
+	)
 }
 
 func writeChangeReport(cmd *cobra.Command, verb string, report adapter.ChangeReport) error {

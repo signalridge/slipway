@@ -146,8 +146,41 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "action"), marshalTestJSON(t, scoped))
 	require.NoError(t, actionSchema.Validate(machineSchemaValue(t, scoped)))
 
+	actionRecordSchema := compileMachineSchemaDefinition(t, "actionRecord")
+	reviewAction := testAction()
+	reviewAction.Kind = ActionReview
+	skippedReviewRecord := ActionRecord{
+		Action: reviewAction,
+		ReviewProjection: &Review{
+			Result:        ReviewNotRun,
+			Findings:      []Finding{},
+			Uncertainties: []string{},
+		},
+		Skipped: true,
+	}
+	require.NoError(t, actionRecordSchema.Validate(machineSchemaValue(t, skippedReviewRecord)))
+	notSkippedReviewRecord := skippedReviewRecord
+	notSkippedReviewRecord.Skipped = false
+	require.Error(t, actionRecordSchema.Validate(machineSchemaValue(t, notSkippedReviewRecord)))
+	nonReviewRecord := skippedReviewRecord
+	nonReviewRecord.Action.Kind = ActionOrient
+	require.Error(t, actionRecordSchema.Validate(machineSchemaValue(t, nonReviewRecord)))
+	projectionWithOutcomeDigest := skippedReviewRecord
+	projectionWithOutcomeDigest.OutcomePayloadSHA256 = "sha256:" + strings.Repeat("a", 64)
+	require.Error(t, actionRecordSchema.Validate(machineSchemaValue(t, projectionWithOutcomeDigest)))
+
 	rawSourceSchema := compileMachineSchemaDefinition(t, "rawSourceEnvelope")
-	require.NoError(t, rawSourceSchema.Validate(machineSchemaValue(t, validSourceEnvelope())))
+	validEnvelope := validSourceEnvelope()
+	require.NoError(t, rawSourceSchema.Validate(machineSchemaValue(t, validEnvelope)))
+	defaultPortEnvelope := validEnvelope
+	defaultPortEnvelope.CanonicalURL = strings.Replace(defaultPortEnvelope.CanonicalURL, "github.com/", "github.com:443/", 1)
+	require.Error(t, rawSourceSchema.Validate(machineSchemaValue(t, defaultPortEnvelope)))
+	controlEnvelope := validEnvelope
+	controlEnvelope.Title += "\u007f"
+	require.Error(t, rawSourceSchema.Validate(machineSchemaValue(t, controlEnvelope)))
+	markdownControlEnvelope := validEnvelope
+	markdownControlEnvelope.Body += "\u0085"
+	require.Error(t, rawSourceSchema.Validate(machineSchemaValue(t, markdownControlEnvelope)))
 
 	material := ActionMaterial{
 		ContractVersion:      ContractVersion,
@@ -208,6 +241,16 @@ func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 	)
 	invalidHead.Comments = []RawSourceComment{}
 	require.NoError(t, schema.Validate(machineSchemaValue(t, invalidHead)))
+
+	defaultPort := validSourceEnvelope()
+	defaultPort.CanonicalURL = strings.Replace(defaultPort.CanonicalURL, "github.com/", "github.com:443/", 1)
+	require.Error(t, schema.Validate(machineSchemaValue(t, defaultPort)))
+	controlTitle := validSourceEnvelope()
+	controlTitle.Title += "\u007f"
+	require.Error(t, schema.Validate(machineSchemaValue(t, controlTitle)))
+	controlBody := validSourceEnvelope()
+	controlBody.Body += "\u0085"
+	require.Error(t, schema.Validate(machineSchemaValue(t, controlBody)))
 
 	tooManyLabels := validSourceEnvelope()
 	tooManyLabels.Labels = make([]string, maxSourceLabels+1)
@@ -386,6 +429,7 @@ func TestMachineProtocolOutcomeSchemaEnforcesGoMatrix(t *testing.T) {
 		{name: "orient partial", kind: ActionOrient, outcome: testOutcome(OutcomePartial)},
 		{name: "orient error", kind: ActionOrient, outcome: testOutcome(OutcomeError)},
 		{name: "orient decision", kind: ActionOrient, outcome: pausedTestOutcome(PauseDecisionRequired, nil)},
+		{name: "orient decision supersession", kind: ActionOrient, outcome: withDecisionSupersession(pausedTestOutcome(PauseDecisionRequired, nil), "prior-action")},
 		{name: "orient environment", kind: ActionOrient, outcome: pausedTestOutcome(PauseEnvironmentUnavailable, nil)},
 		{name: "clarify completed", kind: ActionClarify, outcome: testOutcome(OutcomeCompleted)},
 		{name: "clarify error", kind: ActionClarify, outcome: testOutcome(OutcomeError)},
@@ -417,6 +461,8 @@ func TestMachineProtocolOutcomeSchemaEnforcesGoMatrix(t *testing.T) {
 
 	missingKind := machineSchemaValue(t, outcomeForSchema(ActionOrient, testOutcome(OutcomeCompleted))).(map[string]any)
 	delete(missingKind, "action_kind")
+	invalidRequestID := destructive
+	invalidRequestID.RequestID = "request-1"
 	illegal := []struct {
 		name  string
 		value any
@@ -427,6 +473,8 @@ func TestMachineProtocolOutcomeSchemaEnforcesGoMatrix(t *testing.T) {
 		{name: "clarify partial", value: machineSchemaValue(t, outcomeForSchema(ActionClarify, testOutcome(OutcomePartial)))},
 		{name: "orient implementation", value: machineSchemaValue(t, outcomeForSchema(ActionOrient, implementedTestOutcome(OutcomeCompleted, ImplementationApplied)))},
 		{name: "orient destructive pause", value: machineSchemaValue(t, outcomeForSchema(ActionOrient, pausedTestOutcome(PauseDestructiveConfirm, &destructive)))},
+		{name: "environment decision supersession", value: machineSchemaValue(t, outcomeForSchema(ActionOrient, withDecisionSupersession(pausedTestOutcome(PauseEnvironmentUnavailable, nil), "prior-action")))},
+		{name: "destructive request non uuid", value: machineSchemaValue(t, outcomeForSchema(ActionImplement, pausedTestOutcome(PauseDestructiveConfirm, &invalidRequestID)))},
 		{name: "implement result mismatch", value: machineSchemaValue(t, outcomeForSchema(ActionImplement, implementedTestOutcome(OutcomeCompleted, ImplementationPartial)))},
 		{name: "implement suggestion", value: machineSchemaValue(t, outcomeForSchema(ActionImplement, withSuggestion(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), ActionSummarize)))},
 		{name: "review needs input", value: machineSchemaValue(t, outcomeForSchema(ActionReview, pausedTestOutcome(PauseDecisionRequired, nil)))},

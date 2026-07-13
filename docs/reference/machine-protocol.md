@@ -29,7 +29,7 @@ The first form is ad-hoc only and rejects every source option. An issue-bound Ru
 
 Refresh validates provider/host and issue node ID before any mutation. A different issue is rejected and requires a new Run. Repository, number, or URL transfer updates projection and records the prior canonical URL once while still comparing the marker and requirements. A refresh whose manifest revision is unchanged—including identical, projection-only, and other non-material drift—voids the outstanding Action/queue/authorization and issues a fresh Orient. Any new manifest revision, including a content-identical replacement, or an invalid body stores a run-local, path-free candidate, voids outstanding work, and pauses with `decision_required` without applying the requested budget.
 
-`pinned` keeps the accepted snapshot; `adopt` installs a valid candidate. Only when adoption changes `requirements_revision` are answers derived from the old revision removed from active Action context; their records remain. A content-identical manifest-only replacement keeps those answers active. The choice receipt makes an identical `(candidate_id, choice)` retry a no-op; another choice or stale ID conflicts. `--use-pinned-source` records `source_refresh_skipped` and never claims the source was unchanged.
+`pinned` retains the accepted manifest, Requirements, and section content while applying the candidate's same-Issue repository/number/canonical-URL/alias/parent projection; `adopt` installs a valid candidate snapshot. Only when adoption changes `requirements_revision` are answers derived from the old revision removed from active Action context; their records remain. A content-identical manifest-only replacement keeps those answers active. The choice receipt makes an identical `(candidate_id, choice)` retry a no-op; another choice or stale ID conflicts. `--use-pinned-source` records `source_refresh_skipped` and never claims the source was unchanged.
 
 An explicit resume budget must be 1..1000 and replaces the remainder before fresh Orient consumes one. If omitted, a positive remainder is preserved; an exhausted remainder becomes `max(initial_budget, 3)` before Orient. Candidate creation reports `budget_applied: false`; repeat the budget on the subsequent choice. Paused protocol output exposes safe `pinned_source`, `source_candidate`, `resume_operation`, and `budget_applied` fields. Full status JSON also exposes `last_resume_result` and the last choice receipt, but no source-file path.
 
@@ -60,7 +60,7 @@ Machine recovery authority is a typed `next` object, never a shell string:
 
 Input types are `string`, `path`, `enum`, and `digest`; enum inputs list nonempty `choices`, and digest values use lowercase `sha256:<64 hex>`. Resolve a chosen variant by copying `base_argv`, then, in input schema order, append each supplied `flag` and exact raw value as separate argv elements. Unknown, missing required, wrong-type, invalid enum, and malformed digest values are rejected. Every variant contains the run's original absolute `--root`; no variant contains `FILE`, `<file>`, `<answer>`, or a quoted pseudo-value.
 
-Active Actions derive `submit-outcome-file`, inputless `submit-outcome-stdin`, and inputless `skip-action`. Decision pauses derive `answer-decision`. Destructive pauses derive inputless `confirm-destructive` fixed to the current digest (with optional text) plus `decline-or-feedback` requiring text. Ad-hoc recovery derives `resume-ad-hoc`; issue recovery derives `refresh-source` and `use-pinned-source`; valid candidates derive `keep-pinned` and `adopt`, while invalid candidates expose only `keep-pinned`. Ended Runs use operation `none` and an empty variants array.
+Active Actions derive `submit-outcome-file`, inputless `submit-outcome-stdin`, and inputless `skip-action`. Decision pauses derive `answer-decision` plus `skip-action`; destructive pauses derive inputless `confirm-destructive` fixed to the current digest (with optional text), `decline-or-feedback`, and `skip-action`; environment pauses derive the appropriate resume variants plus `skip-action`. Budget/candidate pauses have no waiting Action and therefore do not expose skip. Ad-hoc recovery derives `resume-ad-hoc`; issue recovery derives `refresh-source` and `use-pinned-source`; valid candidates derive `keep-pinned` and `adopt`, while invalid candidates expose only `keep-pinned`. Ended Runs use operation `none` and an empty variants array.
 
 Only a variant with no unresolved required input may be rendered as a display command. Rendering happens at the CLI edge from argv for POSIX, `cmd.exe`, or PowerShell and never changes machine semantics or enters the journal.
 
@@ -70,9 +70,9 @@ Run initialization stores `workspace_identity` version 1 with the canonical abso
 
 Before Load, status-derived recovery, and every submit, answer, skip, stop, or resume mutation, Slipway rediscovers all three paths without a shell and compares the full identity. A reused root, another linked worktree, or moved/retargeted Git metadata fails before journal mutation with `workspace_identity_mismatch`, `next.operation:"none"`, and no retry variant.
 
-`initial_git` and `current_git` are version 1 structured observations. Each contains `head`, an `index_fingerprint` over the exact bytes from `git ls-files --stage -z`, a `status_fingerprint` over the exact bytes from `git status --porcelain=v2 -z --untracked-files=all`, sorted non-null `dirty_files`, sorted non-null `path_observations`, and a `snapshot_hash` framed over every structured field. Porcelain-v2 ordinary, rename/copy (including the origin path), unmerged, and untracked records are parsed without losing spaces or Unicode. `initial_git` is immutable; routing compares the structured snapshot hashes.
+`initial_git` and `current_git` are version 1 structured observations. Each contains `head`, an `index_fingerprint` over the exact bytes from `git ls-files --stage -z`, a `status_fingerprint` over the exact bytes from `git status --porcelain=v2 -z --untracked-files=all`, `path_count`, a `path_fingerprint` over every sorted dirty-path observation, bounded sorted non-null `dirty_files` and `path_observations` prefixes, an explicit `details_truncated` flag, and a `snapshot_hash` framed over every retained field plus the complete-set fingerprint. Porcelain-v2 ordinary, rename/copy (including the origin path), unmerged, and untracked records are parsed without losing spaces or Unicode. `initial_git` is immutable; routing compares the structured snapshot hashes.
 
-Each path observation records path, category/state, known size, and a content digest when safe. Regular dirty and untracked files up to 16 MiB are hashed; symlinks are never followed and hash only their link target. Missing, symlink, non-regular, unreadable, and oversize states are explicit. Oversize files are rejected from content hashing by size before read, and unreadable/oversize paths do not fail the whole Git observation. No raw file content enters a journal. A same-size content change wholly inside an oversize file is outside this bounded observer and may require host inspection.
+Each retained path observation records path, category/state, known size, and a content fingerprint when readable. Regular dirty and untracked files up to 16 MiB receive a full streamed SHA-256 without retaining raw content. Larger files are explicitly classified `oversize` and receive a bounded, domain-separated fingerprint over size plus fixed first/middle/last samples; this detects size changes and changes in sampled regions but may miss an equal-length edit confined outside those regions. Symlinks are never followed and hash only their link target. Missing, non-regular, and unreadable states remain explicit and do not fail the whole Git observation. If detailed records exceed the bounded projection budget, the omitted count and complete `path_fingerprint` remain visible; no raw file content enters a journal.
 
 ## Action
 
@@ -143,7 +143,7 @@ Only a structurally confirmed Implement may carry `destructive_authorization`:
 ```json
 {
   "destructive_authorization": {
-    "request_id": "...",
+    "request_id": "11111111-1111-4111-8111-111111111111",
     "originating_action_id": "...",
     "scope_version": 1,
     "scope_sha256": "sha256:...",
@@ -154,7 +154,7 @@ Only a structurally confirmed Implement may carry `destructive_authorization`:
 }
 ```
 
-Target kinds are `path`, `git_ref`, `external_resource`, and `data_domain`. Targets must already be unique and bytewise sorted by `(kind, value)`. Slipway recomputes SHA-256 over RFC 8785-compatible canonical JSON containing exactly `impact`, `request_id`, `scope_version: 1`, and `targets` in lexicographic key order.
+Target kinds are `path`, `git_ref`, `external_resource`, and `data_domain`. `request_id` is a canonical lowercase non-nil RFC UUID. Targets must already be unique and bytewise sorted by `(kind, value)`. Slipway recomputes SHA-256 over RFC 8785-compatible canonical JSON containing exactly `impact`, `request_id`, `scope_version: 1`, and `targets` in lexicographic key order.
 
 Action limits are:
 
@@ -195,7 +195,7 @@ Every public Outcome field is mandatory. Arrays must be arrays, including when e
 
 `action_kind` is mandatory and must exactly equal the current Action's `kind`. Slipway rejects a missing, unknown, or mismatched value; there is no inference or legacy fallback.
 
-Host status is only `completed`, `needs_input`, `partial`, or `error`. `skipped` is a CLI-owned `_machine skip` event and is rejected in a host Outcome. Outcome input is capped at 1 MiB and must be UTF-8 without a BOM or trailing data.
+Host status is only `completed`, `needs_input`, `partial`, or `error`. `skipped` is a CLI-owned `_machine skip` event and is rejected in a host Outcome. A skipped Review remains outcome-free and exposes the CLI-owned `review_projection.result: "not_run"` in action history, so consumers never confuse it with a host review result. Outcome input is capped at 1 MiB and must be UTF-8 without a BOM or trailing data.
 
 An Orient or Clarify may suggest at most one immediate `clarify`, `implement`, or `summarize` Action:
 
@@ -217,14 +217,14 @@ A `needs_input` Outcome has a non-null `pause`; every other status has `pause: n
 }
 ```
 
-Host pause reasons are `decision_required`, `destructive_confirmation_required`, and `environment_unavailable`. `budget_exhausted` is CLI-owned and is rejected from a host. A destructive request is required only for an Implement destructive pause:
+Host pause reasons are `decision_required`, `destructive_confirmation_required`, and `environment_unavailable`. `budget_exhausted` is CLI-owned and is rejected from a host. A decision pause may optionally include `supersedes_answer_action_id` naming one active prior answer that this question will revise; the field is invalid on environment or destructive pauses. If the user answers, only that named decision becomes inactive while remaining in history; skipping the question leaves it active. A destructive request is required only for an Implement destructive pause:
 
 ```json
 {
   "reason": "destructive_confirmation_required",
   "question": "Confirm this exact destructive scope?",
   "destructive_request": {
-    "request_id": "...",
+    "request_id": "11111111-1111-4111-8111-111111111111",
     "targets": [{"kind": "path", "value": "/absolute/target"}],
     "impact": "exact irreversible consequence",
     "scope_sha256": "sha256:..."
@@ -237,7 +237,7 @@ slipway _machine answer --run RUN --action ACTION --root ROOT --text TEXT
 slipway _machine answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
 ```
 
-Normal decision answers require text and forbid destructive flags; environment pauses reject answers and must resume. `--confirm-destructive` is a trusted-host attestation of a current user confirmation, not cryptographic proof of human presence; a malicious process with shell authority can forge flags. Natural-language answer text, including `yes`, never grants destructive authority. It records feedback or decline, invalidates the waiting Action and queues, clears the request/grant, and produces a fresh non-destructive Orient. Confirmation requires `--confirm-destructive --scope-sha256 DIGEST`; the digest must exactly match the CLI-recomputed current request. Success records an attestation and issues exactly one fresh Implement carrying a field-for-field copy as `destructive_authorization`. Any changed or expanded target/impact requires a new request.
+Normal decision answers require text and forbid destructive flags; an explicitly named prior answer is superseded only when the revising question is answered. Environment pauses reject answers and must resume. All three host pauses retain the no-reason `skip-action` control. `--confirm-destructive` is a trusted-host attestation of a current user confirmation, not cryptographic proof of human presence; a malicious process with shell authority can forge flags. Natural-language answer text, including `yes`, never grants destructive authority. It records feedback or decline, invalidates the waiting Action and queues, clears the request/grant, and produces a fresh non-destructive Orient. Confirmation requires `--confirm-destructive --scope-sha256 DIGEST`; the digest must exactly match the CLI-recomputed current request, whose `request_id` is a canonical lowercase non-nil RFC UUID. Success records an attestation and issues exactly one fresh Implement carrying a field-for-field copy as `destructive_authorization`. Any changed or expanded target/impact requires a new request.
 
 ### Implementation
 
@@ -325,7 +325,7 @@ An `action_id` accepts one Outcome. Retrying the exact original Outcome bytes is
 
 ## Journal commit errors
 
-`.git/slipway/runs/<run-id>/journal.jsonl` is the sole recovery authority; `run.json` is only a replaceable projection. Machine errors for storage mutations include stable `details.phase`, `details.committed`, `details.projection_stale`, `details.namespace_detached`, and `details.ambiguous` fields. `mutation_committed_projection_stale` means the journal event was fsynced but projection completion failed. `mutation_outcome_ambiguous` means an inode was written but durability or namespace membership could not be proved. Both return `next.operation:"none"`: inspect/replay the journal before recovery and never blind-retry. A pre-write failure uses `mutation_not_committed`.
+`.git/slipway/runs/<run-id>/journal.jsonl` is the sole recovery authority; `run.json` is only a replaceable projection, and `run.lock` is a coordination artifact rather than Run authority. Immutable initialization inspection never creates the lock, so directories with an absent/corrupt initialization record or a foreign workspace remain untouched. After that record identifies a valid local Run, locked replay or mutation may recreate a missing lock before continuing. Machine errors for storage mutations include stable `details.phase`, `details.committed`, `details.projection_stale`, `details.namespace_detached`, and `details.ambiguous` fields. `mutation_committed_projection_stale` means the journal event was fsynced but projection completion failed. `mutation_outcome_ambiguous` means an inode was written but durability or namespace membership could not be proved. Both return `next.operation:"none"`: inspect/replay the journal before recovery and never blind-retry. A pre-write failure uses `mutation_not_committed`.
 
 The storage capability is `file_and_directory_fsync` on supported Unix-like systems. On Windows it is stably reported as `file_fsync_only` with `directory_sync:false` and limitation `directory_fsync_unsupported`; file contents are fsynced, but crash durability of newly created or renamed directory entries cannot be claimed.
 
@@ -333,7 +333,7 @@ Paused, stopped, and ended command responses contain `contract_version`, `run_id
 
 ## Public report envelopes and doctor advisories
 
-Every JSON success/error is an unambiguous top-level contract-version-2 object. Install and uninstall use exactly `{contract_version,hosts,written,removed,preserved,warnings}` with all arrays present. List uses `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`. Doctor uses `{contract_version,checks:[{code,status,host_id,name,detail}]}`; check status is only `ok|warning|error`. The normative schema closes every object with `additionalProperties:false`. Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
+Every JSON success/error is an unambiguous top-level contract-version-2 object. Install and uninstall use exactly `{contract_version,hosts,written,removed,preserved,warnings}` with all arrays present. List uses `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`. Doctor uses `{contract_version,checks:[...]}`; every check has `{code,status,host_id,name,detail}`, and the `runstore_durability_full|runstore_durability_limited` check additionally has `durability:{level,file_sync,directory_sync,limitation?}`. Check status is only `ok|warning|error`. The normative schema closes every object with `additionalProperties:false`. Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
 
 GitHub capability codes are `github_cli_unavailable`, `github_cli_version_unknown`, `github_cli_rest_fallback_required`, `github_cli_compatible`, `github_auth_unavailable`, `github_auth_available`, `github_issue_permissions_ok`, `github_issue_permissions_limited`, and `github_issue_permissions_unknown`. Version detection and `gh auth status --hostname github.com` are time-bounded; `gh <2.94.0` reports that the official REST fallback is required for parent/sub-issue/dependency operations. Permission lookup runs only for a safely identified credential-free GitHub origin and never reports raw command, token, authentication, or API output.
 

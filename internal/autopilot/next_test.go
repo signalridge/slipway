@@ -34,7 +34,7 @@ func TestDeriveNextCoversEveryRunBranch(t *testing.T) {
 			name:       "decision pause",
 			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseDecisionRequired, CurrentAction: action},
 			operation:  NextOperationAnswer,
-			variantIDs: []string{"answer-decision"},
+			variantIDs: []string{"answer-decision", "skip-action"},
 		},
 		{
 			name: "destructive pause",
@@ -43,13 +43,19 @@ func TestDeriveNextCoversEveryRunBranch(t *testing.T) {
 				CurrentAction: action, PendingDestructiveRequest: &request,
 			},
 			operation:  NextOperationAnswer,
-			variantIDs: []string{"confirm-destructive", "decline-or-feedback"},
+			variantIDs: []string{"confirm-destructive", "decline-or-feedback", "skip-action"},
 		},
 		{
 			name:       "environment pause ad hoc",
 			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseEnvironmentUnavailable, CurrentAction: action},
 			operation:  NextOperationResume,
-			variantIDs: []string{"resume-ad-hoc"},
+			variantIDs: []string{"resume-ad-hoc", "skip-action"},
+		},
+		{
+			name:       "environment pause issue bound",
+			run:        Run{ID: "run-1", Workspace: workspace, WorkspaceIdentity: runstore.WorkspaceIdentity{ID: workspaceID}, State: RunPaused, PauseReason: PauseEnvironmentUnavailable, CurrentAction: action, PinnedSource: &PinnedSource{}},
+			operation:  NextOperationResume,
+			variantIDs: []string{"refresh-source", "use-pinned-source", "skip-action"},
 		},
 		{
 			name:       "budget pause ad hoc",

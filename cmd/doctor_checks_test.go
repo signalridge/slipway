@@ -228,15 +228,26 @@ func TestDoctorCommandEmitsVersionedExactChecksAndWarningsExitSuccessfully(t *te
 	assert.Equal(t, machineContractVersion, output.ContractVersion)
 	require.NotEmpty(t, output.Checks)
 	assert.Contains(t, doctorCodes(output.Checks), "github_cli_unavailable")
+	durabilityChecks := 0
 	for _, check := range output.Checks {
 		assert.NotEmpty(t, check.Code)
 		assert.Contains(t, []string{"ok", "warning", "error"}, check.Status)
+		expectedKeys := []string{"code", "status", "host_id", "name", "detail"}
+		if check.Durability != nil {
+			durabilityChecks++
+			expectedKeys = append(expectedKeys, "durability")
+			assert.Contains(t, []string{"runstore_durability_full", "runstore_durability_limited"}, check.Code)
+			assert.Contains(t, []string{"file_and_directory_fsync", "file_fsync_only"}, check.Durability.Level)
+			assert.True(t, check.Durability.FileSync)
+			assert.Equal(t, check.Code == "runstore_durability_full", check.Durability.DirectorySync)
+		}
 		encoded, err := json.Marshal(check)
 		require.NoError(t, err)
 		var shape map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal(encoded, &shape))
-		assert.ElementsMatch(t, []string{"code", "status", "host_id", "name", "detail"}, mapKeys(shape))
+		assert.ElementsMatch(t, expectedKeys, mapKeys(shape))
 	}
+	assert.Equal(t, 1, durabilityChecks)
 }
 
 func doctorCodes(checks []adapter.DoctorCheck) []string {

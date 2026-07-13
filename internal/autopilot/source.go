@@ -446,10 +446,11 @@ func validatePinnedSource(source PinnedSource) error {
 		return fmt.Errorf("validate source manifest: %w", err)
 	}
 	for index, section := range source.Sections {
-		if err := validateGitHubCommentURL(
+		if err := validatePinnedCommentURL(
 			fmt.Sprintf("sections[%d].provenance.url", index),
 			section.Provenance.URL,
 			source.CanonicalURL,
+			source.URLAliases,
 			section.Provenance.CommentDatabaseID,
 		); err != nil {
 			return err
@@ -471,6 +472,19 @@ func validatePinnedSource(source PinnedSource) error {
 		return errors.New("requirements_revision does not match sections")
 	}
 	return nil
+}
+
+func validatePinnedCommentURL(field, value, canonicalURL string, aliases []string, databaseID int64) error {
+	canonicalErr := validateGitHubCommentURL(field, value, canonicalURL, databaseID)
+	if canonicalErr == nil {
+		return nil
+	}
+	for _, alias := range aliases {
+		if validateGitHubCommentURL(field, value, alias, databaseID) == nil {
+			return nil
+		}
+	}
+	return canonicalErr
 }
 
 func validateSourceCandidateInput(input SourceCandidateInput) error {
@@ -516,7 +530,7 @@ func validateSourceCandidateInput(input SourceCandidateInput) error {
 	if len(input.ClassificationError) > maxSourceClassificationErrBytes {
 		return fmt.Errorf("classification_error exceeds %d bytes", maxSourceClassificationErrBytes)
 	}
-	if err := validateC0Text("classification_error", input.ClassificationError, false); err != nil {
+	if err := validateTextControls("classification_error", input.ClassificationError, false); err != nil {
 		return err
 	}
 	if input.RequirementsRevision != "" {
@@ -562,7 +576,7 @@ func validatePersistedSourceProjection(sourceVersion, parserVersion int, provide
 	seenAliases := make(map[string]struct{}, len(aliases))
 	for index, alias := range aliases {
 		field := fmt.Sprintf("url_aliases[%d]", index)
-		if err := validateC0Text(field, alias, false); err != nil {
+		if err := validateTextControls(field, alias, false); err != nil {
 			return err
 		}
 		if err := validateGitHubIssueURL(field, alias, 0); err != nil {
@@ -579,7 +593,7 @@ func validatePersistedSourceProjection(sourceVersion, parserVersion int, provide
 	if !validSHA256(sourceRevision) {
 		return errors.New("source_revision must use lowercase sha256:<64 hex> format")
 	}
-	if err := validateC0Text("title", title, false); err != nil {
+	if err := validateTextControls("title", title, false); err != nil {
 		return err
 	}
 	if strings.TrimSpace(title) == "" {
@@ -732,11 +746,11 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 		{name: "title", value: envelope.Title},
 	}
 	for _, field := range textFields {
-		if err := validateC0Text(field.name, field.value, false); err != nil {
+		if err := validateTextControls(field.name, field.value, false); err != nil {
 			return err
 		}
 	}
-	if err := validateC0Text("body", envelope.Body, true); err != nil {
+	if err := validateTextControls("body", envelope.Body, true); err != nil {
 		return err
 	}
 
@@ -775,7 +789,7 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 	}
 	for index, label := range envelope.Labels {
 		field := fmt.Sprintf("labels[%d]", index)
-		if err := validateC0Text(field, label, false); err != nil {
+		if err := validateTextControls(field, label, false); err != nil {
 			return err
 		}
 		if strings.TrimSpace(label) == "" {
@@ -815,7 +829,7 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 			{name: "parent.canonical_url", value: envelope.Parent.CanonicalURL},
 		}
 		for _, field := range parentFields {
-			if err := validateC0Text(field.name, field.value, false); err != nil {
+			if err := validateTextControls(field.name, field.value, false); err != nil {
 				return err
 			}
 		}
@@ -832,15 +846,15 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 	return nil
 }
 
-func validateC0Text(field, value string, markdownBody bool) error {
+func validateTextControls(field, value string, markdownBody bool) error {
 	for _, character := range value {
-		if character >= 0x20 {
+		if !unicode.IsControl(character) {
 			continue
 		}
 		if markdownBody && (character == '\t' || character == '\n' || character == '\r') {
 			continue
 		}
-		return fmt.Errorf("%s contains disallowed c0 control u+%04x", field, character)
+		return fmt.Errorf("%s contains disallowed control u+%04x", field, character)
 	}
 	return nil
 }
@@ -865,11 +879,8 @@ func validateGitHubIssueURL(field, value string, expectedNumber int) error {
 	if parsed.Scheme != "https" || parsed.Opaque != "" || parsed.User != nil || parsed.Hostname() != "github.com" {
 		return fmt.Errorf("%s must use https://github.com without userinfo", field)
 	}
-	if port := parsed.Port(); port != "" && port != "443" {
-		return fmt.Errorf("%s must not use a non-default port", field)
-	}
-	if parsed.Host != "github.com" && parsed.Host != "github.com:443" {
-		return fmt.Errorf("%s must use the exact github.com host", field)
+	if parsed.Port() != "" || parsed.Host != "github.com" {
+		return fmt.Errorf("%s must use the exact github.com host without an explicit port", field)
 	}
 	if parsed.RawQuery != "" || parsed.ForceQuery || strings.Contains(value, "#") {
 		return fmt.Errorf("%s must not contain a query or fragment", field)
