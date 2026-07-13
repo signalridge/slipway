@@ -1,20 +1,20 @@
 # マシンプロトコル
 
-現在の `contract_version` は **1** です。規範 JSON Schema は [`machine-protocol.schema.json`](../../reference/machine-protocol.schema.json) です。未知 version・field、重複 key、不正 UTF-8、BOM、末尾データ、1 MiB を超える Outcome は拒否されます。
+現在の `contract_version` は **2** です。規範 JSON Schema は [`machine-protocol.schema.json`](../../reference/machine-protocol.schema.json) です。未知 version・field、重複 key、不正 UTF-8、BOM、末尾データ、1 MiB を超える Outcome は拒否されます。
 
 開始・resume コマンドは固定です。
 
 ```text
 slipway run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json
-slipway run resume RUN [--budget N]
-slipway run resume RUN (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine resume RUN [--budget N]
+slipway _machine resume RUN (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
 ```
 
-新規 Run の `--source-file` は任意です。指定時、CLI は 256 KiB 以下の regular/no-follow file を一度だけ開き、strict JSON/identity を body classification より先に検証します。不正 marker/section の新規 Run は journal 作成前に拒否されます。journal に入るのは `pinned_source` の identity/projection、二つの revision、五つの accepted requirement section だけで、raw body、labels、timestamps、comments、file path は入りません。
+新規 Run の `--source-file` は任意です。指定時、CLI は最大 16 MiB の regular/no-follow file を一度だけ開き、Source Bundle v2 を検証します。Issue body の `change/v2` marker に続く唯一の manifest が、5–64 個の chapter key/role を GitHub comment node ID と body digest に明示的に束縛します。Valid manifest の envelope は参照 comment だけを含み、CLI は通常の discussion comment を走査しません。Refresh head に parse 可能な v2 manifest がなければ、宿主は初期化済みの空 `comments` array を使い、無関係な discussion を収集せず core に invalid candidate を分類させます。Raw observation は最大100 labels、pinned source は過去の transfer URL alias を最大64件保持し、超過時は新しい Run 用の structured `start-with-source` recovery を返します。1 chapter は 256 KiB、全 payload は 4 MiB までで、missing・extra・duplicate・minimized・edited・hash mismatch は fail closed です。Manifest revision は comment node/database ID の binding を commit し、requirements revision は provenance を除外します。Accepted payload は journal が参照する前に `0600` content-addressed blob として fsync され、journal/status/Action は catalog、provenance、domain-separated revision のみを保持し、Markdown、raw body、file path は保持しません。Replay はすべての pinned manifest head から accepted-comment identity ledger を導出します。Retire しても node/database identity は忘れられず、再参照時は最初に accepted された section と一致しなければなりません。
 
 最初の resume 形式は ad-hoc 専用で source flag をすべて拒否します。Issue-bound Run は candidate がなければ fresh `--source-file` または明示的 `--use-pinned-source` の一つを必須とし、candidate があれば完全一致する `--source-choice pinned|adopt --candidate ID` だけを受け付けます。invalid candidate は pinned のみです。別 Issue は mutation 前に拒否し、repository/number/URL transfer は旧 URL alias を記録した上で amendment 比較を続行します。
 
-同一・projection-only・non-material refresh は旧 Action/queue/authorization を原子的に void して fresh Orient を発行します。Requirements 変更または invalid body は path-free candidate を保存し、`decision_required` で pause し、その呼出しの budget を適用せず `budget_applied:false` を返します。`adopt` は旧 Requirements 由来 answer を active context から外して履歴には残します。同じ `(candidate_id,choice)` retry は event も Action も増やしません。明示 budget は 1..1000、未指定なら正の残量を維持し、枯渇時は `max(initial,3)` にしてから Orient が一つ消費します。状態応答は安全な `pinned_source`、`source_candidate`、`resume_operation`、`budget_applied` を公開し、source-file path は公開しません。
+Manifest revision が同じ refresh（同一・projection-only・その他 non-material drift）は旧 Action/queue/authorization を原子的に void して fresh Orient を発行します。Content-identical replacement を含む新しい manifest revision、または invalid body は path-free candidate を保存し、`decision_required` で pause し、その呼出しの budget を適用せず `budget_applied:false` を返します。`adopt` で `requirements_revision` が変わる場合だけ旧 revision 由来 answer を active context から外して履歴に残し、manifest-only replacement では active のままです。同じ `(candidate_id,choice)` retry は event も Action も増やしません。明示 budget は 1..1000、未指定なら正の残量を維持し、枯渇時は `max(initial,3)` にしてから Orient が一つ消費します。状態応答は安全な `pinned_source`、`source_candidate`、`resume_operation`、`budget_applied` を公開し、source-file path は公開しません。
 
 error、pause、stop、ended、full status は shell string ではなく構造化 `next={operation,workspace_identity,variants}` を返します。`next.workspace_identity` は path ではなく安定した小文字 `sha256:<64 hex>` ID です。各 variant は `id`、固定の完全な `base_argv`、non-null `inputs` を持ち、一つだけの `--root` の直後に Run の元の canonical absolute worktree root を保持します。input type は `string|path|enum|digest` のみで、schema 順に `flag` と shell 解釈しない生の値を別 argv element として追加します。必須 input が未解決なら型説明だけを表示し、入力なし/解決済み argv だけを POSIX/cmd.exe/PowerShell の端で render します。rendered text は journal に入りません。
 
@@ -30,9 +30,9 @@ Active Action は `submit-outcome-file|submit-outcome-stdin|skip-action`、decis
 
 対応する Unix 系 system は `file_and_directory_fsync` を提供します。Windows は `file_fsync_only`、`directory_sync:false`、limitation `directory_fsync_unsupported` を安定して報告します。file content は fsync されますが、新規作成・rename した directory entry の crash durability は保証されません。
 
-Active 応答は `contract_version`、`run_id`、`action_id`、`kind`、`goal`、`brief`、`context`、`remaining_budget` を持つ Action です。kind は `orient|clarify|implement|review|summarize` のみです。Ad-hoc Action は `source` と `requirements` の両方を省略し、issue-bound Action は両方を必須とします。`null` は使えません。context は 128 KiB、brief は 8 KiB、Action 全体は 256 KiB が上限です。
+Active 応答は `contract_version`、`run_id`、`action_id`、`kind`、`goal`、`brief`、`context`、`remaining_budget` を持つ Action です。kind は `orient|clarify|implement|review|summarize` のみです。Ad-hoc Action は `source` と `requirements` の両方を省略します。Issue-bound Action は source/manifest/requirements revision、ordered section catalog、current root/run/action に束縛した structured `_machine material` reader を持ち、Markdown を複製しません。context は 128 KiB、brief は 8 KiB、Action 全体は 256 KiB で、stdout と同じ non-HTML-escaping encoder で測定します。
 
-Requirements は常に別の非切詰め field で、context に複製しません。Context は active confirmed decision と過去 Outcome projection だけです。優先順は最新 active decision、他の active decisions（新→旧）、最新 Outcome summary とその known issues、残り Outcomes（新→旧）です。Superseded decision と旧 requirements revision の decision は履歴に残して除外し、Structured destructive confirmation attestation は常に product decision ではなく、別の decline-or-feedback branch の非空 text だけが active feedback になり得ます。各 candidate は CRLF/CR を LF に正規化して UTF-8 を検証し、選択後は `Decisions:`、`Recent outcome:`、`Earlier outcomes:` class 内で時系列に描画します。収まらない item は code-point 境界で切り、正確な `...[truncated original_bytes=N sha256=HEX]` marker を付けます。省略は class ごとの `[omitted CLASS: N]` で記録します。同じ journal の replay は byte-identical で 128 KiB を超えません。非切詰め Requirements により Action 全体が 256 KiB を超える場合は `action_too_large` です。
+Requirements payload は別の非切詰め local material で、context に複製しません。Reader は digest、byte count、section revision を検証し、current non-void Action だけが読めます。Completed、replaced、stopped、その他 stale Action は拒否されます。Context は active confirmed decision と non-void Outcome projection だけで、優先順は最新 active decision、他の active decisions（新→旧）、最新 Outcome summary とその known issues、残り Outcomes（新→旧）です。Superseded decision と旧 requirements revision の decision は履歴に残して除外し、destructive confirmation attestation は product decision ではなく、別の decline-or-feedback branch の非空 text だけが active feedback になり得ます。Candidate は CRLF/CR を LF に正規化して UTF-8 を検証し、class 内で時系列に描画します。収まらない item は code-point 境界で切り、`...[truncated original_bytes=N sha256=HEX]` marker を付け、省略は `[omitted CLASS: N]` で記録します。同じ journal replay は byte-identical で 128 KiB を超えません。
 
 構造化確認済みの Implement だけが `destructive_authorization` を持てます。`--confirm-destructive` は trusted host による current user confirmation の attestation であり、偽造不能な human-presence proof ではありません。shell 権限を持つ悪意ある process は flag を偽装できます。target は非空・重複なしで `(kind,value)` の byte 順に整列し、kind は `path|git_ref|external_resource|data_domain` のみです。CLI は canonical scope の SHA-256 を再計算します。`yes` を含む自然言語は破壊権限を与えず、拒否/feedback を記録して request/grant を消去し、権限なしの fresh Orient を発行します。`--confirm-destructive --scope-sha256 DIGEST` が current request と完全一致した場合だけ scope を field-by-field copy した fresh Implement を一つ発行し、target/impact の拡大には新しい request が必要です。
 
@@ -40,7 +40,7 @@ Host Outcome は次の全 field を必ず明示します。
 
 ```json
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "action_id": "...",
   "action_kind": "orient",
   "status": "completed",
@@ -56,7 +56,7 @@ Host Outcome は次の全 field を必ず明示します。
 
 `action_kind` は必須で、current Action の `kind` と完全一致しなければなりません。欠落、未知値、不一致は拒否され、推論や legacy fallback はありません。
 
-配列は省略も `null` も不可です。Host status は `completed|needs_input|partial|error` のみで、`skipped` は CLI の `run skip` event です。`needs_input` には pause が必須で、他 status は `pause:null` です。Host pause reason は `decision_required|destructive_confirmation_required|environment_unavailable` のみで、`budget_exhausted` は CLI 専用です。破壊 request は Implement の破壊 pause にだけ許可されます。
+配列は省略も `null` も不可です。Host status は `completed|needs_input|partial|error` のみで、`skipped` は CLI の `_machine skip` event です。`needs_input` には pause が必須で、他 status は `pause:null` です。Host pause reason は `decision_required|destructive_confirmation_required|environment_unavailable` のみで、`budget_exhausted` は CLI 専用です。破壊 request は Implement の破壊 pause にだけ許可されます。
 
 Orient は `completed|partial|error|needs_input`、Clarify は `completed|error|needs_input` を許可し、Clarify の `partial` は不正です。非 pause の Orient/Clarify は `clarify|implement|summarize` を最大一つ提案でき、提案なしなら Summary へ進みます。`needs_input`、Implement、Review、Summary の提案配列は常に空です。
 
@@ -68,13 +68,13 @@ No test, typecheck, build, or lint activity was reported.
 
 Review の `review` は `result`、`findings`、`uncertainties` を必須とします。`completed` は `no_findings_reported|findings_reported`、`partial` は `inconclusive`、`error` は `error` です。Review は `needs_input` を使わず、修正を提案・自動 dispatch しません。`not_run` は CLI review-skip projection 専用で、Host Outcome では拒否されます。
 
-Routing は決定的です。有効な suggestion を先に処理し、suggestion のない Orient/Clarify は Summary へ進みます。CLI がコード差分を観測し Review が有効なら、Implement の報告が `applied|not_needed|partial|unable` のどれでも Review へ進み、それ以外は Summary です。すべての合法 Review は Summary、Summary は Run 終了へ進みます。Skip も diff-first で、Orient/Clarify/Implement skip 時に start-to-current diff があり review 有効なら Review、それ以外は Summary、Review skip は Summary、Summary skip は最小の事実 summary を書いて終了します。skip は destructive state を消去します。activity exit code と Review finding は報告データであり routing 条件ではありません。
+Routing は決定的です。Orient/Clarify/Implement の完了時、CLI は Git を再観測します。前回 snapshot から新しい revision があり Review が有効なら、host suggestion より先に Review を発行し、その pending suggestion を破棄して通常どおり Summary へ進みます。Review override がなければ有効な suggestion を処理し、それもなければ Summary です。このため停止・再開後の後続 revision は新しい Review を受け、snapshot が変わらなければ loop しません。Review skip は Summary、Summary skip は最小の事実 summary を書いて終了します。skip は destructive state を消去し、activity exit code と Review finding は routing 条件ではありません。
 
 Start-to-current difference を観測するたび、事実 `observed_since_start` と `attribution_uncertainty` を記録します。並行 user edit、別 Run、tool が寄与した可能性があり、CLI は host や Run に差分を帰属させません。二方向とも中立な report discrepancy です：`applied|partial` report だが diff なし、`not_needed|unable` report だが diff あり。Routing は diff-first のままで、Review brief と final Summary は attribution uncertainty と Run 開始時から dirty だった path の structured observation を保持します。
 
 ## Public JSON envelope と Doctor advisory
 
-すべての JSON success/error は top-level `contract_version:1` object です。Install/uninstall は常に `{contract_version,hosts,written,removed,preserved,warnings}` で配列を省略せず、list は `{contract_version,hosts:[...]}`、ID なし status は `{contract_version,runs:[...]}` で、空でも `{"contract_version":1,"runs":[]}` です。Single Run status は flat Run projection のまま top-level `contract_version` と fresh `next` を必須とします。Doctor は `{contract_version,checks:[{code,status,host_id,name,detail}]}` で、normative schema の全 object は `additionalProperties:false` です。Repository/adapter code は `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy` です。
+すべての JSON success/error は top-level `contract_version:2` object です。Install/uninstall は常に `{contract_version,hosts,written,removed,preserved,warnings}` で配列を省略せず、list は `{contract_version,hosts:[...]}`、ID なし status は `{contract_version,runs:[...]}` で、空でも `{"contract_version":2,"runs":[]}` です。Single Run status は flat Run projection のまま top-level `contract_version` と fresh `next` を必須とします。Doctor は `{contract_version,checks:[{code,status,host_id,name,detail}]}` で、normative schema の全 object は `additionalProperties:false` です。Repository/adapter code は `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy` です。
 
 GitHub code は `github_cli_unavailable|github_cli_version_unknown|github_cli_rest_fallback_required|github_cli_compatible`、`github_auth_unavailable|github_auth_available`、`github_issue_permissions_ok|github_issue_permissions_limited|github_issue_permissions_unknown` です。command は timeout 付き・shell なしで、`gh <2.94.0` は公式 REST fallback が必要です。raw auth/API output や token は report しません。
 

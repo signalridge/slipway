@@ -62,6 +62,83 @@ func TestServiceOrientWithoutSuggestionRoutesSummary(t *testing.T) {
 	assert.Equal(t, ActionSummarize, run.CurrentAction.Kind)
 }
 
+func TestServiceOrientAndClarifyChangesRequireReview(t *testing.T) {
+	for _, kind := range []ActionKind{ActionOrient, ActionClarify} {
+		t.Run(string(kind), func(t *testing.T) {
+			repository := newTestRepository(t)
+			service := openTestService(t, repository)
+			run := startTestRun(t, service, 6, true)
+			if kind == ActionClarify {
+				run = submitCurrent(t, service, run, Outcome{
+					Status:           OutcomeCompleted,
+					Summary:          "clarification needed",
+					SuggestedActions: []SuggestedAction{{Kind: ActionClarify, Brief: "Clarify the remaining fact."}},
+				})
+				require.Equal(t, ActionClarify, run.CurrentAction.Kind)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(repository, string(kind)+"-change.go"), []byte("package sample\n"), 0o600))
+			run = submitCurrent(t, service, run, Outcome{
+				Status:           OutcomeCompleted,
+				Summary:          "facts only",
+				SuggestedActions: []SuggestedAction{{Kind: ActionSummarize, Brief: "Attempt to report without review."}},
+			})
+			require.NotNil(t, run.CurrentAction)
+			assert.Equal(t, ActionReview, run.CurrentAction.Kind)
+			assert.Empty(t, run.PendingActions)
+		})
+	}
+}
+
+func TestServiceCarriesReviewPendingAcrossDecisionAndBudgetPauses(t *testing.T) {
+	t.Run("decision", func(t *testing.T) {
+		repository := newTestRepository(t)
+		service := openTestService(t, repository)
+		run := startTestRun(t, service, 8, true)
+		actionID := run.CurrentAction.ActionID
+		require.NoError(t, os.WriteFile(filepath.Join(repository, "decision-change.go"), []byte("package sample\n"), 0o600))
+		run = submitCurrent(t, service, run, Outcome{
+			Status:  OutcomeNeedsInput,
+			Summary: "one decision remains",
+			Pause:   pauseReport(PauseDecisionRequired, "Choose the API?", nil),
+		})
+		require.Equal(t, RunPaused, run.State)
+		assert.True(t, run.ReviewPending)
+
+		run, err := service.Answer(run.ID, actionID, AnswerOptions{Text: "Use the current API"})
+		require.NoError(t, err)
+		assert.True(t, run.ReviewPending)
+		run = submitCurrent(t, service, run, Outcome{
+			Status:           OutcomeCompleted,
+			Summary:          "decision incorporated",
+			SuggestedActions: []SuggestedAction{{Kind: ActionSummarize, Brief: "Try to finish."}},
+		})
+		require.Equal(t, ActionReview, run.CurrentAction.Kind)
+		assert.True(t, run.ReviewPending)
+		assert.Empty(t, run.PendingActions)
+		run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reviewed", Review: reviewReport(ReviewNoFindings)})
+		assert.False(t, run.ReviewPending)
+	})
+
+	t.Run("budget", func(t *testing.T) {
+		repository := newTestRepository(t)
+		service := openTestService(t, repository)
+		run := startTestRun(t, service, 1, true)
+		require.NoError(t, os.WriteFile(filepath.Join(repository, "budget-change.go"), []byte("package sample\n"), 0o600))
+		run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "changed", SuggestedActions: []SuggestedAction{}})
+		require.Equal(t, PauseBudgetExhausted, run.PauseReason)
+		assert.True(t, run.ReviewPending)
+
+		run, err := service.Resume(run.ID, ResumeOptions{})
+		require.NoError(t, err)
+		assert.True(t, run.ReviewPending)
+		run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "fresh facts", SuggestedActions: []SuggestedAction{}})
+		require.Equal(t, ActionReview, run.CurrentAction.Kind)
+		run, err = service.Skip(run.ID, run.CurrentAction.ActionID)
+		require.NoError(t, err)
+		assert.False(t, run.ReviewPending)
+	})
+}
+
 func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -71,6 +148,27 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 	runs, listErr := service.List()
 	require.NoError(t, listErr)
 	assert.Empty(t, runs)
+}
+
+func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	local := startTestRun(t, service, 4, false)
+
+	foreignRoot := filepath.Join(t.TempDir(), "foreign-worktree")
+	runGit(t, repository, "worktree", "add", "-q", "-b", "foreign-list-test", foreignRoot)
+	foreignService := openTestService(t, foreignRoot)
+	foreign := startTestRun(t, foreignService, 4, false)
+
+	corruptDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "corrupt-list-test")
+	require.NoError(t, os.MkdirAll(corruptDirectory, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(corruptDirectory, "journal.jsonl"), []byte("not-json\n"), 0o600))
+
+	runs, err := service.List()
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	assert.Equal(t, local.ID, runs[0].ID)
+	assert.NotEqual(t, foreign.ID, runs[0].ID)
 }
 
 func TestServiceRejectsHostSkippedReviewStatus(t *testing.T) {
@@ -112,6 +210,64 @@ func TestServiceGitObservationRecordsNeutralDiscrepancyAndRoutesDiffFirst(t *tes
 	assert.Contains(t, joinedUncertainties, attributionUncertainty)
 	assert.NotContains(t, joinedObservations+joinedUncertainties, "despite")
 	assert.NotContains(t, joinedObservations+joinedUncertainties, "contradict")
+}
+
+func TestServiceReviewsEachNewObservedGitRevision(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 10, true)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "first.go"), []byte("package sample\n"), 0o600))
+	run = submitCurrent(t, service, run, Outcome{
+		Status:         OutcomeCompleted,
+		Summary:        "first revision",
+		Implementation: implementationReport(ImplementationApplied, "first.go"),
+	})
+	require.Equal(t, ActionReview, run.CurrentAction.Kind)
+	firstReviewID := run.CurrentAction.ActionID
+
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeCompleted,
+		Summary: "first revision reviewed",
+		Review:  reviewReport(ReviewNoFindings),
+	})
+	require.Equal(t, ActionSummarize, run.CurrentAction.Kind)
+	_, err := service.Stop(run.ID)
+	require.NoError(t, err)
+	run, err = service.Resume(run.ID, ResumeOptions{})
+	require.NoError(t, err)
+	require.Equal(t, ActionOrient, run.CurrentAction.Kind)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "fresh facts"})
+	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "second.go"), []byte("package sample\n"), 0o600))
+	run = submitCurrent(t, service, run, Outcome{
+		Status:         OutcomeCompleted,
+		Summary:        "second revision",
+		Implementation: implementationReport(ImplementationApplied, "second.go"),
+	})
+	require.Equal(t, ActionReview, run.CurrentAction.Kind)
+	assert.NotEqual(t, firstReviewID, run.CurrentAction.ActionID)
+}
+
+func TestServiceResumeVoidedReviewKeepsReviewPending(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 8, true)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "pending-review.go"), []byte("package sample\n"), 0o600))
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "changed", Implementation: implementationReport(ImplementationApplied, "pending-review.go")})
+	require.Equal(t, ActionReview, run.CurrentAction.Kind)
+	assert.True(t, run.ReviewPending)
+
+	_, err := service.Stop(run.ID)
+	require.NoError(t, err)
+	run, err = service.Resume(run.ID, ResumeOptions{})
+	require.NoError(t, err)
+	assert.True(t, run.ReviewPending)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reoriented", SuggestedActions: []SuggestedAction{}})
+	require.Equal(t, ActionReview, run.CurrentAction.Kind)
+	assert.True(t, run.ReviewPending)
 }
 
 func TestServicePreservesRunStartDirtyFilesAcrossGitDeltas(t *testing.T) {
@@ -339,8 +495,8 @@ func TestServiceDuplicateSubmitIsIdempotentAndConflictingDuplicateIsRejected(t *
 	assertProtocolError(t, err, "outcome_conflict")
 }
 
-func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
-	t.Run("voided", func(t *testing.T) {
+func TestServiceDuplicateSubmitReplayAcrossTerminalStates(t *testing.T) {
+	t.Run("voided remains stale", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
 		run := startTestRun(t, service, 8, false)
@@ -354,7 +510,7 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		assertProtocolError(t, err, "stale_action")
 	})
 
-	t.Run("stopped", func(t *testing.T) {
+	t.Run("stopped exact replay", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
 		run := startTestRun(t, service, 8, false)
@@ -364,11 +520,16 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		require.NoError(t, err)
 		_, err = service.Stop(run.ID)
 		require.NoError(t, err)
-		_, err = service.Submit(run.ID, actionID, completed)
-		assertProtocolError(t, err, "run_not_active")
+		replayed, err := service.Submit(run.ID, actionID, completed)
+		require.NoError(t, err)
+		assert.Equal(t, RunStopped, replayed.State)
+		conflict := completed
+		conflict.Summary = "different"
+		_, err = service.Submit(run.ID, actionID, conflict)
+		assertProtocolError(t, err, "outcome_conflict")
 	})
 
-	t.Run("ended", func(t *testing.T) {
+	t.Run("ended exact replay", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
 		run := startTestRun(t, service, 8, false)
@@ -379,8 +540,13 @@ func TestServiceRejectsDuplicateForVoidedStoppedAndEndedRuns(t *testing.T) {
 		run, err := service.Submit(run.ID, summarizeID, summary)
 		require.NoError(t, err)
 		assert.Equal(t, RunEnded, run.State)
-		_, err = service.Submit(run.ID, summarizeID, summary)
-		assertProtocolError(t, err, "run_not_active")
+		replayed, err := service.Submit(run.ID, summarizeID, summary)
+		require.NoError(t, err)
+		assert.Equal(t, RunEnded, replayed.State)
+		conflict := summary
+		conflict.Summary = "different"
+		_, err = service.Submit(run.ID, summarizeID, conflict)
+		assertProtocolError(t, err, "outcome_conflict")
 	})
 }
 
@@ -1045,12 +1211,48 @@ func assertProtocolError(t *testing.T, err error, code string) {
 	require.NoError(t, protocolErr.Next.Validate())
 }
 
+func TestServiceReadsOnlyCurrentPinnedActionMaterial(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 5)
+	currentActionID := run.CurrentAction.ActionID
+
+	material, err := service.ReadActionMaterial(run.ID, currentActionID, "requirements")
+	require.NoError(t, err)
+	assert.Equal(t, ContractVersion, material.ContractVersion)
+	assert.Equal(t, "action_material", material.MessageType)
+	assert.Equal(t, run.PinnedSource.RequirementsRevision, material.RequirementsRevision)
+	assert.Equal(t, "requirements", material.Section.Key)
+	assert.Contains(t, material.Section.Markdown, "Keep order")
+
+	_, err = service.ReadActionMaterial(run.ID, currentActionID, "missing")
+	assertProtocolError(t, err, "material_section_not_found")
+
+	completed := withEnvelope(currentActionID, ActionOrient, Outcome{
+		Status:           OutcomeCompleted,
+		Summary:          "oriented",
+		SuggestedActions: []SuggestedAction{{Kind: ActionSummarize, Brief: "summarize"}},
+	})
+	next, err := service.Submit(run.ID, currentActionID, completed)
+	require.NoError(t, err)
+	require.NotNil(t, next.CurrentAction)
+	_, err = service.ReadActionMaterial(run.ID, currentActionID, "requirements")
+	assertProtocolError(t, err, "material_action_stale")
+
+	stoppedActionID := next.CurrentAction.ActionID
+	_, err = service.Stop(run.ID)
+	require.NoError(t, err)
+	_, err = service.ReadActionMaterial(run.ID, stoppedActionID, "requirements")
+	assertProtocolError(t, err, "material_action_stale")
+}
+
 func TestServiceIssueBoundStartPersistsSafeDefensiveSnapshot(t *testing.T) {
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	envelope := validSourceEnvelope()
 	source := mustParseSource(t, envelope)
 	expected := clonePinnedSourceValue(source)
+	expected.materials = nil
 
 	run, err := service.Start("implement the accepted Change", CreateOptions{
 		Budget:        8,
@@ -1066,14 +1268,21 @@ func TestServiceIssueBoundStartPersistsSafeDefensiveSnapshot(t *testing.T) {
 	assert.Equal(t, expected.CanonicalURL, run.CurrentAction.Source.CanonicalURL)
 	assert.Equal(t, expected.IssueID, run.CurrentAction.Source.IssueID)
 	assert.Equal(t, expected.SourceRevision, run.CurrentAction.Source.SourceRevision)
+	assert.Equal(t, expected.ManifestRevision, run.CurrentAction.Source.ManifestRevision)
 	assert.Equal(t, expected.RequirementsRevision, run.CurrentAction.Source.RequirementsRevision)
-	assert.Equal(t, expected.AcceptedRequirements, *run.CurrentAction.Requirements)
+	expectedRequirements := actionRequirements(
+		run.Workspace,
+		run.CurrentAction.RunID,
+		run.CurrentAction.ActionID,
+		expected,
+	)
+	assert.Equal(t, expectedRequirements, *run.CurrentAction.Requirements)
 
 	source.URLAliases = append(source.URLAliases, "https://github.com/signalridge/slipway/issues/41")
 	source.Parent.IssueID = "I_kwDOMutatedParent"
-	source.AcceptedRequirements.RequirementsMarkdown = "mutated caller data"
+	source.Sections[0].Title = "mutated caller data"
 	run.CurrentAction.Source.CanonicalURL = "https://github.com/attacker/changed/issues/1"
-	run.CurrentAction.Requirements.RequirementsMarkdown = "mutated returned action"
+	run.CurrentAction.Requirements.Sections[0].Title = "mutated returned action"
 
 	loaded, err := service.Load(run.ID)
 	require.NoError(t, err)
@@ -1081,7 +1290,7 @@ func TestServiceIssueBoundStartPersistsSafeDefensiveSnapshot(t *testing.T) {
 	assert.Equal(t, expected, *loaded.PinnedSource)
 	require.NotNil(t, loaded.CurrentAction)
 	assert.Equal(t, expected.CanonicalURL, loaded.CurrentAction.Source.CanonicalURL)
-	assert.Equal(t, expected.AcceptedRequirements, *loaded.CurrentAction.Requirements)
+	assert.Equal(t, expectedRequirements, *loaded.CurrentAction.Requirements)
 
 	adHoc, err := service.Start("ad-hoc escape hatch", CreateOptions{Budget: 3, ReviewEnabled: false})
 	require.NoError(t, err)
@@ -1198,6 +1407,9 @@ func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
 
 			envelope := validSourceEnvelope()
 			test.mutate(&envelope)
+			for index := range envelope.Comments {
+				envelope.Comments[index].URL = envelope.CanonicalURL + "#issuecomment-" + jsonNumber(envelope.Comments[index].DatabaseID)
+			}
 			candidate := sourceCandidateForTest(t, envelope)
 			replacement := 6
 			resumed, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate, Budget: &replacement})
@@ -1231,12 +1443,119 @@ func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
 				assert.Equal(t, original.RequirementsRevision, resumed.PinnedSource.RequirementsRevision)
 			}
 
-			candidate.Snapshot.AcceptedRequirements.RequirementsMarkdown = "caller mutation after resume"
+			candidate.Snapshot.Sections[0].Title = "caller mutation after resume"
 			loaded, loadErr := service.Load(run.ID)
 			require.NoError(t, loadErr)
-			assert.NotEqual(t, "caller mutation after resume", loaded.PinnedSource.AcceptedRequirements.RequirementsMarkdown)
+			assert.NotEqual(t, "caller mutation after resume", loaded.PinnedSource.Sections[0].Title)
 		})
 	}
+}
+
+func TestServiceRejectsInPlaceSectionAmendment(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 6)
+
+	envelope := validSourceEnvelope()
+	for index := range envelope.Comments {
+		if testSourceCommentKey(envelope.Comments[index].Body) == "requirements" {
+			envelope.Comments[index].Body = sectionMarkerPrefix + "requirements -->\n# Requirements\n\n- Edited in place.\n"
+		}
+	}
+	rebuildSourceManifestBody(t, &envelope)
+	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
+	candidate := sourceCandidateForTest(t, envelope)
+	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	assertProtocolError(t, err, "source_history_in_place_edit")
+}
+
+func TestServiceRejectsAcceptedCommentDatabaseIdentityRebind(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 6)
+
+	envelope := validSourceEnvelope()
+	for index := range envelope.Comments {
+		if testSourceCommentKey(envelope.Comments[index].Body) == "requirements" {
+			envelope.Comments[index].DatabaseID += 100_000
+			envelope.Comments[index].URL = envelope.CanonicalURL + "#issuecomment-" + jsonNumber(envelope.Comments[index].DatabaseID)
+		}
+	}
+	rebuildSourceManifestBody(t, &envelope)
+	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
+	candidate := sourceCandidateForTest(t, envelope)
+	require.NotNil(t, candidate.Snapshot)
+	assert.NotEqual(t, run.PinnedSource.ManifestRevision, candidate.Snapshot.ManifestRevision)
+	assert.Equal(t, run.PinnedSource.RequirementsRevision, candidate.Snapshot.RequirementsRevision)
+
+	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	assertProtocolError(t, err, "source_history_in_place_edit")
+}
+
+func TestServiceManifestOnlyReplacementRequiresExplicitAdoption(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 7)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "one requirements-derived decision is needed",
+		Pause:   pauseReport(PauseDecisionRequired, "Choose the retained behavior?", nil),
+	})
+	waitingActionID := run.CurrentAction.ActionID
+	const retainedAnswer = "retain the exact accepted behavior"
+	var err error
+	run, err = service.Answer(run.ID, waitingActionID, AnswerOptions{Text: retainedAnswer})
+	require.NoError(t, err)
+	require.Len(t, run.Answers, 1)
+	assert.True(t, run.Answers[0].Active)
+	originalRequirements := run.PinnedSource.RequirementsRevision
+
+	envelope := validSourceEnvelope()
+	envelope.Comments[0].NodeID += "_replacement"
+	envelope.Comments[0].DatabaseID += 100_000
+	envelope.Comments[0].URL = envelope.CanonicalURL + "#issuecomment-" + jsonNumber(envelope.Comments[0].DatabaseID)
+	rebuildSourceManifestBody(t, &envelope)
+	setEnvelopeParentRequirementsRevision(t, &envelope, originalRequirements)
+	candidate := sourceCandidateForTest(t, envelope)
+	require.Equal(t, originalRequirements, candidate.RequirementsRevision)
+
+	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	require.NoError(t, err)
+	require.NotNil(t, paused.SourceCandidate)
+	assert.Equal(t, RunPaused, paused.State)
+	assert.NotEqual(t, run.PinnedSource.ManifestRevision, paused.SourceCandidate.Snapshot.ManifestRevision)
+
+	adopted, err := service.Resume(run.ID, ResumeOptions{
+		SourceChoice: SourceChoiceAdopt,
+		CandidateID:  paused.SourceCandidate.CandidateID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, originalRequirements, adopted.PinnedSource.RequirementsRevision)
+	assert.Equal(t, ResumeOperationSourceAmended, adopted.LastResumeResult.Operation)
+	require.Len(t, adopted.Answers, 1)
+	assert.True(t, adopted.Answers[0].Active)
+	assert.Empty(t, adopted.Answers[0].SupersededBy)
+	require.NotNil(t, adopted.CurrentAction)
+	assert.Contains(t, adopted.CurrentAction.Context, retainedAnswer)
+}
+
+func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 6)
+	actionID := run.CurrentAction.ActionID
+
+	envelope := validSourceEnvelope()
+	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Divergent amendment.\n")
+	candidate := sourceCandidateForTest(t, envelope)
+	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	assertProtocolError(t, err, "source_history_fork")
+
+	loaded, err := service.Load(run.ID)
+	require.NoError(t, err)
+	require.NotNil(t, loaded.CurrentAction)
+	assert.Equal(t, actionID, loaded.CurrentAction.ActionID)
+	assert.Nil(t, loaded.SourceCandidate)
 }
 
 func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testing.T) {
@@ -1259,7 +1578,8 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 	outstandingActionID := run.CurrentAction.ActionID
 
 	envelope := validSourceEnvelope()
-	envelope.Body = strings.Replace(envelope.Body, "- Keep order.", "- Keep amended order.", 1)
+	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Keep amended order.\n")
+	setEnvelopeParentRequirementsRevision(t, &envelope, oldRequirementsRevision)
 	candidateInput := sourceCandidateForTest(t, envelope)
 	replacementNotYetApplied := 100
 	paused, err := service.Resume(run.ID, ResumeOptions{
@@ -1285,10 +1605,10 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 	assert.Empty(t, paused.DecisionSuggestions)
 	candidateID := paused.SourceCandidate.CandidateID
 
-	candidateInput.Snapshot.AcceptedRequirements.RequirementsMarkdown = "mutated after candidate creation"
+	candidateInput.Snapshot.Sections[0].Title = "mutated after candidate creation"
 	replayedCandidate, err := service.Load(run.ID)
 	require.NoError(t, err)
-	assert.NotEqual(t, "mutated after candidate creation", replayedCandidate.SourceCandidate.Snapshot.AcceptedRequirements.RequirementsMarkdown)
+	assert.NotEqual(t, "mutated after candidate creation", replayedCandidate.SourceCandidate.Snapshot.Sections[0].Title)
 
 	choiceBudget := 5
 	adopted, err := service.Resume(run.ID, ResumeOptions{
@@ -1365,7 +1685,8 @@ func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {
 	oldSource := clonePinnedSourceValue(*run.PinnedSource)
 
 	envelope := validSourceEnvelope()
-	envelope.Body = strings.Replace(envelope.Body, "- Keep order.", "- Replace the ordering rule.", 1)
+	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Replace the ordering rule.\n")
+	setEnvelopeParentRequirementsRevision(t, &envelope, oldSource.RequirementsRevision)
 	candidate := sourceCandidateForTest(t, envelope)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
@@ -1397,9 +1718,9 @@ func TestServiceInvalidCandidateAllowsOnlyPinnedChoice(t *testing.T) {
 		{
 			name: "missing section",
 			mutate: func(envelope *RawSourceEnvelope) {
-				envelope.Body = strings.Replace(envelope.Body, "## Constraints\r\n", "", 1)
+				envelope.Comments = envelope.Comments[:len(envelope.Comments)-1]
 			},
-			code: SourceClassificationAcceptedSectionMissing,
+			code: SourceClassificationSectionMissing,
 		},
 		{
 			name: "invalid marker position",
@@ -1458,6 +1779,43 @@ func TestServiceInvalidCandidateAllowsOnlyPinnedChoice(t *testing.T) {
 	}
 }
 
+func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	source := mustParseSource(t, validSourceEnvelope())
+	source.URLAliases = make([]string, maxSourceURLAliases)
+	for index := range source.URLAliases {
+		source.URLAliases[index] = "https://github.com/example/repository/issues/" + jsonNumber(int64(1000+index))
+	}
+	run, err := service.Start("bounded transfer history", CreateOptions{
+		Budget:        6,
+		ReviewEnabled: false,
+		PinnedSource:  &source,
+	})
+	require.NoError(t, err)
+	actionID := run.CurrentAction.ActionID
+
+	envelope := validSourceEnvelope()
+	envelope.RepositoryID = "R_kgDOTransferredAtLimit"
+	envelope.IssueNumber = 99
+	envelope.CanonicalURL = "https://github.com/example/transferred/issues/99"
+	for index := range envelope.Comments {
+		envelope.Comments[index].URL = envelope.CanonicalURL + "#issuecomment-" + jsonNumber(envelope.Comments[index].DatabaseID)
+	}
+	candidate := sourceCandidateForTest(t, envelope)
+	_, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	assertProtocolError(t, err, "source_alias_limit")
+	var protocolErr *ProtocolError
+	require.ErrorAs(t, err, &protocolErr)
+	require.Len(t, protocolErr.Next.Variants, 1)
+	assert.Equal(t, "start-with-source", protocolErr.Next.Variants[0].ID)
+
+	unchanged, err := service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, actionID, unchanged.CurrentAction.ActionID)
+	assert.Equal(t, source.URLAliases, unchanged.PinnedSource.URLAliases)
+}
+
 func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *testing.T) {
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -1493,15 +1851,21 @@ func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *test
 	transferEnvelope.RepositoryID = "R_kgDOTransferred"
 	transferEnvelope.IssueNumber = 99
 	transferEnvelope.CanonicalURL = "https://github.com/signalridge/slipway-next/issues/99"
-	transferEnvelope.Body = strings.Replace(transferEnvelope.Body, "- Keep order.", "- Use transferred requirements.", 1)
+	for index := range transferEnvelope.Comments {
+		transferEnvelope.Comments[index].URL = transferEnvelope.CanonicalURL + "#issuecomment-" + jsonNumber(transferEnvelope.Comments[index].DatabaseID)
+	}
+	setEnvelopeSection(t, &transferEnvelope, "requirements", "\n# Requirements\n\n- Use transferred requirements.\n")
+	setEnvelopeParentRequirementsRevision(t, &transferEnvelope, transferRun.PinnedSource.RequirementsRevision)
 	transferred := sourceCandidateForTest(t, transferEnvelope)
 	paused, err := service.Resume(transferRun.ID, ResumeOptions{RefreshedSource: &transferred})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
 	assert.True(t, paused.SourceCandidate.Valid, "repository transfer must not skip body amendment classification")
-	assert.Equal(t, transferEnvelope.RepositoryID, paused.PinnedSource.RepositoryID)
-	assert.Equal(t, transferEnvelope.CanonicalURL, paused.PinnedSource.CanonicalURL)
-	assert.Equal(t, []string{oldURL}, paused.PinnedSource.URLAliases)
+	assert.Equal(t, transferRun.PinnedSource.RepositoryID, paused.PinnedSource.RepositoryID)
+	assert.Equal(t, oldURL, paused.PinnedSource.CanonicalURL)
+	assert.Equal(t, transferRun.PinnedSource.URLAliases, paused.PinnedSource.URLAliases)
+	assert.Equal(t, transferEnvelope.RepositoryID, paused.SourceCandidate.RepositoryID)
+	assert.Equal(t, transferEnvelope.CanonicalURL, paused.SourceCandidate.CanonicalURL)
 	assert.Equal(t, []string{oldURL}, paused.SourceCandidate.URLAliases)
 	require.NotNil(t, paused.SourceCandidate.Snapshot)
 	assert.Equal(t, []string{oldURL}, paused.SourceCandidate.Snapshot.URLAliases)
@@ -1564,6 +1928,13 @@ func assertIssueActionMatchesPinned(t *testing.T, run Run) {
 	assert.Equal(t, run.PinnedSource.CanonicalURL, run.CurrentAction.Source.CanonicalURL)
 	assert.Equal(t, run.PinnedSource.IssueID, run.CurrentAction.Source.IssueID)
 	assert.Equal(t, run.PinnedSource.SourceRevision, run.CurrentAction.Source.SourceRevision)
+	assert.Equal(t, run.PinnedSource.ManifestRevision, run.CurrentAction.Source.ManifestRevision)
 	assert.Equal(t, run.PinnedSource.RequirementsRevision, run.CurrentAction.Source.RequirementsRevision)
-	assert.Equal(t, run.PinnedSource.AcceptedRequirements, *run.CurrentAction.Requirements)
+	expected := actionRequirements(
+		run.Workspace,
+		run.CurrentAction.RunID,
+		run.CurrentAction.ActionID,
+		*run.PinnedSource,
+	)
+	assert.Equal(t, expected, *run.CurrentAction.Requirements)
 }

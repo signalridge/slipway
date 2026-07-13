@@ -156,24 +156,24 @@ func TestOutcomeValidationEnforcesSuggestionsAndText(t *testing.T) {
 func TestDecodeOutcomeRequiresExactStrictJSON(t *testing.T) {
 	t.Parallel()
 
-	valid := `{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
+	valid := `{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
 	tests := []struct {
 		name string
 		raw  []byte
 		want string
 	}{
-		{name: "missing action kind", raw: []byte(`{"contract_version":1,"action_id":"action-1","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "action_kind"},
-		{name: "missing array", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "observations"},
+		{name: "missing action kind", raw: []byte(`{"contract_version":2,"action_id":"action-1","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "action_kind"},
+		{name: "missing array", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`), want: "observations"},
 		{name: "null array", raw: []byte(strings.Replace(valid, `"observations":[]`, `"observations":null`, 1)), want: "array, not null"},
 		{name: "wrong array type", raw: []byte(strings.Replace(valid, `"observations":[]`, `"observations":{}`, 1)), want: "cannot unmarshal"},
 		{name: "unknown field", raw: []byte(strings.Replace(valid, `"review":null`, `"review":null,"verdict":true`, 1)), want: "unknown field"},
 		{name: "duplicate key", raw: []byte(strings.Replace(valid, `"summary":"facts"`, `"summary":"facts","summary":"other"`, 1)), want: "duplicate object key"},
-		{name: "nested unknown field", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"extra":true},"implementation":null,"review":null}`), want: "unknown field"},
-		{name: "nested duplicate key", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","question":"again","destructive_request":null},"implementation":null,"review":null}`), want: "duplicate object key"},
-		{name: "nested missing field", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":[],"activities":[],"uncertainties":[]},"review":null}`), want: "attempts"},
-		{name: "nested null array", raw: []byte(`{"contract_version":1,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":null,"activities":[],"uncertainties":[],"attempts":1},"review":null}`), want: "array, not null"},
+		{name: "nested unknown field", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"extra":true},"implementation":null,"review":null}`), want: "unknown field"},
+		{name: "nested duplicate key", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","question":"again","destructive_request":null},"implementation":null,"review":null}`), want: "duplicate object key"},
+		{name: "nested missing field", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":[],"activities":[],"uncertainties":[]},"review":null}`), want: "attempts"},
+		{name: "nested null array", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":null,"activities":[],"uncertainties":[],"attempts":1},"review":null}`), want: "array, not null"},
 		{name: "trailing value", raw: []byte(valid + ` {}`), want: "trailing json value"},
-		{name: "invalid utf8", raw: append([]byte(`{"contract_version":1,"action_id":"`), append([]byte{0xff}, []byte(`","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`)...)...), want: "valid utf-8"},
+		{name: "invalid utf8", raw: append([]byte(`{"contract_version":2,"action_id":"`), append([]byte{0xff}, []byte(`","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`)...)...), want: "valid utf-8"},
 		{name: "bom", raw: append([]byte{0xef, 0xbb, 0xbf}, []byte(valid)...), want: "bom"},
 	}
 
@@ -196,11 +196,11 @@ func TestDecodeOutcomeRequiresExactStrictJSON(t *testing.T) {
 func TestDecodeOutcomeReturnsVersionErrorAfterStrictDecode(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
+	raw := `{"contract_version":1,"action_id":"action-1","action_kind":"orient","status":"completed","summary":"facts","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":null,"review":null}`
 	_, err := DecodeOutcome(strings.NewReader(raw))
 	var versionErr *VersionError
 	require.ErrorAs(t, err, &versionErr)
-	assert.Equal(t, 2, versionErr.Received)
+	assert.Equal(t, 1, versionErr.Received)
 
 	_, err = DecodeOutcome(strings.NewReader(strings.Repeat("x", maxOutcomeBytes+1)))
 	require.Error(t, err)
@@ -211,7 +211,7 @@ func TestActionValidationEnforcesSourceAuthorizationAndBounds(t *testing.T) {
 	t.Parallel()
 
 	source := testActionSource()
-	requirements := testAcceptedRequirements()
+	requirements := testActionRequirements()
 	authorization := destructiveAuthorizationForTest(t)
 	tests := []struct {
 		name   string
@@ -253,8 +253,8 @@ func TestActionValidationEnforcesSourceAuthorizationAndBounds(t *testing.T) {
 		{name: "brief too large", mutate: func(action *Action) { action.Brief = strings.Repeat("b", maxActionBriefBytes+1) }, want: "brief exceeds"},
 		{name: "context too large", mutate: func(action *Action) { action.Context = strings.Repeat("c", maxActionContextBytes+1) }, want: "context exceeds"},
 		{name: "encoded action too large", mutate: func(action *Action) {
-			oversized := testAcceptedRequirements()
-			oversized.OutcomeMarkdown = strings.Repeat("r", maxActionBytes)
+			oversized := testActionRequirements()
+			oversized.Sections[0].Title = strings.Repeat("r", maxActionBytes)
 			action.Source, action.Requirements = &source, &oversized
 		}, want: "encoded action exceeds"},
 		{name: "invalid utf8", mutate: func(action *Action) { action.Goal = string([]byte{0xff}) }, want: "valid utf-8"},
@@ -354,7 +354,10 @@ func TestDecideUsesIssueSemantics(t *testing.T) {
 	}{
 		{name: "orient without suggestion summarizes", input: TransitionInput{Kind: ActionOrient, Outcome: testOutcome(OutcomeCompleted)}, want: Transition{Next: ActionSummarize}},
 		{name: "clarify without suggestion summarizes", input: TransitionInput{Kind: ActionClarify, Outcome: testOutcome(OutcomeCompleted)}, want: Transition{Next: ActionSummarize}},
+		{name: "orient changed reviews", input: TransitionInput{Kind: ActionOrient, Outcome: testOutcome(OutcomeCompleted), CodeChanged: true, ReviewEnabled: true}, want: Transition{Next: ActionReview}},
+		{name: "clarify changed reviews", input: TransitionInput{Kind: ActionClarify, Outcome: testOutcome(OutcomeCompleted), CodeChanged: true, ReviewEnabled: true}, want: Transition{Next: ActionReview}},
 		{name: "pending suggestion routes first", input: TransitionInput{Kind: ActionOrient, Outcome: testOutcome(OutcomeCompleted), Pending: []SuggestedAction{{Kind: ActionImplement, Brief: "apply"}}}, want: Transition{Next: ActionImplement, Brief: "apply"}},
+		{name: "new revision reviews before pending suggestion", input: TransitionInput{Kind: ActionOrient, Outcome: testOutcome(OutcomeCompleted), CodeChanged: true, ReviewEnabled: true, Pending: []SuggestedAction{{Kind: ActionSummarize, Brief: "report"}}}, want: Transition{Next: ActionReview}},
 		{name: "applied changed reviews", input: TransitionInput{Kind: ActionImplement, Outcome: implementedTestOutcome(OutcomeCompleted, ImplementationApplied), CodeChanged: true, ReviewEnabled: true}, want: Transition{Next: ActionReview}},
 		{name: "not needed changed reviews", input: TransitionInput{Kind: ActionImplement, Outcome: implementedTestOutcome(OutcomeCompleted, ImplementationNotNeeded), CodeChanged: true, ReviewEnabled: true}, want: Transition{Next: ActionReview}},
 		{name: "partial changed reviews", input: TransitionInput{Kind: ActionImplement, Outcome: implementedTestOutcome(OutcomePartial, ImplementationPartial), CodeChanged: true, ReviewEnabled: true}, want: Transition{Next: ActionReview}},
@@ -407,17 +410,51 @@ func testActionSource() ActionSource {
 		CanonicalURL:         "https://github.com/signalridge/slipway/issues/434",
 		IssueID:              "I_kwDOExample",
 		SourceRevision:       "sha256:" + strings.Repeat("a", 64),
+		ManifestRevision:     "sha256:" + strings.Repeat("c", 64),
 		RequirementsRevision: "sha256:" + strings.Repeat("b", 64),
 	}
 }
 
-func testAcceptedRequirements() AcceptedRequirements {
-	return AcceptedRequirements{
-		OutcomeMarkdown:            "outcome",
-		RequirementsMarkdown:       "requirements",
-		AcceptanceExamplesMarkdown: "examples",
-		ConstraintsMarkdown:        "constraints",
-		NonGoalsMarkdown:           "non-goals",
+func testActionRequirements() ActionRequirements {
+	keys := []string{"outcome", "requirements", "acceptance-examples", "constraints", "non-goals"}
+	roles := []SourceSectionRole{
+		SourceSectionOutcome,
+		SourceSectionRequirements,
+		SourceSectionAcceptanceExamples,
+		SourceSectionConstraints,
+		SourceSectionNonGoals,
+	}
+	revisionDigits := []string{"1", "2", "3", "4", "5"}
+	materialDigits := []string{"6", "7", "8", "9", "a"}
+	sections := make([]ActionRequirementSection, len(keys))
+	for index, key := range keys {
+		sections[index] = ActionRequirementSection{
+			Key:             key,
+			Role:            roles[index],
+			Title:           key,
+			SectionRevision: "sha256:" + strings.Repeat(revisionDigits[index], 64),
+			MaterialSHA256:  "sha256:" + strings.Repeat(materialDigits[index], 64),
+			Bytes:           32,
+		}
+	}
+	return ActionRequirements{
+		RequirementsRevision: "sha256:" + strings.Repeat("b", 64),
+		Sections:             sections,
+		RequiredForAction:    append([]string(nil), keys...),
+		Reader: ActionMaterialReader{
+			Operation: "read_material",
+			BaseArgv: []string{
+				"slipway", "_machine", "material", "--root", "/workspace",
+				"--run", "run-1", "--action", "action-1",
+			},
+			Input: ActionMaterialInput{
+				Name:     "section",
+				Type:     "enum",
+				Flag:     "--section",
+				Required: true,
+				Choices:  append([]string(nil), keys...),
+			},
+		},
 	}
 }
 

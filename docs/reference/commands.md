@@ -23,7 +23,7 @@ Removes only hash-matching managed files. Modified files are preserved and repor
 
 ## `slipway list`
 
-Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":1,"hosts":[]}`.
+Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
 
 ## `slipway doctor`
 
@@ -41,7 +41,7 @@ Legacy codes are `legacy_runtime_residue`, `legacy_cache_residue`, `legacy_scope
 slipway run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
 ```
 
-Creates a journal and returns the initial `orient` Action. The default Action budget is 8. `--no-review` omits the recommended review after observed code changes. Without `--source-file`, the Run is ad-hoc. With `--source-file`, Slipway opens the strict raw GitHub Change envelope once, closes it before parsing, and journals only the normalized pinned snapshot; the temporary file is never needed again.
+Creates a journal and returns the initial `orient` Action. The default Action budget is 8. `--no-review` omits the recommended review after observed code changes. Without `--source-file`, the Run is ad-hoc. With `--source-file`, Slipway opens one strict Source Bundle v2 envelope, verifies the Issue-body manifest and its exact referenced comments, durably stores each normalized chapter by digest, and journals only the bounded catalog. The temporary file and GitHub are never needed for local material reads or resume.
 
 Ad-hoc and issue-bound examples:
 
@@ -50,17 +50,18 @@ slipway run "small private fix" --json
 slipway run "implement the bounded Change" --source-file /safe/temp/change-envelope.json --json
 ```
 
-Before source import, warn that accepted Requirements, goals, later answers, and command summaries may be sensitive. The raw body/comments/token/environment are not journal inputs. See [Runs and privacy](../explanation/runs-and-privacy.md).
+Before source import, warn that accepted Requirements, goals, later answers, and command summaries may be sensitive. Raw Issue/comment bodies, tokens, labels, and the source-file path are not journal inputs; accepted chapter bytes live only in private per-Run material blobs. See [Runs and privacy](../explanation/runs-and-privacy.md).
 
 Host-only protocol commands are intentionally hidden from help:
 
 ```text
-slipway run submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
-slipway run answer --run ID --action ID --text TEXT
-slipway run answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
-slipway run skip --run ID --action ID
-slipway run resume ID [--budget N]
-slipway run resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
+slipway _machine answer --run ID --action ID --text TEXT
+slipway _machine answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway _machine skip --run ID --action ID
+slipway _machine resume ID [--budget N]
+slipway _machine resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine material --run ID --action ID --section KEY
 ```
 
 The first resume form is ad-hoc only. Issue-bound resume requires exactly one source mode: import a fresh envelope, explicitly continue with the pinned snapshot, or resolve the current candidate by its exact ID. See [Machine protocol](machine-protocol.md).
@@ -68,15 +69,15 @@ The first resume form is ad-hoc only. Issue-bound resume requires exactly one so
 ## `slipway status`
 
 ```text
-slipway status [run-id] [--json]
+slipway status [run-id] [--root ROOT] [--json]
 ```
 
-Without an ID, lists all journals in the Git common directory, including runs from linked worktrees. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":1,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
+Without an ID, lists all journals in the Git common directory, including runs from linked worktrees. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":2,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
 
 ## `slipway stop`
 
 ```text
-slipway stop [run-id] [--json]
+slipway stop [run-id] [--root ROOT] [--json]
 ```
 
 Stops without deleting recovery data. An omitted ID is accepted only when exactly one active or paused run exists. A stopped run can be resumed.

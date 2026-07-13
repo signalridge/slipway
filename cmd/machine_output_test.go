@@ -71,7 +71,7 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 		t,
 		statusJSON,
 		"contract_version", "id", "goal", "workspace", "workspace_identity", "state",
-		"review_enabled", "initial_budget", "remaining_budget", "initial_git", "current_git",
+		"review_enabled", "review_pending", "initial_budget", "remaining_budget", "initial_git", "current_git",
 		"final_git_observed", "current_action", "actions", "created_at", "updated_at", "next",
 	)
 	assertContractVersion(t, status)

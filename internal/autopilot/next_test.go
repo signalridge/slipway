@@ -132,7 +132,7 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 		NextOperationAnswer,
 		workspace,
 		"typed-answer",
-		[]string{"slipway", "run", "answer", "--run", "run-1", "--root", workspace},
+		[]string{"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace},
 		[]NextInput{
 			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: true, Choices: []string{"safe", "exact"}},
 			{Name: "scope", Type: NextInputDigest, Flag: "--scope-sha256", Required: true},
@@ -149,7 +149,7 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"slipway", "run", "answer", "--run", "run-1", "--root", workspace,
+		"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace,
 		"--mode", "exact", "--scope-sha256", digest, "--text", text,
 	}, argv)
 }
@@ -161,7 +161,7 @@ func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
 		NextOperationResume,
 		workspace,
 		"resolve",
-		[]string{"slipway", "run", "resume", "run-1", "--root", workspace},
+		[]string{"slipway", "_machine", "resume", "run-1", "--root", workspace},
 		[]NextInput{
 			{Name: "path", Type: NextInputPath, Flag: "--source-file", Required: true},
 			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: false, Choices: []string{"one", "two"}},
@@ -201,7 +201,7 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 	valid := Next{
 		Operation: NextOperationResume, WorkspaceIdentity: workspaceID, workspaceRoot: workspace,
 		Variants: []NextVariant{{
-			ID: "resume", BaseArgv: []string{"slipway", "run", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
+			ID: "resume", BaseArgv: []string{"slipway", "_machine", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
 		}},
 	}
 	tests := []struct {

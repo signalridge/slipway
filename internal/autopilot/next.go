@@ -362,7 +362,7 @@ func DeriveResumeNext(run Run) (Next, error) {
 
 func actionNext(run Run) (Next, error) {
 	actionID := run.CurrentAction.ActionID
-	fixed := []string{"slipway", "run", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}
+	fixed := []string{"slipway", "_machine", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}
 	next := Next{
 		Operation:         NextOperationAction,
 		WorkspaceIdentity: run.WorkspaceIdentity.ID,
@@ -380,7 +380,7 @@ func actionNext(run Run) (Next, error) {
 			},
 			{
 				ID:       "skip-action",
-				BaseArgv: []string{"slipway", "run", "skip", "--run", run.ID, "--action", actionID, "--root", run.Workspace},
+				BaseArgv: []string{"slipway", "_machine", "skip", "--run", run.ID, "--action", actionID, "--root", run.Workspace},
 				Inputs:   []NextInput{},
 			},
 		},
@@ -395,7 +395,7 @@ func decisionNext(run Run) (Next, error) {
 		workspaceRoot:     run.Workspace,
 		Variants: []NextVariant{{
 			ID:       "answer-decision",
-			BaseArgv: []string{"slipway", "run", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+			BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 			Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
 		}},
 	}
@@ -415,14 +415,14 @@ func destructiveNext(run Run) (Next, error) {
 			{
 				ID: "confirm-destructive",
 				BaseArgv: []string{
-					"slipway", "run", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID,
+					"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID,
 					"--root", run.Workspace, "--confirm-destructive", "--scope-sha256", request.ScopeSHA256,
 				},
 				Inputs: []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: false}},
 			},
 			{
 				ID:       "decline-or-feedback",
-				BaseArgv: []string{"slipway", "run", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+				BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
 			},
 		},
@@ -431,7 +431,7 @@ func destructiveNext(run Run) (Next, error) {
 }
 
 func resumeNext(run Run) (Next, error) {
-	base := []string{"slipway", "run", "resume", run.ID, "--root", run.Workspace}
+	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
 	next := Next{Operation: NextOperationResume, WorkspaceIdentity: run.WorkspaceIdentity.ID, workspaceRoot: run.Workspace}
 	if run.PinnedSource == nil {
 		next.Variants = []NextVariant{{ID: "resume-ad-hoc", BaseArgv: base, Inputs: []NextInput{}}}
@@ -454,7 +454,7 @@ func resumeNext(run Run) (Next, error) {
 
 func sourceCandidateNext(run Run) (Next, error) {
 	candidate := run.SourceCandidate
-	base := []string{"slipway", "run", "resume", run.ID, "--root", run.Workspace}
+	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
 	next := Next{
 		Operation:         NextOperationResume,
 		WorkspaceIdentity: run.WorkspaceIdentity.ID,

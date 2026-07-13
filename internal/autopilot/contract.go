@@ -13,7 +13,7 @@ import (
 	"unicode/utf8"
 )
 
-const ContractVersion = 1
+const ContractVersion = 2
 
 const (
 	maxOutcomeBytes              = 1 << 20
@@ -98,7 +98,44 @@ type ActionSource struct {
 	CanonicalURL         string           `json:"canonical_url"`
 	IssueID              string           `json:"issue_id"`
 	SourceRevision       string           `json:"source_revision"`
+	ManifestRevision     string           `json:"manifest_revision"`
 	RequirementsRevision string           `json:"requirements_revision"`
+}
+
+// ActionRequirementSection is the bounded catalog entry exposed to a host.
+type ActionRequirementSection struct {
+	Key             string            `json:"key"`
+	Role            SourceSectionRole `json:"role"`
+	Title           string            `json:"title"`
+	SectionRevision string            `json:"section_revision"`
+	MaterialSHA256  string            `json:"material_sha256"`
+	Bytes           int               `json:"bytes"`
+}
+
+// ActionMaterialInput describes the only unresolved argument for the local
+// material reader operation.
+type ActionMaterialInput struct {
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Flag     string   `json:"flag"`
+	Required bool     `json:"required"`
+	Choices  []string `json:"choices"`
+}
+
+// ActionMaterialReader is a structured, shell-neutral local read operation.
+type ActionMaterialReader struct {
+	Operation string              `json:"operation"`
+	BaseArgv  []string            `json:"base_argv"`
+	Input     ActionMaterialInput `json:"input"`
+}
+
+// ActionRequirements identifies the immutable source bundle available to one
+// Action without copying its Markdown into the Action JSON.
+type ActionRequirements struct {
+	RequirementsRevision string                     `json:"requirements_revision"`
+	Sections             []ActionRequirementSection `json:"sections"`
+	RequiredForAction    []string                   `json:"required_for_action"`
+	Reader               ActionMaterialReader       `json:"reader"`
 }
 
 type DestructiveTarget struct {
@@ -134,7 +171,7 @@ type Action struct {
 	Brief                    string                    `json:"brief"`
 	Context                  string                    `json:"context"`
 	Source                   *ActionSource             `json:"source,omitempty"`
-	Requirements             *AcceptedRequirements     `json:"requirements,omitempty"`
+	Requirements             *ActionRequirements       `json:"requirements,omitempty"`
 	DestructiveAuthorization *DestructiveAuthorization `json:"destructive_authorization,omitempty"`
 	RemainingBudget          int                       `json:"remaining_budget"`
 }
@@ -243,7 +280,7 @@ func (action Action) Validate() error {
 		if err := validateActionSource(*action.Source); err != nil {
 			return err
 		}
-		if err := validateAcceptedRequirements(*action.Requirements); err != nil {
+		if err := validateActionRequirements(*action.Requirements, *action.Source, action); err != nil {
 			return err
 		}
 	}
@@ -255,7 +292,7 @@ func (action Action) Validate() error {
 			return err
 		}
 	}
-	encoded, err := json.Marshal(action)
+	encoded, err := encodeAction(action)
 	if err != nil {
 		return fmt.Errorf("encode action: %w", err)
 	}
@@ -280,25 +317,102 @@ func validateActionSource(source ActionSource) error {
 	if !validSHA256(source.SourceRevision) {
 		return errors.New("source.source_revision must use lowercase sha256:<64 hex> format")
 	}
+	if !validSHA256(source.ManifestRevision) {
+		return errors.New("source.manifest_revision must use lowercase sha256:<64 hex> format")
+	}
 	if !validSHA256(source.RequirementsRevision) {
 		return errors.New("source.requirements_revision must use lowercase sha256:<64 hex> format")
 	}
 	return nil
 }
 
-func validateAcceptedRequirements(requirements AcceptedRequirements) error {
-	for name, value := range map[string]string{
-		"requirements.outcome_markdown":             requirements.OutcomeMarkdown,
-		"requirements.requirements_markdown":        requirements.RequirementsMarkdown,
-		"requirements.acceptance_examples_markdown": requirements.AcceptanceExamplesMarkdown,
-		"requirements.constraints_markdown":         requirements.ConstraintsMarkdown,
-		"requirements.non_goals_markdown":           requirements.NonGoalsMarkdown,
-	} {
-		if !utf8.ValidString(value) {
-			return fmt.Errorf("%s must be valid utf-8", name)
+func validateActionRequirements(
+	requirements ActionRequirements,
+	source ActionSource,
+	action Action,
+) error {
+	if !validSHA256(requirements.RequirementsRevision) {
+		return errors.New("requirements.requirements_revision must use lowercase sha256:<64 hex> format")
+	}
+	if requirements.RequirementsRevision != source.RequirementsRevision {
+		return errors.New("requirements revision does not match source")
+	}
+	if requirements.Sections == nil || len(requirements.Sections) == 0 || len(requirements.Sections) > maxSourceSections {
+		return fmt.Errorf("requirements.sections must contain 1..%d entries", maxSourceSections)
+	}
+	keys := make([]string, 0, len(requirements.Sections))
+	seen := make(map[string]struct{}, len(requirements.Sections))
+	for index, section := range requirements.Sections {
+		field := fmt.Sprintf("requirements.sections[%d]", index)
+		if !validSourceSectionKey(section.Key) {
+			return fmt.Errorf("%s.key is invalid", field)
+		}
+		if _, exists := seen[section.Key]; exists {
+			return fmt.Errorf("%s.key is duplicated", field)
+		}
+		seen[section.Key] = struct{}{}
+		keys = append(keys, section.Key)
+		if !validSourceSectionRole(section.Role) {
+			return fmt.Errorf("%s.role is invalid", field)
+		}
+		if err := requireNonEmptyUTF8(field+".title", section.Title); err != nil {
+			return err
+		}
+		if !validSHA256(section.SectionRevision) || !validSHA256(section.MaterialSHA256) {
+			return fmt.Errorf("%s revisions must use lowercase sha256:<64 hex> format", field)
+		}
+		if section.Bytes <= 0 || section.Bytes > maxSourceSectionBytes {
+			return fmt.Errorf("%s.bytes must be 1..%d", field, maxSourceSectionBytes)
 		}
 	}
+	if !equalStrings(requirements.RequiredForAction, keys) {
+		return errors.New("requirements.required_for_action must list every section key in manifest order")
+	}
+	reader := requirements.Reader
+	if reader.Operation != "read_material" {
+		return errors.New("requirements.reader.operation must be read_material")
+	}
+	expectedArgv := []string{
+		"slipway", "_machine", "material", "--root", actionMaterialRoot(reader.BaseArgv),
+		"--run", action.RunID, "--action", action.ActionID,
+	}
+	if !equalStrings(reader.BaseArgv, expectedArgv) || strings.TrimSpace(expectedArgv[4]) == "" {
+		return errors.New("requirements.reader.base_argv does not identify this action")
+	}
+	input := reader.Input
+	if input.Name != "section" || input.Type != "enum" || input.Flag != "--section" || !input.Required || !equalStrings(input.Choices, keys) {
+		return errors.New("requirements.reader.input must enumerate every section key in manifest order")
+	}
 	return nil
+}
+
+func actionMaterialRoot(argv []string) string {
+	if len(argv) != 9 {
+		return ""
+	}
+	return argv[4]
+}
+
+func equalStrings(left, right []string) bool {
+	if left == nil || right == nil || len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func encodeAction(action Action) ([]byte, error) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(action); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 // ComputeDestructiveScopeSHA256 returns the SHA-256 of the canonical destructive

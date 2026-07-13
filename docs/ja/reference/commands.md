@@ -9,9 +9,9 @@
 - `uninstall`: 未変更の管理ファイルだけを削除。
 - `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は fail closed です。
 - `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。non-current manifest は `adapter_manifest_unreadable`、不完全な current surface は `needs_refresh`/warning になります。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。source 付きでは strict GitHub Change envelope を一度だけ読み、pinned snapshot だけを永続化します。
-- `status [run-id] [--json]`: run を一覧・表示。
-- `stop [run-id] [--json]`: journal を残して停止。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。source 付きでは strict Source Bundle v2 envelope を一度だけ読み、manifest が参照する chapter を local content-addressed material として固定し、journal には catalog/provenance だけを永続化します。
+- `status [run-id] [--root ROOT] [--json]`: run を一覧・表示。
+- `stop [run-id] [--root ROOT] [--json]`: journal を残して停止。
 
 ```bash
 slipway run "small private fix" --json
@@ -23,12 +23,13 @@ Source import 前に accepted Requirements、goal、later answers、command summ
 ホストは非表示のプロトコルコマンドを使います。
 
 ```text
-slipway run submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
-slipway run answer --run ID --action ID --text TEXT
-slipway run answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
-slipway run skip --run ID --action ID
-slipway run resume ID [--budget N]
-slipway run resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
+slipway _machine answer --run ID --action ID --text TEXT
+slipway _machine answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway _machine skip --run ID --action ID
+slipway _machine resume ID [--budget N]
+slipway _machine resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine material --run ID --action ID --section KEY
 ```
 
 最初の resume 形式は ad-hoc Run 専用です。Issue-bound resume は fresh `--source-file`、明示的な `--use-pinned-source`、または current candidate ID に対する `pinned|adopt` のどれか一つを必須とします。Skip に理由は不要です。pause・error・status JSON は元の absolute `--root` を持つ構造化 `next` を含み、未解決の必須 input がない argv だけを human command として render します。

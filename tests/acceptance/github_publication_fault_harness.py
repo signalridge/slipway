@@ -16,7 +16,7 @@ import sys
 import uuid
 
 ALLOWED_STATUS = {"created", "matched", "failed", "ambiguous"}
-LEVEL_MARKER = "<!-- slipway-level: change/v1 -->"
+LEVEL_MARKER = "<!-- slipway-level: change/v2 -->"
 OPERATION_PREFIX = "<!-- slipway-publication-operation: "
 ITEM_PREFIX = "<!-- slipway-publication-item: "
 
@@ -30,36 +30,55 @@ def require_uuid(value: object, field: str) -> str:
     return value
 
 
+def framed_revision(*fields: str) -> str:
+    digest = hashlib.sha256()
+    for field in fields:
+        encoded = field.encode("utf-8")
+        digest.update(len(encoded).to_bytes(8, byteorder="big"))
+        digest.update(encoded)
+    return "sha256:" + digest.hexdigest()
+
+
 def approved_body(operation_id: str, item_id: str) -> tuple[str, str]:
+    definitions = [
+        ("outcome", "outcome", "Outcome", "Exercise deterministic publication reconciliation."),
+        ("requirements", "requirements", "Requirements", "Never blindly retry an ambiguous create."),
+        ("acceptance-examples", "acceptance_examples", "Acceptance examples", "Zero, one, and multiple marker matches are classified."),
+        ("constraints", "constraints", "Constraints", "No network or credentials."),
+        ("non-goals", "non_goals", "Non-goals", "This is not live GitHub evidence."),
+    ]
+    sections: list[dict[str, object]] = []
+    for index, (key, role, title, text) in enumerate(definitions, start=1):
+        comment_body = f"<!-- slipway-section:v1 key={key} -->\n# {title}\n\n{text}\n"
+        sections.append(
+            {
+                "key": key,
+                "role": role,
+                "title": title,
+                "comment_node_id": f"IC_{item_id}_{key}",
+                "comment_database_id": index,
+                "body_sha256": framed_revision("slipway-comment-body/v1", comment_body),
+            }
+        )
+    manifest = {"manifest_version": 2, "profile": "change/v2", "sections": sections}
+    operation_marker = f"{OPERATION_PREFIX}{operation_id} -->"
+    item_marker = f"{ITEM_PREFIX}{item_id} -->"
     body = "\n".join(
         [
             LEVEL_MARKER,
-            f"{OPERATION_PREFIX}{operation_id} -->",
-            f"{ITEM_PREFIX}{item_id} -->",
             "",
-            "## Outcome",
-            "Exercise deterministic publication reconciliation.",
+            "```slipway-manifest",
+            json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True),
+            "```",
             "",
-            "## Requirements",
-            "Never blindly retry an ambiguous create.",
-            "",
-            "## Acceptance examples",
-            "Zero, one, and multiple marker matches are classified.",
-            "",
-            "## Constraints",
-            "No network or credentials.",
-            "",
-            "## Non-goals",
-            "This is not live GitHub evidence.",
+            operation_marker,
+            item_marker,
             "",
         ]
     )
     lines = body.splitlines()
-    assert lines[:3] == [
-        LEVEL_MARKER,
-        f"{OPERATION_PREFIX}{operation_id} -->",
-        f"{ITEM_PREFIX}{item_id} -->",
-    ]
+    assert lines[0] == LEVEL_MARKER
+    assert lines[-2:] == [operation_marker, item_marker]
     return body, "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
@@ -165,7 +184,11 @@ def classify_case(raw_case: object, operation_id: str) -> dict[str, object]:
         "operation_id": operation_id,
         "item_id": item_id,
         "approved_body_sha256": body_sha256,
-        "approved_marker_lines": body.splitlines()[:3],
+        "approved_marker_lines": [
+            LEVEL_MARKER,
+            f"{OPERATION_PREFIX}{operation_id} -->",
+            f"{ITEM_PREFIX}{item_id} -->",
+        ],
         "request_result": request_result,
         "create_attempts": 1,
         "blind_retry": False,

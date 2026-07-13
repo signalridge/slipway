@@ -17,44 +17,46 @@ Its title starts `[Objective]`; labels are exactly `level:objective` plus one `k
 A Change's first non-empty line is exactly:
 
 ```html
-<!-- slipway-level: change/v1 -->
+<!-- slipway-level: change/v2 -->
 ```
 
-Its title starts `[Change]`; labels are exactly `level:change` plus one `kind:*`, with optional `ready-for-agent`. Its accepted body is:
+Its title starts `[Change]`; labels are exactly `level:change` plus one `kind:*`, with optional `ready-for-agent`. The marker is followed by one strict manifest fence:
 
-```markdown
-<!-- slipway-level: change/v1 -->
+````markdown
+<!-- slipway-level: change/v2 -->
 
-## Outcome
-A single observable result.
-
-## Requirements
-All behavior needed for this delivery.
-
-## Acceptance examples
-Concrete observable examples.
-
-## Constraints
-Technical and product boundaries.
-
-## Non-goals
-Explicit exclusions.
-
-## Implementation checklist
-Optional execution notes; excluded from revisions.
+```slipway-manifest
+{
+  "manifest_version": 2,
+  "profile": "change/v2",
+  "parent_requirements_revision": "sha256:...",
+  "sections": [
+    {
+      "key": "outcome",
+      "role": "outcome",
+      "title": "Outcome",
+      "comment_node_id": "IC_...",
+      "comment_database_id": 123,
+      "body_sha256": "sha256:..."
+    }
+  ]
+}
 ```
+````
 
-The first exact marker is Level authority. Title or label drift is a warning and can be repaired only after confirmation; it never blocks a marker-valid Change Run. A missing, conflicting, Objective, or unknown marker is not a Change source. An ordinary unmarked Issue offers three explicit paths: manual normalization, a separately confirmed linked Change, or a bounded ad-hoc Run.
+Each manifest entry identifies one exact GitHub Issue comment. The comment's first nonempty line is `<!-- slipway-section:v1 key=KEY -->`; everything after it is that chapter's normalized Markdown. The Change profile requires at least one `outcome`, `requirements`, `acceptance_examples`, `constraints`, and `non_goals` role, but may split a role across independently addressable chapters.
+
+The manifest is the only authority: array order is chapter order, the GraphQL comment node ID is object identity, and the body digest detects edits. Slipway fetches only referenced comments and rejects missing, unexpected, minimized, edited, duplicate, or hash-mismatched material. Ordinary discussion comments never enter a Run. Title or label drift remains advisory. A missing, conflicting, Objective, v1, or unknown marker is not a v2 Change source.
 
 ## Self-containment and relationships
 
-Decomposition copies every applicable Objective requirement and shared constraint into each child. Parent Kind is not inherited. Comments must be folded into the Change body before they can enter a new snapshot. Objective→Change uses native sub-issues with one hierarchy level and a maximum of 100. Change dependencies use native blocked-by with a maximum of 50 blocking and 50 blocked-by per Issue. Stop and report limits; do not hide overflow in prose.
+Decomposition publishes every applicable Objective requirement and shared constraint as self-contained Change chapters. Parent Kind is not inherited. Discussion is non-authoritative until a replacement chapter comment and a new manifest explicitly publish it. Objective→Change uses native sub-issues with one hierarchy level and a maximum of 100. Change dependencies use native blocked-by with a maximum of 50 blocking and 50 blocked-by per Issue. Stop and report limits; do not hide overflow in prose.
 
 Detect `gh --version`. Use first-class relationship operations at `gh >= 2.94.0`; otherwise use the official REST API with existing authentication or report `environment_unavailable`. Do not invent local authority. Follow transfers only through `github.com`, then refetch repository/Issue node IDs, labels, parent, dependencies, and canonical URL; preserve the old URL alias and still compare markers and revisions. Never trust cross-host redirects.
 
 ## Publication and reconciliation
 
-Before a write, show complete drafts and a plan containing an operation UUID, stable item UUIDs, repository, canonical body SHA-256, exact labels/relationships, and expected revisions. Confirm that exact plan. Put typed operation/item markers immediately after the level marker, use body files, refetch mutable Issues, and read everything back.
+Publication uses two confirmations because comment IDs do not exist before creation. First show complete chapter drafts, operation/item UUIDs, canonical comment-body digests, intended section order/roles, exact labels/relationships, and the expected parent requirements revision; confirm creation of non-authoritative drafts. A new Change begins as a reconcilable draft Issue shell with publication markers but no `change/v2` marker; an amendment leaves the accepted body unchanged. Create replacement comments, refetch and verify IDs/body/visibility, then build and show the exact final manifest. Every amendment manifest, including a content-identical replacement, sets `parent_requirements_revision` to the exact pinned revision checked during preview; an initial manifest omits it. A second current confirmation authorizes the commit. Immediately refetch the accepted head, reject parent drift, and update the Issue body manifest last. Preserve reconciliation markers after the manifest fence. Unreferenced comments are drafts, never authority; do not edit accepted chapters in place or silently delete abandoned drafts. Refetch and reconcile the complete graph after the commit point.
 
 GitHub has neither exactly-once Issue creation nor body CAS. On timeout-after-success, partial relation failure, duplicate markers, indexing delay, or ambiguous response, enumerate via paginated non-search Issue API and report each item/label/relation as `created|matched|failed|ambiguous`. Never blindly retry or roll back successes. Zero matches need a fresh preview and confirmation, one may converge, and multiple pause for the user.
 

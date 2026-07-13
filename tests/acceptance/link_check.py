@@ -21,7 +21,7 @@ SOURCE_NAMES = {
     "CONTRIBUTING.md",
     "README.md",
     "README.ja.md",
-    "README.zh-CN.md",
+    "README.zh.md",
     "SECURITY.md",
 }
 MARKDOWN_SUFFIXES = {".md", ".mdx"}

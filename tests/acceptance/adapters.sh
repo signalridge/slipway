@@ -180,7 +180,7 @@ capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-de
 specific = {
     "slipway-run": [
         "`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`",
-        "accepted five Requirements sections", "Redact recognized credentials while preserving command identity",
+        "Source Bundle v2 envelope", "fetch exactly those comments", "Redact recognized credentials while preserving command identity",
     ],
     "slipway-propose": [
         "exactly one `level:change`", "exactly one `level:objective`", "exactly one `kind:*`",
@@ -198,7 +198,7 @@ repo = Path(sys.argv[2])
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
-assert report["contract_version"] == 1, report
+assert report["contract_version"] == 2, report
 assert report["hosts"] == hosts, report
 expected_written = len(hosts) * (len(capabilities) + 1 + 2) + len(capabilities)
 assert len(report["written"]) == expected_written, {"expected": expected_written, "report": report}
@@ -281,7 +281,7 @@ capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-de
 with open(sys.argv[1], encoding="utf-8") as stream:
     listed_report = json.load(stream)
 assert set(listed_report) == {"contract_version", "hosts"}, listed_report
-assert listed_report["contract_version"] == 1, listed_report
+assert listed_report["contract_version"] == 2, listed_report
 listed = listed_report["hosts"]
 assert [item["id"] for item in listed] == hosts, listed
 for item in listed:
@@ -292,7 +292,7 @@ for item in listed:
 with open(sys.argv[2], encoding="utf-8") as stream:
     doctor = json.load(stream)
 assert set(doctor) == {"contract_version", "checks"}, doctor
-assert doctor["contract_version"] == 1, doctor
+assert doctor["contract_version"] == 2, doctor
 for check in doctor["checks"]:
     assert set(check) == {"code", "status", "host_id", "name", "detail"}, check
     assert check["code"], check
@@ -337,7 +337,7 @@ import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
-assert report["contract_version"] == 1, report
+assert report["contract_version"] == 2, report
 listed = report["hosts"]
 assert len(listed) == 10, listed
 for item in listed:
@@ -386,7 +386,7 @@ roots = {
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
-assert report["contract_version"] == 1, report
+assert report["contract_version"] == 2, report
 expected = {f"{root}/slipway-review/SKILL.md" for root in roots.values()}
 assert set(report["preserved"]) == expected, report
 for host, root in roots.items():
@@ -429,7 +429,7 @@ repo = Path(sys.argv[2])
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
-assert report["contract_version"] == 1, report
+assert report["contract_version"] == 2, report
 assert report["hosts"] == hosts, report
 expected_preserved = {f"{root}/slipway-implement/SKILL.md" for root in skills.values()}
 assert set(report["preserved"]) == expected_preserved, report
@@ -471,7 +471,7 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 assert set(report) == {"contract_version", "hosts"}, report
-assert report["contract_version"] == 1, report
+assert report["contract_version"] == 2, report
 listed = report["hosts"]
 assert len(listed) == 10, listed
 for item in listed:

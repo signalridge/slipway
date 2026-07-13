@@ -18,7 +18,7 @@ func TestBuildContextRendersOnlyActiveDecisionsAndOutcomeProjectionsInClassOrder
 		Goal: "raw goal must stay outside context",
 		PinnedSource: &PinnedSource{
 			RequirementsRevision: currentRevision,
-			AcceptedRequirements: AcceptedRequirements{RequirementsMarkdown: "raw requirements must stay outside context"},
+			Sections:             []PinnedSourceSection{{Title: "raw requirements must stay outside context"}},
 		},
 		Answers: []AnswerRecord{
 			{ActionID: "old-source", Text: "old source decision", Active: true, RequirementsRevision: "sha256:" + strings.Repeat("a", 64)},
@@ -50,7 +50,7 @@ func TestBuildContextRendersOnlyActiveDecisionsAndOutcomeProjectionsInClassOrder
 	assert.True(t, utf8.ValidString(context))
 	assert.NotContains(t, context, "\r")
 	assert.NotContains(t, context, run.Goal)
-	assert.NotContains(t, context, run.PinnedSource.AcceptedRequirements.RequirementsMarkdown)
+	assert.NotContains(t, context, run.PinnedSource.Sections[0].Title)
 	assert.NotContains(t, context, "old source decision")
 	assert.NotContains(t, context, "overturned decision")
 	assert.NotContains(t, context, "structural-confirmation")
@@ -185,22 +185,28 @@ func TestContextIsByteIdenticalAfterJournalReplay(t *testing.T) {
 	assert.Equal(t, fromProjection, fromReplay)
 }
 
-func TestUntruncatedRequirementsStillReturnActionTooLarge(t *testing.T) {
+func TestLargeNeedsInputOutcomeCannotDeadlockNextAction(t *testing.T) {
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
-	envelope := validSourceEnvelope()
-	envelope.Body = strings.Replace(envelope.Body, "- Keep order.", "- "+strings.Repeat("r", 60<<10), 1)
-	source := mustParseSource(t, envelope)
-	run, err := service.Start(strings.Repeat("g", 100<<10), CreateOptions{Budget: 4, ReviewEnabled: false, PinnedSource: &source})
+	source := mustParseSource(t, validSourceEnvelope())
+	run, err := service.Start(strings.Repeat("g", 90<<10), CreateOptions{Budget: 4, ReviewEnabled: false, PinnedSource: &source})
 	require.NoError(t, err)
 
-	outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{Status: OutcomeCompleted, Summary: strings.Repeat("s", 110<<10)})
-	_, err = service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
-	assertProtocolError(t, err, "action_too_large")
+	outcome := withEnvelope(run.CurrentAction.ActionID, run.CurrentAction.Kind, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: strings.Repeat("<&>", 50<<10),
+		Pause:   &Pause{Reason: PauseDecisionRequired, Question: "continue?"},
+	})
+	paused, err := service.Submit(run.ID, run.CurrentAction.ActionID, outcome)
+	require.NoError(t, err)
+	require.Equal(t, RunPaused, paused.State)
 
-	unchanged, loadErr := service.Load(run.ID)
-	require.NoError(t, loadErr)
-	require.NotNil(t, unchanged.CurrentAction)
-	assert.Equal(t, run.CurrentAction.ActionID, unchanged.CurrentAction.ActionID)
-	assert.Nil(t, findActionRecord(&unchanged, run.CurrentAction.ActionID).Outcome)
+	continued, err := service.Answer(run.ID, run.CurrentAction.ActionID, AnswerOptions{Text: "continue"})
+	require.NoError(t, err)
+	require.NotNil(t, continued.CurrentAction)
+	assert.Equal(t, ActionOrient, continued.CurrentAction.Kind)
+	assert.LessOrEqual(t, len(continued.CurrentAction.Context), maxActionContextBytes)
+	encoded, err := encodeAction(*continued.CurrentAction)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(encoded), maxActionBytes)
 }

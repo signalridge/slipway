@@ -33,12 +33,12 @@ slipway install --tool claude
 # Ad-hoc escape hatch：微小、敏感、紧急、GitHub 不可用或明确不建 Issue。
 slipway run "给报表增加 CSV 导出" --json
 
-# Issue-bound：可信宿主一次性获取严格 Change envelope。
+# Issue-bound：可信宿主一次性获取严格、manifest-addressed Source Bundle v2。
 slipway run "实施这个有界 Change" \
   --source-file /安全临时目录/change-envelope.json --json
 ```
 
-CLI 不调用模型 provider、不持 GitHub token。宿主 attest GitHub fetch，但 Issue 内容仍是不可信数据；CLI 验证、固定五段 accepted Requirements 与 revisions，每次只返回一个 Action。Amendment 需显式 current-candidate choice；破坏性操作需精确 scope 的 one-shot structured grant，自然语言 yes 不授权。
+CLI 不调用模型 provider、不持 GitHub token。宿主 attest GitHub fetch，但 Issue 内容仍是不可信数据；CLI 只接受 manifest 显式引用的 chapter comments，验证身份/digest，将 exact payload 固定为本地 material，并每次返回一个有界 Action catalog。宿主按 structured `_machine material` 操作逐章读取。Amendment 需显式 current-candidate choice；破坏性操作需精确 scope 的 one-shot structured grant，自然语言 yes 不授权。
 
 [Issue 工作流](docs/zh/reference/issue-workflow.md)说明 Objective/Change marker、精确 Level/Kind labels、自包含、`gh >= 2.94`/官方 REST fallback、同 host transfer、100/50 限制、approved publication markers 与部分/歧义对账。
 
@@ -63,7 +63,7 @@ status       列出/查看可恢复 Run
 stop         保留 journal 并停止
 ```
 
-隐藏的版本化 `run submit/answer/skip/resume` 见[机器协议](docs/zh/reference/machine-protocol.md)。`ended` 只表示自动 Action queue 为空，不认证正确、交付、部署、release-ready 或无 finding。
+隐藏的版本化 `_machine submit/answer/skip/resume/material` 见[机器协议](docs/zh/reference/machine-protocol.md)。`ended` 只表示自动 Action queue 为空，不认证正确、交付、部署、release-ready 或无 finding。
 
 ## Journal 与隐私
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -20,11 +21,12 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	var schema map[string]any
 	require.NoError(t, json.Unmarshal(raw, &schema))
 	assert.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema["$schema"])
-	require.Len(t, schemaSlice(t, schema, "oneOf"), 9)
+	require.Len(t, schemaSlice(t, schema, "oneOf"), 11)
 
 	definitions := schemaMap(t, schema, "$defs")
 	for _, name := range []string{
-		"action", "outcome", "protocolState", "cliError", "changeReport", "listReport", "doctorReport", "runStatus", "statusList",
+		"action", "actionMaterial", "rawSourceEnvelope", "outcome", "protocolState", "cliError",
+		"changeReport", "listReport", "doctorReport", "runStatus", "statusList",
 	} {
 		definition := schemaMap(t, definitions, name)
 		assert.False(t, definition["additionalProperties"].(bool), name)
@@ -92,29 +94,29 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "next"), marshalTestJSON(t, next))
 
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "changeReport"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1,
+		"contract_version": ContractVersion,
 		"hosts":            []string{"claude"}, "written": []string{}, "removed": []string{}, "preserved": []string{}, "warnings": []string{},
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "listReport"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1,
+		"contract_version": ContractVersion,
 		"hosts": []map[string]any{{
 			"id": "claude", "detected": true, "installed": true, "needs_refresh": false, "capabilities": []string{"slipway-run"},
 		}},
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "doctorReport"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1,
+		"contract_version": ContractVersion,
 		"checks": []map[string]any{{
 			"code": "adapter_healthy", "status": "ok", "host_id": "claude", "name": "adapter", "detail": "7 managed files",
 		}},
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "protocolState"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1, "run_id": "run-1", "state": "paused", "pause_reason": "decision_required", "next": next,
+		"contract_version": ContractVersion, "run_id": "run-1", "state": "paused", "pause_reason": "decision_required", "next": next,
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "cliError"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1, "code": "invalid_usage", "message": "invalid", "next": next, "exit_code": 2,
+		"contract_version": ContractVersion, "code": "invalid_usage", "message": "invalid", "next": next, "exit_code": 2,
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "statusList"), marshalTestJSON(t, map[string]any{
-		"contract_version": 1, "runs": []any{},
+		"contract_version": ContractVersion, "runs": []any{},
 	}))
 	var runObject map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(marshalTestJSON(t, runFixture), &runObject))
@@ -125,13 +127,15 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, adHoc.Validate())
 	adHocJSON := marshalTestJSON(t, adHoc)
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "action"), adHocJSON)
+	actionSchema := compileMachineSchemaDefinition(t, "action")
+	require.NoError(t, actionSchema.Validate(machineSchemaValue(t, adHoc)))
 	var adHocObject map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(adHocJSON, &adHocObject))
 	assert.NotContains(t, adHocObject, "source")
 	assert.NotContains(t, adHocObject, "requirements")
 
 	source := testActionSource()
-	requirements := testAcceptedRequirements()
+	requirements := testActionRequirements()
 	authorization := destructiveAuthorizationForTest(t)
 	scoped := testAction()
 	scoped.Kind = ActionImplement
@@ -140,6 +144,27 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	scoped.DestructiveAuthorization = &authorization
 	require.NoError(t, scoped.Validate())
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "action"), marshalTestJSON(t, scoped))
+	require.NoError(t, actionSchema.Validate(machineSchemaValue(t, scoped)))
+
+	rawSourceSchema := compileMachineSchemaDefinition(t, "rawSourceEnvelope")
+	require.NoError(t, rawSourceSchema.Validate(machineSchemaValue(t, validSourceEnvelope())))
+
+	material := ActionMaterial{
+		ContractVersion:      ContractVersion,
+		MessageType:          "action_material",
+		RunID:                "run-1",
+		ActionID:             "action-1",
+		RequirementsRevision: requirements.RequirementsRevision,
+		Section: ActionMaterialSection{
+			Key:             requirements.Sections[0].Key,
+			Role:            requirements.Sections[0].Role,
+			Title:           requirements.Sections[0].Title,
+			SectionRevision: requirements.Sections[0].SectionRevision,
+			Markdown:        "# Outcome\n",
+		},
+	}
+	materialSchema := compileMachineSchemaDefinition(t, "actionMaterial")
+	require.NoError(t, materialSchema.Validate(machineSchemaValue(t, material)))
 
 	implementation := implementedTestOutcome(OutcomeCompleted, ImplementationApplied)
 	implementation.ActionKind = ActionImplement
@@ -156,6 +181,195 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, decoded.Validate(ActionReview, "action-1"))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "outcome"), reviewJSON)
+}
+
+func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "docs", "reference", "source-envelope.schema.json")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	require.NoError(t, err)
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	const schemaURL = "https://signalridge.github.io/slipway/reference/source-envelope.schema.json"
+	require.NoError(t, compiler.AddResource(schemaURL, document))
+	schema, err := compiler.Compile(schemaURL)
+	require.NoError(t, err)
+	require.NoError(t, schema.Validate(machineSchemaValue(t, validSourceEnvelope())))
+
+	invalidHead := validSourceEnvelope()
+	invalidHead.Body = strings.Replace(
+		invalidHead.Body,
+		changeSourceMarker,
+		"<!-- slipway-level: objective/v1 -->",
+		1,
+	)
+	invalidHead.Comments = []RawSourceComment{}
+	require.NoError(t, schema.Validate(machineSchemaValue(t, invalidHead)))
+
+	tooManyLabels := validSourceEnvelope()
+	tooManyLabels.Labels = make([]string, maxSourceLabels+1)
+	for index := range tooManyLabels.Labels {
+		tooManyLabels.Labels[index] = "label-" + jsonNumber(int64(index))
+	}
+	require.Error(t, schema.Validate(machineSchemaValue(t, tooManyLabels)))
+
+	manifest, err := parseSourceManifest(normalizeLineEndings(validSourceEnvelope().Body))
+	require.NoError(t, err)
+	manifestSchema, err := compiler.Compile(schemaURL + "#/$defs/sourceManifest")
+	require.NoError(t, err)
+	require.NoError(t, manifestSchema.Validate(machineSchemaValue(t, manifest)))
+	incompleteManifest := machineSchemaValue(t, manifest).(map[string]any)
+	manifestSections := incompleteManifest["sections"].([]any)
+	incompleteManifest["sections"] = manifestSections[:len(manifestSections)-1]
+	require.Error(t, manifestSchema.Validate(incompleteManifest))
+}
+
+func TestMachineAndSourceSchemasShareRawEnvelopeDefinitions(t *testing.T) {
+	t.Parallel()
+
+	machineRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
+	require.NoError(t, err)
+	var machineSchema map[string]any
+	require.NoError(t, json.Unmarshal(machineRaw, &machineSchema))
+
+	sourceRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "source-envelope.schema.json"))
+	require.NoError(t, err)
+	var sourceSchema map[string]any
+	require.NoError(t, json.Unmarshal(sourceRaw, &sourceSchema))
+
+	machineDefinitions := schemaMap(t, machineSchema, "$defs")
+	sourceDefinitions := schemaMap(t, sourceSchema, "$defs")
+	for _, name := range []string{"sourceParent", "rawSourceComment", "rawSourceEnvelope"} {
+		assert.Equal(t, schemaMap(t, sourceDefinitions, name), schemaMap(t, machineDefinitions, name), name)
+	}
+}
+
+func TestMachineProtocolPinnedSourceSchemaRequiresChangeProfileRoles(t *testing.T) {
+	t.Parallel()
+
+	schema := compileMachineSchemaDefinition(t, "pinnedSource")
+	pinned := mustParseSource(t, validSourceEnvelope())
+	require.NoError(t, schema.Validate(machineSchemaValue(t, pinned)))
+
+	incomplete := machineSchemaValue(t, pinned).(map[string]any)
+	sections := incomplete["sections"].([]any)
+	incomplete["sections"] = sections[:len(sections)-1]
+	require.Error(t, schema.Validate(incomplete))
+
+	tooManyAliases := mustParseSource(t, validSourceEnvelope())
+	tooManyAliases.URLAliases = make([]string, maxSourceURLAliases+1)
+	for index := range tooManyAliases.URLAliases {
+		tooManyAliases.URLAliases[index] = "https://github.com/example/repository/issues/" + jsonNumber(int64(1000+index))
+	}
+	require.Error(t, schema.Validate(machineSchemaValue(t, tooManyAliases)))
+}
+
+func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
+	t.Parallel()
+
+	schema := compileMachineSchemaDefinition(t, "sourceCandidate")
+	valid := newSourceCandidate(sourceCandidateForTest(t, validSourceEnvelope()))
+	require.NoError(t, schema.Validate(machineSchemaValue(t, valid)))
+
+	invalidEnvelope := validSourceEnvelope()
+	invalidEnvelope.Body = strings.Replace(
+		invalidEnvelope.Body,
+		changeSourceMarker,
+		"<!-- slipway-level: objective/v1 -->",
+		1,
+	)
+	invalid := newSourceCandidate(sourceCandidateForTest(t, invalidEnvelope))
+	require.False(t, invalid.Valid)
+	require.NoError(t, schema.Validate(machineSchemaValue(t, invalid)))
+
+	validWithoutSnapshot := machineSchemaValue(t, valid).(map[string]any)
+	delete(validWithoutSnapshot, "snapshot")
+	invalidWithoutError := machineSchemaValue(t, invalid).(map[string]any)
+	delete(invalidWithoutError, "classification_error")
+	invalidWithSnapshot := machineSchemaValue(t, invalid).(map[string]any)
+	invalidWithSnapshot["snapshot"] = machineSchemaValue(t, *valid.Snapshot)
+	invalidWithSnapshot["requirements_revision"] = valid.RequirementsRevision
+	validWithError := machineSchemaValue(t, valid).(map[string]any)
+	validWithError["classification_error"] = "must be absent"
+	invalidWithValidCode := machineSchemaValue(t, invalid).(map[string]any)
+	invalidWithValidCode["classification_code"] = SourceClassificationValidChange
+	missingSourceRevision := machineSchemaValue(t, valid).(map[string]any)
+	delete(missingSourceRevision, "source_revision")
+
+	illegal := []struct {
+		name  string
+		value any
+	}{
+		{name: "valid without snapshot", value: validWithoutSnapshot},
+		{name: "invalid without classification error", value: invalidWithoutError},
+		{name: "invalid with valid snapshot", value: invalidWithSnapshot},
+		{name: "valid with classification error", value: validWithError},
+		{name: "invalid with valid classification code", value: invalidWithValidCode},
+		{name: "missing source revision", value: missingSourceRevision},
+	}
+	for _, test := range illegal {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			require.Error(t, schema.Validate(test.value))
+		})
+	}
+}
+
+func TestMachineProtocolSchemaAcceptsSourceIssueMismatchErrorDetails(t *testing.T) {
+	t.Parallel()
+
+	workspaceIdentity := "sha256:" + strings.Repeat("a", 64)
+	value := map[string]any{
+		"contract_version": ContractVersion,
+		"code":             "source_issue_mismatch",
+		"message":          "refreshed source belongs to another issue",
+		"next":             NoneNext(workspaceIdentity),
+		"exit_code":        3,
+		"details": map[string]any{
+			"run_id":             "run-1",
+			"state":              RunActive,
+			"pinned_issue_id":    "I_pinned",
+			"refreshed_issue_id": "I_refreshed",
+		},
+	}
+	schema := compileMachineSchemaDefinition(t, "cliError")
+	require.NoError(t, schema.Validate(machineSchemaValue(t, value)))
+
+	value["details"].(map[string]any)["unexpected"] = true
+	require.Error(t, schema.Validate(machineSchemaValue(t, value)))
+}
+
+func TestMachineProtocolResumeResultSchemaEnforcesReceiptMatrix(t *testing.T) {
+	t.Parallel()
+
+	schema := compileMachineSchemaDefinition(t, "resumeResult")
+	legal := []ResumeResult{
+		{Operation: ResumeOperationAdHoc, BudgetApplied: true},
+		{Operation: ResumeOperationSourceRefreshed, BudgetApplied: true},
+		{Operation: ResumeOperationSourceRefreshSkipped, BudgetApplied: true},
+		{Operation: ResumeOperationSourceCandidate, BudgetApplied: false, CandidateID: "candidate-1"},
+		{Operation: ResumeOperationSourceAmended, BudgetApplied: true, CandidateID: "candidate-1"},
+		{Operation: ResumeOperationSourcePinned, BudgetApplied: true},
+		{Operation: ResumeOperationSourcePinned, BudgetApplied: true, CandidateID: "candidate-1"},
+	}
+	for _, result := range legal {
+		require.NoError(t, schema.Validate(machineSchemaValue(t, result)), result.Operation)
+	}
+
+	illegal := []ResumeResult{
+		{Operation: "invented", BudgetApplied: true},
+		{Operation: ResumeOperationAdHoc, BudgetApplied: true, CandidateID: "candidate-1"},
+		{Operation: ResumeOperationSourceCandidate, BudgetApplied: true, CandidateID: "candidate-1"},
+		{Operation: ResumeOperationSourceCandidate, BudgetApplied: false},
+		{Operation: ResumeOperationSourceAmended, BudgetApplied: true},
+		{Operation: ResumeOperationSourcePinned, BudgetApplied: false},
+	}
+	for _, result := range illegal {
+		require.Error(t, schema.Validate(machineSchemaValue(t, result)), result.Operation)
+	}
 }
 
 func TestMachineProtocolOutcomeSchemaEnforcesGoMatrix(t *testing.T) {
@@ -230,6 +444,10 @@ func TestMachineProtocolOutcomeSchemaEnforcesGoMatrix(t *testing.T) {
 }
 
 func compileMachineOutcomeSchema(t *testing.T) *jsonschema.Schema {
+	return compileMachineSchemaDefinition(t, "outcome")
+}
+
+func compileMachineSchemaDefinition(t *testing.T, name string) *jsonschema.Schema {
 	t.Helper()
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
@@ -241,7 +459,7 @@ func compileMachineOutcomeSchema(t *testing.T) *jsonschema.Schema {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	require.NoError(t, compiler.AddResource(schemaURL, document))
-	schema, err := compiler.Compile(schemaURL + "#/$defs/outcome")
+	schema, err := compiler.Compile(schemaURL + "#/$defs/" + name)
 	require.NoError(t, err)
 	return schema
 }

@@ -76,7 +76,10 @@ function rewriteTarget(target, currentDir) {
   }
 
   const resolved = path.posix.normalize(path.posix.join(currentDir, pathPart));
-  if (resolved === 'reference/machine-protocol.schema.json') {
+  if (
+    resolved === 'reference/machine-protocol.schema.json' ||
+    resolved === 'reference/source-envelope.schema.json'
+  ) {
     return `${BASE}/${resolved}${suffix}`;
   }
   return null;
@@ -183,9 +186,11 @@ async function main() {
     await fs.cp(assetsSrc, PUBLIC_ASSETS, { recursive: true });
   }
 
-  const schemaSrc = path.join(DOCS_DIR, 'reference/machine-protocol.schema.json');
   await fs.mkdir(PUBLIC_REFERENCE, { recursive: true });
-  await fs.copyFile(schemaSrc, path.join(PUBLIC_REFERENCE, 'machine-protocol.schema.json'));
+  for (const name of ['machine-protocol.schema.json', 'source-envelope.schema.json']) {
+    const schemaSrc = path.join(DOCS_DIR, 'reference', name);
+    await fs.copyFile(schemaSrc, path.join(PUBLIC_REFERENCE, name));
+  }
 
   console.log(`sync-docs: ${files.length} pages -> ${path.relative(process.cwd(), OUT_DIR)}`);
 }

@@ -70,6 +70,28 @@ function Get-Sha256([string]$Path) {
     }
 }
 
+function Get-FramedRevision([string[]]$Fields) {
+    $stream = New-Object System.IO.MemoryStream
+    $sha256 = $null
+    try {
+        foreach ($field in $Fields) {
+            $payload = $script:Utf8NoBom.GetBytes([string]$field)
+            $length = [BitConverter]::GetBytes([UInt64]$payload.Length)
+            if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($length) }
+            $stream.Write($length, 0, $length.Length)
+            $stream.Write($payload, 0, $payload.Length)
+        }
+        $stream.Position = 0
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $digest = $sha256.ComputeHash($stream)
+        return 'sha256:' + ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) { $sha256.Dispose() }
+        $stream.Dispose()
+    }
+}
+
 function Join-NativeOutput($Output) {
     return (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
 }
@@ -278,7 +300,7 @@ function New-Outcome {
         $Suggestions
     )
     return [ordered]@{
-        contract_version = 1
+        contract_version = 2
         action_id = $ActionId
         action_kind = $ActionKind
         status = $Status
@@ -292,42 +314,73 @@ function New-Outcome {
     }
 }
 
-function New-SourceEnvelope([string]$RequirementText, [string]$UpdatedAt) {
-    $body = @(
-        '<!-- slipway-level: change/v1 -->',
-        '',
-        '## Outcome',
-        'Exercise native Windows source and recovery.',
-        '',
-        '## Requirements',
-        $RequirementText,
-        '',
-        '## Acceptance examples',
-        'Structured recovery preserves the selected candidate.',
-        '',
-        '## Constraints',
-        'No network and no real user data.',
-        '',
-        '## Non-goals',
-        'This script is not live GitHub evidence.',
-        '',
-        '## Implementation checklist',
-        '- [ ] Native fixture only',
-        ''
-    ) -join "`r`n"
+function New-SourceEnvelope {
+    param(
+        [string]$RequirementText,
+        [string]$UpdatedAt,
+        [string]$ParentRequirementsRevision = ''
+    )
+    $issueUrl = 'https://github.com/example/windows-acceptance/issues/434'
+    $definitions = @(
+        [ordered]@{ key = 'outcome'; role = 'outcome'; title = 'Outcome'; text = 'Exercise native Windows source and recovery.' },
+        [ordered]@{ key = 'requirements'; role = 'requirements'; title = 'Requirements'; text = $RequirementText },
+        [ordered]@{ key = 'acceptance-examples'; role = 'acceptance_examples'; title = 'Acceptance examples'; text = 'Structured recovery preserves the selected candidate.' },
+        [ordered]@{ key = 'constraints'; role = 'constraints'; title = 'Constraints'; text = 'No network and no real user data.' },
+        [ordered]@{ key = 'non-goals'; role = 'non_goals'; title = 'Non-goals'; text = 'This script is not live GitHub evidence.' }
+    )
+    $comments = @()
+    $sections = @()
+    for ($index = 0; $index -lt $definitions.Count; $index++) {
+        $definition = $definitions[$index]
+        $databaseId = 3001 + $index
+        $nodeId = 'IC_windows_' + $definition.key
+        if ((-not [string]::IsNullOrWhiteSpace($ParentRequirementsRevision)) -and $definition.key -eq 'requirements') {
+            $databaseId = 4001 + $index
+            $nodeId += '_replacement'
+        }
+        $commentBody = '<!-- slipway-section:v1 key=' + $definition.key + " -->`n# " + $definition.title + "`n`n" + $definition.text + "`n"
+        $comments += [ordered]@{
+            node_id = $nodeId
+            database_id = $databaseId
+            url = "$issueUrl#issuecomment-$databaseId"
+            updated_at = $UpdatedAt
+            author_id = 'U_windowsAcceptance'
+            is_minimized = $false
+            body = $commentBody
+        }
+        $sections += [ordered]@{
+            key = $definition.key
+            role = $definition.role
+            title = $definition.title
+            comment_node_id = $nodeId
+            comment_database_id = $databaseId
+            body_sha256 = Get-FramedRevision -Fields @('slipway-comment-body/v1', $commentBody)
+        }
+    }
+    $manifest = [ordered]@{
+        manifest_version = 2
+        profile = 'change/v2'
+        sections = $sections
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ParentRequirementsRevision)) {
+        $manifest.Add('parent_requirements_revision', $ParentRequirementsRevision)
+    }
+    $manifestJson = ConvertTo-Json -InputObject $manifest -Depth 20 -Compress
+    $body = "<!-- slipway-level: change/v2 -->`n`n``````slipway-manifest`n$manifestJson`n```````n"
     return [ordered]@{
-        source_version = 1
+        source_version = 2
         provider = 'github'
         host = 'github.com'
         repository_id = 'R_windowsAcceptanceRepository'
         issue_id = 'I_windowsAcceptanceIssue'
         issue_number = 434
-        canonical_url = 'https://github.com/example/windows-acceptance/issues/434'
+        canonical_url = $issueUrl
         updated_at = $UpdatedAt
         fetched_at = '2026-07-12T10:01:00Z'
         title = '[Change] Native Windows acceptance'
         body = $body
         labels = @('level:change', 'kind:maintenance')
+        comments = $comments
     }
 }
 
@@ -398,7 +451,7 @@ try {
     if ($LASTEXITCODE -ne 0) { Fail 'initial git commit failed' }
 
     $doctor = (Invoke-ResolvedArgv -CommandArgs @('doctor', '--root', $repo, '--json')) | ConvertFrom-Json
-    Assert-True ($doctor.contract_version -eq 1) 'doctor did not return contract_version 1'
+    Assert-True ($doctor.contract_version -eq 2) 'doctor did not return contract_version 2'
     Assert-True ($null -ne $doctor.checks) 'doctor checks are missing'
 
     $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
@@ -416,7 +469,7 @@ try {
     $decisionOutcome = New-Outcome -ActionId $start.action_id -ActionKind $start.kind -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
     $outcomePath = Join-Path $tempRoot ('outcome file % ! & ^ ' + $UnicodeProbe + '.json')
     Write-Utf8 $outcomePath (($decisionOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $paused = (Invoke-ResolvedArgv -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
+    $paused = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
     Assert-True ($paused.state -eq 'paused') 'Outcome file did not pause the Run'
     Assert-True ($paused.next.operation -eq 'answer') 'decision pause did not return structured answer next'
 
@@ -436,11 +489,11 @@ try {
     if ($Mode -eq 'PowerShell') {
         # stdin transport is intentionally PowerShell-only. Cmd mode exercises
         # the same Outcome through an outcome-file argv that crosses cmd.exe.
-        $implementedText = Invoke-SlipwayDirect -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
+        $implementedText = Invoke-SlipwayDirect -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
     } else {
         $secondOutcomePath = Join-Path $tempRoot 'cmd outcome file.json'
         Write-Utf8 $secondOutcomePath $orientJson
-        $implementedText = Invoke-ResolvedArgv -CommandArgs @('run', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
+        $implementedText = Invoke-ResolvedArgv -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
     }
     $implemented = $implementedText | ConvertFrom-Json
     Assert-True ($implemented.kind -eq 'implement') 'Outcome transport did not return Implement'
@@ -470,11 +523,13 @@ try {
     $sourceStart = (Invoke-ResolvedArgv -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
     Assert-True ($sourceStart.kind -eq 'orient') 'source-file start did not Orient'
     Assert-True ($sourceStart.source.kind -eq 'change_issue') 'source identity is missing'
-    Assert-True ($sourceStart.requirements.requirements_markdown -match 'initial Windows') 'accepted Requirements missing from Action'
+    Assert-True ($sourceStart.requirements.sections.Count -eq 5) 'source section catalog is incomplete'
+    $initialMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $sourceStart.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    Assert-True ($initialMaterial.section.markdown -match 'initial Windows') 'initial Requirements material is missing'
 
-    $sourceAmended = New-SourceEnvelope -RequirementText 'Keep the materially amended Windows requirement.' -UpdatedAt '2026-07-12T10:00:00Z'
+    $sourceAmended = New-SourceEnvelope -RequirementText 'Keep the materially amended Windows requirement.' -UpdatedAt '2026-07-12T10:00:00Z' -ParentRequirementsRevision $sourceStart.source.requirements_revision
     Write-Utf8 $sourcePath (($sourceAmended | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $candidate = (Invoke-ResolvedArgv -CommandArgs @('run', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
+    $candidate = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
     Assert-True ($candidate.state -eq 'paused') 'material source refresh did not pause'
     Assert-True ($candidate.budget_applied -eq $false) 'candidate creation applied replacement budget'
     Assert-True ($candidate.source_candidate.candidate_id.Length -gt 0) 'current candidate ID missing'
@@ -483,7 +538,8 @@ try {
     $adoptedText = Invoke-NextVariant -Next $candidate.next -VariantId 'adopt' -InputValues @{}
     $adopted = $adoptedText | ConvertFrom-Json
     Assert-True ($adopted.kind -eq 'orient') 'current-candidate adopt did not Orient'
-    Assert-True ($adopted.requirements.requirements_markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements'
+    $adoptedMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $adopted.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    Assert-True ($adoptedMaterial.section.markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements material'
 
     $status = (Invoke-ResolvedArgv -CommandArgs @('status', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-True (-not ($status.PSObject.Properties.Name -contains 'source_candidate')) 'candidate remained current after adopt'

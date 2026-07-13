@@ -33,12 +33,12 @@ slipway install --tool claude
 # Ad-hoc escape hatch: tiny/sensitive/urgent/offline/no-Issue choice.
 slipway run "レポートに CSV export を追加" --json
 
-# Issue-bound: trusted host が strict Change envelope を一度だけ取得。
+# Issue-bound: trusted host が strict manifest-addressed Source Bundle v2 を一度だけ取得。
 slipway run "bounded Change を実装" \
   --source-file C:\safe\temp\change-envelope.json --json
 ```
 
-CLI は model provider を呼ばず GitHub token を持ちません。Host は fetch の trusted attester ですが Issue content は untrusted data です。CLI は5 accepted Requirements sections と revisions を固定し、一度に1 Action を返します。Amendment は current candidate の明示選択、destructive work は exact-scope one-shot structured grant が必要で、natural-language yes は authority ではありません。
+CLI は model provider を呼ばず GitHub token を持ちません。Host は fetch の trusted attester ですが Issue content は untrusted data です。CLI は manifest が明示的に参照する chapter comments だけを検証し、exact payload を local material として固定し、一度に1 bounded Action catalog を返します。Host は structured `_machine material` operation で chapter を読みます。Amendment は current candidate の明示選択、destructive work は exact-scope one-shot structured grant が必要で、natural-language yes は authority ではありません。
 
 [Issue workflow](docs/ja/reference/issue-workflow.md)は marker、exact Level/Kind labels、self-containment、`gh >= 2.94`/official REST fallback、same-host transfer、100/50 limits、approved markers、partial/ambiguous reconciliation を説明します。
 
@@ -63,7 +63,7 @@ status       recoverable Run を表示
 stop         journal を残して停止
 ```
 
-Hidden versioned `run submit/answer/skip/resume` は[マシンプロトコル](docs/ja/reference/machine-protocol.md)を参照してください。`ended` は automatic Action queue が空であることだけを示し、correct/delivered/deployed/release-ready/no-findings を認定しません。
+Hidden versioned `_machine submit/answer/skip/resume/material` は[マシンプロトコル](docs/ja/reference/machine-protocol.md)を参照してください。`ended` は automatic Action queue が空であることだけを示し、correct/delivered/deployed/release-ready/no-findings を認定しません。
 
 ## Journal と privacy
 

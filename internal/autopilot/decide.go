@@ -27,17 +27,16 @@ func Decide(input TransitionInput) Transition {
 		}
 		return Transition{PauseReason: input.Outcome.Pause.Reason}
 	}
+	if input.CodeChanged && input.ReviewEnabled &&
+		(input.Kind == ActionOrient || input.Kind == ActionClarify || input.Kind == ActionImplement) {
+		return Transition{Next: ActionReview}
+	}
 	if len(input.Pending) > 0 {
 		return Transition{Next: input.Pending[0].Kind, Brief: input.Pending[0].Brief}
 	}
 
 	switch input.Kind {
-	case ActionOrient, ActionClarify:
-		return Transition{Next: ActionSummarize}
-	case ActionImplement:
-		if input.CodeChanged && input.ReviewEnabled {
-			return Transition{Next: ActionReview}
-		}
+	case ActionOrient, ActionClarify, ActionImplement:
 		return Transition{Next: ActionSummarize}
 	case ActionReview:
 		return Transition{Next: ActionSummarize}

@@ -29,16 +29,16 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 	specificFragments := map[string][]string{
 		"slipway-run": {
 			"`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`",
-			"accepted five Requirements sections", "Redact recognized credentials while preserving command identity",
+			"Source Bundle v2 envelope", "fetch exactly those comments", "overrides and discards that pending suggestion", "Redact recognized credentials while preserving command identity",
 		},
 		"slipway-propose": {
 			"exactly one `level:change`", "exactly one `level:objective`", "exactly one `kind:*`",
 			"official GitHub REST API", "same-host redirect or transfer", "100 sub-issues", "50 blocking",
-			"timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`", "public repository has no per-Issue private switch",
+			"timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`", "two confirmations", "second current confirmation", "public repository has no per-Issue private switch",
 		},
 		"slipway-decompose": {
 			"exactly one `level:objective`", "exactly one `level:change`", "official REST API",
-			"cross-host redirects", "100 sub-issues", "50 dependencies", "duplicate marker matches",
+			"cross-host redirects", "100 sub-issues", "50 dependencies", "two confirmed phases", "second current commit confirmation", "duplicate marker matches",
 			"`created`, `matched`, `failed`, or `ambiguous`", "public Issue has no private switch",
 		},
 	}

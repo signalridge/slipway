@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalridge.github.io/slipway/reference/source-envelope.schema.json",
+  "title": "Slipway Source Bundle v2 envelope",
+  "description": "Strict trusted-host observation containing an Issue body and, when its manifest is valid, exactly the referenced comments; an invalid head uses an empty comments array.",
+  "$ref": "#/$defs/rawSourceEnvelope",
+  "$defs": {
+    "sourceParent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "issue_id", "canonical_url"],
+      "properties": {
+        "repository_id": { "type": "string", "minLength": 1 },
+        "issue_id": { "type": "string", "minLength": 1 },
+        "canonical_url": { "type": "string", "format": "uri" }
+      }
+    },
+    "rawSourceComment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "database_id", "url", "updated_at", "author_id", "is_minimized", "body"],
+      "properties": {
+        "node_id": { "type": "string", "minLength": 1 },
+        "database_id": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "author_id": { "type": "string", "minLength": 1 },
+        "is_minimized": { "type": "boolean" },
+        "body": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rawSourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_version", "provider", "host", "repository_id", "issue_id", "issue_number",
+        "canonical_url", "updated_at", "fetched_at", "title", "body", "labels", "comments"
+      ],
+      "properties": {
+        "source_version": { "const": 2 },
+        "provider": { "const": "github" },
+        "host": { "const": "github.com" },
+        "repository_id": { "type": "string", "minLength": 1 },
+        "issue_id": { "type": "string", "minLength": 1 },
+        "issue_number": { "type": "integer", "minimum": 1 },
+        "canonical_url": { "type": "string", "format": "uri" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "title": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 },
+        "labels": { "type": "array", "maxItems": 100, "items": { "type": "string", "minLength": 1 } },
+        "parent": { "$ref": "#/$defs/sourceParent" },
+        "comments": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/rawSourceComment" }
+        }
+      }
+    },
+    "sourceManifestSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "role", "title", "comment_node_id", "comment_database_id", "body_sha256"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "comment_node_id": { "type": "string", "minLength": 1 },
+        "comment_database_id": { "type": "integer", "minimum": 1 },
+        "body_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "sourceManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_version", "profile", "sections"],
+      "properties": {
+        "manifest_version": { "const": 2 },
+        "profile": { "const": "change/v2" },
+        "parent_requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sections": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/sourceManifestSection" },
+          "allOf": [
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "outcome" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "requirements" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "acceptance_examples" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "constraints" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "non_goals" } } }, "minContains": 1 }
+          ]
+        }
+      }
+    }
+  }
+}

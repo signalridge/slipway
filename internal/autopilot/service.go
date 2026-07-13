@@ -111,6 +111,7 @@ type Run struct {
 	State                     RunState                   `json:"state"`
 	PauseReason               PauseReason                `json:"pause_reason,omitempty"`
 	ReviewEnabled             bool                       `json:"review_enabled"`
+	ReviewPending             bool                       `json:"review_pending"`
 	InitialBudget             int                        `json:"initial_budget"`
 	RemainingBudget           int                        `json:"remaining_budget"`
 	InitialGit                runstore.GitObservation    `json:"initial_git"`
@@ -134,6 +135,11 @@ type Run struct {
 	DestructiveGrant          *DestructiveAuthorization  `json:"destructive_grant,omitempty"`
 	CreatedAt                 time.Time                  `json:"created_at"`
 	UpdatedAt                 time.Time                  `json:"updated_at"`
+
+	// Rebuilt during journal replay so retired accepted comment identities remain
+	// immutable without adding another field to the public Run projection.
+	acceptedSourceComments    map[string]PinnedSourceSection
+	acceptedSourceDatabaseIDs map[int64]string
 }
 
 type Service struct {
@@ -223,10 +229,21 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 				Next:    startRunNext(workspace, goal, true),
 			}
 		}
+		if err := validateSourceMaterials(*pinnedSource, true); err != nil {
+			return Run{}, &ProtocolError{
+				Code:    "invalid_source",
+				Message: "invalid pinned source materials: " + err.Error(),
+				Next:    startRunNext(workspace, goal, true),
+			}
+		}
 	}
 	observation, err := runstore.ObserveGit(workspace)
 	if err != nil {
 		return Run{}, &ProtocolError{Code: "git_observation_failed", Message: err.Error(), Next: startRunNext(workspace, goal, pinnedSource != nil)}
+	}
+	materials := runstoreMaterials(pinnedSource)
+	if pinnedSource != nil {
+		pinnedSource.materials = nil
 	}
 	now := time.Now().UTC()
 	run := Run{
@@ -245,6 +262,7 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
+	recordAcceptedSourceComments(&run, run.PinnedSource)
 	if err := issueAction(&run, ActionOrient, "Investigate repository facts, relevant code, Git state, and build/test/lint conventions before deciding what to do."); err != nil {
 		return Run{}, err
 	}
@@ -255,7 +273,7 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 	if _, err := service.validateOpenWorkspace(); err != nil {
 		return Run{}, err
 	}
-	if err := service.store.Create(run.ID, event, run); err != nil {
+	if err := service.store.CreateWithMaterials(run.ID, event, run, materials); err != nil {
 		return Run{}, err
 	}
 	return run, nil
@@ -281,15 +299,24 @@ func (service *Service) Load(runID string) (Run, error) {
 }
 
 func (service *Service) List() ([]Run, error) {
+	if _, err := service.validateOpenWorkspace(); err != nil {
+		return nil, err
+	}
 	ids, err := service.store.ListIDs()
 	if err != nil {
 		return nil, err
 	}
 	runs := make([]Run, 0, len(ids))
 	for _, id := range ids {
-		run, loadErr := service.Load(id)
-		if loadErr != nil {
-			return nil, loadErr
+		var run Run
+		loadErr := service.store.Visit(id, func(event runstore.Event) error {
+			return applyRunEvent(&run, event)
+		})
+		if loadErr != nil || run.ID != id {
+			continue
+		}
+		if loadErr = service.validateRunWorkspace(run); loadErr != nil {
+			continue
 		}
 		runs = append(runs, run)
 	}
@@ -325,15 +352,15 @@ func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, er
 		if record != nil && record.Voided {
 			return nil, nil, protocolRunError(run, "stale_action", "action_id was voided by resume")
 		}
-		if run.State == RunStopped || run.State == RunEnded {
-			return nil, nil, protocolRunError(run, "run_not_active", "run is not accepting outcomes while "+string(run.State))
-		}
 		if record != nil && record.Outcome != nil {
 			if record.OutcomePayloadSHA256 == payloadSHA256 {
 				result = run
 				return nil, run, nil
 			}
 			return nil, nil, protocolRunError(run, "outcome_conflict", "this action already has a different outcome payload")
+		}
+		if run.State == RunStopped || run.State == RunEnded {
+			return nil, nil, protocolRunError(run, "run_not_active", "run is not accepting outcomes while "+string(run.State))
 		}
 		if run.State != RunActive {
 			return nil, nil, protocolRunError(run, "run_not_active", "run is not accepting outcomes while "+string(run.State))
@@ -563,48 +590,57 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 
 	var run Run
 	var result Run
-	err = service.store.UpdateStream(runID, func(event runstore.Event) error {
+	err = service.store.UpdateStreamWithMaterials(runID, func(event runstore.Event) error {
 		return applyRunEvent(&run, event)
-	}, func() ([]runstore.Event, any, error) {
+	}, func() (runstore.UpdateResult, error) {
 		if run.ID != runID {
-			return nil, nil, errors.New("run journal identity mismatch")
+			return runstore.UpdateResult{}, errors.New("run journal identity mismatch")
 		}
 		if err := service.validateRunWorkspace(run); err != nil {
-			return nil, nil, err
+			return runstore.UpdateResult{}, err
 		}
 
 		if run.State == RunEnded {
-			return nil, nil, protocolRunError(run, "run_already_ended", "ended run cannot be resumed")
+			return runstore.UpdateResult{}, protocolRunError(run, "run_already_ended", "ended run cannot be resumed")
 		}
 		if run.SourceCandidate == nil && normalized.RefreshedSource == nil && !normalized.UsePinnedSource && normalized.SourceChoice != "" && normalized.CandidateID != "" {
 			if run.LastSourceChoice != nil && run.LastSourceChoice.CandidateID == normalized.CandidateID {
 				if run.LastSourceChoice.Choice != normalized.SourceChoice {
-					return nil, nil, resumeProtocolError(run, "source_choice_conflict", "candidate_id was already resolved with a different source choice")
+					return runstore.UpdateResult{}, resumeProtocolError(run, "source_choice_conflict", "candidate_id was already resolved with a different source choice")
 				}
 				result = run
-				return nil, run, nil
+				return runstore.UpdateResult{Projection: run}, nil
 			}
 		}
 
+		materials := []runstore.Material(nil)
+		if normalized.RefreshedSource != nil && normalized.RefreshedSource.Snapshot != nil {
+			materials = runstoreMaterials(normalized.RefreshedSource.Snapshot)
+			normalized.RefreshedSource.Snapshot.materials = nil
+		}
 		before := runBeforeMutation(run)
 		eventType, mutated, resumeErr := resumeRun(&run, normalized)
 		if resumeErr != nil {
-			return nil, nil, resumeErr
+			return runstore.UpdateResult{}, resumeErr
 		}
 		if !mutated {
 			result = run
-			return nil, run, nil
+			return runstore.UpdateResult{Projection: run}, nil
 		}
 		if err := service.validateRunWorkspace(run); err != nil {
-			return nil, nil, err
+			return runstore.UpdateResult{}, err
 		}
 		run.UpdatedAt = time.Now().UTC()
 		event, eventErr := newRunEvent(eventType, before, run)
 		if eventErr != nil {
-			return nil, nil, eventErr
+			return runstore.UpdateResult{}, eventErr
 		}
 		result = run
-		return []runstore.Event{event}, run, nil
+		return runstore.UpdateResult{
+			Events:     []runstore.Event{event},
+			Projection: run,
+			Materials:  materials,
+		}, nil
 	})
 	return result, err
 }
@@ -709,8 +745,23 @@ func refreshIssueSource(run *Run, refreshed SourceCandidateInput, budget *int) (
 	}
 
 	projectionChanged := sourceProjectionChanged(current, refreshed)
-	projectedCurrent, refreshed := mergeRefreshedProjection(current, refreshed)
-	run.PinnedSource = clonePinnedSource(&projectedCurrent)
+	_, refreshed = mergeRefreshedProjection(current, refreshed)
+	if len(refreshed.URLAliases) > maxSourceURLAliases {
+		err := resumeProtocolError(
+			*run,
+			"source_alias_limit",
+			"source transfer history exceeds the URL alias limit; start a new run from the refreshed source",
+		)
+		err.Next = startRunNext(run.Workspace, run.Goal, true)
+		return "", false, err
+	}
+	if err := validateSourceCandidateInput(refreshed); err != nil {
+		return "", false, resumeProtocolError(
+			*run,
+			"invalid_source_candidate",
+			"merged refreshed source is invalid: "+err.Error(),
+		)
+	}
 
 	if !refreshed.Valid {
 		candidate := newSourceCandidate(refreshed)
@@ -727,7 +778,28 @@ func refreshIssueSource(run *Run, refreshed SourceCandidateInput, budget *int) (
 		return ResumeOperationSourceCandidate, true, nil
 	}
 
-	if refreshed.RequirementsRevision != current.RequirementsRevision {
+	if err := validateAcceptedSourceCommentHistory(*run, *refreshed.Snapshot); err != nil {
+		return "", false, resumeProtocolError(
+			*run,
+			"source_history_in_place_edit",
+			err.Error(),
+		)
+	}
+	if refreshed.Snapshot.ManifestRevision != current.ManifestRevision {
+		if refreshed.Snapshot.ParentRequirementsRevision != current.RequirementsRevision {
+			return "", false, resumeProtocolError(
+				*run,
+				"source_history_fork",
+				"amended source parent_requirements_revision does not match the pinned requirements revision",
+			)
+		}
+		if err := validateReplacementOnlyAmendment(current, *refreshed.Snapshot); err != nil {
+			return "", false, resumeProtocolError(
+				*run,
+				"source_history_in_place_edit",
+				err.Error(),
+			)
+		}
 		candidate := newSourceCandidate(refreshed)
 		run.SourceCandidate = &candidate
 		invalidateOutstandingResumeState(run)
@@ -740,6 +812,13 @@ func refreshIssueSource(run *Run, refreshed SourceCandidateInput, budget *int) (
 			CandidateID:   candidate.CandidateID,
 		}
 		return ResumeOperationSourceCandidate, true, nil
+	}
+	if refreshed.RequirementsRevision != current.RequirementsRevision {
+		return "", false, resumeProtocolError(
+			*run,
+			"source_integrity_mismatch",
+			"requirements revision changed without a new manifest revision",
+		)
 	}
 
 	run.PinnedSource = clonePinnedSource(refreshed.Snapshot)
@@ -773,9 +852,12 @@ func resolveSourceCandidate(run *Run, options ResumeOptions) (string, bool, erro
 	if options.SourceChoice == SourceChoiceAdopt {
 		oldRequirementsRevision := run.PinnedSource.RequirementsRevision
 		run.PinnedSource = clonePinnedSource(candidate.Snapshot)
-		markActiveAnswersSuperseded(run, oldRequirementsRevision, "requirements:"+run.PinnedSource.RequirementsRevision)
+		if run.PinnedSource.RequirementsRevision != oldRequirementsRevision {
+			markActiveAnswersSuperseded(run, oldRequirementsRevision, "requirements:"+run.PinnedSource.RequirementsRevision)
+		}
 		operation = ResumeOperationSourceAmended
 	}
+	recordAcceptedSourceComments(run, run.PinnedSource)
 	invalidateOutstandingResumeState(run)
 	run.SourceCandidate = nil
 	applyResumeBudget(run, options.Budget)
@@ -832,6 +914,300 @@ func cloneSourceCandidate(candidate SourceCandidate) SourceCandidate {
 	return candidate
 }
 
+func validateRunSourceTransition(eventType string, before, after Run) error {
+	if before.ID == "" {
+		if eventType != "run_started" {
+			return errors.New("new run requires the run_started event")
+		}
+		if after.SourceCandidate != nil || after.LastSourceChoice != nil {
+			return errors.New("new run cannot begin with source candidate state")
+		}
+		return nil
+	}
+	if before.PinnedSource == nil {
+		if after.PinnedSource != nil || after.SourceCandidate != nil || after.LastSourceChoice != nil {
+			return errors.New("ad-hoc run cannot acquire issue source state")
+		}
+		return nil
+	}
+	if after.PinnedSource == nil {
+		return errors.New("issue-bound run cannot clear its pinned source")
+	}
+	if err := validateSameSourceIssue(*before.PinnedSource, *after.PinnedSource); err != nil {
+		return err
+	}
+
+	switch {
+	case before.SourceCandidate == nil && after.SourceCandidate != nil:
+		if eventType != ResumeOperationSourceCandidate {
+			return errors.New("source candidate creation requires the source_candidate_created event")
+		}
+		if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) {
+			return errors.New("source candidate creation cannot mutate pinned source")
+		}
+		if err := validateCandidateLineage(before, *after.SourceCandidate); err != nil {
+			return err
+		}
+		if after.LastResumeResult == nil ||
+			after.LastResumeResult.Operation != ResumeOperationSourceCandidate ||
+			after.LastResumeResult.BudgetApplied ||
+			after.LastResumeResult.CandidateID != after.SourceCandidate.CandidateID {
+			return errors.New("source candidate creation requires a matching resume receipt")
+		}
+		if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+			return errors.New("source candidate creation cannot rewrite the prior choice receipt")
+		}
+		if after.State != RunPaused || after.PauseReason != PauseDecisionRequired ||
+			after.CurrentAction != nil || len(after.Actions) != len(before.Actions) {
+			return errors.New("source candidate creation must pause without issuing an action")
+		}
+		if len(after.PendingActions) != 0 || len(after.DecisionSuggestions) != 0 ||
+			after.PendingDestructiveRequest != nil || after.DestructiveGrant != nil {
+			return errors.New("source candidate creation must clear outstanding execution state")
+		}
+		if before.CurrentAction != nil {
+			record := findActionRecord(&after, before.CurrentAction.ActionID)
+			if record == nil || !record.Voided {
+				return errors.New("source candidate creation must void the outstanding action")
+			}
+		}
+		return nil
+	case before.SourceCandidate != nil && after.SourceCandidate != nil:
+		if !reflect.DeepEqual(before.SourceCandidate, after.SourceCandidate) ||
+			!reflect.DeepEqual(before.PinnedSource, after.PinnedSource) ||
+			!reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) ||
+			!reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) {
+			return errors.New("pending source candidate is immutable until resolved")
+		}
+		if after.CurrentAction != nil || len(after.Actions) != len(before.Actions) {
+			return errors.New("pending source candidate cannot issue an action before resolution")
+		}
+		return nil
+	case before.SourceCandidate != nil && after.SourceCandidate == nil:
+		return validateCandidateResolution(eventType, before, after)
+	}
+
+	if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+		return errors.New("source choice receipt requires a current candidate")
+	}
+	pinnedChanged := !reflect.DeepEqual(before.PinnedSource, after.PinnedSource)
+	switch eventType {
+	case ResumeOperationSourceRefreshed:
+		if before.PinnedSource.ManifestRevision != after.PinnedSource.ManifestRevision ||
+			before.PinnedSource.RequirementsRevision != after.PinnedSource.RequirementsRevision {
+			return errors.New("pinned manifest can change only by adopting its current candidate")
+		}
+		if err := validateAcceptedSourceCommentHistory(before, *after.PinnedSource); err != nil {
+			return err
+		}
+		if err := validateSourceAliasTransition(*before.PinnedSource, *after.PinnedSource); err != nil {
+			return err
+		}
+		if after.LastResumeResult == nil ||
+			after.LastResumeResult.Operation != ResumeOperationSourceRefreshed ||
+			!after.LastResumeResult.BudgetApplied ||
+			after.LastResumeResult.CandidateID != "" {
+			return errors.New("source refresh requires a matching resume receipt")
+		}
+		return validateFreshSourceOrient(before, after)
+	case ResumeOperationSourceRefreshSkipped:
+		if pinnedChanged {
+			return errors.New("skipping source refresh cannot mutate pinned source")
+		}
+		if after.LastResumeResult == nil ||
+			after.LastResumeResult.Operation != ResumeOperationSourceRefreshSkipped ||
+			!after.LastResumeResult.BudgetApplied ||
+			after.LastResumeResult.CandidateID != "" {
+			return errors.New("skipped source refresh requires a matching resume receipt")
+		}
+		return validateFreshSourceOrient(before, after)
+	default:
+		if pinnedChanged {
+			if before.PinnedSource.ManifestRevision != after.PinnedSource.ManifestRevision ||
+				before.PinnedSource.RequirementsRevision != after.PinnedSource.RequirementsRevision {
+				return errors.New("pinned manifest can change only by adopting its current candidate")
+			}
+			return errors.New("pinned source projection can change only in a source_refreshed event")
+		}
+		if !reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) {
+			return errors.New("source resume receipt requires its matching source event")
+		}
+	}
+	return nil
+}
+
+func validateSameSourceIssue(current, next PinnedSource) error {
+	if current.Provider != next.Provider || current.Host != next.Host || current.IssueID != next.IssueID {
+		return errors.New("source transition changed provider, host, or issue identity")
+	}
+	return nil
+}
+
+func validateCandidateLineage(run Run, candidate SourceCandidate) error {
+	current := *run.PinnedSource
+	if candidate.Provider != current.Provider || candidate.Host != current.Host || candidate.IssueID != current.IssueID {
+		return errors.New("source candidate does not belong to the pinned issue")
+	}
+	if !candidate.Valid {
+		return nil
+	}
+	if candidate.Snapshot == nil {
+		return errors.New("valid source candidate has no snapshot")
+	}
+	if candidate.Snapshot.ManifestRevision == current.ManifestRevision {
+		return errors.New("valid source candidate must publish a new manifest head")
+	}
+	if candidate.Snapshot.ParentRequirementsRevision != current.RequirementsRevision {
+		return errors.New("source candidate parent does not match pinned requirements")
+	}
+	if err := validateSourceAliasTransition(current, *candidate.Snapshot); err != nil {
+		return err
+	}
+	if err := validateReplacementOnlyAmendment(current, *candidate.Snapshot); err != nil {
+		return err
+	}
+	if err := validateAcceptedSourceCommentHistory(run, *candidate.Snapshot); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCandidateResolution(eventType string, before, after Run) error {
+	candidate := *before.SourceCandidate
+	receipt := after.LastSourceChoice
+	if receipt == nil || reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+		return errors.New("source candidate resolution requires a fresh choice receipt")
+	}
+	if receipt.CandidateID != candidate.CandidateID {
+		return errors.New("source choice receipt does not match the resolved candidate")
+	}
+	if after.LastResumeResult == nil ||
+		!after.LastResumeResult.BudgetApplied ||
+		after.LastResumeResult.CandidateID != candidate.CandidateID {
+		return errors.New("source candidate resolution requires a matching resume receipt")
+	}
+	if after.CurrentAction == nil || receipt.ResultingActionID != after.CurrentAction.ActionID {
+		return errors.New("source choice receipt does not match the resulting action")
+	}
+	if err := validateFreshSourceOrient(before, after); err != nil {
+		return err
+	}
+	switch receipt.Choice {
+	case SourceChoicePinned:
+		if eventType != ResumeOperationSourcePinned {
+			return errors.New("pinned source choice requires the source_pinned event")
+		}
+		if after.LastResumeResult.Operation != ResumeOperationSourcePinned {
+			return errors.New("pinned source choice has the wrong resume operation")
+		}
+		if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) {
+			return errors.New("pinned source choice mutated the pinned source")
+		}
+	case SourceChoiceAdopt:
+		if eventType != ResumeOperationSourceAmended {
+			return errors.New("adopted source choice requires the source_amended event")
+		}
+		if after.LastResumeResult.Operation != ResumeOperationSourceAmended {
+			return errors.New("adopted source choice has the wrong resume operation")
+		}
+		if !candidate.Valid || candidate.Snapshot == nil {
+			return errors.New("invalid source candidate cannot be adopted")
+		}
+		if !reflect.DeepEqual(candidate.Snapshot, after.PinnedSource) {
+			return errors.New("adopted pinned source does not equal the chosen candidate")
+		}
+		if err := validateCandidateLineage(before, candidate); err != nil {
+			return err
+		}
+	default:
+		return errors.New("source choice receipt has an invalid choice")
+	}
+	return nil
+}
+
+func validateFreshSourceOrient(before, after Run) error {
+	if after.State != RunActive || after.PauseReason != "" || after.CurrentAction == nil ||
+		after.CurrentAction.Kind != ActionOrient {
+		return errors.New("source resume must issue a fresh active Orient action")
+	}
+	if len(after.Actions) != len(before.Actions)+1 {
+		return errors.New("source resume must append exactly one fresh Orient action")
+	}
+	record := after.Actions[len(before.Actions)]
+	if !reflect.DeepEqual(record.Action, *after.CurrentAction) || record.Outcome != nil ||
+		record.OutcomePayloadSHA256 != "" || record.Voided || record.Skipped {
+		return errors.New("source resume resulting action is not a fresh pending action")
+	}
+	if before.CurrentAction != nil {
+		prior := findActionRecord(&after, before.CurrentAction.ActionID)
+		if prior == nil || !prior.Voided {
+			return errors.New("source resume must void the outstanding action")
+		}
+	}
+	if len(after.PendingActions) != 0 || len(after.DecisionSuggestions) != 0 ||
+		after.PendingDestructiveRequest != nil || after.DestructiveGrant != nil {
+		return errors.New("source resume must clear outstanding execution state")
+	}
+	return nil
+}
+
+func validateAcceptedSourceCommentHistory(run Run, source PinnedSource) error {
+	if run.acceptedSourceComments == nil || run.acceptedSourceDatabaseIDs == nil {
+		recordAcceptedSourceComments(&run, run.PinnedSource)
+	}
+	for _, section := range source.Sections {
+		nodeID := section.Provenance.CommentNodeID
+		databaseID := section.Provenance.CommentDatabaseID
+		if prior, ok := run.acceptedSourceComments[nodeID]; ok {
+			if prior.Provenance.CommentDatabaseID != databaseID {
+				return fmt.Errorf(
+					"accepted comment node %q was rebound from database id %d to %d",
+					nodeID,
+					prior.Provenance.CommentDatabaseID,
+					databaseID,
+				)
+			}
+			if !sameAcceptedSection(prior, section) {
+				return fmt.Errorf(
+					"accepted comment node %q was changed in place; publish a replacement comment",
+					nodeID,
+				)
+			}
+		}
+		if priorNodeID, ok := run.acceptedSourceDatabaseIDs[databaseID]; ok && priorNodeID != nodeID {
+			return fmt.Errorf(
+				"comment database id %d was rebound from node %q to %q",
+				databaseID,
+				priorNodeID,
+				nodeID,
+			)
+		}
+	}
+	return nil
+}
+
+func recordAcceptedSourceComments(run *Run, source *PinnedSource) {
+	if source == nil {
+		return
+	}
+	if run.acceptedSourceComments == nil {
+		run.acceptedSourceComments = make(map[string]PinnedSourceSection)
+	}
+	if run.acceptedSourceDatabaseIDs == nil {
+		run.acceptedSourceDatabaseIDs = make(map[int64]string)
+	}
+	for _, section := range source.Sections {
+		nodeID := section.Provenance.CommentNodeID
+		databaseID := section.Provenance.CommentDatabaseID
+		if _, exists := run.acceptedSourceComments[nodeID]; !exists {
+			run.acceptedSourceComments[nodeID] = section
+		}
+		if _, exists := run.acceptedSourceDatabaseIDs[databaseID]; !exists {
+			run.acceptedSourceDatabaseIDs[databaseID] = nodeID
+		}
+	}
+}
+
 func sourceProjectionChanged(current PinnedSource, refreshed SourceCandidateInput) bool {
 	return current.RepositoryID != refreshed.RepositoryID ||
 		current.IssueNumber != refreshed.IssueNumber ||
@@ -840,7 +1216,7 @@ func sourceProjectionChanged(current PinnedSource, refreshed SourceCandidateInpu
 }
 
 func mergeRefreshedProjection(current PinnedSource, refreshed SourceCandidateInput) (PinnedSource, SourceCandidateInput) {
-	aliases := append([]string(nil), current.URLAliases...)
+	aliases := append(make([]string, 0, len(current.URLAliases)+1), current.URLAliases...)
 	if current.CanonicalURL != refreshed.CanonicalURL {
 		aliases = appendUniqueString(aliases, current.CanonicalURL)
 	}
@@ -856,16 +1232,16 @@ func mergeRefreshedProjection(current PinnedSource, refreshed SourceCandidateInp
 	projected.RepositoryID = refreshed.RepositoryID
 	projected.IssueNumber = refreshed.IssueNumber
 	projected.CanonicalURL = refreshed.CanonicalURL
-	projected.URLAliases = append([]string(nil), aliases...)
+	projected.URLAliases = append(make([]string, 0, len(aliases)), aliases...)
 	projected.Parent = cloneSourceParent(refreshed.Parent)
 
 	refreshed = cloneSourceCandidateInput(refreshed)
-	refreshed.URLAliases = append([]string(nil), aliases...)
+	refreshed.URLAliases = append(make([]string, 0, len(aliases)), aliases...)
 	if refreshed.Snapshot != nil {
 		refreshed.Snapshot.RepositoryID = refreshed.RepositoryID
 		refreshed.Snapshot.IssueNumber = refreshed.IssueNumber
 		refreshed.Snapshot.CanonicalURL = refreshed.CanonicalURL
-		refreshed.Snapshot.URLAliases = append([]string(nil), aliases...)
+		refreshed.Snapshot.URLAliases = append(make([]string, 0, len(aliases)), aliases...)
 		refreshed.Snapshot.Parent = cloneSourceParent(refreshed.Parent)
 	}
 	return projected, refreshed
@@ -878,6 +1254,23 @@ func appendUniqueString(values []string, value string) []string {
 		}
 	}
 	return append(values, value)
+}
+
+func validateSourceAliasTransition(current, next PinnedSource) error {
+	expected := append(make([]string, 0, len(current.URLAliases)+1), current.URLAliases...)
+	if current.CanonicalURL != next.CanonicalURL {
+		expected = appendUniqueString(expected, current.CanonicalURL)
+	}
+	filtered := expected[:0]
+	for _, alias := range expected {
+		if alias != next.CanonicalURL {
+			filtered = append(filtered, alias)
+		}
+	}
+	if !stringSlicesEqual(filtered, next.URLAliases) {
+		return errors.New("source refresh rewrote URL alias history")
+	}
+	return nil
 }
 
 func invalidateOutstandingResumeState(run *Run) {
@@ -956,6 +1349,9 @@ func acceptOutcome(run *Run, outcome Outcome, payloadSHA256 string) error {
 	}
 	clearDestructiveState(run)
 	if outcome.Status == OutcomeNeedsInput {
+		if !observeGitAfterAction(run, action.Kind, outcome) {
+			return nil
+		}
 		run.State = RunPaused
 		run.PauseReason = outcome.Pause.Reason
 		if outcome.Pause.Reason == PauseDestructiveConfirm {
@@ -969,30 +1365,28 @@ func acceptOutcome(run *Run, outcome Outcome, payloadSHA256 string) error {
 	}
 	run.PendingActions = append(run.PendingActions, outcome.SuggestedActions...)
 	run.CurrentAction = nil
+	if !observeGitAfterAction(run, action.Kind, outcome) {
+		return nil
+	}
 	return transitionFrom(run, action.Kind, outcome)
 }
 
 func transitionFrom(run *Run, kind ActionKind, outcome Outcome) error {
-	changed := false
-	if kind == ActionImplement {
-		current, err := runstore.ObserveGit(run.Workspace)
-		if err != nil {
-			clearDestructiveState(run)
-			run.State = RunPaused
-			run.PauseReason = PauseEnvironmentUnavailable
-			run.KnownIssues = append(run.KnownIssues, "Git observation failed: "+err.Error())
-			return nil
-		}
-		changed = recordGitObservation(run, current)
-		recordImplementationDiscrepancy(run, outcome, changed)
+	if kind == ActionReview {
+		run.ReviewPending = false
 	}
 	transition := Decide(TransitionInput{
 		Kind:          kind,
 		Outcome:       outcome,
-		CodeChanged:   changed,
-		ReviewEnabled: run.ReviewEnabled && !reviewAlreadyReported(*run),
+		CodeChanged:   run.ReviewPending,
+		ReviewEnabled: run.ReviewEnabled,
 		Pending:       run.PendingActions,
 	})
+	if transition.Next == ActionReview && run.ReviewPending {
+		// A newly observed revision is a safety override, not a detour through a
+		// host-selected queue. Review it, then follow the normal Summary route.
+		run.PendingActions = nil
+	}
 	if transition.PauseReason != "" {
 		clearDestructiveState(run)
 		run.State = RunPaused
@@ -1024,6 +1418,30 @@ const (
 	observedSinceStart     = "observed_since_start: the current Git observation differs from the run-start snapshot."
 	attributionUncertainty = "attribution_uncertainty: concurrent user edits, another Run, or tools may have contributed to the observed difference."
 )
+
+func observeGitAfterAction(run *Run, kind ActionKind, outcome Outcome) bool {
+	if kind != ActionOrient && kind != ActionClarify && kind != ActionImplement {
+		return true
+	}
+	previous := cloneGitObservation(run.CurrentGit)
+	current, err := runstore.ObserveGit(run.Workspace)
+	if err != nil {
+		clearDestructiveState(run)
+		run.State = RunPaused
+		run.PauseReason = PauseEnvironmentUnavailable
+		run.KnownIssues = append(run.KnownIssues, "Git observation failed: "+err.Error())
+		return false
+	}
+	changedSincePrevious := current.ChangedFrom(previous)
+	changedSinceStart := recordGitObservation(run, current)
+	if run.ReviewEnabled && changedSincePrevious {
+		run.ReviewPending = changedSinceStart
+	}
+	if kind == ActionImplement {
+		recordImplementationDiscrepancy(run, outcome, changedSinceStart)
+	}
+	return true
+}
 
 func recordGitObservation(run *Run, current runstore.GitObservation) bool {
 	run.CurrentGit = cloneGitObservation(current)
@@ -1100,14 +1518,15 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 			CanonicalURL:         pinned.CanonicalURL,
 			IssueID:              pinned.IssueID,
 			SourceRevision:       pinned.SourceRevision,
+			ManifestRevision:     pinned.ManifestRevision,
 			RequirementsRevision: pinned.RequirementsRevision,
 		}
-		requirements := pinned.AcceptedRequirements
+		requirements := actionRequirements(run.Workspace, action.RunID, action.ActionID, pinned)
 		action.Requirements = &requirements
 	}
 	if err := action.Validate(); err != nil {
 		code := "invalid_action"
-		if strings.Contains(err.Error(), "exceeds") {
+		if strings.Contains(err.Error(), "encoded action exceeds") {
 			code = "action_too_large"
 		}
 		clearDestructiveState(run)
@@ -1125,6 +1544,55 @@ func issueAction(run *Run, kind ActionKind, brief string) error {
 	run.Actions = append(run.Actions, ActionRecord{Action: action})
 	run.CurrentAction = &action
 	return nil
+}
+
+func actionRequirements(workspace, runID, actionID string, source PinnedSource) ActionRequirements {
+	sections := make([]ActionRequirementSection, 0, len(source.Sections))
+	keys := make([]string, 0, len(source.Sections))
+	for _, section := range source.Sections {
+		sections = append(sections, ActionRequirementSection{
+			Key:             section.Key,
+			Role:            section.Role,
+			Title:           section.Title,
+			SectionRevision: section.SectionRevision,
+			MaterialSHA256:  section.MaterialSHA256,
+			Bytes:           section.Bytes,
+		})
+		keys = append(keys, section.Key)
+	}
+	return ActionRequirements{
+		RequirementsRevision: source.RequirementsRevision,
+		Sections:             sections,
+		RequiredForAction:    append([]string(nil), keys...),
+		Reader: ActionMaterialReader{
+			Operation: "read_material",
+			BaseArgv: []string{
+				"slipway", "_machine", "material", "--root", workspace,
+				"--run", runID, "--action", actionID,
+			},
+			Input: ActionMaterialInput{
+				Name:     "section",
+				Type:     "enum",
+				Flag:     "--section",
+				Required: true,
+				Choices:  append([]string(nil), keys...),
+			},
+		},
+	}
+}
+
+func runstoreMaterials(source *PinnedSource) []runstore.Material {
+	if source == nil || len(source.materials) == 0 {
+		return nil
+	}
+	materials := make([]runstore.Material, len(source.materials))
+	for index, material := range source.materials {
+		materials[index] = runstore.Material{
+			Digest: material.Digest,
+			Data:   append([]byte(nil), material.Data...),
+		}
+	}
+	return materials
 }
 
 func defaultBrief(kind ActionKind) string {
@@ -1224,7 +1692,7 @@ func buildContext(run Run) (string, error) {
 
 	outcomes := make([]*contextCandidate, 0, len(run.Actions))
 	for _, record := range run.Actions {
-		if record.Outcome == nil {
+		if record.Outcome == nil || record.Voided {
 			continue
 		}
 		item := renderOutcomeContextItem(record)
@@ -1503,6 +1971,18 @@ func runBeforeMutation(run Run) Run {
 		result := *run.LastResumeResult
 		run.LastResumeResult = &result
 	}
+	if acceptedSourceComments := run.acceptedSourceComments; acceptedSourceComments != nil {
+		run.acceptedSourceComments = make(map[string]PinnedSourceSection, len(acceptedSourceComments))
+		for nodeID, section := range acceptedSourceComments {
+			run.acceptedSourceComments[nodeID] = section
+		}
+	}
+	if acceptedSourceDatabaseIDs := run.acceptedSourceDatabaseIDs; acceptedSourceDatabaseIDs != nil {
+		run.acceptedSourceDatabaseIDs = make(map[int64]string, len(acceptedSourceDatabaseIDs))
+		for databaseID, nodeID := range acceptedSourceDatabaseIDs {
+			run.acceptedSourceDatabaseIDs[databaseID] = nodeID
+		}
+	}
 	return run
 }
 
@@ -1513,18 +1993,6 @@ func findActionRecord(run *Run, actionID string) *ActionRecord {
 		}
 	}
 	return nil
-}
-
-func reviewAlreadyReported(run Run) bool {
-	for _, record := range run.Actions {
-		if record.Action.Kind != ActionReview || record.Voided {
-			continue
-		}
-		if record.Outcome != nil || record.Skipped {
-			return true
-		}
-	}
-	return false
 }
 
 func outcomePayloadSHA256(outcome Outcome) (string, error) {
@@ -1651,7 +2119,52 @@ func validateDestructiveGrant(authorization DestructiveAuthorization, request De
 	return nil
 }
 
+func validateRunResumeReceipt(run Run) error {
+	result := run.LastResumeResult
+	if result == nil {
+		return nil
+	}
+
+	switch result.Operation {
+	case ResumeOperationAdHoc:
+		if !result.BudgetApplied || result.CandidateID != "" || run.PinnedSource != nil {
+			return errors.New("ad-hoc resume receipt is inconsistent")
+		}
+	case ResumeOperationSourceRefreshed, ResumeOperationSourceRefreshSkipped:
+		if !result.BudgetApplied || result.CandidateID != "" || run.PinnedSource == nil {
+			return errors.New("source refresh receipt is inconsistent")
+		}
+	case ResumeOperationSourceCandidate:
+		if result.BudgetApplied || result.CandidateID == "" || run.SourceCandidate == nil ||
+			run.SourceCandidate.CandidateID != result.CandidateID {
+			return errors.New("source candidate receipt is inconsistent")
+		}
+	case ResumeOperationSourceAmended:
+		if !result.BudgetApplied || result.CandidateID == "" || run.SourceCandidate != nil ||
+			run.LastSourceChoice == nil || run.LastSourceChoice.Choice != SourceChoiceAdopt ||
+			run.LastSourceChoice.CandidateID != result.CandidateID {
+			return errors.New("source amendment receipt is inconsistent")
+		}
+	case ResumeOperationSourcePinned:
+		if !result.BudgetApplied || run.PinnedSource == nil {
+			return errors.New("pinned source receipt is inconsistent")
+		}
+		if result.CandidateID != "" &&
+			(run.SourceCandidate != nil || run.LastSourceChoice == nil ||
+				run.LastSourceChoice.Choice != SourceChoicePinned ||
+				run.LastSourceChoice.CandidateID != result.CandidateID) {
+			return errors.New("pinned candidate receipt is inconsistent")
+		}
+	default:
+		return fmt.Errorf("resume receipt has unknown operation %q", result.Operation)
+	}
+	return nil
+}
+
 func validateRunReceipts(run Run) error {
+	if err := validateRunResumeReceipt(run); err != nil {
+		return err
+	}
 	answerActions := make(map[string]struct{}, len(run.Answers))
 	for index, answer := range run.Answers {
 		if strings.TrimSpace(answer.ActionID) == "" || !validSHA256(answer.PayloadSHA256) || answer.At.IsZero() {
@@ -1689,8 +2202,59 @@ func validateRunReceipts(run Run) error {
 	return nil
 }
 
+func validateCurrentActionState(run Run) error {
+	if run.CurrentAction == nil {
+		return nil
+	}
+	if err := run.CurrentAction.Validate(); err != nil {
+		return fmt.Errorf("current action is invalid: %w", err)
+	}
+	record := findActionRecord(&run, run.CurrentAction.ActionID)
+	if record == nil || !reflect.DeepEqual(record.Action, *run.CurrentAction) {
+		return errors.New("current action does not match its run history record")
+	}
+	if record.Voided || record.Skipped {
+		return errors.New("current action cannot reference a voided or skipped record")
+	}
+	if record.Outcome != nil && record.Outcome.Status != OutcomeNeedsInput {
+		return errors.New("current action cannot reference a completed action record")
+	}
+	if run.PinnedSource == nil {
+		if run.CurrentAction.Source != nil || run.CurrentAction.Requirements != nil {
+			return errors.New("ad-hoc current action cannot carry issue source")
+		}
+		return nil
+	}
+
+	expectedSource := ActionSource{
+		Kind:                 ActionSourceChangeIssue,
+		CanonicalURL:         run.PinnedSource.CanonicalURL,
+		IssueID:              run.PinnedSource.IssueID,
+		SourceRevision:       run.PinnedSource.SourceRevision,
+		ManifestRevision:     run.PinnedSource.ManifestRevision,
+		RequirementsRevision: run.PinnedSource.RequirementsRevision,
+	}
+	if run.CurrentAction.Source == nil || !reflect.DeepEqual(*run.CurrentAction.Source, expectedSource) {
+		return errors.New("current action source does not match pinned source")
+	}
+	expectedRequirements := actionRequirements(
+		run.Workspace,
+		run.CurrentAction.RunID,
+		run.CurrentAction.ActionID,
+		*run.PinnedSource,
+	)
+	if run.CurrentAction.Requirements == nil ||
+		!reflect.DeepEqual(*run.CurrentAction.Requirements, expectedRequirements) {
+		return errors.New("current action requirements do not match pinned source")
+	}
+	return nil
+}
+
 func validateRunDestructiveState(run Run) error {
 	if err := validateRunReceipts(run); err != nil {
+		return err
+	}
+	if err := validateCurrentActionState(run); err != nil {
 		return err
 	}
 	if run.PendingDestructiveRequest == nil && run.DestructiveGrant != nil {
@@ -1736,6 +2300,7 @@ func validateRunDestructiveState(run Run) error {
 func transitionAfterSkip(run *Run, kind ActionKind) error {
 	switch kind {
 	case ActionReview:
+		run.ReviewPending = false
 		return issueAction(run, ActionSummarize, "Summarize the run after the user skipped advisory Review.")
 	case ActionSummarize:
 		return endAfterSummarySkip(run)
@@ -1747,8 +2312,14 @@ func transitionAfterSkip(run *Run, kind ActionKind) error {
 			run.KnownIssues = append(run.KnownIssues, "Git observation failed after action skip: "+err.Error())
 			return nil
 		}
-		changed := recordGitObservation(run, current)
-		if changed && run.ReviewEnabled && !reviewAlreadyReported(*run) {
+		previous := cloneGitObservation(run.CurrentGit)
+		changedSincePrevious := current.ChangedFrom(previous)
+		changedSinceStart := recordGitObservation(run, current)
+		if run.ReviewEnabled && changedSincePrevious {
+			run.ReviewPending = changedSinceStart
+		}
+		if run.ReviewPending {
+			run.PendingActions = nil
 			return issueAction(run, ActionReview, "Review the complete observed start-to-current Git difference after the prior Action was skipped; report findings only.")
 		}
 		return issueAction(run, ActionSummarize, "Summarize observed facts after the prior Action was skipped.")

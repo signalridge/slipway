@@ -10,7 +10,7 @@ Start a run that produces a small code diff and reaches `review`.
 
 ## Expected observations
 
-- The host invokes `slipway run skip` for the current review Action without requesting a reason.
+- The host invokes `slipway _machine skip` for the current review Action without requesting a reason.
 - The next Action is `summarize` or the run ends after summary submission.
 - The report states that review was skipped.
 

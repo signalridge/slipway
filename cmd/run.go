@@ -33,7 +33,7 @@ func makeRunCmd() *cobra.Command {
 	var jsonOutput bool
 	command := &cobra.Command{
 		Use:   "run <goal>",
-		Short: "Start or continue a user-controlled soft-autopilot run",
+		Short: "Start a user-controlled soft-autopilot run",
 		Example: "  slipway run \"<goal>\" --budget 8 --json\n" +
 			"  slipway run \"<bounded goal>\" --source-file FILE --budget 8 --json",
 		Args: cobra.ExactArgs(1),
@@ -82,12 +82,6 @@ func makeRunCmd() *cobra.Command {
 	command.Flags().BoolVar(&noReview, "no-review", false, "omit the default advisory review")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "emit machine-protocol JSON")
 	command.PersistentFlags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")
-	command.AddCommand(
-		makeRunSubmitCmd(&root),
-		makeRunAnswerCmd(&root),
-		makeRunSkipCmd(&root),
-		makeRunResumeCmd(&root),
-	)
 	return command
 }
 
@@ -213,10 +207,10 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 	command := &cobra.Command{
 		Use:    "resume <run-id>",
 		Hidden: true,
-		Example: "  slipway run resume RUN [--budget N]\n" +
-			"  slipway run resume RUN --source-file FILE [--budget N]\n" +
-			"  slipway run resume RUN --use-pinned-source [--budget N]\n" +
-			"  slipway run resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
+		Example: "  slipway _machine resume RUN [--budget N]\n" +
+			"  slipway _machine resume RUN --source-file FILE [--budget N]\n" +
+			"  slipway _machine resume RUN --use-pinned-source [--budget N]\n" +
+			"  slipway _machine resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			service, err := openAutopilot(*root)

@@ -1,6 +1,6 @@
 # Machine protocol
 
-Contract version: **1**. The normative JSON Schema is [machine-protocol.schema.json](machine-protocol.schema.json).
+Contract version: **2**. The normative schemas are [machine-protocol.schema.json](machine-protocol.schema.json) and [source-envelope.schema.json](source-envelope.schema.json). The source model is recorded in [ADR-0001](../decisions/0001-source-bundle-v2.md).
 
 The AI coding host executes Actions; Slipway schedules them, observes Git independently, and stores recovery history. Unknown contract versions and unknown or duplicate JSON fields are rejected.
 
@@ -10,22 +10,26 @@ The AI coding host executes Actions; Slipway schedules them, observes Git indepe
 slipway run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json
 ```
 
-`--source-file` is optional for a new Run. When present, it must be a strict raw GitHub Change envelope no larger than 256 KiB. Slipway opens the regular, no-follow file once, closes it before parsing, validates identity before classifying the body, and persists only `pinned_source`: identity/projection fields, source and requirements revisions, and the exact five accepted requirement sections. It never journals the raw body, labels, timestamps, comments, or source-file path. A new Run rejects an invalid marker or missing accepted section without creating a journal.
+`--source-file` is optional for a new Run. When present, it must be a strict Source Bundle v2 envelope no larger than 16 MiB. The Issue body starts with the exact `change/v2` marker followed by one strict `slipway-manifest` JSON fence. Its ordered manifest explicitly binds 5–64 section keys and roles to GitHub comment node IDs and exact body digests. For a valid manifest, the envelope contains exactly those referenced comments; Slipway never scans ordinary discussion comments or treats comment order as authority. A refreshed head without a parseable v2 manifest uses an initialized empty `comments` array so the core can classify the invalid candidate without collecting unrelated discussion.
 
-Without `--source-file`, the Run is ad-hoc. Ad-hoc Actions omit both `source` and `requirements`. Every issue-bound Action carries the current canonical URL, issue ID, both revisions, and a fresh copy of all five accepted sections.
+Each referenced comment starts with `<!-- slipway-section:v1 key=KEY -->`. The normalized chapter after that marker is limited to 256 KiB, and the complete bundle to 4 MiB. Missing, unexpected, minimized, edited, duplicate, or hash-mismatched comments fail closed. Database IDs, URLs, authors, and observation times are provenance; the GraphQL comment node ID is canonical remote identity. The manifest revision commits the node/database-ID binding, while the requirements revision intentionally excludes provenance.
+
+Slipway opens the regular no-follow file once and closes it before parsing. A raw observation contains at most 100 labels; a pinned source retains at most 64 prior transfer URL aliases, after which refresh returns a structured `start-with-source` recovery for a new Run. Before the first journal event that refers to a chapter, its exact normalized bytes are fsynced to the Run's private content-addressed material store. Journals, status, candidates, and Actions retain only catalogs, provenance, byte counts, and domain-separated revisions—not Markdown, the raw Issue body, labels, or source-file path. Replay derives an accepted-comment identity ledger from every pinned manifest head: retiring a comment does not forget its node/database identity, and reintroducing that identity must match the originally accepted section. A Run can therefore resume and read its pinned chapters without GitHub or the temporary source file.
+
+Without `--source-file`, the Run is ad-hoc. Ad-hoc Actions omit both `source` and `requirements`. Issue-bound Actions carry the source, manifest, and requirements revisions plus a bounded chapter catalog and a structured local reader. They never copy chapter Markdown into the Action.
 
 ## Resume and source amendments
 
 ```text
-slipway run resume RUN [--budget N]
-slipway run resume RUN (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine resume RUN [--budget N]
+slipway _machine resume RUN (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
 ```
 
 The first form is ad-hoc only and rejects every source option. An issue-bound Run with no current candidate requires exactly one of a freshly imported envelope or `--use-pinned-source`; omission never means “unchanged.” A Run with a current candidate rejects refresh/pinned modes and requires an exact `--source-choice` plus `--candidate` pair. An invalid candidate permits only `pinned`.
 
-Refresh validates provider/host and issue node ID before any mutation. A different issue is rejected and requires a new Run. Repository, number, or URL transfer updates projection and records the prior canonical URL once while still comparing the marker and requirements. Identical, projection-only, and non-material refreshes void the outstanding Action/queue/authorization and issue a fresh Orient. A requirements change or invalid body stores a run-local, path-free candidate, voids outstanding work, and pauses with `decision_required` without applying the requested budget.
+Refresh validates provider/host and issue node ID before any mutation. A different issue is rejected and requires a new Run. Repository, number, or URL transfer updates projection and records the prior canonical URL once while still comparing the marker and requirements. A refresh whose manifest revision is unchanged—including identical, projection-only, and other non-material drift—voids the outstanding Action/queue/authorization and issues a fresh Orient. Any new manifest revision, including a content-identical replacement, or an invalid body stores a run-local, path-free candidate, voids outstanding work, and pauses with `decision_required` without applying the requested budget.
 
-`pinned` keeps the accepted snapshot; `adopt` installs a valid candidate and removes old requirements-derived answers from active Action context while retaining their records. The choice receipt makes an identical `(candidate_id, choice)` retry a no-op; another choice or stale ID conflicts. `--use-pinned-source` records `source_refresh_skipped` and never claims the source was unchanged.
+`pinned` keeps the accepted snapshot; `adopt` installs a valid candidate. Only when adoption changes `requirements_revision` are answers derived from the old revision removed from active Action context; their records remain. A content-identical manifest-only replacement keeps those answers active. The choice receipt makes an identical `(candidate_id, choice)` retry a no-op; another choice or stale ID conflicts. `--use-pinned-source` records `source_refresh_skipped` and never claims the source was unchanged.
 
 An explicit resume budget must be 1..1000 and replaces the remainder before fresh Orient consumes one. If omitted, a positive remainder is preserved; an exhausted remainder becomes `max(initial_budget, 3)` before Orient. Candidate creation reports `budget_applied: false`; repeat the budget on the subsequent choice. Paused protocol output exposes safe `pinned_source`, `source_candidate`, `resume_operation`, and `budget_applied` fields. Full status JSON also exposes `last_resume_result` and the last choice receipt, but no source-file path.
 
@@ -40,14 +44,14 @@ Machine recovery authority is a typed `next` object, never a shell string:
   "variants": [
     {
       "id": "refresh-source",
-      "base_argv": ["slipway", "run", "resume", "RUN", "--root", "/absolute/original/workspace"],
+      "base_argv": ["slipway", "_machine", "resume", "RUN", "--root", "/absolute/original/workspace"],
       "inputs": [
         {"name": "source_file", "type": "path", "flag": "--source-file", "required": true}
       ]
     },
     {
       "id": "use-pinned-source",
-      "base_argv": ["slipway", "run", "resume", "RUN", "--root", "/absolute/original/workspace", "--use-pinned-source"],
+      "base_argv": ["slipway", "_machine", "resume", "RUN", "--root", "/absolute/original/workspace", "--use-pinned-source"],
       "inputs": []
     }
   ]
@@ -76,7 +80,7 @@ Active responses are bare Action JSON objects:
 
 ```json
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "run_id": "...",
   "action_id": "...",
   "kind": "orient",
@@ -89,7 +93,7 @@ Active responses are bare Action JSON objects:
 
 `kind` is `orient`, `clarify`, `implement`, `review`, or `summarize`. An ad-hoc Action omits both `source` and `requirements`; it never sends either field as `null`.
 
-Every issue-bound Action includes both objects:
+Every issue-bound Action includes both objects, but no chapter Markdown:
 
 ```json
 {
@@ -98,17 +102,41 @@ Every issue-bound Action includes both objects:
     "canonical_url": "https://github.com/OWNER/REPOSITORY/issues/123",
     "issue_id": "I_...",
     "source_revision": "sha256:...",
+    "manifest_revision": "sha256:...",
     "requirements_revision": "sha256:..."
   },
   "requirements": {
-    "outcome_markdown": "...",
-    "requirements_markdown": "...",
-    "acceptance_examples_markdown": "...",
-    "constraints_markdown": "...",
-    "non_goals_markdown": "..."
+    "requirements_revision": "sha256:...",
+    "sections": [
+      {
+        "key": "requirements",
+        "role": "requirements",
+        "title": "Requirements",
+        "section_revision": "sha256:...",
+        "material_sha256": "sha256:...",
+        "bytes": 18231
+      }
+    ],
+    "required_for_action": ["requirements"],
+    "reader": {
+      "operation": "read_material",
+      "base_argv": [
+        "slipway", "_machine", "material", "--root", "/absolute/workspace",
+        "--run", "RUN", "--action", "ACTION"
+      ],
+      "input": {
+        "name": "section",
+        "type": "enum",
+        "flag": "--section",
+        "required": true,
+        "choices": ["requirements"]
+      }
+    }
   }
 }
 ```
+
+The host resolves each key with the exact structured argv and receives one `action_material` JSON object. The operation reads only the Run-local digest blob, validates its digest, byte count, and section revision, and never accesses GitHub. Only the current non-void Action may read material; completed, replaced, stopped, and otherwise stale Actions are rejected so old work cannot continue executing.
 
 Only a structurally confirmed Implement may carry `destructive_authorization`:
 
@@ -134,15 +162,15 @@ Action limits are:
 - `brief`: 8 KiB;
 - total encoded Action: 256 KiB.
 
-Requirements remain in the separate, untruncated `requirements` field and are never copied into `context`. Context contains only active confirmed decisions and prior Outcome projections. Selection priority is the latest active decision, other active decisions newest-first, the most recent Outcome summary with its known issues, then remaining Outcomes newest-first. Superseded decisions and decisions bound to an older requirements revision are retained in history but excluded; a structured destructive confirmation attestation never contributes a product decision, while nonempty text from the separate decline-or-feedback branch may.
+The `requirements` field is a bounded catalog; normative Markdown remains in separately addressable, untruncated local materials and is never copied into `context`. Context contains only active confirmed decisions and prior Outcome projections. Selection priority is the latest active decision, other active decisions newest-first, the most recent Outcome summary with its known issues, then remaining Outcomes newest-first. Superseded decisions and decisions bound to an older requirements revision are retained in history but excluded; a structured destructive confirmation attestation never contributes a product decision, while nonempty text from the separate decline-or-feedback branch may.
 
-Each candidate normalizes CRLF and CR to LF and must be valid UTF-8. Selected items render chronologically inside the stable `Decisions:`, `Recent outcome:`, and `Earlier outcomes:` classes. If a normalized item does not fit, Slipway cuts only at a UTF-8 code-point boundary and appends exactly `...[truncated original_bytes=N sha256=HEX]`, where `HEX` hashes the complete normalized item. Omitted candidates produce a deterministic per-class `[omitted CLASS: N]` line. The result never exceeds exactly 128 KiB and replay of the same journal is byte-identical. Untruncated requirements can still make the total Action exceed 256 KiB, which returns `action_too_large`.
+Each candidate normalizes CRLF and CR to LF and must be valid UTF-8. Selected items render chronologically inside the stable `Decisions:`, `Recent outcome:`, and `Earlier outcomes:` classes. If a normalized item does not fit, Slipway cuts only at a UTF-8 code-point boundary and appends exactly `...[truncated original_bytes=N sha256=HEX]`, where `HEX` hashes the complete normalized item. Omitted candidates produce a deterministic per-class `[omitted CLASS: N]` line. The result never exceeds exactly 128 KiB and replay of the same journal is byte-identical. Voided Action outcomes are excluded. Action size is measured with the same non-HTML-escaping JSON encoder used on stdout, so stored history cannot make the Action grow beyond the bounded context projection.
 
 ## Submit an Outcome
 
 ```bash
-slipway run submit --run RUN --action ACTION --outcome-file outcome.json
-slipway run submit --run RUN --action ACTION --outcome-stdin
+slipway _machine submit --run RUN --action ACTION --outcome-file outcome.json
+slipway _machine submit --run RUN --action ACTION --outcome-stdin
 ```
 
 Exactly one input mode is required. Slipway hashes the original accepted bytes before decoding. Retrying those exact bytes is idempotent; a semantically equivalent JSON object with different whitespace or key order conflicts.
@@ -151,7 +179,7 @@ Every public Outcome field is mandatory. Arrays must be arrays, including when e
 
 ```json
 {
-  "contract_version": 1,
+  "contract_version": 2,
   "action_id": "...",
   "action_kind": "orient",
   "status": "completed",
@@ -167,7 +195,7 @@ Every public Outcome field is mandatory. Arrays must be arrays, including when e
 
 `action_kind` is mandatory and must exactly equal the current Action's `kind`. Slipway rejects a missing, unknown, or mismatched value; there is no inference or legacy fallback.
 
-Host status is only `completed`, `needs_input`, `partial`, or `error`. `skipped` is a CLI-owned `run skip` event and is rejected in a host Outcome. Outcome input is capped at 1 MiB and must be UTF-8 without a BOM or trailing data.
+Host status is only `completed`, `needs_input`, `partial`, or `error`. `skipped` is a CLI-owned `_machine skip` event and is rejected in a host Outcome. Outcome input is capped at 1 MiB and must be UTF-8 without a BOM or trailing data.
 
 An Orient or Clarify may suggest at most one immediate `clarify`, `implement`, or `summarize` Action:
 
@@ -205,8 +233,8 @@ Host pause reasons are `decision_required`, `destructive_confirmation_required`,
 ```
 
 ```text
-slipway run answer --run RUN --action ACTION --root ROOT --text TEXT
-slipway run answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway _machine answer --run RUN --action ACTION --root ROOT --text TEXT
+slipway _machine answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
 ```
 
 Normal decision answers require text and forbid destructive flags; environment pauses reject answers and must resume. `--confirm-destructive` is a trusted-host attestation of a current user confirmation, not cryptographic proof of human presence; a malicious process with shell authority can forge flags. Natural-language answer text, including `yes`, never grants destructive authority. It records feedback or decline, invalidates the waiting Action and queues, clears the request/grant, and produces a fresh non-destructive Orient. Confirmation requires `--confirm-destructive --scope-sha256 DIGEST`; the digest must exactly match the CLI-recomputed current request. Success records an attestation and issues exactly one fresh Implement carrying a field-for-field copy as `destructive_authorization`. Any changed or expanded target/impact requires a new request.
@@ -275,25 +303,25 @@ The exact matrix is:
 ## Deterministic routing
 
 ```text
-needs_input                                  → paused by pause.reason
-pending valid suggestion                    → suggested Action first
-orient/clarify with no suggestion           → summarize
-implement + CLI-observed diff + review on   → review
-other implement result                      → summarize
-any legal review result                     → summarize
-summary result                              → ended
-next Action with no budget                  → paused (budget_exhausted)
+needs_input                                         → paused by pause.reason
+orient/clarify/implement + newly observed revision
+  + review on                                      → review; discard pending suggestion
+  pending valid suggestion with no review override   → suggested Action
+orient/clarify/implement without either route      → summarize
+any legal review result                            → summarize
+summary result                                     → ended
+next Action with no budget                         → paused (budget_exhausted)
 ```
 
-Implementation reports, activity exit codes, and Review findings are data, not routing gates. Any CLI-observed code difference routes to Review when Review is enabled, even when the host reported `not_needed`, `partial`, or `unable`. Review findings go to Summary and do not create an automatic repair or re-review loop.
+Implementation reports, activity exit codes, and Review findings are data, not routing gates. Orient, Clarify, and Implement each compare the new CLI Git observation with the previously observed snapshot. A newly observed revision routes to Review before any host suggestion when Review is enabled, so an Orient/Clarify suggestion cannot bypass inspection; that pending suggestion is discarded and Review follows its normal Summary route. A later revision after a completed or skipped Review therefore receives a new Review, while unchanged snapshots do not loop. This applies even when an Implement host reported `not_needed`, `partial`, or `unable`. Review findings go to Summary and do not create an automatic repair loop.
 
-Skip is diff-first: skipping Orient, Clarify, or Implement observes current Git and routes to Review whenever any run-start-to-current difference exists and review is enabled; otherwise it routes to Summary. Review skip routes to Summary. Summary skip writes a minimal CLI-owned factual summary and ends. Every skip clears destructive request/grant state.
+Skip is diff-first: skipping Orient, Clarify, or Implement observes current Git and routes to Review whenever that observation differs from the previously observed snapshot and review is enabled; otherwise it routes to Summary. Review skip routes to Summary. Summary skip writes a minimal CLI-owned factual summary and ends. Every skip clears destructive request/grant state.
 
 Every observed start-to-current difference records the factual `observed_since_start` observation and an `attribution_uncertainty`: concurrent user edits, another Run, or tools may have contributed. Slipway never assigns the difference to a host or Run. Both discrepancy directions are retained neutrally as report observations: `applied|partial` with no observed difference, and `not_needed|unable` with an observed difference. Routing remains diff-first. Review briefs and final Summary preserve this uncertainty and the structured observations for paths already dirty at Run start.
 
 ## Idempotency and ordering
 
-An `action_id` accepts one Outcome. Retrying the exact original Outcome bytes is idempotent; a different byte payload conflicts even when it decodes to the same JSON values. Non-current, voided, stopped, or ended Actions reject late submissions. Answer idempotency hashes the canonical tuple `(action_id,text,confirm_destructive,scope_sha256)`: an identical retry returns the current result without an event, budget use, or Action, while another payload conflicts. Every successful resume voids an outstanding Action, destructive request/grant, and queue before fresh Orient; candidate creation instead voids them and pauses without an Action.
+An `action_id` accepts one Outcome. Retrying the exact original Outcome bytes is idempotent even after the Run becomes stopped or ended; a different byte payload conflicts even when it decodes to the same JSON values. A voided Action always rejects, and a non-recorded late submission to a non-current, stopped, or ended Action rejects. Answer idempotency hashes the canonical tuple `(action_id,text,confirm_destructive,scope_sha256)`: an identical retry returns the current result without an event, budget use, or Action, while another payload conflicts. Every successful resume voids an outstanding Action, destructive request/grant, and queue before fresh Orient; candidate creation instead voids them and pauses without an Action.
 
 ## Journal commit errors
 
@@ -301,11 +329,11 @@ An `action_id` accepts one Outcome. Retrying the exact original Outcome bytes is
 
 The storage capability is `file_and_directory_fsync` on supported Unix-like systems. On Windows it is stably reported as `file_fsync_only` with `directory_sync:false` and limitation `directory_fsync_unsupported`; file contents are fsynced, but crash durability of newly created or renamed directory entries cannot be claimed.
 
-Paused, stopped, and ended command responses contain `contract_version`, `run_id`, `state`, structured `next`, and applicable `pause_reason`, `summary`, `pinned_source`, `source_candidate`, `resume_operation`, and `budget_applied` fields. A single `status RUN --json` is the stable flat Run projection with mandatory top-level `contract_version` and freshly derived `next`; `status --json` is exactly `{contract_version,runs:[...]}`, including `{"contract_version":1,"runs":[]}` when empty. Rendered commands are never journaled. Errors contain `contract_version`, `code`, `message`, structured `next`, `exit_code`, and optional strictly shaped `details`. Run states are `active`, `paused`, `stopped`, and `ended`.
+Paused, stopped, and ended command responses contain `contract_version`, `run_id`, `state`, structured `next`, and applicable `pause_reason`, `summary`, `pinned_source`, `source_candidate`, `resume_operation`, and `budget_applied` fields. A single `status RUN --json` is the stable flat Run projection with mandatory top-level `contract_version`, `review_enabled`, durable `review_pending`, and freshly derived `next`; `review_pending` survives decision, environment, budget, stop/resume, and source-choice interruptions until the corresponding Review is completed or explicitly skipped. `status --json` is exactly `{contract_version,runs:[...]}`, including `{"contract_version":2,"runs":[]}` when empty. Rendered commands are never journaled. Errors contain `contract_version`, `code`, `message`, structured `next`, `exit_code`, and optional strictly shaped `details`. Run states are `active`, `paused`, `stopped`, and `ended`.
 
 ## Public report envelopes and doctor advisories
 
-Every JSON success/error is an unambiguous top-level contract-version-1 object. Install and uninstall use exactly `{contract_version,hosts,written,removed,preserved,warnings}` with all arrays present. List uses `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`. Doctor uses `{contract_version,checks:[{code,status,host_id,name,detail}]}`; check status is only `ok|warning|error`. The normative schema closes every object with `additionalProperties:false`. Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
+Every JSON success/error is an unambiguous top-level contract-version-2 object. Install and uninstall use exactly `{contract_version,hosts,written,removed,preserved,warnings}` with all arrays present. List uses `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`. Doctor uses `{contract_version,checks:[{code,status,host_id,name,detail}]}`; check status is only `ok|warning|error`. The normative schema closes every object with `additionalProperties:false`. Repository/adapter codes are `repository_ok`, `adapter_manifest_unreadable`, `adapter_not_detected`, `adapter_not_installed`, `adapter_refresh_required`, `adapter_modified`, and `adapter_healthy`.
 
 GitHub capability codes are `github_cli_unavailable`, `github_cli_version_unknown`, `github_cli_rest_fallback_required`, `github_cli_compatible`, `github_auth_unavailable`, `github_auth_available`, `github_issue_permissions_ok`, `github_issue_permissions_limited`, and `github_issue_permissions_unknown`. Version detection and `gh auth status --hostname github.com` are time-bounded; `gh <2.94.0` reports that the official REST fallback is required for parent/sub-issue/dependency operations. Permission lookup runs only for a safely identified credential-free GitHub origin and never reports raw command, token, authentication, or API output.
 

@@ -9,9 +9,9 @@ Slipway 只有七个公开命令：
 - `uninstall`：仅删除仍保持原样的托管文件。
 - `list`：列出宿主检测、安装、`needs_refresh` 与 capability 状态；非当前版本 manifest 会 fail closed。
 - `doctor`：诊断适配器和运行环境，不检查代码改动；非当前版本 manifest 报告 `adapter_manifest_unreadable`，不完整 current surface 报告 `needs_refresh`/warning。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；带 source 时只读取一次严格 GitHub Change envelope，并仅持久化 pinned snapshot。
-- `status [run-id] [--json]`：列出或查看 run。
-- `stop [run-id] [--json]`：停止但保留恢复日志。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；带 source 时只读取一次严格 Source Bundle v2 envelope，把 manifest 引用章节固定为本地内容寻址 material，并仅在 journal 中持久化 catalog/provenance。
+- `status [run-id] [--root ROOT] [--json]`：列出或查看 run。
+- `stop [run-id] [--root ROOT] [--json]`：停止但保留恢复日志。
 
 ```bash
 slipway run "小型私密修复" --json
@@ -23,12 +23,13 @@ slipway run "实施有界 Change" --source-file /安全临时目录/change-envel
 宿主使用隐藏的协议命令：
 
 ```text
-slipway run submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
-slipway run answer --run ID --action ID --text TEXT
-slipway run answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
-slipway run skip --run ID --action ID
-slipway run resume ID [--budget N]
-slipway run resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
+slipway _machine answer --run ID --action ID --text TEXT
+slipway _machine answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway _machine skip --run ID --action ID
+slipway _machine resume ID [--budget N]
+slipway _machine resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine material --run ID --action ID --section KEY
 ```
 
 第一种 resume 仅适用于 ad-hoc Run。Issue-bound resume 必须且只能选择 fresh `--source-file`、显式 `--use-pinned-source` 或按当前 candidate ID 执行 `pinned|adopt` 之一。Skip 不需要理由。暂停、错误与 status JSON 包含带原始绝对 `--root` 的结构化 `next`；只有无未解析必填输入的 argv 才渲染成人类命令。

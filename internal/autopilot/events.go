@@ -12,7 +12,7 @@ import (
 	"github.com/signalridge/slipway/internal/runstore"
 )
 
-const runEventVersion = 1
+const runEventVersion = 2
 
 type runInitialization struct {
 	Goal              string                     `json:"goal"`
@@ -51,6 +51,7 @@ type runDelta struct {
 
 	State                        *RunState                 `json:"state,omitempty"`
 	PauseReason                  *PauseReason              `json:"pause_reason,omitempty"`
+	ReviewPending                *bool                     `json:"review_pending,omitempty"`
 	RemainingBudget              *int                      `json:"remaining_budget,omitempty"`
 	CurrentActionSet             bool                      `json:"current_action_set,omitempty"`
 	CurrentAction                *Action                   `json:"current_action,omitempty"`
@@ -85,14 +86,14 @@ type runDelta struct {
 }
 
 func newRunEvent(eventType string, before, after Run) (runstore.Event, error) {
-	delta, err := diffRun(before, after)
+	delta, err := diffRun(eventType, before, after)
 	if err != nil {
 		return runstore.Event{}, err
 	}
 	return runstore.NewEvent(eventType, delta)
 }
 
-func diffRun(before, after Run) (runDelta, error) {
+func diffRun(eventType string, before, after Run) (runDelta, error) {
 	if after.ContractVersion != ContractVersion || after.ID == "" {
 		return runDelta{}, errors.New("cannot journal a run with invalid identity")
 	}
@@ -108,8 +109,17 @@ func diffRun(before, after Run) (runDelta, error) {
 	if err := after.CurrentGit.Validate(); err != nil {
 		return runDelta{}, fmt.Errorf("cannot journal invalid current git observation: %w", err)
 	}
+	if err := validateActionHistoryTransition(before, after); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid action history: %w", err)
+	}
 	if err := validateRunDestructiveState(after); err != nil {
 		return runDelta{}, fmt.Errorf("cannot journal invalid destructive run state: %w", err)
+	}
+	if after.ReviewPending && !after.ReviewEnabled {
+		return runDelta{}, errors.New("cannot journal pending review when review is disabled")
+	}
+	if err := validateRunSourceTransition(eventType, before, after); err != nil {
+		return runDelta{}, fmt.Errorf("cannot journal invalid source transition: %w", err)
 	}
 	if _, err := DeriveNext(after); err != nil {
 		return runDelta{}, fmt.Errorf("cannot journal run with invalid next operation: %w", err)
@@ -160,6 +170,9 @@ func diffRun(before, after Run) (runDelta, error) {
 	}
 	if before.PauseReason != after.PauseReason {
 		delta.PauseReason = pointer(after.PauseReason)
+	}
+	if before.ReviewPending != after.ReviewPending {
+		delta.ReviewPending = pointer(after.ReviewPending)
 	}
 	if before.RemainingBudget != after.RemainingBudget {
 		delta.RemainingBudget = pointer(after.RemainingBudget)
@@ -246,6 +259,7 @@ func diffRun(before, after Run) (runDelta, error) {
 }
 
 func applyRunEvent(run *Run, event runstore.Event) error {
+	before := runBeforeMutation(*run)
 	var delta runDelta
 	decoder := json.NewDecoder(bytes.NewReader(event.Data))
 	decoder.DisallowUnknownFields()
@@ -306,6 +320,9 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	}
 	if delta.PauseReason != nil {
 		run.PauseReason = *delta.PauseReason
+	}
+	if delta.ReviewPending != nil {
+		run.ReviewPending = *delta.ReviewPending
 	}
 	if delta.RemainingBudget != nil {
 		run.RemainingBudget = *delta.RemainingBudget
@@ -443,11 +460,97 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	if err := run.CurrentGit.Validate(); err != nil {
 		return fmt.Errorf("invalid current git observation after %s: %w", event.Type, err)
 	}
+	if err := validateActionHistoryTransition(before, *run); err != nil {
+		return fmt.Errorf("invalid action history after %s: %w", event.Type, err)
+	}
 	if err := validateRunDestructiveState(*run); err != nil {
 		return fmt.Errorf("invalid destructive run state after %s: %w", event.Type, err)
 	}
+	if run.ReviewPending && !run.ReviewEnabled {
+		return fmt.Errorf("invalid pending review after %s", event.Type)
+	}
+	if err := validateRunSourceTransition(event.Type, before, *run); err != nil {
+		return fmt.Errorf("invalid source transition after %s: %w", event.Type, err)
+	}
+	recordAcceptedSourceComments(run, run.PinnedSource)
 	if _, err := DeriveNext(*run); err != nil {
 		return fmt.Errorf("derive next after %s: %w", event.Type, err)
+	}
+	return nil
+}
+
+func validateActionHistoryTransition(before, after Run) error {
+	if len(after.Actions) < len(before.Actions) {
+		return errors.New("run action history shrank")
+	}
+	if len(after.Actions) > len(before.Actions)+1 {
+		return errors.New("one journal event cannot append multiple actions")
+	}
+
+	currentActionID := ""
+	if before.CurrentAction != nil {
+		currentActionID = before.CurrentAction.ActionID
+	}
+	seenActionIDs := make(map[string]struct{}, len(after.Actions))
+	for index, record := range after.Actions {
+		if err := record.Action.Validate(); err != nil {
+			return fmt.Errorf("action record %d is invalid: %w", index, err)
+		}
+		if record.Action.RunID != after.ID {
+			return fmt.Errorf("action record %d belongs to another run", index)
+		}
+		if _, exists := seenActionIDs[record.Action.ActionID]; exists {
+			return fmt.Errorf("action_id %q is duplicated", record.Action.ActionID)
+		}
+		seenActionIDs[record.Action.ActionID] = struct{}{}
+
+		if record.Outcome == nil {
+			if record.OutcomePayloadSHA256 != "" {
+				return fmt.Errorf("action record %d has an outcome digest without an outcome", index)
+			}
+		} else {
+			if err := record.Outcome.Validate(record.Action.Kind, record.Action.ActionID); err != nil {
+				return fmt.Errorf("action record %d has an invalid outcome: %w", index, err)
+			}
+			// The digest commits to the exact host bytes, whose formatting is
+			// intentionally not journaled. Replay can validate its shape and
+			// immutability, but cannot recompute it from the decoded Outcome.
+			if !validSHA256(record.OutcomePayloadSHA256) {
+				return fmt.Errorf("action record %d has a malformed outcome payload digest", index)
+			}
+		}
+
+		if index >= len(before.Actions) {
+			if record.Outcome != nil || record.OutcomePayloadSHA256 != "" || record.Voided || record.Skipped {
+				return fmt.Errorf("new action record %d must begin pending and non-void", index)
+			}
+			continue
+		}
+
+		prior := before.Actions[index]
+		if !reflect.DeepEqual(prior.Action, record.Action) {
+			return fmt.Errorf("action record %d rewrote its issued action", index)
+		}
+		if prior.Voided && !record.Voided {
+			return fmt.Errorf("action record %d was unvoided", index)
+		}
+		if !prior.Voided && record.Voided && prior.Action.ActionID != currentActionID {
+			return fmt.Errorf("action record %d voided a non-current action", index)
+		}
+		if prior.Skipped && !record.Skipped {
+			return fmt.Errorf("action record %d was unskipped", index)
+		}
+		if !prior.Skipped && record.Skipped && prior.Action.ActionID != currentActionID {
+			return fmt.Errorf("action record %d skipped a non-current action", index)
+		}
+		if prior.Outcome != nil &&
+			(!reflect.DeepEqual(prior.Outcome, record.Outcome) ||
+				prior.OutcomePayloadSHA256 != record.OutcomePayloadSHA256) {
+			return fmt.Errorf("action record %d rewrote its accepted outcome", index)
+		}
+		if prior.Outcome == nil && record.Outcome != nil && prior.Action.ActionID != currentActionID {
+			return fmt.Errorf("action record %d completed a non-current action", index)
+		}
 	}
 	return nil
 }

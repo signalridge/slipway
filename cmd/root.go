@@ -14,7 +14,6 @@ var (
 )
 
 // Execute runs Slipway's user-controlled soft-autopilot CLI.
-// Execute runs Slipway's user-controlled soft-autopilot CLI.
 func Execute() error {
 	root := newRootCmd()
 	root.SetOut(os.Stdout)
@@ -51,6 +50,7 @@ func newRootCmd() *cobra.Command {
 		makeRunCmd(),
 		makeStatusCmd(),
 		makeStopCmd(),
+		makeMachineCmd(),
 	)
 	root.SetHelpCommand(&cobra.Command{
 		Use:    "_help [command]",

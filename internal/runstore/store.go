@@ -106,7 +106,23 @@ func (store *Store) Close() error {
 	return store.closeErr
 }
 
+// Create initializes a Run without content-addressed materials.
 func (store *Store) Create(runID string, event Event, projection any) error {
+	return store.create(runID, event, projection, nil)
+}
+
+// CreateWithMaterials makes every material durable before the first journal
+// event that references it.
+func (store *Store) CreateWithMaterials(
+	runID string,
+	event Event,
+	projection any,
+	materials []Material,
+) error {
+	return store.create(runID, event, projection, materials)
+}
+
+func (store *Store) create(runID string, event Event, projection any, materials []Material) error {
 	tracker := newMutationTracker()
 	if err := validateRunID(runID); err != nil {
 		return tracker.fail(PhaseValidation, false, err)
@@ -146,6 +162,9 @@ func (store *Store) Create(runID string, event Event, projection any) error {
 	}
 	if err := syncNewDirectory(run.root, run.identity, store.runsRoot, store.runsIdentity, runID, store.hooks, faultSyncRunDirectory, faultSyncRunsParent); err != nil {
 		return tracker.fail(PhaseDirectorySync, false, err)
+	}
+	if err := store.putMaterials(run, materials); err != nil {
+		return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("persist run materials: %w", err))
 	}
 
 	err = withRunLock(run, tracker, func(transaction *runTransaction) error {
@@ -193,7 +212,20 @@ func (store *Store) Visit(runID string, consume func(Event) error) error {
 
 // UpdateStream serializes a streaming replay/mutate/append transaction. Events
 // are durable before the replaceable projection is committed.
-func (store *Store) UpdateStream(runID string, consume func(Event) error, callback func() ([]Event, any, error)) error {
+// UpdateResult is the complete output of one locked Run mutation callback.
+type UpdateResult struct {
+	Events     []Event
+	Projection any
+	Materials  []Material
+}
+
+// UpdateStreamWithMaterials makes callback-selected materials durable after
+// business validation succeeds and before any returned event is appended.
+func (store *Store) UpdateStreamWithMaterials(
+	runID string,
+	consume func(Event) error,
+	callback func() (UpdateResult, error),
+) error {
 	tracker := newMutationTracker()
 	run, err := store.openRunRoot(runID)
 	if err != nil {
@@ -208,27 +240,27 @@ func (store *Store) UpdateStream(runID string, consume func(Event) error, callba
 		if err := transaction.validate(PhaseLockVerify, faultLockBeforeCallback); err != nil {
 			return err
 		}
-		newEvents, projection, err := callback()
+		result, err := callback()
 		if err != nil {
 			return tracker.fail(PhaseCallback, false, err)
 		}
 		if err := transaction.validate(PhaseLockVerify, faultLockAfterCallback); err != nil {
 			return err
 		}
-		if len(newEvents) == 0 {
+		if len(result.Events) == 0 {
 			return nil
 		}
-		for index := range newEvents {
-			newEvents[index].Sequence = count + index + 1
-			if newEvents[index].At.IsZero() {
+		for index := range result.Events {
+			result.Events[index].Sequence = count + index + 1
+			if result.Events[index].At.IsZero() {
 				return tracker.fail(PhaseValidation, false, fmt.Errorf("event %d timestamp is required", index))
 			}
 		}
-		journalContent, err := encodeJournalEvents(newEvents)
+		journalContent, err := encodeJournalEvents(result.Events)
 		if err != nil {
 			return tracker.fail(PhaseJournalWrite, false, err)
 		}
-		projectionContent, err := encodeSnapshot(count+len(newEvents), projection)
+		projectionContent, err := encodeSnapshot(count+len(result.Events), result.Projection)
 		if err != nil {
 			return tracker.fail(PhaseProjectionEncode, false, err)
 		}
@@ -237,10 +269,24 @@ func (store *Store) UpdateStream(runID string, consume func(Event) error, callba
 			return err
 		}
 		defer prepared.discard()
+		if err := store.putMaterials(run, result.Materials); err != nil {
+			return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("persist run materials: %w", err))
+		}
 		if err := appendEncodedJournal(transaction, journalFileName, journalContent); err != nil {
 			return err
 		}
 		return commitSnapshot(transaction, prepared)
+	})
+}
+
+func (store *Store) UpdateStream(
+	runID string,
+	consume func(Event) error,
+	callback func() ([]Event, any, error),
+) error {
+	return store.UpdateStreamWithMaterials(runID, consume, func() (UpdateResult, error) {
+		events, projection, err := callback()
+		return UpdateResult{Events: events, Projection: projection}, err
 	})
 }
 

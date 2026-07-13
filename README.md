@@ -33,12 +33,12 @@ slipway install --tool claude
 # Ad-hoc escape hatch: tiny, sensitive, urgent, offline, or no Issue by choice.
 slipway run "add a CSV export to reports" --json
 
-# Issue-bound: a trusted host fetches this strict Change envelope once.
+# Issue-bound: a trusted host fetches one strict manifest-addressed Source Bundle v2.
 slipway run "implement the bounded Change" \
   --source-file /safe/temp/change-envelope.json --json
 ```
 
-The CLI does not call a model provider or hold a GitHub token. A trusted host fetches an untrusted Change body; the CLI validates it, pins exact accepted sections and revisions, then returns one versioned Action at a time. Amendments require an explicit current-candidate choice. Destructive work requires a one-shot exact-scope structured grant; natural-language approval never grants it.
+The CLI does not call a model provider or hold a GitHub token. A trusted host fetches an untrusted Issue manifest and only its explicitly referenced chapter comments; the CLI validates their identities/digests, pins exact chapter bytes locally, and returns one bounded versioned Action catalog at a time. Hosts read required chapters through the structured local `_machine material` operation. Amendments require an explicit current-candidate choice. Destructive work requires a one-shot exact-scope structured grant; natural-language approval never grants it.
 
 Read the [Issue workflow](docs/reference/issue-workflow.md) for Objective/Change markers, exact Level/Kind labels, self-containment, `gh >= 2.94`/official REST fallback, same-host transfer handling, 100/50 limits, approved publication markers, and partial/ambiguous reconciliation.
 
@@ -65,7 +65,7 @@ slipway status      list or inspect recoverable Runs
 slipway stop        stop without deleting the journal
 ```
 
-Hidden versioned `run submit/answer/skip/resume` operations are documented in the [machine protocol](docs/reference/machine-protocol.md). `ended` means only that the automatic Action queue is empty; Slipway does not certify correctness, delivery, deployment, release readiness, or absence of findings.
+Hidden versioned `_machine submit/answer/skip/resume/material` operations are documented in the [machine protocol](docs/reference/machine-protocol.md). `ended` means only that the automatic Action queue is empty; Slipway does not certify correctness, delivery, deployment, release readiness, or absence of findings.
 
 ## Journal and privacy
 

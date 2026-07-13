@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,12 +26,12 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts gathered")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the requested update."}}
 	outcomePath := writeOutcome(t, orient)
-	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
+	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 
-	stdout, stderr, err = executeForTest(t, "run", "skip", "--root", repository, "--run", action.RunID, "--action", action.ActionID)
+	stdout, stderr, err = executeForTest(t, "_machine", "skip", "--root", repository, "--run", action.RunID, "--action", action.ActionID)
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
@@ -43,7 +44,7 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	assert.Equal(t, autopilot.NextOperationResume, state.Next.Operation)
 	assert.Equal(t, "resume-ad-hoc", state.Next.Variants[0].ID)
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", action.RunID, "--root", repository)
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository)
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionOrient, action.Kind)
@@ -60,7 +61,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	outcome.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the inspected change."}}
 	encoded, err := json.Marshal(outcome)
 	require.NoError(t, err)
-	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
@@ -69,7 +70,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	bad.ContractVersion = 999
 	encoded, err = json.Marshal(bad)
 	require.NoError(t, err)
-	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"contract_version_mismatch"`)
@@ -106,19 +107,19 @@ func TestSubmitRejectsInvalidOutcomeShapeBeforeWritingJournal(t *testing.T) {
 	valid, err := json.Marshal(machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
 	require.NoError(t, err)
 	missingKind := strings.Replace(string(valid), `"action_kind":"orient",`, "", 1)
-	stdout, stderr, err = executeForTestWithInput(t, missingKind, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, missingKind, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `required field \"action_kind\" is missing`)
 
 	mismatchedKind := strings.Replace(string(valid), `"action_kind":"orient"`, `"action_kind":"clarify"`, 1)
-	stdout, stderr, err = executeForTestWithInput(t, mismatchedKind, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, mismatchedKind, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "does not match current action kind")
 
 	bad := strings.Replace(string(valid), `"review":null`, `"review":null,"approved":true`, 1)
-	stdout, stderr, err = executeForTestWithInput(t, bad, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, bad, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "unknown field")
@@ -144,7 +145,7 @@ func TestSubmitRejectsSymlinkOutcomeFileBeforeWritingJournal(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink creation is unavailable: %v", err)
 	}
-	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", link)
+	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", link)
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"outcome_unavailable"`)
@@ -174,7 +175,7 @@ func TestRunResumeRejectsExplicitZeroBudget(t *testing.T) {
 	var action autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", action.RunID, "--root", repository, "--budget", "0")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository, "--budget", "0")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"invalid_budget"`)
@@ -190,7 +191,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the change."}}
-	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
+	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 
@@ -203,7 +204,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 		Uncertainties: []string{},
 		Attempts:      1,
 	}
-	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, implementation))
+	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, implementation))
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionReview, action.Kind)
@@ -218,7 +219,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 		}},
 		Uncertainties: []string{},
 	}
-	stdout, stderr, err = executeForTest(t, "run", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, review))
+	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, review))
 	require.NoError(t, err, stderr)
 	require.NoError(t, json.Unmarshal([]byte(stdout), &action))
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
@@ -291,7 +292,24 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 	require.NotNil(t, action.Requirements)
 	assert.Equal(t, envelope.CanonicalURL, action.Source.CanonicalURL)
 	assert.Equal(t, envelope.IssueID, action.Source.IssueID)
-	assert.Equal(t, "Keep the exact CLI contract.\n", action.Requirements.RequirementsMarkdown)
+	require.Len(t, action.Requirements.Sections, 5)
+	assert.Equal(t, "requirements", action.Requirements.Sections[1].Key)
+	assert.NotContains(t, stdout, "Keep the exact CLI contract.")
+
+	materialStdout, materialStderr, materialErr := executeForTest(
+		t,
+		"_machine", "material",
+		"--root", repository,
+		"--run", action.RunID,
+		"--action", action.ActionID,
+		"--section", "requirements",
+	)
+	require.NoError(t, materialErr, materialStderr)
+	var material autopilot.ActionMaterial
+	require.NoError(t, json.Unmarshal([]byte(materialStdout), &material))
+	assert.Equal(t, "action_material", material.MessageType)
+	assert.Equal(t, "requirements", material.Section.Key)
+	assert.Contains(t, material.Section.Markdown, "Keep the exact CLI contract.")
 
 	stdout, stderr, err = executeForTest(t, "status", action.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
@@ -301,7 +319,7 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 	assert.Equal(t, envelope.CanonicalURL, run.PinnedSource.CanonicalURL)
 	assert.NotContains(t, stdout, sourcePath)
 	assert.NotContains(t, stdout, filepath.Base(sourcePath))
-	assert.NotContains(t, stdout, "<!-- slipway-level: change/v1 -->")
+	assert.NotContains(t, stdout, "<!-- slipway-level: change/v2 -->")
 	assert.NotContains(t, stdout, "Non-normative implementation notes")
 
 	help, helpStderr, err := executeForTest(t, "run", "--help")
@@ -311,7 +329,7 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 
 	invalidRepository := newCLIRepository(t)
 	invalidEnvelope := cliSourceEnvelope()
-	invalidEnvelope.Body = strings.Replace(invalidEnvelope.Body, "<!-- slipway-level: change/v1 -->", "<!-- slipway-level: objective/v1 -->", 1)
+	invalidEnvelope.Body = strings.Replace(invalidEnvelope.Body, "<!-- slipway-level: change/v2 -->", "<!-- slipway-level: objective/v1 -->", 1)
 	invalidPath := writeCLISource(t, invalidEnvelope)
 	stdout, stderr, err = executeForTest(t, "run", "must reject objective", "--root", invalidRepository, "--source-file", invalidPath, "--json")
 	require.Error(t, err)
@@ -344,9 +362,10 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stdout), &initial))
 
 	amended := cliSourceEnvelope()
-	amended.Body = strings.Replace(amended.Body, "Keep the exact CLI contract.", "Keep the amended CLI contract.", 1)
+	setCLISourceSection(&amended, "requirements", "\n# Requirements\n\nKeep the amended CLI contract.\n")
+	setCLISourceParentRevision(&amended, initial.Source.RequirementsRevision)
 	candidatePath := writeCLISource(t, amended)
-	stdout, stderr, err = executeForTest(t, "run", "resume", initial.RunID, "--root", repository, "--source-file", candidatePath, "--budget", "20")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-file", candidatePath, "--budget", "20")
 	require.NoError(t, err, stderr)
 	require.NoError(t, os.Remove(candidatePath))
 	var paused protocolStateOutput
@@ -372,18 +391,18 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	require.Len(t, candidateStatus.Next.Variants, 2)
 	assert.Equal(t, "keep-pinned", candidateStatus.Next.Variants[0].ID)
 	assert.Equal(t, []string{
-		"slipway", "run", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"slipway", "_machine", "resume", initial.RunID, "--root", candidateStatus.Workspace,
 		"--source-choice", "pinned", "--candidate", candidateID,
 	}, candidateStatus.Next.Variants[0].BaseArgv)
 	assert.Empty(t, candidateStatus.Next.Variants[0].Inputs)
 	assert.Equal(t, "adopt", candidateStatus.Next.Variants[1].ID)
 	assert.Equal(t, []string{
-		"slipway", "run", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"slipway", "_machine", "resume", initial.RunID, "--root", candidateStatus.Workspace,
 		"--source-choice", "adopt", "--candidate", candidateID,
 	}, candidateStatus.Next.Variants[1].BaseArgv)
 	assert.Empty(t, candidateStatus.Next.Variants[1].Inputs)
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
 	require.NoError(t, err, stderr)
 	var adopted autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &adopted))
@@ -392,11 +411,11 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	require.NotNil(t, adopted.Source)
 	assert.Equal(t, paused.SourceCandidate.RequirementsRevision, adopted.Source.RequirementsRevision)
 
-	retry, retryStderr, err := executeForTest(t, "run", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "999")
+	retry, retryStderr, err := executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "999")
 	require.NoError(t, err, retryStderr)
 	assert.JSONEq(t, stdout, retry)
 
-	conflictStdout, conflictStderr, err := executeForTest(t, "run", "resume", initial.RunID, "--root", repository, "--source-choice", "pinned", "--candidate", candidateID)
+	conflictStdout, conflictStderr, err := executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "pinned", "--candidate", candidateID)
 	require.Error(t, err)
 	assert.Empty(t, conflictStdout)
 	assert.Contains(t, conflictStderr, `"code":"source_choice_conflict"`)
@@ -414,13 +433,13 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 }
 
 func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
-	resumeHelp, resumeHelpStderr, err := executeForTest(t, "run", "resume", "--help")
+	resumeHelp, resumeHelpStderr, err := executeForTest(t, "_machine", "resume", "--help")
 	require.NoError(t, err, resumeHelpStderr)
 	assert.Contains(t, resumeHelp, "--source-file string")
 	assert.Contains(t, resumeHelp, "--use-pinned-source")
 	assert.Contains(t, resumeHelp, "--source-choice string")
 	assert.Contains(t, resumeHelp, "--candidate string")
-	assert.Contains(t, resumeHelp, "slipway run resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]")
+	assert.Contains(t, resumeHelp, "slipway _machine resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]")
 
 	issueRepository := newCLIRepository(t)
 	sourcePath := writeCLISource(t, cliSourceEnvelope())
@@ -429,12 +448,12 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 	var issueAction autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &issueAction))
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", issueAction.RunID, "--root", issueRepository)
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository)
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_required"`)
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", issueAction.RunID, "--root", issueRepository, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--use-pinned-source")
 	require.NoError(t, err, stderr)
 	var refreshed autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &refreshed))
@@ -446,22 +465,69 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 	require.NoError(t, err, stderr)
 	var adHocAction autopilot.Action
 	require.NoError(t, json.Unmarshal([]byte(stdout), &adHocAction))
-	stdout, stderr, err = executeForTest(t, "run", "resume", adHocAction.RunID, "--root", adHocRepository, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", adHocAction.RunID, "--root", adHocRepository, "--use-pinned-source")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_not_allowed"`)
 
-	stdout, stderr, err = executeForTest(t, "run", "resume", issueAction.RunID, "--root", issueRepository, "--source-choice", "adopt")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--source-choice", "adopt")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_choice_requires_candidate"`)
-	stdout, stderr, err = executeForTest(t, "run", "resume", issueAction.RunID, "--root", issueRepository, "--source-file", sourcePath, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--source-file", sourcePath, "--use-pinned-source")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_conflict"`)
 }
 
 func cliSourceEnvelope() autopilot.RawSourceEnvelope {
+	issueURL := "https://github.com/signalridge/slipway/issues/434"
+	definitions := []struct {
+		key     string
+		role    autopilot.SourceSectionRole
+		title   string
+		payload string
+	}{
+		{key: "outcome", role: autopilot.SourceSectionOutcome, title: "Outcome", payload: "\n# Outcome\n\nSafe issue-bound CLI behavior.\n"},
+		{key: "requirements", role: autopilot.SourceSectionRequirements, title: "Requirements", payload: "\n# Requirements\n\nKeep the exact CLI contract.\n"},
+		{key: "acceptance-examples", role: autopilot.SourceSectionAcceptanceExamples, title: "Acceptance examples", payload: "\n# Acceptance examples\n\nThe source file may be deleted after import.\n"},
+		{key: "constraints", role: autopilot.SourceSectionConstraints, title: "Constraints", payload: "\n# Constraints\n\nNever persist the source path.\n"},
+		{key: "non-goals", role: autopilot.SourceSectionNonGoals, title: "Non-goals", payload: "\n# Non-goals\n\nNo provider implementation.\n"},
+	}
+	comments := make([]autopilot.RawSourceComment, len(definitions))
+	sections := make([]autopilot.SourceManifestSection, len(definitions))
+	for index, definition := range definitions {
+		databaseID := int64(index + 1001)
+		body := "<!-- slipway-section:v1 key=" + definition.key + " -->" + definition.payload
+		digest, err := autopilot.ComputeSourceCommentBodySHA256(body)
+		if err != nil {
+			panic(err)
+		}
+		comments[index] = autopilot.RawSourceComment{
+			NodeID:     fmt.Sprintf("IC_cli_%s", definition.key),
+			DatabaseID: databaseID,
+			URL:        fmt.Sprintf("%s#issuecomment-%d", issueURL, databaseID),
+			UpdatedAt:  "2026-07-12T09:00:00Z",
+			AuthorID:   "U_cli_author",
+			Body:       body,
+		}
+		sections[index] = autopilot.SourceManifestSection{
+			Key:               definition.key,
+			Role:              definition.role,
+			Title:             definition.title,
+			CommentNodeID:     comments[index].NodeID,
+			CommentDatabaseID: databaseID,
+			BodySHA256:        digest,
+		}
+	}
+	manifest, err := json.MarshalIndent(autopilot.SourceManifest{
+		ManifestVersion: autopilot.SourceManifestVersion,
+		Profile:         autopilot.SourceProfileChangeV2,
+		Sections:        sections,
+	}, "", "  ")
+	if err != nil {
+		panic(err)
+	}
 	return autopilot.RawSourceEnvelope{
 		SourceVersion: autopilot.SourceVersion,
 		Provider:      "github",
@@ -469,19 +535,95 @@ func cliSourceEnvelope() autopilot.RawSourceEnvelope {
 		RepositoryID:  "R_cliSourceRepository",
 		IssueID:       "I_cliSourceIssue",
 		IssueNumber:   434,
-		CanonicalURL:  "https://github.com/signalridge/slipway/issues/434",
+		CanonicalURL:  issueURL,
 		UpdatedAt:     "2026-07-12T09:00:00Z",
 		FetchedAt:     "2026-07-12T09:01:00Z",
 		Title:         "[Change] CLI source lifecycle",
-		Body: "<!-- slipway-level: change/v1 -->\n" +
-			"## Outcome\nSafe issue-bound CLI behavior.\n" +
-			"## Requirements\nKeep the exact CLI contract.\n" +
-			"## Acceptance examples\nThe source file may be deleted after import.\n" +
-			"## Constraints\nNever persist the source path.\n" +
-			"## Non-goals\nNo provider implementation.\n" +
-			"## Implementation notes\nNon-normative implementation notes.\n",
-		Labels: []string{"level:change", "kind:refactor"},
+		Body:          "<!-- slipway-level: change/v2 -->\n\n```slipway-manifest\n" + string(manifest) + "\n```\n",
+		Labels:        []string{"level:change", "kind:refactor"},
+		Comments:      comments,
 	}
+}
+
+func setCLISourceSection(envelope *autopilot.RawSourceEnvelope, key, payload string) {
+	roles := map[string]autopilot.SourceSectionRole{
+		"outcome":             autopilot.SourceSectionOutcome,
+		"requirements":        autopilot.SourceSectionRequirements,
+		"acceptance-examples": autopilot.SourceSectionAcceptanceExamples,
+		"constraints":         autopilot.SourceSectionConstraints,
+		"non-goals":           autopilot.SourceSectionNonGoals,
+	}
+	titles := map[string]string{
+		"outcome":             "Outcome",
+		"requirements":        "Requirements",
+		"acceptance-examples": "Acceptance examples",
+		"constraints":         "Constraints",
+		"non-goals":           "Non-goals",
+	}
+	sections := make([]autopilot.SourceManifestSection, len(envelope.Comments))
+	for index := range envelope.Comments {
+		comment := &envelope.Comments[index]
+		commentKey := cliSourceCommentKey(comment.Body)
+		if commentKey == key {
+			comment.NodeID += "_replacement"
+			comment.DatabaseID += 100_000
+			comment.URL = fmt.Sprintf("%s#issuecomment-%d", envelope.CanonicalURL, comment.DatabaseID)
+			comment.Body = "<!-- slipway-section:v1 key=" + key + " -->" + payload
+		}
+		digest, err := autopilot.ComputeSourceCommentBodySHA256(comment.Body)
+		if err != nil {
+			panic(err)
+		}
+		sections[index] = autopilot.SourceManifestSection{
+			Key:               commentKey,
+			Role:              roles[commentKey],
+			Title:             titles[commentKey],
+			CommentNodeID:     comment.NodeID,
+			CommentDatabaseID: comment.DatabaseID,
+			BodySHA256:        digest,
+		}
+	}
+	manifest, err := json.MarshalIndent(autopilot.SourceManifest{
+		ManifestVersion: autopilot.SourceManifestVersion,
+		Profile:         autopilot.SourceProfileChangeV2,
+		Sections:        sections,
+	}, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	envelope.Body = "<!-- slipway-level: change/v2 -->\n\n```slipway-manifest\n" + string(manifest) + "\n```\n"
+}
+
+func cliSourceCommentKey(body string) string {
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(line, "<!-- slipway-section:v1 key="), " -->")
+	}
+	return ""
+}
+
+func setCLISourceParentRevision(
+	envelope *autopilot.RawSourceEnvelope,
+	revision string,
+) {
+	start := strings.Index(envelope.Body, "{")
+	end := strings.LastIndex(envelope.Body, "\n```")
+	if start < 0 || end <= start {
+		panic("source manifest not found")
+	}
+	var manifest autopilot.SourceManifest
+	if err := json.Unmarshal([]byte(envelope.Body[start:end]), &manifest); err != nil {
+		panic(err)
+	}
+	manifest.ParentRequirementsRevision = revision
+	encoded, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	envelope.Body = "<!-- slipway-level: change/v2 -->\n\n```slipway-manifest\n" + string(encoded) + "\n```\n"
 }
 
 func writeCLISource(t *testing.T, envelope autopilot.RawSourceEnvelope) string {

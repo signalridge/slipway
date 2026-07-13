@@ -17,26 +17,27 @@ import (
 )
 
 const (
-	SourceVersion = 1
-	ParserVersion = 1
+	SourceVersion = 2
+	ParserVersion = 2
 
-	maxSourceFileBytes              = 256 << 10
-	maxAcceptedRequirementsBytes    = 64 << 10
+	maxSourceFileBytes              = 16 << 20
+	maxSourceManifestBytes          = 256 << 10
+	maxSourceSections               = 64
+	maxSourceLabels                 = 100
+	maxSourceURLAliases             = 64
+	maxSourceSectionBytes           = 256 << 10
+	maxSourceMaterialBytes          = 4 << 20
 	maxSourceClassificationErrBytes = 1 << 10
 )
 
 const (
-	changeSourceMarker = "<!-- slipway-level: change/v1 -->"
-	markerIdentifier   = "slipway-level:"
-)
+	SourceManifestVersion = 2
+	SourceProfileChangeV2 = "change/v2"
 
-var acceptedSectionHeadings = [...]string{
-	"Outcome",
-	"Requirements",
-	"Acceptance examples",
-	"Constraints",
-	"Non-goals",
-}
+	changeSourceMarker  = "<!-- slipway-level: change/v2 -->"
+	sourceManifestFence = "```slipway-manifest"
+	sectionMarkerPrefix = "<!-- slipway-section:v1 key="
+)
 
 // SourceParent identifies an optional parent Objective for traceability only.
 type SourceParent struct {
@@ -46,49 +47,115 @@ type SourceParent struct {
 }
 
 // RawSourceEnvelope is the strict, ephemeral GitHub input supplied by a host.
+// For a valid manifest, Comments contains exactly its referenced comments. An
+// invalid head uses an initialized empty slice; discussion never enters here.
 type RawSourceEnvelope struct {
-	SourceVersion int           `json:"source_version"`
-	Provider      string        `json:"provider"`
-	Host          string        `json:"host"`
-	RepositoryID  string        `json:"repository_id"`
-	IssueID       string        `json:"issue_id"`
-	IssueNumber   int           `json:"issue_number"`
-	CanonicalURL  string        `json:"canonical_url"`
-	UpdatedAt     string        `json:"updated_at"`
-	FetchedAt     string        `json:"fetched_at"`
-	Title         string        `json:"title"`
-	Body          string        `json:"body"`
-	Labels        []string      `json:"labels"`
-	Parent        *SourceParent `json:"parent,omitempty"`
+	SourceVersion int                `json:"source_version"`
+	Provider      string             `json:"provider"`
+	Host          string             `json:"host"`
+	RepositoryID  string             `json:"repository_id"`
+	IssueID       string             `json:"issue_id"`
+	IssueNumber   int                `json:"issue_number"`
+	CanonicalURL  string             `json:"canonical_url"`
+	UpdatedAt     string             `json:"updated_at"`
+	FetchedAt     string             `json:"fetched_at"`
+	Title         string             `json:"title"`
+	Body          string             `json:"body"`
+	Labels        []string           `json:"labels"`
+	Parent        *SourceParent      `json:"parent,omitempty"`
+	Comments      []RawSourceComment `json:"comments"`
 }
 
-// AcceptedRequirements contains the exact normalized Markdown bytes selected
-// from the five normative Change sections.
-type AcceptedRequirements struct {
-	OutcomeMarkdown            string `json:"outcome_markdown"`
-	RequirementsMarkdown       string `json:"requirements_markdown"`
-	AcceptanceExamplesMarkdown string `json:"acceptance_examples_markdown"`
-	ConstraintsMarkdown        string `json:"constraints_markdown"`
-	NonGoalsMarkdown           string `json:"non_goals_markdown"`
+// RawSourceComment is one manifest-referenced GitHub Issue comment observation.
+type RawSourceComment struct {
+	NodeID      string `json:"node_id"`
+	DatabaseID  int64  `json:"database_id"`
+	URL         string `json:"url"`
+	UpdatedAt   string `json:"updated_at"`
+	AuthorID    string `json:"author_id"`
+	IsMinimized bool   `json:"is_minimized"`
+	Body        string `json:"body"`
 }
 
-// PinnedSource is the complete source snapshot that may be persisted. It
-// deliberately has no raw body, comments, timestamps, or labels.
+// SourceSectionRole identifies how a normative chapter contributes to a Change.
+type SourceSectionRole string
+
+const (
+	SourceSectionOutcome            SourceSectionRole = "outcome"
+	SourceSectionRequirements       SourceSectionRole = "requirements"
+	SourceSectionAcceptanceExamples SourceSectionRole = "acceptance_examples"
+	SourceSectionConstraints        SourceSectionRole = "constraints"
+	SourceSectionNonGoals           SourceSectionRole = "non_goals"
+)
+
+// SourceManifest is the only accepted Issue source head. Array order is
+// normative; comment order and timestamps are not.
+type SourceManifest struct {
+	ManifestVersion            int                     `json:"manifest_version"`
+	Profile                    string                  `json:"profile"`
+	ParentRequirementsRevision string                  `json:"parent_requirements_revision,omitempty"`
+	Sections                   []SourceManifestSection `json:"sections"`
+}
+
+// SourceManifestSection binds one stable key and role to an exact comment body.
+type SourceManifestSection struct {
+	Key               string            `json:"key"`
+	Role              SourceSectionRole `json:"role"`
+	Title             string            `json:"title"`
+	CommentNodeID     string            `json:"comment_node_id"`
+	CommentDatabaseID int64             `json:"comment_database_id"`
+	BodySHA256        string            `json:"body_sha256"`
+}
+
+// SourceSectionProvenance records non-authoritative fetch and display metadata.
+type SourceSectionProvenance struct {
+	CommentNodeID     string `json:"comment_node_id"`
+	CommentDatabaseID int64  `json:"comment_database_id"`
+	URL               string `json:"url"`
+	AuthorID          string `json:"author_id"`
+	ObservedUpdatedAt string `json:"observed_updated_at"`
+}
+
+// PinnedSourceSection is the persisted, path-free catalog entry for one local
+// content-addressed chapter. Markdown is stored separately by runstore.
+type PinnedSourceSection struct {
+	Key             string                  `json:"key"`
+	Role            SourceSectionRole       `json:"role"`
+	Title           string                  `json:"title"`
+	BodySHA256      string                  `json:"body_sha256"`
+	SectionRevision string                  `json:"section_revision"`
+	MaterialSHA256  string                  `json:"material_sha256"`
+	Bytes           int                     `json:"bytes"`
+	Provenance      SourceSectionProvenance `json:"provenance"`
+}
+
+type sourceMaterial struct {
+	Digest string
+	Data   []byte
+}
+
+// PinnedSource is the complete source catalog that may be persisted. Raw Issue
+// bodies, labels, timestamps, and Markdown material are not journaled.
 type PinnedSource struct {
-	SourceVersion        int                  `json:"source_version"`
-	ParserVersion        int                  `json:"parser_version"`
-	Provider             string               `json:"provider"`
-	Host                 string               `json:"host"`
-	RepositoryID         string               `json:"repository_id"`
-	IssueID              string               `json:"issue_id"`
-	IssueNumber          int                  `json:"issue_number"`
-	CanonicalURL         string               `json:"canonical_url"`
-	URLAliases           []string             `json:"url_aliases"`
-	SourceRevision       string               `json:"source_revision"`
-	RequirementsRevision string               `json:"requirements_revision"`
-	Title                string               `json:"title"`
-	Parent               *SourceParent        `json:"parent,omitempty"`
-	AcceptedRequirements AcceptedRequirements `json:"accepted_requirements"`
+	SourceVersion              int                   `json:"source_version"`
+	ParserVersion              int                   `json:"parser_version"`
+	ManifestVersion            int                   `json:"manifest_version"`
+	Profile                    string                `json:"profile"`
+	Provider                   string                `json:"provider"`
+	Host                       string                `json:"host"`
+	RepositoryID               string                `json:"repository_id"`
+	IssueID                    string                `json:"issue_id"`
+	IssueNumber                int                   `json:"issue_number"`
+	CanonicalURL               string                `json:"canonical_url"`
+	URLAliases                 []string              `json:"url_aliases"`
+	SourceRevision             string                `json:"source_revision"`
+	ManifestRevision           string                `json:"manifest_revision"`
+	RequirementsRevision       string                `json:"requirements_revision"`
+	ParentRequirementsRevision string                `json:"parent_requirements_revision,omitempty"`
+	Title                      string                `json:"title"`
+	Parent                     *SourceParent         `json:"parent,omitempty"`
+	Sections                   []PinnedSourceSection `json:"sections"`
+	materials                  []sourceMaterial
 }
 
 // SourceClassification reports whether a refreshed envelope is a structurally
@@ -101,16 +168,19 @@ const (
 )
 
 const (
-	SourceClassificationValidChange              = "valid_change"
-	SourceClassificationObjectiveMarker          = "objective_marker"
-	SourceClassificationUnsupportedMarker        = "unsupported_marker"
-	SourceClassificationMultipleMarkers          = "multiple_markers"
-	SourceClassificationChangeMarkerRequired     = "change_marker_required"
-	SourceClassificationAcceptedSectionMissing   = "accepted_section_missing"
-	SourceClassificationAcceptedSectionDuplicate = "accepted_section_duplicate"
-	SourceClassificationAcceptedSectionAmbiguous = "accepted_section_ambiguous"
-	SourceClassificationRequirementsTooLarge     = "accepted_requirements_too_large"
-	SourceClassificationInvalidChangeBody        = "invalid_change_body"
+	SourceClassificationValidChange          = "valid_change"
+	SourceClassificationObjectiveMarker      = "objective_marker"
+	SourceClassificationUnsupportedMarker    = "unsupported_marker"
+	SourceClassificationChangeMarkerRequired = "change_marker_required"
+	SourceClassificationManifestInvalid      = "source_manifest_invalid"
+	SourceClassificationSectionMissing       = "source_section_missing"
+	SourceClassificationSectionUnexpected    = "source_section_unexpected"
+	SourceClassificationSectionMinimized     = "source_section_minimized"
+	SourceClassificationSectionHashMismatch  = "source_section_hash_mismatch"
+	SourceClassificationSectionInvalid       = "source_section_invalid"
+	SourceClassificationSectionTooLarge      = "source_section_too_large"
+	SourceClassificationBundleTooLarge       = "source_bundle_too_large"
+	SourceClassificationInvalidChangeBody    = "invalid_change_body"
 )
 
 // SourceCandidateInput is the normalized, path-free result of importing a
@@ -195,29 +265,36 @@ func parseSourceCandidate(raw []byte) (SourceCandidateInput, error, error) {
 
 	normalizedBody := normalizeLineEndings(envelope.Body)
 	candidate := sourceCandidateIdentity(envelope, normalizedBody)
-	accepted, bodyErr := parseAcceptedRequirements(normalizedBody)
+	manifest, sections, materials, bodyErr := parseSourceBundle(envelope, normalizedBody)
 	if bodyErr != nil {
 		candidate.Classification = SourceClassificationInvalid
 		candidate.ClassificationCode, candidate.ClassificationError = classifySourceBodyError(bodyErr)
 		return candidate, bodyErr, nil
 	}
 
+	manifestSHA256 := manifestRevision(manifest)
 	snapshot := PinnedSource{
-		SourceVersion:        SourceVersion,
-		ParserVersion:        ParserVersion,
-		Provider:             envelope.Provider,
-		Host:                 envelope.Host,
-		RepositoryID:         envelope.RepositoryID,
-		IssueID:              envelope.IssueID,
-		IssueNumber:          envelope.IssueNumber,
-		CanonicalURL:         envelope.CanonicalURL,
-		URLAliases:           make([]string, 0),
-		SourceRevision:       candidate.SourceRevision,
-		RequirementsRevision: requirementsRevision(accepted),
-		Title:                envelope.Title,
-		Parent:               cloneSourceParent(envelope.Parent),
-		AcceptedRequirements: accepted,
+		SourceVersion:              SourceVersion,
+		ParserVersion:              ParserVersion,
+		ManifestVersion:            manifest.ManifestVersion,
+		Profile:                    manifest.Profile,
+		Provider:                   envelope.Provider,
+		Host:                       envelope.Host,
+		RepositoryID:               envelope.RepositoryID,
+		IssueID:                    envelope.IssueID,
+		IssueNumber:                envelope.IssueNumber,
+		CanonicalURL:               envelope.CanonicalURL,
+		URLAliases:                 make([]string, 0),
+		SourceRevision:             sourceRevision(envelope, manifestSHA256),
+		ManifestRevision:           manifestSHA256,
+		RequirementsRevision:       requirementsRevision(manifest.Profile, sections),
+		ParentRequirementsRevision: manifest.ParentRequirementsRevision,
+		Title:                      envelope.Title,
+		Parent:                     cloneSourceParent(envelope.Parent),
+		Sections:                   sections,
+		materials:                  cloneSourceMaterials(materials),
 	}
+	candidate.SourceRevision = snapshot.SourceRevision
 	candidate.Valid = true
 	candidate.Classification = SourceClassificationValid
 	candidate.ClassificationCode = SourceClassificationValidChange
@@ -238,46 +315,33 @@ func sourceCandidateIdentity(envelope RawSourceEnvelope, normalizedBody string) 
 		IssueNumber:    envelope.IssueNumber,
 		CanonicalURL:   envelope.CanonicalURL,
 		URLAliases:     make([]string, 0),
-		SourceRevision: sourceRevision(envelope, normalizedBody),
+		SourceRevision: observedSourceRevision(envelope, normalizedBody),
 		Title:          envelope.Title,
 		Parent:         cloneSourceParent(envelope.Parent),
 	}
 }
 
 func classifySourceBodyError(err error) (string, string) {
-	message := err.Error()
-	switch {
-	case strings.Contains(message, "objective marker"):
-		return SourceClassificationObjectiveMarker, "objective marker cannot be used as a change source"
-	case strings.Contains(message, "unsupported slipway-level marker"):
-		return SourceClassificationUnsupportedMarker, "source uses an unsupported slipway-level marker"
-	case strings.Contains(message, "multiple slipway-level markers"):
-		return SourceClassificationMultipleMarkers, "source contains multiple slipway-level markers outside code fences"
-	case strings.Contains(message, "first nonempty body line"), strings.Contains(message, "marker must appear"):
-		return SourceClassificationChangeMarkerRequired, "source must begin with one change/v1 marker outside code fences"
-	case strings.Contains(message, "missing accepted h2 heading"):
-		return SourceClassificationAcceptedSectionMissing, "source is missing one or more accepted h2 sections"
-	case strings.Contains(message, "duplicate accepted h2 heading"):
-		return SourceClassificationAcceptedSectionDuplicate, "source contains a duplicate accepted h2 section"
-	case strings.Contains(message, "ambiguous accepted h2 heading"):
-		return SourceClassificationAcceptedSectionAmbiguous, "source contains an ambiguous accepted h2 section"
-	case strings.Contains(message, "accepted requirements exceed"):
-		return SourceClassificationRequirementsTooLarge, fmt.Sprintf("accepted requirements exceed %d bytes", maxAcceptedRequirementsBytes)
-	default:
-		return SourceClassificationInvalidChangeBody, "change source body is structurally invalid"
+	var bundleErr *sourceBundleError
+	if errors.As(err, &bundleErr) {
+		return bundleErr.code, bundleErr.message
 	}
+	return SourceClassificationInvalidChangeBody, "change source bundle is structurally invalid"
 }
 
 func validInvalidSourceClassificationCode(code string) bool {
 	switch code {
 	case SourceClassificationObjectiveMarker,
 		SourceClassificationUnsupportedMarker,
-		SourceClassificationMultipleMarkers,
 		SourceClassificationChangeMarkerRequired,
-		SourceClassificationAcceptedSectionMissing,
-		SourceClassificationAcceptedSectionDuplicate,
-		SourceClassificationAcceptedSectionAmbiguous,
-		SourceClassificationRequirementsTooLarge,
+		SourceClassificationManifestInvalid,
+		SourceClassificationSectionMissing,
+		SourceClassificationSectionUnexpected,
+		SourceClassificationSectionMinimized,
+		SourceClassificationSectionHashMismatch,
+		SourceClassificationSectionInvalid,
+		SourceClassificationSectionTooLarge,
+		SourceClassificationBundleTooLarge,
 		SourceClassificationInvalidChangeBody:
 		return true
 	default:
@@ -307,7 +371,26 @@ func clonePinnedSourceValue(source PinnedSource) PinnedSource {
 		source.URLAliases = make([]string, 0)
 	}
 	source.Parent = cloneSourceParent(source.Parent)
+	source.Sections = append([]PinnedSourceSection(nil), source.Sections...)
+	if source.Sections == nil {
+		source.Sections = make([]PinnedSourceSection, 0)
+	}
+	source.materials = cloneSourceMaterials(source.materials)
 	return source
+}
+
+func cloneSourceMaterials(materials []sourceMaterial) []sourceMaterial {
+	if materials == nil {
+		return nil
+	}
+	cloned := make([]sourceMaterial, len(materials))
+	for index, material := range materials {
+		cloned[index] = sourceMaterial{
+			Digest: material.Digest,
+			Data:   append([]byte(nil), material.Data...),
+		}
+	}
+	return cloned
 }
 
 func cloneSourceCandidateInput(input SourceCandidateInput) SourceCandidateInput {
@@ -337,33 +420,55 @@ func validatePinnedSource(source PinnedSource) error {
 	); err != nil {
 		return err
 	}
+	if source.ManifestVersion != SourceManifestVersion {
+		return fmt.Errorf("manifest_version must be %d", SourceManifestVersion)
+	}
+	if source.Profile != SourceProfileChangeV2 {
+		return fmt.Errorf("profile must be exactly %s", SourceProfileChangeV2)
+	}
+	if !validSHA256(source.ManifestRevision) {
+		return errors.New("manifest_revision must use lowercase sha256:<64 hex> format")
+	}
 	if !validSHA256(source.RequirementsRevision) {
 		return errors.New("requirements_revision must use lowercase sha256:<64 hex> format")
 	}
-	if err := validateAcceptedRequirements(source.AcceptedRequirements); err != nil {
+	if source.ParentRequirementsRevision != "" && !validSHA256(source.ParentRequirementsRevision) {
+		return errors.New("parent_requirements_revision must use lowercase sha256:<64 hex> format")
+	}
+	if err := validatePinnedSections(source.Sections); err != nil {
 		return err
 	}
-	total := len(source.AcceptedRequirements.OutcomeMarkdown) +
-		len(source.AcceptedRequirements.RequirementsMarkdown) +
-		len(source.AcceptedRequirements.AcceptanceExamplesMarkdown) +
-		len(source.AcceptedRequirements.ConstraintsMarkdown) +
-		len(source.AcceptedRequirements.NonGoalsMarkdown)
-	if total > maxAcceptedRequirementsBytes {
-		return fmt.Errorf("accepted requirements exceed %d bytes", maxAcceptedRequirementsBytes)
+	if err := validateSourceMaterials(source, false); err != nil {
+		return err
 	}
-	for name, value := range map[string]string{
-		"accepted_requirements.outcome_markdown":             source.AcceptedRequirements.OutcomeMarkdown,
-		"accepted_requirements.requirements_markdown":        source.AcceptedRequirements.RequirementsMarkdown,
-		"accepted_requirements.acceptance_examples_markdown": source.AcceptedRequirements.AcceptanceExamplesMarkdown,
-		"accepted_requirements.constraints_markdown":         source.AcceptedRequirements.ConstraintsMarkdown,
-		"accepted_requirements.non_goals_markdown":           source.AcceptedRequirements.NonGoalsMarkdown,
-	} {
-		if err := validateC0Text(name, value, true); err != nil {
+	manifest := manifestFromPinnedSource(source)
+	if err := validateSourceManifest(manifest); err != nil {
+		return fmt.Errorf("validate source manifest: %w", err)
+	}
+	for index, section := range source.Sections {
+		if err := validateGitHubCommentURL(
+			fmt.Sprintf("sections[%d].provenance.url", index),
+			section.Provenance.URL,
+			source.CanonicalURL,
+			section.Provenance.CommentDatabaseID,
+		); err != nil {
 			return err
 		}
 	}
-	if computed := requirementsRevision(source.AcceptedRequirements); source.RequirementsRevision != computed {
-		return errors.New("requirements_revision does not match accepted_requirements")
+	if computed := manifestRevision(manifest); source.ManifestRevision != computed {
+		return errors.New("manifest_revision does not match sections")
+	}
+	if computed := sourceRevisionFromIdentity(
+		source.Host,
+		source.RepositoryID,
+		source.IssueID,
+		source.Title,
+		source.ManifestRevision,
+	); source.SourceRevision != computed {
+		return errors.New("source_revision does not match source identity and manifest")
+	}
+	if computed := requirementsRevision(source.Profile, source.Sections); source.RequirementsRevision != computed {
+		return errors.New("requirements_revision does not match sections")
 	}
 	return nil
 }
@@ -450,6 +555,9 @@ func validatePersistedSourceProjection(sourceVersion, parserVersion int, provide
 	}
 	if aliases == nil {
 		return errors.New("url_aliases must be an initialized array")
+	}
+	if len(aliases) > maxSourceURLAliases {
+		return fmt.Errorf("url_aliases must contain at most %d entries", maxSourceURLAliases)
 	}
 	seenAliases := make(map[string]struct{}, len(aliases))
 	for index, alias := range aliases {
@@ -662,6 +770,9 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 	if envelope.Labels == nil {
 		return errors.New("labels must be an initialized array")
 	}
+	if len(envelope.Labels) > maxSourceLabels {
+		return fmt.Errorf("labels must contain at most %d entries", maxSourceLabels)
+	}
 	for index, label := range envelope.Labels {
 		field := fmt.Sprintf("labels[%d]", index)
 		if err := validateC0Text(field, label, false); err != nil {
@@ -670,6 +781,28 @@ func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {
 		if strings.TrimSpace(label) == "" {
 			return fmt.Errorf("%s must be nonempty", field)
 		}
+	}
+	if envelope.Comments == nil {
+		return errors.New("comments must be an initialized array")
+	}
+	if len(envelope.Comments) > maxSourceSections {
+		return fmt.Errorf("comments must contain at most %d entries", maxSourceSections)
+	}
+	nodeIDs := make(map[string]struct{}, len(envelope.Comments))
+	databaseIDs := make(map[int64]struct{}, len(envelope.Comments))
+	for index, comment := range envelope.Comments {
+		field := fmt.Sprintf("comments[%d]", index)
+		if err := validateRawSourceComment(field, comment, envelope.CanonicalURL); err != nil {
+			return err
+		}
+		if _, exists := nodeIDs[comment.NodeID]; exists {
+			return fmt.Errorf("%s.node_id is duplicated", field)
+		}
+		nodeIDs[comment.NodeID] = struct{}{}
+		if _, exists := databaseIDs[comment.DatabaseID]; exists {
+			return fmt.Errorf("%s.database_id is duplicated", field)
+		}
+		databaseIDs[comment.DatabaseID] = struct{}{}
 	}
 
 	if envelope.Parent != nil {
@@ -783,251 +916,6 @@ func validGitHubRepositoryName(value string) bool {
 func normalizeLineEndings(value string) string {
 	value = strings.ReplaceAll(value, "\r\n", "\n")
 	return strings.ReplaceAll(value, "\r", "\n")
-}
-
-type markdownLine struct {
-	text         string
-	start        int
-	contentStart int
-}
-
-type acceptedSectionLocation struct {
-	start        int
-	contentStart int
-}
-
-func parseAcceptedRequirements(body string) (AcceptedRequirements, error) {
-	lines := splitMarkdownLines(body)
-	firstNonempty := ""
-	for _, line := range lines {
-		if strings.TrimSpace(line.text) != "" {
-			firstNonempty = line.text
-			break
-		}
-	}
-	if firstNonempty != changeSourceMarker {
-		if firstNonempty == "<!-- slipway-level: objective/v1 -->" {
-			return AcceptedRequirements{}, errors.New("objective marker cannot be used as a change source")
-		}
-		if strings.Contains(firstNonempty, markerIdentifier) {
-			return AcceptedRequirements{}, errors.New("unsupported slipway-level marker")
-		}
-		return AcceptedRequirements{}, fmt.Errorf("first nonempty body line must exactly equal %s", changeSourceMarker)
-	}
-
-	headingIndexes := make(map[string]int, len(acceptedSectionHeadings))
-	for index, heading := range acceptedSectionHeadings {
-		headingIndexes[heading] = index
-	}
-	locations := make([]*acceptedSectionLocation, len(acceptedSectionHeadings))
-	allH2Starts := make([]int, 0, len(acceptedSectionHeadings)+1)
-	markerCount := 0
-	var fenceCharacter byte
-	fenceLength := 0
-
-	for _, line := range lines {
-		if fenceLength > 0 {
-			if closesFence(line.text, fenceCharacter, fenceLength) {
-				fenceCharacter = 0
-				fenceLength = 0
-			}
-			continue
-		}
-		if character, length, ok := opensFence(line.text); ok {
-			fenceCharacter = character
-			fenceLength = length
-			continue
-		}
-
-		markerCount += strings.Count(line.text, markerIdentifier)
-		heading, isH2 := markdownH2Text(line.text)
-		if !isH2 {
-			if acceptedHeadingLookalike(line.text) {
-				return AcceptedRequirements{}, fmt.Errorf("ambiguous accepted h2 heading %q", line.text)
-			}
-			continue
-		}
-		allH2Starts = append(allH2Starts, line.start)
-
-		index, accepted := headingIndexes[heading]
-		if !accepted {
-			if acceptedHeadingNameFold(heading) {
-				return AcceptedRequirements{}, fmt.Errorf("ambiguous accepted h2 heading %q", line.text)
-			}
-			continue
-		}
-		if line.text != "## "+heading {
-			return AcceptedRequirements{}, fmt.Errorf("ambiguous accepted h2 heading %q", line.text)
-		}
-		if locations[index] != nil {
-			return AcceptedRequirements{}, fmt.Errorf("duplicate accepted h2 heading %q", heading)
-		}
-		locations[index] = &acceptedSectionLocation{start: line.start, contentStart: line.contentStart}
-	}
-
-	if markerCount != 1 {
-		if markerCount == 0 {
-			return AcceptedRequirements{}, errors.New("change source marker must appear outside code fences")
-		}
-		return AcceptedRequirements{}, errors.New("multiple slipway-level markers outside code fences")
-	}
-
-	sections := make([]string, len(locations))
-	totalBytes := 0
-	for index, location := range locations {
-		if location == nil {
-			return AcceptedRequirements{}, fmt.Errorf("missing accepted h2 heading %q", acceptedSectionHeadings[index])
-		}
-		end := len(body)
-		for _, headingStart := range allH2Starts {
-			if headingStart > location.start {
-				end = headingStart
-				break
-			}
-		}
-		sections[index] = body[location.contentStart:end]
-		totalBytes += len(sections[index])
-	}
-	if totalBytes > maxAcceptedRequirementsBytes {
-		return AcceptedRequirements{}, fmt.Errorf("accepted requirements exceed %d bytes", maxAcceptedRequirementsBytes)
-	}
-
-	return AcceptedRequirements{
-		OutcomeMarkdown:            sections[0],
-		RequirementsMarkdown:       sections[1],
-		AcceptanceExamplesMarkdown: sections[2],
-		ConstraintsMarkdown:        sections[3],
-		NonGoalsMarkdown:           sections[4],
-	}, nil
-}
-
-func splitMarkdownLines(body string) []markdownLine {
-	lines := make([]markdownLine, 0, strings.Count(body, "\n")+1)
-	for start := 0; start < len(body); {
-		relativeEnd := strings.IndexByte(body[start:], '\n')
-		if relativeEnd < 0 {
-			lines = append(lines, markdownLine{text: body[start:], start: start, contentStart: len(body)})
-			break
-		}
-		end := start + relativeEnd
-		lines = append(lines, markdownLine{text: body[start:end], start: start, contentStart: end + 1})
-		start = end + 1
-	}
-	return lines
-}
-
-func opensFence(line string) (byte, int, bool) {
-	trimmed, ok := trimFenceIndent(line)
-	if !ok || trimmed == "" || (trimmed[0] != '`' && trimmed[0] != '~') {
-		return 0, 0, false
-	}
-	character := trimmed[0]
-	length := countLeadingByte(trimmed, character)
-	if length < 3 {
-		return 0, 0, false
-	}
-	if character == '`' && strings.Contains(trimmed[length:], "`") {
-		return 0, 0, false
-	}
-	return character, length, true
-}
-
-func closesFence(line string, character byte, minimumLength int) bool {
-	trimmed, ok := trimFenceIndent(line)
-	if !ok || trimmed == "" || trimmed[0] != character {
-		return false
-	}
-	length := countLeadingByte(trimmed, character)
-	return length >= minimumLength && strings.Trim(trimmed[length:], " \t") == ""
-}
-
-func trimFenceIndent(line string) (string, bool) {
-	spaces := 0
-	for spaces < len(line) && line[spaces] == ' ' {
-		spaces++
-	}
-	if spaces > 3 {
-		return "", false
-	}
-	return line[spaces:], true
-}
-
-func countLeadingByte(value string, character byte) int {
-	count := 0
-	for count < len(value) && value[count] == character {
-		count++
-	}
-	return count
-}
-
-func markdownH2Text(line string) (string, bool) {
-	trimmed, ok := trimFenceIndent(line)
-	if !ok || !strings.HasPrefix(trimmed, "##") || strings.HasPrefix(trimmed, "###") {
-		return "", false
-	}
-	if len(trimmed) == 2 {
-		return "", true
-	}
-	if trimmed[2] != ' ' && trimmed[2] != '\t' {
-		return "", false
-	}
-	content := strings.Trim(trimmed[2:], " \t")
-	if closingStart := closingHeadingHashStart(content); closingStart >= 0 {
-		content = strings.TrimRight(content[:closingStart], " \t")
-	}
-	return content, true
-}
-
-func closingHeadingHashStart(content string) int {
-	index := len(content)
-	for index > 0 && content[index-1] == '#' {
-		index--
-	}
-	if index == len(content) || index == 0 || (content[index-1] != ' ' && content[index-1] != '\t') {
-		return -1
-	}
-	return index
-}
-
-func acceptedHeadingLookalike(line string) bool {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "##") || strings.HasPrefix(trimmed, "###") {
-		return false
-	}
-	candidate := strings.TrimSpace(strings.TrimPrefix(trimmed, "##"))
-	candidate = strings.TrimSpace(strings.TrimRight(candidate, "#"))
-	return acceptedHeadingNameFold(candidate)
-}
-
-func acceptedHeadingNameFold(value string) bool {
-	for _, heading := range acceptedSectionHeadings {
-		if strings.EqualFold(value, heading) {
-			return true
-		}
-	}
-	return false
-}
-
-func sourceRevision(envelope RawSourceEnvelope, normalizedBody string) string {
-	return framedRevision(
-		strconv.Itoa(SourceVersion),
-		envelope.Host,
-		envelope.RepositoryID,
-		envelope.IssueID,
-		normalizeLineEndings(envelope.Title),
-		normalizedBody,
-	)
-}
-
-func requirementsRevision(requirements AcceptedRequirements) string {
-	return framedRevision(
-		strconv.Itoa(ParserVersion),
-		requirements.OutcomeMarkdown,
-		requirements.RequirementsMarkdown,
-		requirements.AcceptanceExamplesMarkdown,
-		requirements.ConstraintsMarkdown,
-		requirements.NonGoalsMarkdown,
-	)
 }
 
 // framedRevision hashes each ordered UTF-8 field as an unsigned uint64
