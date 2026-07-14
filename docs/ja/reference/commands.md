@@ -7,18 +7,18 @@
 - `install`: 六つのホスト capability を導入。
   初回は `--refresh` 不要です。current ownership manifest が既にある場合、通常の `install` は管理ファイルを変更せず、修復・更新には `--refresh` を明示します。marker だけで current manifest がない場合は no-op safety warning を返し、non-current manifest は mutation 前に失敗します。
 - `uninstall`: 未変更の管理ファイルだけを削除。
-- `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は fail closed です。`needs_refresh` は drift を示すだけで user edit の上書きを許可しません。Missing pristine content は refresh で再作成できますが、modified file/sentinel はユーザーが明示的に扱うまで保持されます。
+- `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は該当ホストだけを `installed:false` と optional `warning` に degrade し、read-only の一覧は filesystem を変更せず他の全ホストも報告し続けます。`needs_refresh` は drift を示すだけで user edit の上書きを許可しません。Missing pristine content は refresh で再作成できますが、modified file/sentinel はユーザーが明示的に扱うまで保持されます。
 - `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。non-current manifest は `adapter_manifest_unreadable`、不完全な current surface は `needs_refresh`/warning になります。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。Action budget のデフォルトは `8` で、明示値は `1..1000` です。source 付きでは strict Source Bundle v2 envelope を一度だけ読み、manifest が参照する chapter を local content-addressed material として固定し、journal には catalog/provenance だけを永続化します。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。Action budget のデフォルトは `8`、明示値は `1..1000` です。Host-generated/machine `start` は常に canonical safe variant `slipway run --budget N --json --root ABSOLUTE_ROOT [--no-review] [--source-file FILE] -- GOAL` を使い、全 flag を唯一の `--` より前に置きます。Public Cobra command は人が入力する同等の合法な配置も受け付けます。Source 付きでは strict Source Bundle v2 envelope を一度だけ読み、accepted normalized materials と catalog/provenance だけを保存します。
 - `status [run-id] [--root ROOT] [--json]`: Run を一覧・表示。ID なしでは current repository の全 Run を列挙します。Current canonical workspace の Run は full replay し、別 linked worktree の Run は `FirstEvent` header stub としてだけ表示し、JSON は `workspace_foreign:true`、human output は `foreign=true` と owning workspace を示します。Foreign stub は discovery 専用で、Load・resume・mutation は引き続き元の workspace からだけ実行できます。
 - `stop [run-id] [--root ROOT] [--json]`: journal を残して停止。
 
 ```bash
-slipway run "small private fix" --json
-slipway run "bounded Change を実装" --source-file C:\safe\temp\change-envelope.json --json
+slipway run --budget 8 --json --root /absolute/repository -- "small private fix"
+slipway run --budget 8 --json --root /absolute/repository --source-file /safe/temp/change-envelope.json -- "bounded Change を実装"
 ```
 
-Source import 前に accepted Requirements、goal、later answers、command summaries が機微であり得ると警告します。Raw body/comments/token/env は journal input ではありません。[Privacy](../explanation/runs-and-privacy.md)を参照してください。
+Source import 前に accepted Requirements、goal、later answers、command summaries が機微であり得ると警告します。Host は exact Issue body と manifest 参照 raw comment fields だけを一時取得し、raw envelope は CLI consume にだけ渡して temporary file を削除します。Journal は accepted normalized materials と bounded catalog/provenance だけを保存し、raw body/comments/token/env は保存しません。[Privacy](../explanation/runs-and-privacy.md)を参照してください。
 
 ホストは非表示のプロトコルコマンドを使います。
 

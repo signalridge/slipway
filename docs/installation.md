@@ -102,12 +102,14 @@ Run from any directory inside a Git worktree:
 
 ```bash
 slipway install --tool claude
+slipway install --tool kiro --surface ide  # or: --surface cli
 ```
 
-Use repeated `--tool`, a comma-separated value, or `--tool all`. Without `--tool`, Slipway installs adapters whose host directories it detects. `--refresh` updates only files whose ownership hash still matches.
+Use repeated `--tool`, a comma-separated value, or `--tool all`. Without `--tool`, Slipway installs adapters whose host directories it detects. `--refresh` updates only files whose ownership hash still matches. Kiro's first install requires `--surface ide|cli`; its ownership manifest records the choice, so later refresh and uninstall infer the same surface. `--surface` is invalid for non-Kiro hosts and cannot silently switch an installed Kiro adapter.
 
-Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`.
-Copilot auto-detection recognizes any of `.github/copilot`, `.github/prompts`, or `.github/skills`; generated capabilities are installed under `.github/skills`.
+Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Skill-native hosts invoke `slipway-<name>` through their skill UI (Codex uses `$slipway-<name>` and Pi uses `/skill:slipway-<name>`). Copilot selects the generated custom agent. Kilo, OpenCode, and Windsurf invoke `/slipway-<name>`. Kiro IDE manually includes `#slipway-<name>`; Kiro CLI uses `kiro-cli chat --agent slipway-<name>`.
+
+Copilot auto-detection recognizes any of `.github/copilot`, `.github/prompts`, or `.github/skills`; generated custom agents are installed under `.github/copilot/agents`.
 
 ```bash
 slipway list
@@ -123,6 +125,6 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-The only accepted manifest format is version 2. Any other version fails closed and cannot authorize install, refresh, uninstall, or list. A marker without a current manifest establishes no ownership and leaves the adapter surface unchanged. Host settings are outside adapter ownership and are never modified.
+The only accepted manifest format is version 2. Any other version fails closed before install, refresh, or uninstall can mutate files. Read-only `list` remains available: it reports that host as uninstalled with an advisory and continues listing every other host without changing the filesystem. A marker without a current manifest establishes no ownership and leaves the adapter surface unchanged. Host settings are outside adapter ownership and are never modified.
 
 No SessionStart or prompt-submission activation is installed.

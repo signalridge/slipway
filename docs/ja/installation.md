@@ -77,9 +77,12 @@ scoop install signalridge/slipway
 
 ```bash
 slipway install --tool claude
+slipway install --tool kiro --surface ide  # または --surface cli
 ```
 
-`claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` をサポートします。`--tool` は複数指定でき、`--tool all` も使えます。省略時は検出したホストだけを対象にします。Copilot auto-detection は `.github/copilot`、`.github/prompts`、`.github/skills` のいずれかを認識し、生成 capability は `.github/skills` に配置します。
+`claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` をサポートします。`--tool` は複数指定でき、`--tool all` も使えます。省略時は検出したホストだけを対象にします。Kiro の初回 install は `--surface ide|cli` が必須で、manifest が選択を記録し、後続の refresh/uninstall は同じ surface を自動的に使います。他ホストでの `--surface` と、既存 Kiro surface の暗黙切替は拒否されます。
+
+Skill host はネイティブ skill UI から `slipway-<name>` を呼び出します（Codex は `$slipway-<name>`、Pi は `/skill:slipway-<name>`）。Copilot は agent picker から custom agent を選び、Kilo、OpenCode、Windsurf は `/slipway-<name>`、Kiro IDE は手動 include の `#slipway-<name>`、Kiro CLI は `kiro-cli chat --agent slipway-<name>` を使います。Copilot auto-detection は `.github/copilot`、`.github/prompts`、`.github/skills` のいずれかを認識し、custom agent は `.github/copilot/agents` に配置します。
 
 ```bash
 slipway list
@@ -88,4 +91,4 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-Refresh と uninstall は current version 2 ownership manifest のハッシュが一致するファイルだけを変更します。他の manifest version はすべて fail closed で、install、refresh、uninstall、list を認可しません。ユーザー変更、未知、範囲外 path、symlink は保持または安全に拒否され、marker-only は ownership を確立せず migration や推論も行いません。ホスト settings は一切変更しません。SessionStart や prompt-submit の自動入口は導入しません。
+Refresh と uninstall は current version 2 ownership manifest のハッシュが一致するファイルだけを変更します。他の manifest version はすべて、install、refresh、uninstall がファイルを変更する前に fail closed となります。Read-only の `list` は引き続き実行でき、そのホストを advisory 付きの未インストールとして報告し、filesystem を変更せずに他の全ホストも列挙します。ユーザー変更、未知、範囲外 path、symlink は保持または安全に拒否され、marker-only は ownership を確立せず migration や推論も行いません。ホスト settings は一切変更しません。SessionStart や prompt-submit の自動入口は導入しません。

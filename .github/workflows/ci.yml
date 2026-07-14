@@ -58,7 +58,7 @@ jobs:
       - name: Run Slipway testlint
         run: go run ./internal/testlint/cmd/testlint ./...
   acceptance-quality:
-    name: Acceptance Asset Quality
+    name: Acceptance Assets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -93,6 +93,12 @@ jobs:
           assert report["statuses_covered"] == expected
           assert {case["item_status"] for case in report["cases"]} == set(expected)
           assert all(case["blind_retry"] is False for case in report["cases"])
+          assert report["rejected_cases"] == ["timeout-second-create-is-forbidden"]
+          duplicate = next(case for case in report["cases"] if case["name"] == "duplicate-converges-after-first-match")
+          assert duplicate["first_match_poll"] == 1
+          assert duplicate["reconciliation_polls"] == 2
+          assert duplicate["marker_match_count"] == 2
+          assert duplicate["convergence_readback"] is True
           PY
   test:
     name: Test (${{ matrix.os }})
@@ -206,7 +212,6 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [acceptance-quality, lint-go, test, release-config]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - name: Set up Go
@@ -236,7 +241,6 @@ jobs:
   cross-compile:
     name: Cross Compile
     runs-on: ubuntu-latest
-    needs: [build]
     strategy:
       fail-fast: false
       matrix:

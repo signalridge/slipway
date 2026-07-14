@@ -7,18 +7,18 @@ Slipway 只有七个公开命令：
 - `install`：安装六个宿主能力。
   首次安装无需 `--refresh`；已有 current ownership manifest 时，普通 `install` 不会改写托管文件，修复或更新需显式使用 `--refresh`。只有 marker 而缺少 current manifest 时返回 no-op 安全提示；非当前版本 manifest 会在 mutation 前失败。
 - `uninstall`：仅删除仍保持原样的托管文件。
-- `list`：列出宿主检测、安装、`needs_refresh` 与 capability 状态；非当前版本 manifest 会 fail closed。`needs_refresh` 表示 drift，不授权覆盖用户修改：缺失 pristine 内容可由 refresh 重建，修改后的文件或 sentinel 会一直保留，直到用户显式处理。
+- `list`：列出宿主检测、安装、`needs_refresh` 与 capability 状态；非当前版本 manifest 只会把对应宿主降级为 `installed:false` 并附可选 `warning`，只读列表仍继续报告其他所有宿主且不修改文件系统。`needs_refresh` 表示 drift，不授权覆盖用户修改：缺失 pristine 内容可由 refresh 重建，修改后的文件或 sentinel 会一直保留，直到用户显式处理。
 - `doctor`：诊断适配器和运行环境，不检查代码改动；非当前版本 manifest 报告 `adapter_manifest_unreadable`，不完整 current surface 报告 `needs_refresh`/warning。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；Action budget 默认是 `8`，显式值必须在 `1..1000`。带 source 时只读取一次严格 Source Bundle v2 envelope，把 manifest 引用章节固定为本地内容寻址 material，并仅在 journal 中持久化 catalog/provenance。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；Action budget 默认是 `8`，显式值必须在 `1..1000`。宿主生成和 machine `start` 固定采用安全规范形式 `slipway run --budget N --json --root ABSOLUTE_ROOT [--no-review] [--source-file FILE] -- GOAL`，所有 flags 都在唯一 `--` 前；公共 Cobra 命令仍接受用户输入的等价合法排列。带 source 时只读取一次严格 Source Bundle v2 envelope，把 manifest 引用章节固定为本地内容寻址 material，并仅持久化 accepted normalized materials 与 catalog/provenance。
 - `status [run-id] [--root ROOT] [--json]`：列出或查看 Run。无 ID 时列出当前仓库的所有 Run：当前 canonical workspace 的 Run 完整 replay；其他 linked worktree 的 Run 仅以 `FirstEvent` header stub 出现，JSON 标记 `workspace_foreign:true`，人类输出标记 `foreign=true` 并显示所属 workspace。Foreign stub 只用于发现；Load、resume 与 mutation 仍必须从原 workspace 执行。
 - `stop [run-id] [--root ROOT] [--json]`：停止但保留恢复日志。
 
 ```bash
-slipway run "小型私密修复" --json
-slipway run "实施有界 Change" --source-file /安全临时目录/change-envelope.json --json
+slipway run --budget 8 --json --root /绝对路径/仓库 -- "小型私密修复"
+slipway run --budget 8 --json --root /绝对路径/仓库 --source-file /安全临时目录/change-envelope.json -- "实施有界 Change"
 ```
 
-导入 source 前警告 accepted Requirements、goal、answers 与 command summaries 可能敏感；raw body/comments/token/env 不进入 journal。详见[运行日志与隐私](../explanation/runs-and-privacy.md)。
+导入 source 前警告 accepted Requirements、goal、answers 与 command summaries 可能敏感。宿主只临时获取精确 Issue body 与 manifest 引用 raw comment fields，raw envelope 仅交给 CLI consume，随后删除临时文件；journal 只保留 accepted normalized materials 与 bounded catalog/provenance，不保存 raw body/comments/token/env。详见[运行日志与隐私](../explanation/runs-and-privacy.md)。
 
 宿主使用隐藏的协议命令：
 

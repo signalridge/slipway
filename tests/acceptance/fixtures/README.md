@@ -4,13 +4,16 @@
 
 The fixture covers:
 
-- approved operation/item UUID markers immediately after a Change level marker;
+- a new Change draft containing only operation/item receipt markers, with no `change/v2` marker or manifest;
+- section comments beginning with their section marker and containing no `slipway-level` marker;
+- a final Change beginning with the level marker and manifest fence, with the same receipt markers after the fence;
+- an actual ordered call log for the one create, every poll, and final convergence readback;
 - successful create plus readback (`created`);
 - timeout-after-success and delayed indexing converging to one match (`matched`);
 - partial relationship success/failure without rollback;
 - zero marker matches (`failed`, requiring a fresh preview and confirmation);
-- duplicate/multiple marker matches (`ambiguous`, requiring user resolution);
-- exactly one create attempt and no blind retry in every case.
+- poll 1 finding one match followed by poll 2 and final readback finding duplicates (`ambiguous`);
+- an explicit rejected timeout trace proving that a second create attempt fails validation.
 
 Run from the repository root:
 

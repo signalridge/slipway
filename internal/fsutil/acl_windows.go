@@ -3,10 +3,11 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
+	"syscall"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -14,21 +15,31 @@ import (
 
 const localSystemSID = "S-1-5-18"
 
+var procReOpenFile = windows.NewLazySystemDLL("kernel32.dll").NewProc("ReOpenFile")
+
 // RestrictToOwner applies a protected DACL that grants full control only to
 // the current user and LocalSystem.
-func RestrictToOwner(path string) error {
-	return restrictToOwner(path)
+func RestrictToOwner(file *os.File) error {
+	return restrictToOwner(file)
 }
 
-func restrictToOwner(path string) error {
-	path = filepath.Clean(path)
-	info, err := os.Lstat(path)
+func restrictToOwner(file *os.File) error {
+	if file == nil {
+		return errors.New("restrict owner access: nil file")
+	}
+	info, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("inspect ACL target: %w", err)
 	}
-	if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
-		return fmt.Errorf("ACL target %q is not a regular file or directory", path)
+	if !info.IsDir() && !info.Mode().IsRegular() {
+		return errors.New("ACL target is not a regular file or directory")
 	}
+
+	handle, err := reopenFileHandle(file, windows.READ_CONTROL|windows.WRITE_DAC)
+	if err != nil {
+		return fmt.Errorf("reopen ACL target handle: %w", err)
+	}
+	defer windows.CloseHandle(handle)
 
 	userSID, systemSID, err := ownerOnlySIDs()
 	if err != nil {
@@ -46,8 +57,8 @@ func restrictToOwner(path string) error {
 	if err != nil {
 		return fmt.Errorf("build owner-only DACL: %w", err)
 	}
-	if err := windows.SetNamedSecurityInfo(
-		path,
+	if err := windows.SetSecurityInfo(
+		handle,
 		windows.SE_FILE_OBJECT,
 		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
 		nil,
@@ -57,14 +68,21 @@ func restrictToOwner(path string) error {
 	); err != nil {
 		return fmt.Errorf("set owner-only DACL: %w", err)
 	}
-	private, err := ownerACLIsPrivate(path)
+	private, err := ownerACLHandleIsPrivate(handle)
 	if err != nil {
 		return fmt.Errorf("verify owner-only DACL: %w", err)
 	}
 	if !private {
-		return fmt.Errorf("verify owner-only DACL: %q retained unexpected access", path)
+		return errors.New("verify owner-only DACL: target retained unexpected access")
 	}
-	return nil
+
+	// ReOpenFile performs a fresh access check while remaining bound to this
+	// filesystem object, so a pathname replacement cannot satisfy verification.
+	access, err := reopenFileHandle(file, windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC)
+	if err != nil {
+		return fmt.Errorf("verify effective owner access: %w", err)
+	}
+	return windows.CloseHandle(access)
 }
 
 func ownerOnlyAccessEntry(sid *windows.SID, trusteeType windows.TRUSTEE_TYPE, inheritance uint32) windows.EXPLICIT_ACCESS {
@@ -95,8 +113,38 @@ func ownerOnlySIDs() (*windows.SID, *windows.SID, error) {
 	return user.User.Sid, system, nil
 }
 
-func ownerACLIsPrivate(path string) (bool, error) {
-	descriptor, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
+func ownerACLIsPrivate(file *os.File) (bool, error) {
+	if file == nil {
+		return false, errors.New("verify owner ACL: nil file")
+	}
+	handle, err := reopenFileHandle(file, windows.READ_CONTROL)
+	if err != nil {
+		return false, err
+	}
+	defer windows.CloseHandle(handle)
+	return ownerACLHandleIsPrivate(handle)
+}
+
+func reopenFileHandle(file *os.File, access uint32) (windows.Handle, error) {
+	handleValue, _, callErr := procReOpenFile.Call(
+		file.Fd(),
+		uintptr(access),
+		uintptr(windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE),
+		uintptr(windows.FILE_FLAG_BACKUP_SEMANTICS),
+	)
+	runtime.KeepAlive(file)
+	handle := windows.Handle(handleValue)
+	if handle == windows.InvalidHandle {
+		if callErr == syscall.Errno(0) {
+			callErr = windows.ERROR_INVALID_HANDLE
+		}
+		return 0, callErr
+	}
+	return handle, nil
+}
+
+func ownerACLHandleIsPrivate(handle windows.Handle) (bool, error) {
+	descriptor, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return false, err
 	}
@@ -131,13 +179,15 @@ func ownerACLIsPrivate(path string) (bool, error) {
 	}
 	seenUser := false
 	seenSystem := false
+	const allowedFlags = uint8(windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE)
 	for index := uint16(0); index < dacl.AceCount; index++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, uint32(index), &ace); err != nil {
 			return false, err
 		}
 		if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE ||
-			ace.Header.AceFlags&(windows.INHERITED_ACE|windows.INHERIT_ONLY_ACE) != 0 ||
+			ace.Header.AceFlags & ^allowedFlags != 0 ||
+			ace.Header.AceSize < uint16(unsafe.Offsetof(ace.SidStart)+4) ||
 			!aceGrantsFullControl(ace.Mask) {
 			return false, nil
 		}
@@ -183,7 +233,7 @@ func aceGrantsFullControl(mask windows.ACCESS_MASK) bool {
 	return mask&required == required
 }
 
-func ownerProtectionIsPrivate(path string, _ os.FileMode) bool {
-	private, err := ownerACLIsPrivate(path)
+func ownerProtectionIsPrivate(file *os.File, _ os.FileMode) bool {
+	private, err := ownerACLIsPrivate(file)
 	return err == nil && private
 }

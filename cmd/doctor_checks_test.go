@@ -250,6 +250,36 @@ func TestDoctorCommandEmitsVersionedExactChecksAndWarningsExitSuccessfully(t *te
 	assert.Equal(t, 1, durabilityChecks)
 }
 
+func TestDoctorAggregationKeepsHostDurabilityAndGitHubChecksAfterInspectionError(t *testing.T) {
+	repository := newCLIRepository(t)
+	runner := &fakeDoctorCommandRunner{pathErr: errors.New("not found"), bounded: true}
+	doctor := func(string) (adapter.DoctorReport, error) {
+		return adapter.DoctorReport{Checks: []adapter.DoctorCheck{
+			{Code: "adapter_inspection_unavailable", Status: "error", HostID: "claude", Name: "adapter inspection", Detail: "injected inspection failure"},
+			{Code: "adapter_healthy", Status: "ok", HostID: "codex", Name: "adapter", Detail: "8 managed files"},
+		}}, nil
+	}
+
+	report, err := collectDoctorReportWithAdapterDoctor(context.Background(), repository, runner, doctor)
+	require.NoError(t, err)
+	codes := doctorCodes(report.Checks)
+	assert.Contains(t, codes, "adapter_inspection_unavailable")
+	assert.Contains(t, codes, "adapter_healthy")
+	assert.Contains(t, codes, "github_cli_unavailable")
+	assert.Condition(t, func() bool {
+		return containsString(codes, "runstore_durability_full") || containsString(codes, "runstore_durability_limited")
+	})
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
 func doctorCodes(checks []adapter.DoctorCheck) []string {
 	codes := make([]string, 0, len(checks))
 	for _, check := range checks {

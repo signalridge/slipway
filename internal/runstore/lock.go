@@ -55,6 +55,12 @@ func (tracker *mutationTracker) fail(phase MutationPhase, detached bool, err err
 	)
 }
 
+type runWriterLock interface {
+	tryLock() (bool, error)
+	unlock() error
+	close() error
+}
+
 type runTransaction struct {
 	run     *runHandle
 	lock    *os.File
@@ -76,10 +82,49 @@ func (transaction *runTransaction) validate(phase MutationPhase, point faultPoin
 	return nil
 }
 
-func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTransaction) error) error {
+func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTransaction) error) (resultErr error) {
 	if err := run.validate(); err != nil {
 		return tracker.fail(PhaseNamespaceVerify, false, err)
 	}
+	writer, err := openRunWriterLock(run)
+	if err != nil {
+		return tracker.fail(PhaseLockOpen, false, fmt.Errorf("open run writer lock: %w", err))
+	}
+	writerLocked := false
+	defer func() {
+		var releaseErr error
+		if writerLocked {
+			releaseErr = writer.unlock()
+		}
+		releaseErr = errors.Join(releaseErr, writer.close())
+		if releaseErr != nil {
+			resultErr = tracker.fail(
+				PhaseLockVerify,
+				tracker != nil && tracker.wroteJournal,
+				errors.Join(resultErr, fmt.Errorf("release run writer lock: %w", releaseErr)),
+			)
+		}
+	}()
+
+	deadline := time.Now().Add(lockTimeout)
+	for {
+		locked, lockErr := writer.tryLock()
+		if lockErr != nil {
+			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run writer lock: %w", lockErr))
+		}
+		if locked {
+			writerLocked = true
+			break
+		}
+		if run.writerWait != nil {
+			run.writerWait()
+		}
+		if !time.Now().Before(deadline) {
+			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run writer lock: timed out after %s", lockTimeout))
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
 	lockIdentity, err := inspectRegularFileOrMissingInRoot(run.root, lockFileName)
 	if err != nil {
 		return tracker.fail(PhaseLockOpen, false, fmt.Errorf("inspect run lock: %w", err))
@@ -100,6 +145,9 @@ func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTra
 	if err := anchor.Chmod(0o600); err != nil {
 		return tracker.fail(PhaseLockOpen, false, fmt.Errorf("secure run lock: %w", err))
 	}
+	if err := restrictPrivateFile(anchor, 0o600); err != nil {
+		return tracker.fail(PhaseLockOpen, false, fmt.Errorf("secure run lock ACL: %w", err))
+	}
 	if created {
 		if err := run.store.hooks.at(faultLockBeforeSync); err != nil {
 			return tracker.fail(PhaseLockSync, false, err)
@@ -118,45 +166,21 @@ func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTra
 		}
 	}
 
-	deadline := time.Now().Add(lockTimeout)
-	for {
-		locked, lockErr := tryLockFile(anchor)
-		if lockErr != nil {
-			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run lock: %w", lockErr))
-		}
-		if locked {
-			break
-		}
-		if !time.Now().Before(deadline) {
-			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run lock: timed out after %s", lockTimeout))
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-
 	transaction := &runTransaction{run: run, lock: anchor, tracker: tracker}
 	if err := run.store.hooks.at(faultLockAcquired); err != nil {
-		_ = unlockFile(anchor)
 		return tracker.fail(PhaseLockVerify, false, err)
 	}
 	if err := transaction.validate(PhaseLockVerify, faultLockBeforeCallback); err != nil {
-		_ = unlockFile(anchor)
 		return err
 	}
 
 	callbackErr := callback(transaction)
 	validationErr := transaction.validate(PhaseLockVerify, faultLockAfterCallback)
-	unlockErr := unlockFile(anchor)
 	if callbackErr != nil {
-		if validationErr != nil || unlockErr != nil {
-			return tracker.fail(PhaseLockVerify, tracker != nil && tracker.wroteJournal, errors.Join(callbackErr, validationErr, unlockErr))
+		if validationErr != nil {
+			return tracker.fail(PhaseLockVerify, tracker != nil && tracker.wroteJournal, errors.Join(callbackErr, validationErr))
 		}
 		return callbackErr
 	}
-	if validationErr != nil {
-		return validationErr
-	}
-	if unlockErr != nil {
-		return tracker.fail(PhaseLockVerify, tracker != nil && tracker.wroteJournal, fmt.Errorf("release run lock: %w", unlockErr))
-	}
-	return nil
+	return validationErr
 }

@@ -234,6 +234,62 @@ func TestLockReplacementBeforeCallbackPreventsMutation(t *testing.T) {
 	assert.ErrorContains(t, err, "run lock changed")
 }
 
+func TestRunWriterGuardSurvivesRunLockReplacement(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("run.lock replacement while opened is not portable on Windows")
+	}
+	runID := "00000000-0000-4000-8000-000000000307"
+	storeA, paths := createAdversarialRun(t, runID)
+	storeB, err := Open(storeA.RepositoryRoot())
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, storeB.Close()) })
+	runA, err := storeA.openRunRoot(runID)
+	require.NoError(t, err)
+	defer runA.Close()
+	runB, err := storeB.openRunRoot(runID)
+	require.NoError(t, err)
+	defer runB.Close()
+
+	aEntered := make(chan struct{})
+	releaseA := make(chan struct{})
+	aResult := make(chan error, 1)
+	go func() {
+		aResult <- withRunLock(runA, nil, func(*runTransaction) error {
+			replaceLeaf(t, paths.LockFile, []byte("replacement lock"))
+			close(aEntered)
+			<-releaseA
+			return nil
+		})
+	}()
+	<-aEntered
+
+	bWaiting := make(chan struct{})
+	var waitOnce sync.Once
+	runB.writerWait = func() { waitOnce.Do(func() { close(bWaiting) }) }
+	bEntered := make(chan struct{})
+	bResult := make(chan error, 1)
+	go func() {
+		bResult <- withRunLock(runB, nil, func(*runTransaction) error {
+			close(bEntered)
+			return nil
+		})
+	}()
+	<-bWaiting
+	select {
+	case <-bEntered:
+		t.Fatal("replacement run.lock bypassed the run writer guard")
+	default:
+	}
+	close(releaseA)
+	require.Error(t, <-aResult)
+	require.NoError(t, <-bResult)
+	select {
+	case <-bEntered:
+	default:
+		t.Fatal("second writer never entered after the first released the writer guard")
+	}
+}
+
 func TestLockReplacementAfterJournalSyncReportsCommittedStale(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("renaming an opened lock file is not portable on Windows")

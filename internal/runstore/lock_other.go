@@ -1,14 +1,15 @@
-//go:build !aix && !darwin && !dragonfly && !freebsd && !linux && !netbsd && !openbsd && !solaris && !windows
+//go:build !unix && !windows
 
 package runstore
 
-import (
-	"errors"
-	"os"
-)
+import "errors"
 
-func tryLockFile(_ *os.File) (bool, error) {
-	return false, errors.New("run journal locking is unsupported on this platform")
+type unsupportedWriterLock struct{}
+
+func openRunWriterLock(_ *runHandle) (runWriterLock, error) {
+	return nil, errors.New("run journal locking is unsupported on this platform")
 }
 
-func unlockFile(_ *os.File) error { return nil }
+func (*unsupportedWriterLock) tryLock() (bool, error) { return false, nil }
+func (*unsupportedWriterLock) unlock() error          { return nil }
+func (*unsupportedWriterLock) close() error           { return nil }

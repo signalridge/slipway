@@ -20,6 +20,9 @@ func makeUninstallCmd() *cobra.Command {
 			}
 			report, err := adapter.Uninstall(adapter.UninstallOptions{Root: resolved, Tools: tools})
 			if err != nil {
+				if selectionErr := unknownHostSelectionCLIError(err, resolved); selectionErr != nil {
+					return selectionErr
+				}
 				return adapterMutationError("uninstall_failed", err, resolved, report)
 			}
 			if jsonOutput {

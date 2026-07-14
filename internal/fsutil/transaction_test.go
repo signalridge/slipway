@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,6 +81,37 @@ func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 		assertFileMode(t, path, 0o640)
 		requireNoRecoveryArtifacts(t, dir)
 	})
+}
+
+func TestRollbackReattachesOriginalFileIdentityAndMetadata(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	later := filepath.Join(dir, "later.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o640))
+	fixedTime := time.Unix(1_700_000_000, 0)
+	require.NoError(t, os.Chtimes(path, fixedTime, fixedTime))
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+	failure := errors.New("later operation failed")
+
+	err = applyFileTransactionWithHooksForTest([]FileTransactionOp{
+		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
+		WriteFileTransactionOp(later, []byte("later"), 0o600),
+	}, fileTransactionHooks{BeforeMutation: failPath(later, failure)})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, failure)
+	after, statErr := os.Stat(path)
+	require.NoError(t, statErr)
+	assert.True(t, os.SameFile(before, after), "rollback must reattach the quarantined object")
+	assert.Equal(t, before.Mode().Perm(), after.Mode().Perm())
+	assert.Equal(t, before.ModTime(), after.ModTime())
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "before", string(content))
+	requireNoRecoveryArtifacts(t, dir)
 }
 
 func TestApplyFileTransactionRestoresRemovedSnapshotKinds(t *testing.T) {
@@ -781,12 +813,15 @@ func assertReportedRecoveryArtifactsPrivate(t *testing.T, transactionErr error, 
 		require.NoError(t, err, recovery.RecoveryPath)
 		assert.True(t, info.IsDir())
 		assert.Zero(t, info.Mode()&os.ModeSymlink)
+		directory, openErr := os.Open(filepath.Dir(recovery.RecoveryPath))
+		require.NoError(t, openErr)
 		assert.True(
 			t,
-			ownerProtectionIsPrivate(filepath.Dir(recovery.RecoveryPath), info.Mode()),
+			ownerProtectionIsPrivate(directory, info.Mode()),
 			"recovery directory must be private: %s",
 			recovery.RecoveryPath,
 		)
+		require.NoError(t, directory.Close())
 	}
 }
 

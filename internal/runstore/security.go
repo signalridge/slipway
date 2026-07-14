@@ -29,7 +29,7 @@ func restrictPrivateFile(file *os.File, perm os.FileMode) error {
 	if perm.Perm()&0o077 != 0 {
 		return nil
 	}
-	if err := fsutil.RestrictToOwner(file.Name()); err != nil {
+	if err := fsutil.RestrictToOwner(file); err != nil {
 		return fmt.Errorf("restrict private file to owner: %w", err)
 	}
 	return nil

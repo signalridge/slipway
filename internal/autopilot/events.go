@@ -49,27 +49,28 @@ type runDelta struct {
 	RunID           string             `json:"run_id"`
 	Initialize      *runInitialization `json:"initialize,omitempty"`
 
-	State                        *RunState                 `json:"state,omitempty"`
-	PauseReason                  *PauseReason              `json:"pause_reason,omitempty"`
-	ReviewPending                *bool                     `json:"review_pending,omitempty"`
-	RemainingBudget              *int                      `json:"remaining_budget,omitempty"`
-	CurrentActionSet             bool                      `json:"current_action_set,omitempty"`
-	CurrentAction                *Action                   `json:"current_action,omitempty"`
-	CurrentGit                   *gitObservationDelta      `json:"current_git,omitempty"`
-	FinalGitObserved             *bool                     `json:"final_git_observed,omitempty"`
-	PinnedSourceSet              bool                      `json:"pinned_source_set,omitempty"`
-	PinnedSource                 *PinnedSource             `json:"pinned_source,omitempty"`
-	SourceCandidateSet           bool                      `json:"source_candidate_set,omitempty"`
-	SourceCandidate              *SourceCandidate          `json:"source_candidate,omitempty"`
-	LastSourceChoiceSet          bool                      `json:"last_source_choice_set,omitempty"`
-	LastSourceChoice             *SourceChoiceReceipt      `json:"last_source_choice,omitempty"`
-	LastResumeResultSet          bool                      `json:"last_resume_result_set,omitempty"`
-	LastResumeResult             *ResumeResult             `json:"last_resume_result,omitempty"`
-	Summary                      *string                   `json:"summary,omitempty"`
-	PendingDestructiveRequestSet bool                      `json:"pending_destructive_request_set,omitempty"`
-	PendingDestructiveRequest    *DestructiveRequest       `json:"pending_destructive_request,omitempty"`
-	DestructiveGrantSet          bool                      `json:"destructive_grant_set,omitempty"`
-	DestructiveGrant             *DestructiveAuthorization `json:"destructive_grant,omitempty"`
+	State                         *RunState                 `json:"state,omitempty"`
+	PauseReason                   *PauseReason              `json:"pause_reason,omitempty"`
+	ReviewPending                 *bool                     `json:"review_pending,omitempty"`
+	RemainingBudget               *int                      `json:"remaining_budget,omitempty"`
+	CurrentActionSet              bool                      `json:"current_action_set,omitempty"`
+	CurrentAction                 *Action                   `json:"current_action,omitempty"`
+	CurrentGit                    *gitObservationDelta      `json:"current_git,omitempty"`
+	FinalGitObserved              *bool                     `json:"final_git_observed,omitempty"`
+	PinnedSourceSet               bool                      `json:"pinned_source_set,omitempty"`
+	PinnedSource                  *PinnedSource             `json:"pinned_source,omitempty"`
+	SourceCandidateSet            bool                      `json:"source_candidate_set,omitempty"`
+	SourceCandidate               *SourceCandidate          `json:"source_candidate,omitempty"`
+	LastSourceChoiceSet           bool                      `json:"last_source_choice_set,omitempty"`
+	LastSourceChoice              *SourceChoiceReceipt      `json:"last_source_choice,omitempty"`
+	SourceChoiceResolutionsAppend []sourceChoiceResolution  `json:"source_choice_resolutions_append,omitempty"`
+	LastResumeResultSet           bool                      `json:"last_resume_result_set,omitempty"`
+	LastResumeResult              *ResumeResult             `json:"last_resume_result,omitempty"`
+	Summary                       *string                   `json:"summary,omitempty"`
+	PendingDestructiveRequestSet  bool                      `json:"pending_destructive_request_set,omitempty"`
+	PendingDestructiveRequest     *DestructiveRequest       `json:"pending_destructive_request,omitempty"`
+	DestructiveGrantSet           bool                      `json:"destructive_grant_set,omitempty"`
+	DestructiveGrant              *DestructiveAuthorization `json:"destructive_grant,omitempty"`
 
 	ActionUpdates       []actionUpdate    `json:"action_updates,omitempty"`
 	AnswerUpdates       []answerUpdate    `json:"answer_updates,omitempty"`
@@ -143,9 +144,6 @@ func validateRunEventMutation(eventType string, before, after Run, delta runDelt
 			return errors.New("run_stopped must enter stopped state")
 		}
 	case "run_resumed":
-		if isBudgetBlockedDestructiveGrant(before) {
-			return validateBudgetBlockedDestructiveResume(before, after)
-		}
 		if after.LastResumeResult == nil || after.LastResumeResult.Operation != ResumeOperationAdHoc {
 			return errors.New("run_resumed must record the ad-hoc resume operation")
 		}
@@ -273,6 +271,18 @@ func diffRun(eventType string, before, after Run) (runDelta, error) {
 			delta.LastSourceChoice = &receipt
 		}
 	}
+	if len(after.sourceChoiceHistory) < len(before.sourceChoiceHistory) {
+		return runDelta{}, errors.New("source choice resolution history is not append-only")
+	}
+	for index := range before.sourceChoiceHistory {
+		if before.sourceChoiceHistory[index] != after.sourceChoiceHistory[index] {
+			return runDelta{}, errors.New("source choice resolution history is not append-only")
+		}
+	}
+	delta.SourceChoiceResolutionsAppend = append(
+		[]sourceChoiceResolution(nil),
+		after.sourceChoiceHistory[len(before.sourceChoiceHistory):]...,
+	)
 	if !reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) {
 		delta.LastResumeResultSet = true
 		if after.LastResumeResult != nil {
@@ -471,6 +481,25 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	} else if delta.LastResumeResult != nil {
 		return errors.New("last_resume_result requires last_resume_result_set")
 	}
+	for _, resolution := range delta.SourceChoiceResolutionsAppend {
+		if err := validateSourceChoiceResolution(resolution); err != nil {
+			return err
+		}
+		if findSourceChoiceResolution(*run, resolution.Receipt.CandidateID) != nil {
+			return errors.New("source choice resolution candidate_id is duplicated")
+		}
+		run.sourceChoiceHistory = append(run.sourceChoiceHistory, resolution)
+	}
+	if len(delta.SourceChoiceResolutionsAppend) == 0 && delta.LastSourceChoiceSet &&
+		delta.LastSourceChoice != nil && delta.LastResumeResultSet && delta.LastResumeResult != nil {
+		legacy := sourceChoiceResolution{Receipt: *delta.LastSourceChoice, Result: *delta.LastResumeResult}
+		if err := validateSourceChoiceResolution(legacy); err == nil {
+			if findSourceChoiceResolution(*run, legacy.Receipt.CandidateID) != nil {
+				return errors.New("source choice resolution candidate_id is duplicated")
+			}
+			run.sourceChoiceHistory = append(run.sourceChoiceHistory, legacy)
+		}
+	}
 	if delta.Summary != nil {
 		run.Summary = *delta.Summary
 	}
@@ -553,6 +582,12 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	canonicalDelta, err := diffRun(event.Type, before, *run)
 	if err != nil {
 		return fmt.Errorf("reconstruct canonical %s event: %w", event.Type, err)
+	}
+	// Event version 1 journals written before append-only source-choice history
+	// carried only the two Last* projection fields. Replay reconstructs their
+	// single resolution while retaining that exact legacy delta as canonical.
+	if len(delta.SourceChoiceResolutionsAppend) == 0 && delta.LastSourceChoiceSet && delta.LastSourceChoice != nil {
+		canonicalDelta.SourceChoiceResolutionsAppend = nil
 	}
 	if !reflect.DeepEqual(delta, canonicalDelta) {
 		return fmt.Errorf("non-canonical delta for %s event", event.Type)

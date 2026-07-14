@@ -55,6 +55,17 @@ func TestRetiredCommandReturnsStructuredActionableError(t *testing.T) {
 	assert.Contains(t, stderr, `"operation":"none"`)
 }
 
+func TestRawRootArgumentStopsAtSeparator(t *testing.T) {
+	t.Parallel()
+	explicit, found := rawRootArgument([]string{"run", "goal", "--root=/repo/b", "--", "--root", "/repo/a"})
+	require.True(t, found)
+	assert.Equal(t, "/repo/b", explicit)
+
+	explicit, found = rawRootArgument([]string{"run", "--", "--root=/repo/b"})
+	assert.False(t, found)
+	assert.Empty(t, explicit)
+}
+
 func executeForTest(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	root := newRootCmd()
@@ -63,6 +74,6 @@ func executeForTest(t *testing.T, args ...string) (string, string, error) {
 	root.SetErr(&stderr)
 	root.SetIn(strings.NewReader(""))
 	root.SetArgs(args)
-	err := executeRootCommand(root)
+	err := executeRootCommand(root, args...)
 	return stdout.String(), stderr.String(), err
 }

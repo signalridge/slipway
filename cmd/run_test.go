@@ -372,6 +372,68 @@ func TestFileAndFlagPreflightFailuresDoNotOpenRunstore(t *testing.T) {
 	}
 }
 
+func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore(t *testing.T) {
+	cwdRepository := newCLIRepository(t)
+	t.Chdir(cwdRepository)
+
+	tests := []struct {
+		name string
+		args func(string) []string
+		code string
+	}{
+		{
+			name: "blank goal",
+			args: func(repository string) []string { return []string{"run", "   ", "--root", repository, "--json"} },
+			code: "goal_required",
+		},
+		{
+			name: "invalid budget",
+			args: func(repository string) []string {
+				return []string{"run", "goal", "--budget", "1001", "--root", repository, "--json"}
+			},
+			code: "invalid_budget",
+		},
+		{
+			name: "malformed budget before equals root",
+			args: func(repository string) []string {
+				return []string{"run", "goal", "--budget", "not-an-integer", "--root=" + repository, "--json"}
+			},
+			code: "invalid_usage",
+		},
+		{
+			name: "invalid mode",
+			args: func(repository string) []string {
+				return []string{"_machine", "resume", "run-1", "--source-choice", "invalid", "--candidate", "candidate-1", "--root", repository}
+			},
+			code: "invalid_source_choice",
+		},
+		{
+			name: "cobra flag error before root",
+			args: func(repository string) []string { return []string{"run", "goal", "--unknown", "--root", repository} },
+			code: "invalid_usage",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			explicitRepository := newCLIRepository(t)
+			stdout, stderr, err := executeForTest(t, test.args(explicitRepository)...)
+			require.Error(t, err)
+			assert.Empty(t, stdout)
+			var cliErr CLIError
+			require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+			assert.Equal(t, test.code, cliErr.Code)
+			expected := autopilot.NoneNext(explicitRepository)
+			assert.Equal(t, expected.WorkspaceIdentity, cliErr.Next.WorkspaceIdentity)
+			assert.Equal(t, autopilot.NextOperationNone, cliErr.Next.Operation)
+			for _, repository := range []string{cwdRepository, explicitRepository} {
+				_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+				require.ErrorIs(t, statErr, os.ErrNotExist)
+			}
+		})
+	}
+}
+
 func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) {
 	repository := newCLIRepository(t)
 	stdout, stderr, err := executeForTest(t, "run", "change", "--root", repository, "--json")
@@ -446,7 +508,7 @@ func executeForTestWithInput(t *testing.T, input string, args ...string) (string
 	root.SetErr(&stderr)
 	root.SetIn(strings.NewReader(input))
 	root.SetArgs(args)
-	err := executeRootCommand(root)
+	err := executeRootCommand(root, args...)
 	return stdout.String(), stderr.String(), err
 }
 

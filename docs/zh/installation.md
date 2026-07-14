@@ -77,9 +77,12 @@ scoop install signalridge/slipway
 
 ```bash
 slipway install --tool claude
+slipway install --tool kiro --surface ide  # 或 --surface cli
 ```
 
-支持 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`；可以重复 `--tool` 或使用 `--tool all`。不指定时只安装检测到的宿主。Copilot 自动探测识别 `.github/copilot`、`.github/prompts` 或 `.github/skills` 任一目录，生成能力写入 `.github/skills`。
+支持 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`；可以重复 `--tool` 或使用 `--tool all`。不指定时只安装检测到的宿主。Kiro 首次安装必须选择 `--surface ide|cli`，manifest 会记录该选择，后续 refresh/uninstall 自动沿用；其他宿主不能使用 `--surface`，已安装的 Kiro 也不会被静默切换。
+
+Skill 宿主通过原生 skill UI 调用 `slipway-<name>`（Codex 为 `$slipway-<name>`，Pi 为 `/skill:slipway-<name>`）；Copilot 从 agent picker 选择 custom agent；Kilo、OpenCode、Windsurf 使用 `/slipway-<name>`；Kiro IDE 手动 include `#slipway-<name>`，Kiro CLI 使用 `kiro-cli chat --agent slipway-<name>`。Copilot 自动探测识别 `.github/copilot`、`.github/prompts` 或 `.github/skills` 任一目录，custom agent 写入 `.github/copilot/agents`。
 
 ```bash
 slipway list
@@ -88,4 +91,4 @@ slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-Refresh 和 uninstall 只修改 current version 2 ownership manifest 中哈希仍匹配的文件。其他任何 manifest 版本都会 fail closed，不能授权 install、refresh、uninstall 或 list。用户修改、未知、路径越界或 symlink 表面会被保留或安全拒绝；marker-only 不建立 ownership，也不会触发迁移或推断。宿主 settings 永不修改。不会安装 SessionStart 或 prompt-submit 自动入口。
+Refresh 和 uninstall 只修改 current version 2 ownership manifest 中哈希仍匹配的文件。其他任何 manifest 版本都会在 install、refresh 或 uninstall 修改文件前 fail closed。只读 `list` 仍可执行：它把该宿主报告为未安装并附 advisory，同时继续完整列出其他宿主，且不修改文件系统。用户修改、未知、路径越界或 symlink 表面会被保留或安全拒绝；marker-only 不建立 ownership，也不会触发迁移或推断。宿主 settings 永不修改。不会安装 SessionStart 或 prompt-submit 自动入口。

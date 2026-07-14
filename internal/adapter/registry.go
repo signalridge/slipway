@@ -20,21 +20,31 @@ var capabilityNames = []string{
 type Host struct {
 	ID            string   `json:"id"`
 	SkillsDir     string   `json:"skills_dir"`
+	SurfaceKind   string   `json:"surface_kind"`
 	OwnershipRoot string   `json:"ownership_root"`
 	DetectPaths   []string `json:"detect_paths"`
 }
 
+// UnknownHostSelectionError reports a requested adapter ID that is not in the registry.
+type UnknownHostSelectionError struct {
+	HostID string
+}
+
+func (err *UnknownHostSelectionError) Error() string {
+	return fmt.Sprintf("unknown host adapter %q", err.HostID)
+}
+
 var hosts = []Host{
-	{ID: "claude", SkillsDir: ".claude/skills", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
-	{ID: "codex", SkillsDir: ".codex/skills", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
-	{ID: "copilot", SkillsDir: ".github/skills", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot", ".github/prompts", ".github/skills"}},
-	{ID: "cursor", SkillsDir: ".cursor/skills", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
-	{ID: "kilo", SkillsDir: ".kilocode/skills", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
-	{ID: "kiro", SkillsDir: ".kiro/skills", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},
-	{ID: "opencode", SkillsDir: ".opencode/skills", OwnershipRoot: ".opencode", DetectPaths: []string{".opencode"}},
-	{ID: "pi", SkillsDir: ".pi/skills", OwnershipRoot: ".pi", DetectPaths: []string{".pi"}},
-	{ID: "qwen", SkillsDir: ".qwen/skills", OwnershipRoot: ".qwen", DetectPaths: []string{".qwen"}},
-	{ID: "windsurf", SkillsDir: ".windsurf/skills", OwnershipRoot: ".windsurf", DetectPaths: []string{".windsurf"}},
+	{ID: "claude", SkillsDir: ".claude/skills", SurfaceKind: "skill", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
+	{ID: "codex", SkillsDir: ".codex/skills", SurfaceKind: "skill", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
+	{ID: "copilot", SkillsDir: ".github/skills", SurfaceKind: "copilot_agent", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot", ".github/prompts", ".github/skills"}},
+	{ID: "cursor", SkillsDir: ".cursor/skills", SurfaceKind: "skill", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
+	{ID: "kilo", SkillsDir: ".kilocode/skills", SurfaceKind: "kilo_command", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
+	{ID: "kiro", SkillsDir: ".kiro/skills", SurfaceKind: "", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},
+	{ID: "opencode", SkillsDir: ".opencode/skills", SurfaceKind: "opencode_command", OwnershipRoot: ".opencode", DetectPaths: []string{".opencode"}},
+	{ID: "pi", SkillsDir: ".pi/skills", SurfaceKind: "skill", OwnershipRoot: ".pi", DetectPaths: []string{".pi"}},
+	{ID: "qwen", SkillsDir: ".qwen/skills", SurfaceKind: "skill", OwnershipRoot: ".qwen", DetectPaths: []string{".qwen"}},
+	{ID: "windsurf", SkillsDir: ".windsurf/skills", SurfaceKind: "windsurf_workflow", OwnershipRoot: ".windsurf", DetectPaths: []string{".windsurf"}},
 }
 
 func Registry() []Host {
@@ -79,7 +89,7 @@ func resolveHosts(root string, requested []string, defaultDetected bool) ([]Host
 				}
 				host, ok := lookupHost(id)
 				if !ok {
-					return nil, fmt.Errorf("unknown host adapter %q", id)
+					return nil, &UnknownHostSelectionError{HostID: id}
 				}
 				selected[id] = host
 			}

@@ -6,7 +6,7 @@
 
 Journal 包含原始 goal、canonical workspace identity、immutable initial Git observation、structured Git delta、bounded issue-source chapter catalog/provenance、Actions/Outcomes、answers 与 supersession metadata、skip/stop、source choice、destructive request/grant、budget、如实的 activity command summaries、known issues 和 uncertainties。Accepted chapter Markdown 只在私有 content-addressed `materials/` 中存一份，不复制到每个 Action 或 journal event。**Goal、accepted Requirements、用户回答与命令摘要可能包含敏感文本。** Source import 或 journal creation 前必须警告，并把 `.git/slipway/runs/` 当作本地私密数据。
 
-Slipway 不绝对承诺 journal 没有 secret。它承诺最小化：不主动收 GitHub token、credential store、raw Issue body、raw/full comments、环境变量 dump、无关文件内容、完整会话 transcript 或 hidden reasoning。Source 只保存 accepted sections、identity 和 revisions。Git path observation 只含 category/state、size、bounded SHA-256；regular hash 超过 16 MiB 或 unreadable 时只记状态。
+Slipway 不绝对承诺 journal 没有 secret。它承诺最小化：不主动收 GitHub token、credential store、未引用讨论、环境变量 dump、无关文件内容、完整会话 transcript 或 hidden reasoning。导入 Issue source 时，宿主只临时获取精确 Issue body 和 manifest 引用的 raw comment fields，构造私有 raw envelope，仅交给 CLI consume，随后删除临时文件。CLI 只持久化 parser-accepted normalized chapter payloads 与 bounded catalog/provenance，不保留 raw Issue body、comment marker 或 raw enclosing comment envelope。Git path observation 只含 category/state、size、bounded SHA-256；regular hash 超过 16 MiB 或 unreadable 时只记状态。
 
 生成宿主在发布或 journaling 前，对识别到的 credential value 做最小脱敏，同时保留真实 command identity，例如 executable 与被脱敏参数的位置/名称。识别不可能完美，因此用户仍不得粘贴 secret。公开仓库 Issue 没有 private switch；敏感工作用 private repository、仅真实漏洞且已启用时用 private vulnerability reporting、既有 security channel 或 ad-hoc Run。
 

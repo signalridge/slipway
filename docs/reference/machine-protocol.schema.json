@@ -1192,7 +1192,7 @@
       "properties": {
         "kind": { "enum": ["test", "typecheck", "build", "lint"] },
         "command": { "type": "string", "minLength": 1 },
-        "exit_code": { "type": "integer", "minimum": 0 },
+        "exit_code": { "type": "integer" },
         "summary": { "type": "string", "minLength": 1 }
       }
     },

@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/spf13/cobra"
 )
 
@@ -18,18 +20,57 @@ func Execute() error {
 	root := newRootCmd()
 	root.SetOut(os.Stdout)
 	root.SetErr(os.Stderr)
-	return executeRootCommand(root)
+	return executeRootCommand(root, os.Args[1:]...)
 }
 
-func executeRootCommand(root *cobra.Command) error {
+func executeRootCommand(root *cobra.Command, args ...string) error {
+	root.SetArgs(args)
+	errorRoot := rootForEarlyError(args)
 	if err := root.Execute(); err != nil {
 		cliErr := asCLIError(err)
+		if errorRoot != "" && cliErr.Next.Operation == autopilot.NextOperationNone {
+			cliErr.Next = autopilot.NoneNext(errorRoot)
+		}
 		if emitErr := writeJSON(root.ErrOrStderr(), cliErr); emitErr != nil {
 			return emitErr
 		}
 		return cliErr
 	}
 	return nil
+}
+
+func rootForEarlyError(args []string) string {
+	explicit, found := rawRootArgument(args)
+	if !found {
+		return ""
+	}
+	resolved, err := resolveRoot(explicit)
+	if err != nil {
+		return ""
+	}
+	return resolved
+}
+
+func rawRootArgument(args []string) (string, bool) {
+	var explicit string
+	var found bool
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		if argument == "--" {
+			break
+		}
+		if strings.HasPrefix(argument, "--root=") {
+			explicit = strings.TrimPrefix(argument, "--root=")
+			found = true
+			continue
+		}
+		if argument == "--root" && index+1 < len(args) {
+			explicit = args[index+1]
+			found = true
+			index++
+		}
+	}
+	return explicit, found
 }
 
 func newRootCmd() *cobra.Command {

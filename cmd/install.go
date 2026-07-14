@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,6 +37,7 @@ func makeChangeReportOutput(report adapter.ChangeReport) changeReportOutput {
 func makeInstallCmd() *cobra.Command {
 	var root string
 	var tools []string
+	var surface string
 	var refresh bool
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -47,8 +49,14 @@ func makeInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			report, err := adapter.Install(adapter.InstallOptions{Root: resolved, Tools: tools, Refresh: refresh})
+			report, err := adapter.Install(adapter.InstallOptions{Root: resolved, Tools: tools, Surface: surface, Refresh: refresh})
 			if err != nil {
+				if selectionErr := unknownHostSelectionCLIError(err, resolved); selectionErr != nil {
+					return selectionErr
+				}
+				if surfaceErr := surfaceSelectionCLIError(err); surfaceErr != nil {
+					return surfaceErr
+				}
 				return adapterMutationError("install_failed", err, resolved, report)
 			}
 			if jsonOutput {
@@ -59,9 +67,30 @@ func makeInstallCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&root, "root", "", "workspace root (default: current directory)")
 	cmd.Flags().StringSliceVar(&tools, "tool", nil, "host adapter to install; repeat or use all")
+	cmd.Flags().StringVar(&surface, "surface", "", "kiro surface to install: ide or cli")
 	cmd.Flags().BoolVar(&refresh, "refresh", false, "refresh managed files owned by Slipway")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "emit JSON")
 	return cmd
+}
+
+func unknownHostSelectionCLIError(err error, root string) *CLIError {
+	var selectionErr *adapter.UnknownHostSelectionError
+	if !errors.As(err, &selectionErr) {
+		return nil
+	}
+	return newUsageError(
+		"unknown_host_adapter",
+		selectionErr.Error(),
+		inputlessCommandNext(root, "list-host-adapters", "slipway", "list", "--root", root),
+	)
+}
+
+func surfaceSelectionCLIError(err error) *CLIError {
+	var surfaceErr *adapter.SurfaceSelectionError
+	if !errors.As(err, &surfaceErr) {
+		return nil
+	}
+	return newUsageError("invalid_adapter_surface", surfaceErr.Error(), defaultErrorNext())
 }
 
 func adapterMutationError(code string, err error, root string, report adapter.ChangeReport) *CLIError {

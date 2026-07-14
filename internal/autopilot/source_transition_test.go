@@ -330,6 +330,10 @@ func TestCandidateResolutionRequiresFreshOrientRecord(t *testing.T) {
 		ResultingActionID: forged.CurrentAction.ActionID,
 		At:                time.Now().UTC(),
 	}
+	forged.sourceChoiceHistory = append(forged.sourceChoiceHistory, sourceChoiceResolution{
+		Receipt: *forged.LastSourceChoice,
+		Result:  *forged.LastResumeResult,
+	})
 
 	err = validateCandidateResolution(ResumeOperationSourcePinned, paused, forged)
 	require.Error(t, err)

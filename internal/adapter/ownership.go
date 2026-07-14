@@ -28,16 +28,29 @@ type manifestFile struct {
 }
 
 type ownershipManifest struct {
-	Version      int            `json:"version"`
-	ToolID       string         `json:"tool_id"`
-	Files        []manifestFile `json:"files"`
+	Version      int               `json:"version"`
+	ToolID       string            `json:"tool_id"`
+	Surface      map[string]string `json:"surface,omitempty"`
+	Files        []manifestFile    `json:"files"`
 	sourceSHA256 string
 }
 
 type InstallOptions struct {
 	Root    string
 	Tools   []string
+	Surface string
 	Refresh bool
+}
+
+// SurfaceSelectionError reports an invalid host surface selection.
+type SurfaceSelectionError struct {
+	HostID  string
+	Surface string
+	Reason  string
+}
+
+func (err *SurfaceSelectionError) Error() string {
+	return err.Reason
 }
 
 type UninstallOptions struct {
@@ -106,6 +119,39 @@ type hostPlan struct {
 	warnings  []string
 }
 
+func selectedSurfaceKind(surface string) (string, bool) {
+	switch surface {
+	case "ide", "cli":
+		return "kiro_" + surface, true
+	default:
+		return "", false
+	}
+}
+
+func hostWithManifestSurface(host Host, manifest ownershipManifest) (Host, error) {
+	if host.ID != "kiro" {
+		return host, nil
+	}
+	surface := manifest.Surface[host.ID]
+	kind, valid := selectedSurfaceKind(surface)
+	if !valid {
+		return host, &SurfaceSelectionError{
+			HostID:  host.ID,
+			Surface: surface,
+			Reason:  "ownership manifest for kiro does not record a valid surface (ide or cli)",
+		}
+	}
+	host.SurfaceKind = kind
+	return host, nil
+}
+
+func manifestSurface(host Host) map[string]string {
+	if host.ID != "kiro" {
+		return nil
+	}
+	return map[string]string{host.ID: strings.TrimPrefix(host.SurfaceKind, "kiro_")}
+}
+
 func Install(options InstallOptions) (ChangeReport, error) {
 	report := ChangeReport{TransactionOutcome: TransactionOutcomeNotCommitted}
 	root, err := validatedRoot(options.Root)
@@ -118,6 +164,24 @@ func Install(options InstallOptions) (ChangeReport, error) {
 	}
 	var operations []fsutil.FileTransactionOp
 	for _, host := range selected {
+		if host.ID != "kiro" && options.Surface != "" {
+			return report, &SurfaceSelectionError{
+				HostID:  host.ID,
+				Surface: options.Surface,
+				Reason:  "surface only valid for kiro",
+			}
+		}
+		if host.ID == "kiro" && options.Surface != "" {
+			kind, valid := selectedSurfaceKind(options.Surface)
+			if !valid {
+				return report, &SurfaceSelectionError{
+					HostID:  host.ID,
+					Surface: options.Surface,
+					Reason:  "surface for kiro must be ide or cli",
+				}
+			}
+			host.SurfaceKind = kind
+		}
 		plan, err := planInstall(root, host, options.Refresh)
 		if err != nil {
 			return transactionFailureReport(root, report, err), err
@@ -252,6 +316,12 @@ func List(root string) ([]HostStatus, error) {
 		}
 		status.Installed = found && manifest.Version == currentManifestVersion
 		if found {
+			host, err = hostWithManifestSurface(host, manifest)
+			if err != nil {
+				status.Warning = "ownership manifest surface could not be read: " + err.Error()
+				statuses = append(statuses, status)
+				continue
+			}
 			inspection, err := inspectManagedSurface(root, host, manifest)
 			if err != nil {
 				status.Warning = "managed surface could not be inspected: " + err.Error()
@@ -269,6 +339,13 @@ func List(root string) ([]HostStatus, error) {
 }
 
 func Doctor(root string) (DoctorReport, error) {
+	return doctorWithInspector(root, inspectManagedSurface)
+}
+
+func doctorWithInspector(
+	root string,
+	inspect func(string, Host, ownershipManifest) (managedSurfaceInspection, error),
+) (DoctorReport, error) {
 	root, err := validatedRoot(root)
 	if err != nil {
 		return DoctorReport{}, err
@@ -300,9 +377,19 @@ func Doctor(root string) (DoctorReport, error) {
 			})
 			continue
 		}
-		inspection, err := inspectManagedSurface(root, host, manifest)
+		host, err = hostWithManifestSurface(host, manifest)
 		if err != nil {
-			return DoctorReport{}, err
+			report.Checks = append(report.Checks, DoctorCheck{
+				Code: "adapter_manifest_unreadable", Status: "error", HostID: host.ID, Name: "manifest", Detail: err.Error(),
+			})
+			continue
+		}
+		inspection, err := inspect(root, host, manifest)
+		if err != nil {
+			report.Checks = append(report.Checks, DoctorCheck{
+				Code: "adapter_inspection_unavailable", Status: "error", HostID: host.ID, Name: "adapter inspection", Detail: err.Error(),
+			})
+			continue
 		}
 		switch {
 		case inspection.SentinelModified:
@@ -334,11 +421,30 @@ func Doctor(root string) (DoctorReport, error) {
 
 func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	var plan hostPlan
-	desired, err := generateHostFiles(host)
+	manifest, found, err := loadManifest(root, host)
 	if err != nil {
 		return plan, err
 	}
-	manifest, found, err := loadManifest(root, host)
+	if found {
+		manifestHost, err := hostWithManifestSurface(host, manifest)
+		if err != nil {
+			return plan, err
+		}
+		if host.ID == "kiro" && host.SurfaceKind != "" && host.SurfaceKind != manifestHost.SurfaceKind {
+			return plan, &SurfaceSelectionError{
+				HostID:  host.ID,
+				Surface: strings.TrimPrefix(host.SurfaceKind, "kiro_"),
+				Reason:  "surface does not match the installed kiro surface",
+			}
+		}
+		host = manifestHost
+	} else if host.ID == "kiro" && host.SurfaceKind == "" {
+		return plan, &SurfaceSelectionError{
+			HostID: host.ID,
+			Reason: "--surface is required for first kiro install; choose ide or cli",
+		}
+	}
+	desired, err := generateHostFiles(host)
 	if err != nil {
 		return plan, err
 	}
@@ -430,7 +536,7 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 		}
 		return plan, nil
 	}
-	encoded, err := encodeManifest(ownershipManifest{Version: currentManifestVersion, ToolID: host.ID, Files: manifestValues(claimed)})
+	encoded, err := encodeManifest(ownershipManifest{Version: currentManifestVersion, ToolID: host.ID, Surface: manifestSurface(host), Files: manifestValues(claimed)})
 	if err != nil {
 		return plan, err
 	}
@@ -450,6 +556,10 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 		return plan, err
 	}
 	if found {
+		host, err = hostWithManifestSurface(host, manifest)
+		if err != nil {
+			return plan, err
+		}
 		for _, record := range manifest.Files {
 			absolute, err := safeManifestPath(root, host, record.Path)
 			if err != nil {
@@ -557,6 +667,10 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	if manifest.ToolID != host.ID {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s belongs to %s", host.ID, manifest.ToolID)
 	}
+	host, err = hostWithManifestSurface(host, manifest)
+	if err != nil {
+		return ownershipManifest{}, false, err
+	}
 	if manifest.Files == nil {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s requires a non-null files array", host.ID)
 	}
@@ -570,9 +684,6 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 			return ownershipManifest{}, false, fmt.Errorf("duplicate ownership path %q", relative)
 		}
 		seen[relative] = struct{}{}
-		if _, err := safeManifestPath(root, host, relative); err != nil {
-			return ownershipManifest{}, false, err
-		}
 		hash := strings.ToLower(strings.TrimSpace(manifest.Files[index].SHA256))
 		decoded, err := hex.DecodeString(hash)
 		if err != nil || len(decoded) != sha256.Size {
@@ -657,14 +768,12 @@ func safePath(root, relative, requiredPrefix string) (string, error) {
 }
 
 func claimAllowed(host Host, relative string) bool {
-	if host.ID != "copilot" {
-		prefix := filepath.ToSlash(filepath.Clean(filepath.FromSlash(host.OwnershipRoot)))
-		return relative == prefix || strings.HasPrefix(relative, prefix+"/")
+	claims, err := currentGeneratedClaims(host)
+	if err != nil {
+		return false
 	}
-	if relative == ".github/copilot" || strings.HasPrefix(relative, ".github/copilot/") {
-		return true
-	}
-	return strings.HasPrefix(relative, ".github/skills/slipway")
+	_, allowed := claims[relative]
+	return allowed
 }
 
 // currentGeneratedClaims computes the exact current ownership surface once per
@@ -854,6 +963,10 @@ type managedSurfaceInspection struct {
 }
 
 func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (managedSurfaceInspection, error) {
+	host, err := hostWithManifestSurface(host, manifest)
+	if err != nil {
+		return managedSurfaceInspection{}, err
+	}
 	complete, err := managedSurfaceComplete(host, manifest)
 	if err != nil {
 		return managedSurfaceInspection{}, err
@@ -895,14 +1008,13 @@ func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (
 	return inspection, nil
 }
 
-func healthyCapabilities(host Host, manifest ownershipManifest, healthyFiles map[string]bool) []string {
+func healthyCapabilities(_ Host, manifest ownershipManifest, healthyFiles map[string]bool) []string {
 	capabilities := make([]string, 0, len(capabilityNames))
 	for _, capability := range capabilityNames {
-		prefix := filepath.ToSlash(filepath.Join(host.SkillsDir, capability)) + "/"
 		found := false
 		healthy := true
 		for _, file := range manifest.Files {
-			if !strings.HasPrefix(file.Path, prefix) {
+			if !strings.Contains(file.Path, capability) {
 				continue
 			}
 			found = true

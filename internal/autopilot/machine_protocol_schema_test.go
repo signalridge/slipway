@@ -77,8 +77,11 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	assertEveryObjectSchemaIsClosed(t, schema, "$")
 }
 
-func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
+func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	t.Parallel()
+
+	// These hand-built values exercise the full contract matrix. Real command
+	// emitter bytes are validated separately in cmd/machine_output_test.go.
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
 	require.NoError(t, err)
@@ -255,6 +258,31 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, decoded.Validate(ActionReview, "action-1"))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "outcome"), reviewJSON)
+}
+
+func TestMachineProtocolSchemaAcceptsSignalStyleActivityExitCode(t *testing.T) {
+	t.Parallel()
+
+	activity := Activity{
+		Kind:     "test",
+		Command:  "killed-test-process",
+		ExitCode: -1,
+		Summary:  "terminated by signal before an exit status was available",
+	}
+	activitySchema := compileMachineSchemaDefinition(t, "activity")
+	require.NoError(t, activitySchema.Validate(machineSchemaValue(t, activity)))
+	require.Error(t, activitySchema.Validate(machineSchemaValue(t, map[string]any{
+		"kind": "test", "command": "test", "exit_code": -1.5, "summary": "not an integer",
+	})))
+
+	outcome := implementedTestOutcome(OutcomeCompleted, ImplementationApplied)
+	outcome.ActionKind = ActionImplement
+	outcome.Implementation.Activities = []Activity{activity}
+	encoded := marshalTestJSON(t, outcome)
+	require.NoError(t, compileMachineOutcomeSchema(t).Validate(machineSchemaValue(t, outcome)))
+	decoded, err := DecodeOutcome(bytes.NewReader(encoded))
+	require.NoError(t, err)
+	require.Equal(t, []Activity{activity}, decoded.Implementation.Activities)
 }
 
 func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) {

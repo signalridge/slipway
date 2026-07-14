@@ -118,6 +118,8 @@ type fileTransactionHooks struct {
 	AfterRestoreBeforePostValidation          fileTransactionHook
 	DuringQuarantineCleanup                   fileTransactionHook
 	AfterQuarantineValidationBeforeRelocation fileTransactionHook
+	AfterQuarantineMkdir                      fileTransactionHook
+	AfterQuarantineOpen                       fileTransactionHook
 }
 
 type fileSnapshot struct {
@@ -398,7 +400,16 @@ func rollbackFileTransactionItem(item *appliedFileTransactionOp, filesystem *tra
 		preserveQuarantine(item.beforeQuarantine)
 		return rollbackRecoveryError(item, currentQuarantine, fmt.Errorf("after quarantine validation: %w", err))
 	}
-	restored, err := filesystem.restoreSnapshotExclusive(item.op.path, item.before, item.after, filesystem.identityLease)
+	restored, reattached, err := filesystem.reattachQuarantinedSnapshot(
+		item.op.path,
+		item.before,
+		item.after,
+		item.beforeQuarantine,
+		filesystem.identityLease,
+	)
+	if err == nil && !reattached {
+		restored, err = filesystem.restoreSnapshotExclusive(item.op.path, item.before, item.after, filesystem.identityLease)
+	}
 	if err != nil {
 		preserveQuarantine(currentQuarantine)
 		preserveQuarantine(item.beforeQuarantine)

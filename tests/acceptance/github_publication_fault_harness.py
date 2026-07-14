@@ -39,7 +39,7 @@ def framed_revision(*fields: str) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def approved_body(operation_id: str, item_id: str) -> tuple[str, str]:
+def approved_body(operation_id: str, item_id: str) -> tuple[str, str, str, str]:
     definitions = [
         ("outcome", "outcome", "Outcome", "Exercise deterministic publication reconciliation."),
         ("requirements", "requirements", "Requirements", "Never blindly retry an ambiguous create."),
@@ -50,6 +50,7 @@ def approved_body(operation_id: str, item_id: str) -> tuple[str, str]:
     sections: list[dict[str, object]] = []
     for index, (key, role, title, text) in enumerate(definitions, start=1):
         comment_body = f"<!-- slipway-section:v1 key={key} -->\n# {title}\n\n{text}\n"
+        assert LEVEL_MARKER not in comment_body
         sections.append(
             {
                 "key": key,
@@ -63,7 +64,11 @@ def approved_body(operation_id: str, item_id: str) -> tuple[str, str]:
     manifest = {"manifest_version": 2, "profile": "change/v2", "sections": sections}
     operation_marker = f"{OPERATION_PREFIX}{operation_id} -->"
     item_marker = f"{ITEM_PREFIX}{item_id} -->"
-    body = "\n".join(
+    draft_body = operation_marker + "\n" + item_marker + "\n"
+    assert draft_body.splitlines() == [operation_marker, item_marker]
+    assert LEVEL_MARKER not in draft_body and "slipway-manifest" not in draft_body
+
+    final_body = "\n".join(
         [
             LEVEL_MARKER,
             "",
@@ -76,41 +81,114 @@ def approved_body(operation_id: str, item_id: str) -> tuple[str, str]:
             "",
         ]
     )
-    lines = body.splitlines()
+    lines = final_body.splitlines()
+    manifest_end = lines.index("```")
     assert lines[0] == LEVEL_MARKER
-    assert lines[-2:] == [operation_marker, item_marker]
-    return body, "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    assert lines[manifest_end + 2 :] == [operation_marker, item_marker]
+    return (
+        draft_body,
+        "sha256:" + hashlib.sha256(draft_body.encode("utf-8")).hexdigest(),
+        final_body,
+        "sha256:" + hashlib.sha256(final_body.encode("utf-8")).hexdigest(),
+    )
+
+
+def validated_marker_matches(
+    raw_matches: object, operation_id: str, item_id: str
+) -> list[dict[str, str]]:
+    if not isinstance(raw_matches, list):
+        raise AssertionError("call-log matches must be a list")
+    matches: list[dict[str, str]] = []
+    for match in raw_matches:
+        if not isinstance(match, dict) or set(match) != {
+            "operation_id",
+            "item_id",
+            "url",
+        }:
+            raise AssertionError("marker match has an unexpected shape")
+        if match["operation_id"] != operation_id or match["item_id"] != item_id:
+            raise AssertionError("marker match escaped the approved operation/item")
+        url = match["url"]
+        if not isinstance(url, str) or not url.startswith("https://github.com/"):
+            raise AssertionError("fixture URL must remain on github.com")
+        matches.append(match)
+    return matches
 
 
 def validated_matches(
-    observations: object, operation_id: str, item_id: str
-) -> tuple[list[dict[str, str]], int]:
-    if not isinstance(observations, list) or not observations:
-        raise AssertionError("marker_observations must be a non-empty sequence")
+    call_log: object, operation_id: str, item_id: str
+) -> dict[str, object]:
+    if not isinstance(call_log, list) or not call_log:
+        raise AssertionError("call_log must be a non-empty sequence")
+    create_entries = [
+        entry
+        for entry in call_log
+        if isinstance(entry, dict) and entry.get("operation") == "create"
+    ]
+    create_attempts = len(create_entries)
+    blind_retry = create_attempts > 1
+    if create_attempts != 1:
+        raise AssertionError(
+            f"create attempts={create_attempts} (blind_retry={str(blind_retry).lower()}); "
+            "publication create must execute exactly once"
+        )
+    if not isinstance(call_log[0], dict) or call_log[0].get("operation") != "create":
+        raise AssertionError("call_log must begin with create")
+    create = call_log[0]
+    if set(create) != {"operation", "body_phase", "result", "returned_url"}:
+        raise AssertionError("create call has an unexpected shape")
+    if create["body_phase"] != "draft":
+        raise AssertionError("create must use the receipt-only Change draft body")
+    request_result = create["result"]
+    if request_result not in {"success", "timeout", "partial", "ambiguous"}:
+        raise AssertionError("create call has an unsupported result")
+    returned_url = create["returned_url"]
+    if returned_url is not None and (
+        not isinstance(returned_url, str)
+        or not returned_url.startswith("https://github.com/")
+    ):
+        raise AssertionError("create returned URL escaped github.com")
+
     polls = 0
-    final_matches: list[dict[str, str]] = []
-    for raw_poll in observations:
-        polls += 1
-        if not isinstance(raw_poll, list):
-            raise AssertionError("each marker observation must be a list")
-        current: list[dict[str, str]] = []
-        for match in raw_poll:
-            if not isinstance(match, dict) or set(match) != {
-                "operation_id",
-                "item_id",
-                "url",
-            }:
-                raise AssertionError("marker match has an unexpected shape")
-            if match["operation_id"] != operation_id or match["item_id"] != item_id:
-                raise AssertionError("marker match escaped the approved operation/item")
-            url = match["url"]
-            if not isinstance(url, str) or not url.startswith("https://github.com/"):
-                raise AssertionError("fixture URL must remain on github.com")
-            current.append(match)
-        final_matches = current
-        if current:
-            break
-    return final_matches, polls
+    first_match_poll: int | None = None
+    final_matches: list[dict[str, str]] | None = None
+    for index, entry in enumerate(call_log[1:], start=1):
+        if not isinstance(entry, dict):
+            raise AssertionError("call_log entries must be objects")
+        operation = entry.get("operation")
+        if operation == "poll":
+            if set(entry) != {"operation", "matches"}:
+                raise AssertionError("poll call has an unexpected shape")
+            if final_matches is not None:
+                raise AssertionError("poll cannot follow final_readback")
+            polls += 1
+            current = validated_marker_matches(entry["matches"], operation_id, item_id)
+            if current and first_match_poll is None:
+                first_match_poll = polls
+            continue
+        if operation == "final_readback":
+            if set(entry) != {"operation", "body_phase", "matches"}:
+                raise AssertionError("final_readback has an unexpected shape")
+            if entry["body_phase"] != "final":
+                raise AssertionError("final_readback must observe the final manifested Change body")
+            if index != len(call_log) - 1 or final_matches is not None:
+                raise AssertionError("call_log must end with exactly one final_readback")
+            final_matches = validated_marker_matches(entry["matches"], operation_id, item_id)
+            continue
+        raise AssertionError(f"unsupported call_log operation: {operation!r}")
+    if polls == 0:
+        raise AssertionError("call_log must include at least one reconciliation poll")
+    if final_matches is None:
+        raise AssertionError("call_log must end with final_readback convergence evidence")
+    return {
+        "request_result": request_result,
+        "returned_url": returned_url,
+        "create_attempts": create_attempts,
+        "blind_retry": blind_retry,
+        "polls": polls,
+        "first_match_poll": first_match_poll,
+        "final_matches": final_matches,
+    }
 
 
 def classify_case(raw_case: object, operation_id: str) -> dict[str, object]:
@@ -119,9 +197,7 @@ def classify_case(raw_case: object, operation_id: str) -> dict[str, object]:
     required = {
         "name",
         "item_id",
-        "request_result",
-        "returned_url",
-        "marker_observations",
+        "call_log",
         "relationships",
         "expected",
     }
@@ -132,20 +208,12 @@ def classify_case(raw_case: object, operation_id: str) -> dict[str, object]:
     if not isinstance(name, str) or not name:
         raise AssertionError("case name must be non-empty")
     item_id = require_uuid(raw_case["item_id"], f"{name}.item_id")
-    request_result = raw_case["request_result"]
-    if request_result not in {"success", "timeout", "partial", "ambiguous"}:
-        raise AssertionError(f"{name}: unsupported request result")
-
-    body, body_sha256 = approved_body(operation_id, item_id)
-    matches, polls = validated_matches(
-        raw_case["marker_observations"], operation_id, item_id
-    )
-    returned_url = raw_case["returned_url"]
-    if returned_url is not None and (
-        not isinstance(returned_url, str)
-        or not returned_url.startswith("https://github.com/")
-    ):
-        raise AssertionError(f"{name}: returned URL escaped github.com")
+    draft_body, draft_sha256, final_body, final_sha256 = approved_body(operation_id, item_id)
+    trace = validated_matches(raw_case["call_log"], operation_id, item_id)
+    request_result = trace["request_result"]
+    returned_url = trace["returned_url"]
+    matches = trace["final_matches"]
+    assert isinstance(matches, list)
 
     if len(matches) > 1:
         item_status = "ambiguous"
@@ -183,16 +251,21 @@ def classify_case(raw_case: object, operation_id: str) -> dict[str, object]:
         "name": name,
         "operation_id": operation_id,
         "item_id": item_id,
-        "approved_body_sha256": body_sha256,
-        "approved_marker_lines": [
+        "approved_draft_body_sha256": draft_sha256,
+        "approved_final_body_sha256": final_sha256,
+        "draft_marker_lines": draft_body.splitlines(),
+        "final_marker_lines": [
             LEVEL_MARKER,
             f"{OPERATION_PREFIX}{operation_id} -->",
             f"{ITEM_PREFIX}{item_id} -->",
         ],
+        "final_markers_follow_manifest": final_body.index("```") < final_body.index(OPERATION_PREFIX),
         "request_result": request_result,
-        "create_attempts": 1,
-        "blind_retry": False,
-        "reconciliation_polls": polls,
+        "create_attempts": trace["create_attempts"],
+        "blind_retry": trace["blind_retry"],
+        "reconciliation_polls": trace["polls"],
+        "first_match_poll": trace["first_match_poll"],
+        "convergence_readback": True,
         "marker_match_count": len(matches),
         "item_status": item_status,
         "canonical_url": canonical_url,
@@ -231,9 +304,10 @@ def run(fixture_path: Path) -> dict[str, object]:
         "fixture_version",
         "operation_id",
         "cases",
+        "rejected_cases",
     }:
         raise AssertionError("fixture top-level shape differs")
-    if fixture["fixture_version"] != 1:
+    if fixture["fixture_version"] != 2:
         raise AssertionError("unsupported fixture version")
     operation_id = require_uuid(fixture["operation_id"], "operation_id")
     if not isinstance(fixture["cases"], list) or not fixture["cases"]:
@@ -242,11 +316,40 @@ def run(fixture_path: Path) -> dict[str, object]:
     observed = {case["item_status"] for case in cases}
     if observed != ALLOWED_STATUS:
         raise AssertionError(f"fixture must cover every status, observed {sorted(observed)}")
+
+    rejected_cases = fixture["rejected_cases"]
+    if not isinstance(rejected_cases, list) or not rejected_cases:
+        raise AssertionError("fixture needs rejected_cases")
+    rejected_names: list[str] = []
+    for rejected in rejected_cases:
+        if not isinstance(rejected, dict) or set(rejected) != {
+            "name",
+            "item_id",
+            "call_log",
+            "expected_error",
+        }:
+            raise AssertionError("rejected case shape differs")
+        name = rejected["name"]
+        item_id = require_uuid(rejected["item_id"], f"{name}.item_id")
+        expected_error = rejected["expected_error"]
+        try:
+            validated_matches(rejected["call_log"], operation_id, item_id)
+        except AssertionError as error:
+            if not isinstance(expected_error, str) or expected_error not in str(error):
+                raise AssertionError(
+                    f"{name}: got rejection {error!s}, want substring {expected_error!r}"
+                ) from error
+        else:
+            raise AssertionError(f"{name}: rejected call log unexpectedly passed")
+        rejected_names.append(str(name))
+
     return {
-        "harness_version": 1,
+        "harness_version": 2,
         "evidence_class": "H/G-adjacent local fault harness; not live GitHub G",
         "network_used": False,
         "case_count": len(cases),
+        "rejected_case_count": len(rejected_names),
+        "rejected_cases": rejected_names,
         "statuses_covered": sorted(observed),
         "cases": cases,
     }

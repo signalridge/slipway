@@ -27,10 +27,11 @@ type Store struct {
 }
 
 type runHandle struct {
-	store    *Store
-	id       string
-	root     *os.Root
-	identity os.FileInfo
+	store      *Store
+	id         string
+	root       *os.Root
+	identity   os.FileInfo
+	writerWait func()
 }
 
 func Open(start string) (*Store, error) {
@@ -165,16 +166,24 @@ func (store *Store) create(runID string, event Event, projection any, materials 
 	if err := syncNewDirectory(run.root, run.identity, store.runsRoot, store.runsIdentity, runID, store.hooks, faultSyncRunDirectory, faultSyncRunsParent); err != nil {
 		return tracker.fail(PhaseDirectorySync, false, err)
 	}
-	if err := store.putMaterials(run, materials); err != nil {
-		return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("persist run materials: %w", err))
-	}
-
 	err = withRunLock(run, tracker, func(transaction *runTransaction) error {
+		guard, err := store.putMaterials(run, materials)
+		if err != nil {
+			return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("persist run materials: %w", err))
+		}
+		if guard != nil {
+			defer guard.close()
+		}
 		prepared, err := prepareSnapshot(transaction, projectionFileName, projectionContent)
 		if err != nil {
 			return err
 		}
 		defer prepared.discard()
+		if guard != nil {
+			if err := guard.validate(); err != nil {
+				return tracker.fail(PhaseNamespaceVerify, false, fmt.Errorf("validate run materials before journal append: %w", err))
+			}
+		}
 		if err := appendEncodedJournal(transaction, journalFileName, journalContent); err != nil {
 			return err
 		}
@@ -297,8 +306,15 @@ func (store *Store) UpdateStreamWithMaterials(
 			return err
 		}
 		defer prepared.discard()
-		if err := store.putMaterials(run, result.Materials); err != nil {
+		guard, err := store.putMaterials(run, result.Materials)
+		if err != nil {
 			return tracker.fail(PhaseDirectorySync, false, fmt.Errorf("persist run materials: %w", err))
+		}
+		if guard != nil {
+			defer guard.close()
+			if err := guard.validate(); err != nil {
+				return tracker.fail(PhaseNamespaceVerify, false, fmt.Errorf("validate run materials before journal append: %w", err))
+			}
 		}
 		if err := appendEncodedJournal(transaction, journalFileName, journalContent); err != nil {
 			return err
@@ -487,7 +503,7 @@ func openPrivateChild(parent *os.Root, name string, create bool) (*os.Root, os.F
 			_ = child.Close()
 			return nil, nil, false, fmt.Errorf("secure private directory: %w", err)
 		}
-		if err := fsutil.RestrictToOwner(directory.Name()); err != nil {
+		if err := fsutil.RestrictToOwner(directory); err != nil {
 			_ = directory.Close()
 			_ = child.Close()
 			return nil, nil, false, fmt.Errorf("secure private directory ACL: %w", err)

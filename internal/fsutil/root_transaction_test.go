@@ -364,6 +364,85 @@ func TestRootTransactionRejectsParentSwapAfterQuarantineValidation(t *testing.T)
 	assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
 }
 
+func TestFailedQuarantineInitializationRemovesOnlyEmptyOwnedDirectory(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	failure := errors.New("quarantine initialization failed")
+
+	err := applyFileTransactionWithHooksForTest(
+		[]FileTransactionOp{WriteFileTransactionOp(path, []byte("after"), 0o600)},
+		fileTransactionHooks{AfterQuarantineMkdir: func(_, _ string) error { return failure }},
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, failure)
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "before", string(content))
+	requireNoRecoveryArtifacts(t, dir)
+}
+
+func TestFailedQuarantinePinRemovesEmptyOwnedDirectory(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	failure := errors.New("quarantine pin failed")
+
+	err := applyFileTransactionWithHooksForTest(
+		[]FileTransactionOp{WriteFileTransactionOp(path, []byte("after"), 0o600)},
+		fileTransactionHooks{AfterQuarantineOpen: func(_, _ string) error { return failure }},
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, failure)
+	content, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "before", string(content))
+	requireNoRecoveryArtifacts(t, dir)
+}
+
+func TestFailedQuarantineInitializationRetainsAndReportsNonemptyArtifact(t *testing.T) {
+	if !atomicNoReplaceAvailableForTest() {
+		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	failure := errors.New("quarantine initialization failed")
+	var artifactDirectory string
+
+	err := applyFileTransactionWithHooksForTest(
+		[]FileTransactionOp{WriteFileTransactionOp(path, []byte("after"), 0o600)},
+		fileTransactionHooks{AfterQuarantineMkdir: func(_, recovery string) error {
+			artifactDirectory = recovery
+			if err := os.WriteFile(filepath.Join(recovery, "user-artifact"), []byte("preserve"), 0o600); err != nil {
+				return err
+			}
+			return failure
+		}},
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, failure)
+	assert.DirExists(t, artifactDirectory)
+	artifact, readErr := os.ReadFile(filepath.Join(artifactDirectory, "user-artifact"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "preserve", string(artifact))
+	recoveries := collectRecoveryErrors(err)
+	assertReportedRecoveryArtifactsPrivate(t, err, recoveries)
+	found := false
+	for _, recovery := range recoveries {
+		if filepath.Dir(recovery.RecoveryPath) == artifactDirectory {
+			found = true
+		}
+	}
+	assert.True(t, found, "retained quarantine allocation must be reported")
+}
+
 func atomicNoReplaceAvailableForTest() bool {
 	switch runtime.GOOS {
 	case "darwin", "linux", "windows":

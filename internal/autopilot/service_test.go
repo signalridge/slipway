@@ -1289,7 +1289,7 @@ func TestServiceStructuredDestructiveGrantIsExactIdempotentAndScopeBound(t *test
 	assertProtocolError(t, err, "destructive_scope_mismatch")
 }
 
-func TestServiceConfirmedDestructiveGrantSurvivesPureBudgetResume(t *testing.T) {
+func TestServiceConfirmedDestructiveGrantInvalidatedByPureBudgetResume(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -1309,43 +1309,36 @@ func TestServiceConfirmedDestructiveGrantSurvivesPureBudgetResume(t *testing.T) 
 		ScopeSHA256:        request.ScopeSHA256,
 	})
 	assertProtocolError(t, err, "budget_exhausted")
-	require.Equal(t, RunPaused, blocked.State)
-	assert.Equal(t, PauseBudgetExhausted, blocked.PauseReason)
-	assert.Nil(t, blocked.CurrentAction)
-	require.NotNil(t, blocked.PendingDestructiveRequest)
 	require.NotNil(t, blocked.DestructiveGrant)
-	require.Len(t, blocked.Answers, 1)
-	assert.True(t, blocked.Answers[0].ConfirmDestructive)
-	assert.Equal(t, request.ScopeSHA256, blocked.Answers[0].ScopeSHA256)
 
-	next, err := DeriveNext(blocked)
-	require.NoError(t, err)
-	require.Len(t, next.Variants, 1)
-	assert.Equal(t, "replenish-destructive-budget", next.Variants[0].ID)
-	assert.NotContains(t, next.Variants[0].BaseArgv, "--source-file")
-	assert.NotContains(t, next.Variants[0].BaseArgv, "--use-pinned-source")
-
-	replacement := 2
+	replacement := 4
 	resumed, err := service.Resume(run.ID, ResumeOptions{Budget: &replacement})
 	require.NoError(t, err)
-	require.Equal(t, RunActive, resumed.State)
 	require.NotNil(t, resumed.CurrentAction)
-	assert.Equal(t, ActionImplement, resumed.CurrentAction.Kind)
-	assert.Equal(t, 1, resumed.RemainingBudget)
-	require.NotNil(t, resumed.CurrentAction.DestructiveAuthorization)
-	require.NotNil(t, resumed.DestructiveGrant)
-	assert.Equal(t, *resumed.DestructiveGrant, *resumed.CurrentAction.DestructiveAuthorization)
-	assert.Equal(t, request.ScopeSHA256, resumed.DestructiveGrant.ScopeSHA256)
-	assert.Equal(t, originatingActionID, resumed.DestructiveGrant.OriginatingActionID)
-	assert.Len(t, resumed.Answers, 1, "budget resume must not require a second confirmation")
+	assert.Equal(t, ActionOrient, resumed.CurrentAction.Kind)
+	assert.Nil(t, resumed.CurrentAction.DestructiveAuthorization)
+	assert.Nil(t, resumed.DestructiveGrant)
+	assert.Nil(t, resumed.PendingDestructiveRequest)
+	assert.Equal(t, 3, resumed.RemainingBudget)
 	require.NotNil(t, resumed.LastResumeResult)
 	assert.Equal(t, ResumeOperationSourceRefreshSkipped, resumed.LastResumeResult.Operation)
+	assert.NotEqual(t, originatingActionID, resumed.CurrentAction.ActionID)
 
-	replayed, err := service.Load(run.ID)
-	require.NoError(t, err)
-	assert.Equal(t, resumed.CurrentAction, replayed.CurrentAction)
-	assert.Equal(t, resumed.DestructiveGrant, replayed.DestructiveGrant)
-	assert.Len(t, replayed.Answers, 1)
+	resumed = submitCurrent(t, service, resumed, Outcome{
+		Status:           OutcomeCompleted,
+		Summary:          "fresh orientation",
+		SuggestedActions: []SuggestedAction{{Kind: ActionImplement, Brief: "perform the requested change"}},
+	})
+	require.NotNil(t, resumed.CurrentAction)
+	assert.Equal(t, ActionImplement, resumed.CurrentAction.Kind)
+	assert.Nil(t, resumed.CurrentAction.DestructiveAuthorization)
+	resumed = submitCurrent(t, service, resumed, Outcome{
+		Status: OutcomeNeedsInput, Summary: "confirmation required again",
+		Pause: pauseReport(PauseDestructiveConfirm, "Confirm the fresh scope?", &request),
+	})
+	assert.Equal(t, PauseDestructiveConfirm, resumed.PauseReason)
+	require.NotNil(t, resumed.PendingDestructiveRequest)
+	assert.Equal(t, request.ScopeSHA256, resumed.PendingDestructiveRequest.ScopeSHA256)
 }
 
 func TestServiceAnswerIdempotencyUsesCanonicalStructuredPayload(t *testing.T) {
@@ -1390,13 +1383,13 @@ func TestServiceAnswerIdempotencyUsesCanonicalStructuredPayload(t *testing.T) {
 	assertProtocolError(t, err, "answer_conflict")
 }
 
-// TestServiceAnswerPreservesOriginalTextWhileTrimmingForIdempotency confirms
+// TestServiceAnswerUsesExactUTF8BytesForIdempotency confirms
 // that surrounding whitespace is used only for idempotency digest comparison:
 // "alpha" and "  alpha  " dedup to the same recorded answer, but the caller's
 // original boundary text is preserved verbatim in the journal rather than
 // being silently erased (issue #434 §9.6: answer text is an uninterpreted
 // value).
-func TestServiceAnswerPreservesOriginalTextWhileTrimmingForIdempotency(t *testing.T) {
+func TestServiceAnswerUsesExactUTF8BytesForIdempotency(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -1408,17 +1401,30 @@ func TestServiceAnswerPreservesOriginalTextWhileTrimmingForIdempotency(t *testin
 		Pause:   pauseReport(PauseDecisionRequired, "Choose one?", nil),
 	})
 
-	original := "  choose alpha  "
+	original := "  choose café\r\nα  "
 	answered, err := service.Answer(run.ID, waitingID, AnswerOptions{Text: original})
 	require.NoError(t, err)
 	require.Len(t, answered.Answers, 1)
-	assert.Equal(t, original, answered.Answers[0].Text, "original boundary text must be preserved verbatim")
+	assert.Equal(t, original, answered.Answers[0].Text)
 
-	// A retry that differs only in surrounding whitespace is idempotent.
-	retried, err := service.Answer(run.ID, waitingID, AnswerOptions{Text: "choose alpha"})
+	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
+	journalBefore, err := os.ReadFile(journalPath)
 	require.NoError(t, err)
-	assert.Equal(t, answered.Answers[0].PayloadSHA256, retried.Answers[0].PayloadSHA256)
-	assert.Equal(t, original, retried.Answers[0].Text, "first-recorded original text is retained on idempotent retry")
+	retried, err := service.Answer(run.ID, waitingID, AnswerOptions{Text: original})
+	require.NoError(t, err)
+	assert.Equal(t, answered.Answers[0], retried.Answers[0])
+
+	for _, different := range []string{
+		"choose café\r\nα",
+		"  choose café\nα  ",
+		"  choose cafe\u0301\r\nα  ",
+	} {
+		_, err = service.Answer(run.ID, waitingID, AnswerOptions{Text: different})
+		assertProtocolError(t, err, "answer_conflict")
+	}
+	journalAfter, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Equal(t, journalBefore, journalAfter, "retries and conflicts must not append journal events")
 }
 
 func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T) {
@@ -2062,19 +2068,37 @@ func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
-	run := startIssueTestRun(t, service, 6)
+	run := authorizeDestructiveRunForTest(t, service, true)
 	actionID := run.CurrentAction.ActionID
+	budget := run.RemainingBudget
+	grant := cloneDestructiveAuthorization(run.DestructiveGrant)
+	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
 
 	envelope := validSourceEnvelope()
 	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Divergent amendment.\n")
 	candidate := sourceCandidateForTest(t, envelope)
-	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
-	assertProtocolError(t, err, "source_history_fork")
+	_, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
+	var protocolErr *ProtocolError
+	require.ErrorAs(t, err, &protocolErr)
+	assert.Equal(t, "source_history_fork", protocolErr.Code)
+	assert.Equal(t, NextOperationStart, protocolErr.Next.Operation)
+	require.Len(t, protocolErr.Next.Variants, 1)
+	assert.Equal(t, "start-with-source", protocolErr.Next.Variants[0].ID)
+	require.Len(t, protocolErr.Next.Variants[0].Inputs, 1)
+	assert.Equal(t, NextInputPath, protocolErr.Next.Variants[0].Inputs[0].Type)
+	assert.True(t, protocolErr.Next.Variants[0].Inputs[0].Required)
 
+	journalAfter, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Equal(t, journalBefore, journalAfter)
 	loaded, err := service.Load(run.ID)
 	require.NoError(t, err)
 	require.NotNil(t, loaded.CurrentAction)
 	assert.Equal(t, actionID, loaded.CurrentAction.ActionID)
+	assert.Equal(t, budget, loaded.RemainingBudget)
+	assert.Equal(t, grant, loaded.DestructiveGrant)
 	assert.Nil(t, loaded.SourceCandidate)
 }
 
@@ -2246,6 +2270,57 @@ func TestServiceSourceChoiceExactReplayAfterRunEnded(t *testing.T) {
 	journalAfter, err := os.ReadFile(journalPath)
 	require.NoError(t, err)
 	assert.Equal(t, journalBefore, journalAfter, "exact source-choice replay must not append a journal event")
+}
+
+func TestServiceSourceChoiceReplayUsesAppendOnlyHistory(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 14)
+
+	firstEnvelope := validSourceEnvelope()
+	setEnvelopeSection(t, &firstEnvelope, "requirements", "\n# Requirements\n\n- First candidate.\n")
+	setEnvelopeParentRequirementsRevision(t, &firstEnvelope, run.PinnedSource.RequirementsRevision)
+	firstCandidate := sourceCandidateForTest(t, firstEnvelope)
+	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &firstCandidate})
+	require.NoError(t, err)
+	firstID := paused.SourceCandidate.CandidateID
+	first, err := service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoicePinned, CandidateID: firstID})
+	require.NoError(t, err)
+	firstReceipt := *first.LastSourceChoice
+	firstResult := *first.LastResumeResult
+
+	secondEnvelope := validSourceEnvelope()
+	setEnvelopeSection(t, &secondEnvelope, "requirements", "\n# Requirements\n\n- Second candidate.\n")
+	setEnvelopeParentRequirementsRevision(t, &secondEnvelope, first.PinnedSource.RequirementsRevision)
+	secondCandidate := sourceCandidateForTest(t, secondEnvelope)
+	paused, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &secondCandidate})
+	require.NoError(t, err)
+	secondID := paused.SourceCandidate.CandidateID
+	second, err := service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoiceAdopt, CandidateID: secondID})
+	require.NoError(t, err)
+	currentActionID := second.CurrentAction.ActionID
+
+	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(journalBefore), `"source_choice_resolutions_append"`)
+
+	retried, err := service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoicePinned, CandidateID: firstID})
+	require.NoError(t, err)
+	assert.Equal(t, firstReceipt, *retried.LastSourceChoice)
+	assert.Equal(t, firstResult, *retried.LastResumeResult)
+	assert.Equal(t, currentActionID, retried.CurrentAction.ActionID)
+	_, err = service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoiceAdopt, CandidateID: firstID})
+	assertProtocolError(t, err, "source_choice_conflict")
+
+	journalAfter, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	assert.Equal(t, journalBefore, journalAfter)
+	loaded, err := service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, secondID, loaded.LastSourceChoice.CandidateID)
+	assert.Equal(t, currentActionID, loaded.CurrentAction.ActionID)
 }
 
 func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {

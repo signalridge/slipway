@@ -1,6 +1,7 @@
 package runstore
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -10,6 +11,8 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 const (
@@ -30,6 +33,53 @@ type Material struct {
 // it.
 type MaterialReader func(digest string) ([]byte, error)
 
+type materialGuard struct {
+	run      *runHandle
+	root     *os.Root
+	identity os.FileInfo
+}
+
+func openMaterialGuard(run *runHandle, create bool) (*materialGuard, bool, error) {
+	if err := run.validate(); err != nil {
+		return nil, false, err
+	}
+	root, identity, created, err := openPrivateChild(run.root, materialsDirectoryName, create)
+	if err != nil {
+		return nil, false, err
+	}
+	guard := &materialGuard{run: run, root: root, identity: identity}
+	if err := guard.validate(); err != nil {
+		_ = root.Close()
+		return nil, false, err
+	}
+	return guard, created, nil
+}
+
+func (guard *materialGuard) validate() error {
+	if guard == nil {
+		return nil
+	}
+	if err := guard.run.validate(); err != nil {
+		return err
+	}
+	if err := validateDirectoryIdentity(guard.run.root, materialsDirectoryName, guard.identity); err != nil {
+		return fmt.Errorf("run materials directory changed after opening: %w", err)
+	}
+	if err := validateOpenedDirectoryRoot(guard.root, guard.identity); err != nil {
+		return fmt.Errorf("opened run materials directory changed: %w", err)
+	}
+	return nil
+}
+
+func (guard *materialGuard) close() error {
+	if guard == nil || guard.root == nil {
+		return nil
+	}
+	err := guard.root.Close()
+	guard.root = nil
+	return err
+}
+
 // PutMaterials makes all supplied materials durable before returning. Existing
 // matching blobs are accepted idempotently; mismatched blobs fail closed.
 func (store *Store) PutMaterials(runID string, materials []Material) error {
@@ -41,25 +91,51 @@ func (store *Store) PutMaterials(runID string, materials []Material) error {
 		return err
 	}
 	defer run.Close()
-	return store.putMaterials(run, materials)
+	return withRunLock(run, nil, func(_ *runTransaction) error {
+		guard, err := store.putMaterials(run, materials)
+		if err != nil {
+			return err
+		}
+		return errors.Join(guard.validate(), guard.close())
+	})
 }
 
-func (store *Store) putMaterials(run *runHandle, materials []Material) error {
+func (store *Store) putMaterials(run *runHandle, materials []Material) (*materialGuard, error) {
 	if len(materials) == 0 {
-		return nil
+		return nil, nil
 	}
-	if err := run.validate(); err != nil {
-		return err
+
+	unique := make([]Material, 0, len(materials))
+	seen := make(map[string]struct{}, len(materials))
+	for _, material := range materials {
+		filename, err := materialFilename(material.Digest)
+		if err != nil {
+			return nil, err
+		}
+		if len(material.Data) == 0 || len(material.Data) > maxMaterialBytes {
+			return nil, fmt.Errorf("material %s must contain 1..%d bytes", material.Digest, maxMaterialBytes)
+		}
+		if materialDigest(material.Data) != material.Digest {
+			return nil, fmt.Errorf("material %s digest does not match content", material.Digest)
+		}
+		if _, duplicate := seen[filename]; duplicate {
+			continue
+		}
+		seen[filename] = struct{}{}
+		unique = append(unique, material)
 	}
-	root, identity, created, err := openPrivateChild(run.root, materialsDirectoryName, true)
+
+	guard, created, err := openMaterialGuard(run, true)
 	if err != nil {
-		return fmt.Errorf("open run materials: %w", err)
+		return nil, fmt.Errorf("open run materials: %w", err)
 	}
-	defer root.Close()
+	fail := func(err error) (*materialGuard, error) {
+		return nil, errors.Join(err, guard.close())
+	}
 	if created {
 		if err := syncNewDirectory(
-			root,
-			identity,
+			guard.root,
+			guard.identity,
 			run.root,
 			run.identity,
 			materialsDirectoryName,
@@ -67,42 +143,30 @@ func (store *Store) putMaterials(run *runHandle, materials []Material) error {
 			faultSyncRunDirectory,
 			faultSyncRunDirectory,
 		); err != nil {
-			return fmt.Errorf("sync run materials directory: %w", err)
+			return fail(fmt.Errorf("sync run materials directory: %w", err))
 		}
 	}
 
-	seen := make(map[string]struct{}, len(materials))
-	for _, material := range materials {
-		filename, err := materialFilename(material.Digest)
-		if err != nil {
-			return err
-		}
-		if len(material.Data) == 0 || len(material.Data) > maxMaterialBytes {
-			return fmt.Errorf("material %s must contain 1..%d bytes", material.Digest, maxMaterialBytes)
-		}
-		if materialDigest(material.Data) != material.Digest {
-			return fmt.Errorf("material %s digest does not match content", material.Digest)
-		}
-		if _, duplicate := seen[filename]; duplicate {
-			continue
-		}
-		seen[filename] = struct{}{}
-		if err := putMaterial(root, identity, filename, material); err != nil {
-			return err
+	for _, material := range unique {
+		filename, _ := materialFilename(material.Digest)
+		if err := putMaterial(guard, filename, material); err != nil {
+			return fail(err)
 		}
 	}
-	if err := syncAnchoredDirectory(root, identity, store.hooks, faultSyncRunDirectory); err != nil {
-		return fmt.Errorf("sync run materials: %w", err)
+	if err := syncAnchoredDirectory(guard.root, guard.identity, store.hooks, faultSyncRunDirectory); err != nil {
+		return fail(fmt.Errorf("sync run materials: %w", err))
 	}
-	return run.validate()
+	if err := guard.validate(); err != nil {
+		return fail(err)
+	}
+	return guard, nil
 }
 
-func putMaterial(
-	root *os.Root,
-	identity os.FileInfo,
-	filename string,
-	material Material,
-) error {
+func putMaterial(guard *materialGuard, filename string, material Material) error {
+	if err := guard.validate(); err != nil {
+		return err
+	}
+	root := guard.root
 	existing, err := inspectRegularFileOrMissingInRoot(root, filename)
 	if err != nil {
 		return fmt.Errorf("inspect material %s: %w", material.Digest, err)
@@ -112,10 +176,10 @@ func putMaterial(
 		if readErr != nil {
 			return readErr
 		}
-		if string(data) != string(material.Data) {
+		if !bytes.Equal(data, material.Data) {
 			return fmt.Errorf("material %s content conflicts with existing blob", material.Digest)
 		}
-		return nil
+		return guard.validate()
 	}
 
 	temporary, file, err := createTemporaryFileInRoot(root, filename, 0o600)
@@ -156,23 +220,25 @@ func putMaterial(
 	}
 	closed = true
 
-	if current, inspectErr := inspectRegularFileOrMissingInRoot(root, filename); inspectErr != nil {
-		return fmt.Errorf("reinspect material destination: %w", inspectErr)
-	} else if current.exists {
-		data, readErr := readMaterialFile(root, filename, material.Digest)
-		if readErr != nil {
-			return readErr
-		}
-		if string(data) != string(material.Data) {
+	if err := guard.validate(); err != nil {
+		return err
+	}
+	if err := fsutil.RenameNoReplace(root, temporary, filename); err != nil {
+		current, inspectErr := inspectRegularFileOrMissingInRoot(root, filename)
+		if inspectErr == nil && current.exists {
+			data, readErr := readMaterialFile(root, filename, material.Digest)
+			if readErr == nil && bytes.Equal(data, material.Data) {
+				return guard.validate()
+			}
+			if readErr != nil {
+				return readErr
+			}
 			return fmt.Errorf("material %s content conflicts with concurrent blob", material.Digest)
 		}
-		return nil
+		return errors.Join(fmt.Errorf("commit material %s without replacement: %w", material.Digest, err), inspectErr)
 	}
-	if err := renameInRootWithRetry(root, temporary, filename); err != nil {
-		return fmt.Errorf("commit material %s: %w", material.Digest, err)
-	}
-	if err := syncAnchoredDirectory(root, identity, storeHooks{}, ""); err != nil {
-		return fmt.Errorf("sync committed material %s: %w", material.Digest, err)
+	if err := guard.validate(); err != nil {
+		return err
 	}
 	_, err = readMaterialFile(root, filename, material.Digest)
 	return err
@@ -220,22 +286,19 @@ func (store *Store) readMaterial(run *runHandle, digest string) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	root, identity, _, err := openPrivateChild(run.root, materialsDirectoryName, false)
+	guard, _, err := openMaterialGuard(run, false)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("material %s not found", digest)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("open run materials: %w", err)
 	}
-	defer root.Close()
-	if err := validateOpenedDirectoryRoot(root, identity); err != nil {
-		return nil, err
-	}
-	data, err := readMaterialFile(root, filename, digest)
+	defer guard.close()
+	data, err := readMaterialFile(guard.root, filename, digest)
 	if err != nil {
 		return nil, err
 	}
-	if err := run.validate(); err != nil {
+	if err := guard.validate(); err != nil {
 		return nil, err
 	}
 	return data, nil

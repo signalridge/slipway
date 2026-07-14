@@ -39,6 +39,7 @@ type fileQuarantine struct {
 	parent            *os.Root
 	directory         *os.Root
 	closed            bool
+	reattached        bool
 }
 
 // ApplyFileTransactionWithin confines every mutation to root using os.Root.
@@ -445,16 +446,28 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		}
 		directoryPath := filepath.Join(filepath.Dir(originalPath), name)
 		recoveryPath := filepath.Join(directoryPath, itemName)
-		allocationError := func(cause error) (*fileQuarantine, error) {
-			return nil, &FileTransactionRecoveryError{
-				OriginalPath: originalPath,
-				RecoveryPath: recoveryPath,
-				Cause:        fmt.Errorf("private transaction quarantine could not be safely initialized: %w", cause),
-			}
-		}
 		info, err := parent.Lstat(name)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return allocationError(errors.Join(errors.New("created quarantine path is not a stable directory"), err))
+			return nil, &FileTransactionRecoveryError{
+				OriginalPath: originalPath,
+				RecoveryPath: directoryPath,
+				Cause:        errors.Join(errors.New("created quarantine path is not a stable directory"), err),
+			}
+		}
+		allocationError := func(cause error) (*fileQuarantine, error) {
+			retained, cleanupErr := cleanupFailedQuarantineAllocation(parent, name, info)
+			artifact := ""
+			if retained {
+				artifact = recoveryPath
+			}
+			return nil, &FileTransactionRecoveryError{
+				OriginalPath: originalPath,
+				RecoveryPath: artifact,
+				Cause:        errors.Join(fmt.Errorf("private transaction quarantine could not be safely initialized: %w", cause), cleanupErr),
+			}
+		}
+		if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineMkdir, originalPath, directoryPath); err != nil {
+			return allocationError(fmt.Errorf("after quarantine mkdir: %w", err))
 		}
 		directory, err := parent.OpenRoot(name)
 		if err != nil {
@@ -467,12 +480,18 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		}
 		opened, statErr := dirFile.Stat()
 		chmodErr := dirFile.Chmod(0o700)
-		aclErr := restrictToOwner(dirFile.Name())
-		closeErr := dirFile.Close()
+		aclErr := restrictToOwner(dirFile)
 		current, lstatErr := parent.Lstat(name)
-		if statErr != nil || chmodErr != nil || aclErr != nil || closeErr != nil || lstatErr != nil || !os.SameFile(info, opened) || !os.SameFile(opened, current) || !transactionQuarantineModeIsPrivate(directoryPath, current.Mode()) {
+		private := lstatErr == nil && transactionQuarantineModeIsPrivate(directory, current.Mode())
+		closeErr := dirFile.Close()
+		if statErr != nil || chmodErr != nil || aclErr != nil || closeErr != nil || lstatErr != nil ||
+			!os.SameFile(info, opened) || !os.SameFile(opened, current) || !private {
 			_ = directory.Close()
 			return allocationError(errors.Join(errors.New("transaction quarantine is not private and stable"), statErr, chmodErr, aclErr, closeErr, lstatErr))
+		}
+		if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineOpen, originalPath, directoryPath); err != nil {
+			_ = directory.Close()
+			return allocationError(fmt.Errorf("after quarantine open: %w", err))
 		}
 		pinnedDirectory, err := directory.OpenRoot(".")
 		if err != nil {
@@ -505,6 +524,43 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		}, nil
 	}
 	return nil, errors.New("allocate private transaction quarantine: name attempts exhausted")
+}
+
+func cleanupFailedQuarantineAllocation(parent *os.Root, name string, identity os.FileInfo) (bool, error) {
+	current, err := parent.Lstat(name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil || identity == nil || !current.IsDir() || current.Mode()&os.ModeSymlink != 0 || !os.SameFile(current, identity) {
+		return true, errors.Join(errors.New("failed quarantine allocation changed identity; recovery artifact retained"), err)
+	}
+	directory, err := parent.OpenRoot(name)
+	if err != nil {
+		return true, fmt.Errorf("open failed quarantine allocation for cleanup: %w", err)
+	}
+	entries, readErr := fs.ReadDir(directory.FS(), ".")
+	closeErr := directory.Close()
+	if readErr != nil || closeErr != nil || len(entries) != 0 {
+		return true, errors.Join(errors.New("failed quarantine allocation is not verifiably empty; recovery artifact retained"), readErr, closeErr)
+	}
+	current, err = parent.Lstat(name)
+	if err != nil || !os.SameFile(current, identity) {
+		return true, errors.Join(errors.New("failed quarantine allocation changed before cleanup; recovery artifact retained"), err)
+	}
+	if err := parent.Remove(name); err != nil {
+		return true, fmt.Errorf("remove failed quarantine allocation: %w", err)
+	}
+	syncErr := syncRootDirectory(parent)
+	_, verifyErr := parent.Lstat(name)
+	if errors.Is(verifyErr, fs.ErrNotExist) {
+		verifyErr = nil
+	} else if verifyErr == nil {
+		verifyErr = errors.New("failed quarantine allocation still exists after cleanup")
+	}
+	if err := errors.Join(syncErr, verifyErr); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func randomTransactionName(prefix string) (string, error) {
@@ -559,7 +615,7 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 		return fileSnapshot{}, false, err
 	}
 	if perm.Perm()&0o077 == 0 {
-		if err := restrictToOwner(file.Name()); err != nil {
+		if err := restrictToOwner(file); err != nil {
 			_ = file.Close()
 			stage.preserve()
 			return fileSnapshot{}, false, fmt.Errorf("secure staged private file: %w", err)
@@ -606,6 +662,75 @@ func (filesystem *transactionFilesystem) writeFileAtomicNoReplace(path string, d
 	return expected, true, nil
 }
 
+func (filesystem *transactionFilesystem) reattachQuarantinedSnapshot(
+	path string,
+	snapshot, namespaceGuard fileSnapshot,
+	quarantine *fileQuarantine,
+	lease *transactionIdentityLease,
+) (fileSnapshot, bool, error) {
+	if quarantine == nil || quarantine.closed || !snapshot.existed {
+		return fileSnapshot{}, false, nil
+	}
+	private, err := quarantine.parent.Lstat(quarantine.directoryName)
+	if err != nil || !private.IsDir() || private.Mode()&os.ModeSymlink != 0 ||
+		quarantine.directoryIdentity == nil || !os.SameFile(private, quarantine.directoryIdentity) ||
+		!transactionQuarantineModeIsPrivate(quarantine.directory, private.Mode()) {
+		return fileSnapshot{}, false, errors.Join(errors.New("pre-transaction quarantine changed before reattachment"), err)
+	}
+	actual, err := snapshotPathForTransactionInRoot(
+		quarantine.directory,
+		quarantine.itemName,
+		quarantine.recoveryPath,
+		snapshotKind(snapshot),
+		lease,
+	)
+	if err != nil || !transactionSnapshotsMatchIgnoringParent(actual, snapshot, true) {
+		return fileSnapshot{}, false, errors.Join(errors.New("pre-transaction object changed before reattachment"), err)
+	}
+
+	parent, base, err := filesystem.openStableParent(path, true)
+	if err != nil {
+		return fileSnapshot{}, false, err
+	}
+	defer parent.Close()
+	parentInfo, err := validateGuardedParent(parent, path, namespaceGuard)
+	if err != nil {
+		return fileSnapshot{}, false, err
+	}
+	if _, err := parent.Lstat(base); !errors.Is(err, fs.ErrNotExist) {
+		if err == nil {
+			err = ErrFileTransactionConcurrentEdit
+		}
+		return fileSnapshot{}, false, fmt.Errorf("destination is not empty before reattaching pre-transaction object: %w", err)
+	}
+	if err := renameNoReplaceRoots(quarantine.directory, parent, quarantine.itemName, base); err != nil {
+		return fileSnapshot{}, false, fmt.Errorf("reattach pre-transaction object without replacement: %w", err)
+	}
+	quarantine.reattached = true
+	quarantine.recoveryPath = path
+
+	restored, err := snapshotPathForTransactionInRoot(parent, base, path, snapshotKind(snapshot), lease)
+	if err != nil {
+		return fileSnapshot{}, true, err
+	}
+	restored.parentObserved = true
+	restored.parentExisted = true
+	restored.parentIdentity = parentInfo
+	if !transactionSnapshotsMatch(restored, func() fileSnapshot {
+		expected := snapshot
+		expected.parentObserved = true
+		expected.parentExisted = true
+		expected.parentIdentity = parentInfo
+		return expected
+	}(), true) {
+		return fileSnapshot{}, true, errors.New("reattached pre-transaction object changed during installation")
+	}
+	if err := callFileTransactionHook(filesystem.hooks.DuringExclusiveRestore, path, ""); err != nil {
+		return fileSnapshot{}, true, err
+	}
+	return restored, true, nil
+}
+
 func (filesystem *transactionFilesystem) restoreSnapshotExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
 	if !snapshot.existed {
 		current, err := filesystem.snapshot(path, snapshotKind(snapshot))
@@ -638,7 +763,7 @@ func (filesystem *transactionFilesystem) restoreFileExclusive(path string, snaps
 		return fileSnapshot{}, fmt.Errorf("exclusive create %s: %w", path, err)
 	}
 	if snapshot.perm.Perm()&0o077 == 0 {
-		if err := restrictToOwner(file.Name()); err != nil {
+		if err := restrictToOwner(file); err != nil {
 			_ = file.Close()
 			return fileSnapshot{}, fmt.Errorf("secure restored private file: %w", err)
 		}
@@ -727,6 +852,9 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 	if quarantine == nil || quarantine.closed {
 		return nil
 	}
+	if quarantine.reattached {
+		return quarantine.removeEmptyDirectory()
+	}
 	observedPath := quarantine.recoveryPath
 	if err := callFileTransactionHook(filesystem.hooks.DuringQuarantineCleanup, quarantine.originalPath, observedPath); err != nil {
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, fmt.Errorf("during quarantine cleanup: %w", err))
@@ -743,7 +871,7 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 		}
 	}
 	private, err := quarantine.parent.Lstat(quarantine.directoryName)
-	if err != nil || !private.IsDir() || private.Mode()&os.ModeSymlink != 0 || !transactionQuarantineModeIsPrivate(quarantine.directoryPath, private.Mode()) ||
+	if err != nil || !private.IsDir() || private.Mode()&os.ModeSymlink != 0 || !transactionQuarantineModeIsPrivate(quarantine.directory, private.Mode()) ||
 		quarantine.directoryIdentity == nil || !os.SameFile(private, quarantine.directoryIdentity) {
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(errors.New("quarantine directory is no longer private and transaction-owned"), err))
 	}
@@ -810,10 +938,13 @@ func relocateQuarantineItemForCleanup(quarantine *fileQuarantine) (resultErr err
 	return errors.New("isolate quarantine for cleanup: name attempts exhausted")
 }
 
-func transactionQuarantineModeIsPrivate(path string, mode os.FileMode) bool {
-	// Windows privacy is verified from the protected owner-only DACL; other
-	// platforms use the restrictive POSIX mode applied during allocation.
-	return ownerProtectionIsPrivate(path, mode)
+func transactionQuarantineModeIsPrivate(root *os.Root, mode os.FileMode) bool {
+	file, err := root.Open(".")
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	return ownerProtectionIsPrivate(file, mode)
 }
 
 func preserveQuarantineFailure(quarantine *fileQuarantine, rollback bool, observedPath string, cause error) error {

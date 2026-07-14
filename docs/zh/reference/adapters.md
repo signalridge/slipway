@@ -2,15 +2,16 @@
 
 每个宿主只生成六个显式能力：`slipway-run`、`slipway-clarify`、`slipway-propose`、`slipway-decompose`、`slipway-implement`、`slipway-review`。Clarify 保持无状态。
 
-能力目录分别位于 `.claude/skills`、`.codex/skills`、`.github/skills`、`.cursor/skills`、`.kilocode/skills`、`.kiro/skills`、`.opencode/skills`、`.pi/skills`、`.qwen/skills`、`.windsurf/skills`。
-Copilot 的 capability 目录是 `.github/skills`；自动探测接受 `.github/copilot`、`.github/prompts`、`.github/skills` 中任一现有宿主表面。
+原生表面与调用方式如下：Claude、Cursor、Qwen 使用各自 `skills` 目录并显式调用 `slipway-<name>` skill；Codex 使用 `.codex/skills` 和 `$slipway-<name>`；Pi 使用 `.pi/skills` 和 `/skill:slipway-<name>`；Copilot 在 `.github/copilot/agents` 生成 custom agent，由 agent picker 选择；Kilo、OpenCode、Windsurf 分别在 `.kilo/commands`、`.opencode/commands`、`.windsurf/workflows` 生成 `/slipway-<name>`；Kiro IDE 在 `.kiro/steering` 生成手动 `#slipway-<name>` steering，Kiro CLI 在 `.kiro/agents` 生成可由 `kiro-cli chat --agent slipway-<name>` 调用的 agent。
+
+命令、workflow、steering 与 agent 表面都引用各宿主 `slipway/capabilities` 下的 canonical body。Copilot 自动探测仍接受 `.github/copilot`、`.github/prompts`、`.github/skills` 中任一现有宿主表面。Kiro 首次安装必须用 `--surface ide|cli` 选择一种表面；选择记录在 ownership manifest，refresh 和 uninstall 沿用该选择。
 
 不会生成 ambient session hook、prompt-submit hook、launcher、总 router 或独立技术检查能力。宿主 settings 不属于 adapter ownership，install、refresh 与 uninstall 永不修改它们。每个生成 skill 都携带相同的 untrusted Issue、trusted attester、确认 publication 与精确 destructive authorization 边界；只有 Clarify 含一份 decision interview reference，它派生自 Matt Pocock 的 MIT `grill-me` 并保留 attribution。
 
 Clarify 保留 Matt Pocock `grill-me`/`grilling` 的事实先查、依赖顺序、一次一问+推荐、shared-understanding confirmation、stateless 与 wrap-up 立即停止；不提供隐式澄清文档化能力。
 Codex 的每个能力还包含受管的 `agents/openai.yaml`，并设置 `allow_implicit_invocation: false`；Codex 不读取通用 frontmatter 中的同类开关，因此该策略确保只有用户显式调用时 Slipway 能力才可用。
 
-只接受 version 2 ownership manifest；其他任何版本都视为不可读，不能授权 install、refresh、uninstall 或 list。Version 2 记录路径与 SHA-256。Refresh/uninstall 只处理哈希匹配的文件；用户修改文件会被保留并停止认领。
+只有 version 2 ownership manifest 可以授权 mutation；其他任何版本都视为不可读，使 install、refresh 与 uninstall 在修改文件前失败。只读 `list` 只把该宿主降级为未安装 advisory，并继续报告其他宿主。Version 2 记录路径与 SHA-256。Refresh/uninstall 只处理哈希匹配的文件；用户修改文件会被保留并停止认领。
 首次安装只认领新创建的文件；current manifest 已存在后，必须显式运行 `slipway install --refresh` 才会更新。只有 marker 而缺少 current manifest 时不建立任何 ownership：install、refresh 与 uninstall 保持 adapter surface 原样，只中性提示 current ownership 缺失，不迁移也不推断。
 
 Install/uninstall report 把普通 ownership preservation 与事务恢复分开：`transaction_outcome` 为 `committed|rolled_back|not_committed|ambiguous`，只有 committed 才保留计划中的 `written`/`removed`；并发对象或 quarantine 路径只进入 `recovery_artifacts`，不与 `preserved` 混合。错误返回同一 report 且不给 blind-retry command。

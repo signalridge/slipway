@@ -169,3 +169,76 @@ func TestStoreRejectsInvalidMaterialInputsAndUnsafeLeaves(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "regular file")
 }
+
+func TestMaterialCommitNeverOverwritesConflictingDestination(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	defer store.Close()
+	require.NoError(t, createOneRun(store, "run-material-conflict"))
+
+	content := []byte("expected immutable bytes")
+	digest := materialDigest(content)
+	filename, err := materialFilename(digest)
+	require.NoError(t, err)
+	materialDirectory := filepath.Join(store.CommonDir(), "slipway", "runs", "run-material-conflict", materialsDirectoryName)
+	require.NoError(t, os.Mkdir(materialDirectory, 0o700))
+	path := filepath.Join(materialDirectory, filename)
+	conflict := []byte("attacker-controlled conflict")
+	require.NoError(t, os.WriteFile(path, conflict, 0o600))
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+
+	err = store.PutMaterials("run-material-conflict", []Material{{Digest: digest, Data: content}})
+	require.Error(t, err)
+	after, statErr := os.Stat(path)
+	require.NoError(t, statErr)
+	assert.True(t, os.SameFile(before, after))
+	bytes, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, conflict, bytes)
+}
+
+func TestMaterialsReplacementBeforeJournalAppendKeepsJournalUnchanged(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory replacement while opened is not portable on Windows")
+	}
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	defer store.Close()
+	runID := "run-material-detached"
+	require.NoError(t, createOneRun(store, runID))
+
+	seed := []byte("seed")
+	require.NoError(t, store.PutMaterials(runID, []Material{{Digest: materialDigest(seed), Data: seed}}))
+	runDirectory := filepath.Join(store.CommonDir(), "slipway", "runs", runID)
+	materialDirectory := filepath.Join(runDirectory, materialsDirectoryName)
+	journalPath := filepath.Join(runDirectory, journalFileName)
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+
+	detached := materialDirectory + ".detached"
+	installOneShotHook(store, faultSyncRunDirectory, func() error {
+		require.NoError(t, os.Rename(materialDirectory, detached))
+		return os.Mkdir(materialDirectory, 0o700)
+	})
+	content := []byte("new detached material")
+	next, err := NewEvent("updated", map[string]bool{"material": true})
+	require.NoError(t, err)
+	err = store.UpdateStreamWithMaterials(runID, func(Event) error { return nil }, func() (UpdateResult, error) {
+		return UpdateResult{
+			Events:     []Event{next},
+			Projection: map[string]bool{"material": true},
+			Materials:  []Material{{Digest: materialDigest(content), Data: content}},
+		}, nil
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "materials")
+	journalAfter, readErr := os.ReadFile(journalPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, journalBefore, journalAfter)
+	filename, err := materialFilename(materialDigest(content))
+	require.NoError(t, err)
+	assert.FileExists(t, filepath.Join(detached, filename))
+}

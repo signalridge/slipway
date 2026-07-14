@@ -83,6 +83,11 @@ type ResumeResult struct {
 	CandidateID   string `json:"candidate_id,omitempty"`
 }
 
+type sourceChoiceResolution struct {
+	Receipt SourceChoiceReceipt `json:"receipt"`
+	Result  ResumeResult        `json:"result"`
+}
+
 type AnswerRecord struct {
 	ActionID             string    `json:"action_id"`
 	Text                 string    `json:"text"`
@@ -142,6 +147,11 @@ type Run struct {
 	// omittedObservations tracks the synthetic projection marker while replay
 	// keeps the authoritative journal history out of the in-memory Run.
 	omittedObservations int
+
+	// sourceChoiceHistory is the append-only authoritative projection rebuilt
+	// from journal deltas. LastSourceChoice and LastResumeResult remain the
+	// public latest-receipt projection.
+	sourceChoiceHistory []sourceChoiceResolution
 
 	// Rebuilt during journal replay so retired accepted comment identities remain
 	// immutable without adding another field to the public Run projection.
@@ -527,10 +537,8 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 		return Run{}, err
 	}
 	// The answer text is an uninterpreted value (issue #434 §9.6). Preserve
-	// the caller's original text verbatim in the journal; only the idempotency
-	// digest trims surrounding whitespace so that "  alpha  " and "alpha" are
-	// treated as the same decision for replay dedup, without silently erasing
-	// the caller's original boundaries from the record.
+	// and digest the caller's valid UTF-8 bytes verbatim. Trimming is limited
+	// to the non-empty validation below.
 	if !utf8.ValidString(options.Text) {
 		return Run{}, &ProtocolError{Code: "invalid_answer", Message: "answer text must be valid utf-8", Next: NoneNext(service.store.RepositoryRoot())}
 	}
@@ -552,7 +560,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			return nil, nil, err
 		}
 		if receipt := findAnswerRecord(run, actionID); receipt != nil {
-			if receipt.PayloadSHA256 == payloadSHA256 {
+			if answerReceiptMatches(*receipt, options, payloadSHA256) {
 				result = run
 				if isBudgetBlockedDestructiveGrant(run) {
 					responseErr = resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
@@ -759,11 +767,15 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 		}
 
 		if run.SourceCandidate == nil && normalized.RefreshedSource == nil && !normalized.UsePinnedSource && normalized.SourceChoice != "" && normalized.CandidateID != "" {
-			if run.LastSourceChoice != nil && run.LastSourceChoice.CandidateID == normalized.CandidateID {
-				if run.LastSourceChoice.Choice != normalized.SourceChoice {
+			if resolution := findSourceChoiceResolution(run, normalized.CandidateID); resolution != nil {
+				if resolution.Receipt.Choice != normalized.SourceChoice {
 					return runstore.UpdateResult{}, resumeProtocolError(run, "source_choice_conflict", "candidate_id was already resolved with a different source choice")
 				}
 				result = run
+				receipt := resolution.Receipt
+				resumeResult := resolution.Result
+				result.LastSourceChoice = &receipt
+				result.LastResumeResult = &resumeResult
 				return runstore.UpdateResult{Projection: run}, nil
 			}
 		}
@@ -842,20 +854,19 @@ func resumeRun(run *Run, durableRun Run, options ResumeOptions) (string, bool, e
 	pureBudgetResume := options.RefreshedSource == nil && !options.UsePinnedSource &&
 		options.SourceChoice == "" && options.CandidateID == ""
 	if isBudgetBlockedDestructiveGrant(*run) && pureBudgetResume {
-		// Security: this is the only resume that retains a destructive grant. The
-		// journal proves that the exact scope was confirmed and blocked only by
-		// budget. Any source mode, candidate choice, or environment recovery falls
-		// through to the normal invalidation paths and clears the grant.
+		invalidateOutstandingResumeState(run)
 		applyResumeBudget(run, options.Budget)
 		operation := ResumeOperationAdHoc
 		eventType := "run_resumed"
+		brief := "Re-investigate the current worktree after interruption before choosing the next action."
 		if run.PinnedSource != nil {
 			operation = ResumeOperationSourceRefreshSkipped
 			eventType = ResumeOperationSourceRefreshSkipped
+			brief = "Re-orient using the retained pinned source after budget interruption; request any destructive scope again."
 			run.Observations = append(run.Observations, ResumeOperationSourceRefreshSkipped)
 		}
 		run.LastResumeResult = &ResumeResult{Operation: operation, BudgetApplied: true}
-		if err := issueAction(run, durableRun, ActionImplement, "Perform only the exact destructively authorized scope. If any target or impact changes, stop and return a fresh destructive request."); err != nil {
+		if err := issueAction(run, durableRun, ActionOrient, brief); err != nil {
 			return "", false, err
 		}
 		return eventType, true, nil
@@ -968,11 +979,13 @@ func refreshIssueSource(run *Run, durableRun Run, refreshed SourceCandidateInput
 	}
 	if refreshed.Snapshot.ManifestRevision != current.ManifestRevision {
 		if refreshed.Snapshot.ParentRequirementsRevision != current.RequirementsRevision {
-			return "", false, resumeProtocolError(
+			err := resumeProtocolError(
 				*run,
 				"source_history_fork",
 				"amended source parent_requirements_revision does not match the pinned requirements revision",
 			)
+			err.Next = startRunNext(run.Workspace, run.Goal, run.InitialBudget, run.ReviewEnabled, true)
+			return "", false, err
 		}
 		if err := validateReplacementOnlyAmendment(current, *refreshed.Snapshot); err != nil {
 			return "", false, resumeProtocolError(
@@ -1046,7 +1059,8 @@ func resolveSourceCandidate(run *Run, durableRun Run, options ResumeOptions) (st
 	run.SourceCandidate = nil
 	applyResumeBudget(run, options.Budget)
 	run.Observations = append(run.Observations, operation)
-	run.LastResumeResult = &ResumeResult{Operation: operation, BudgetApplied: true, CandidateID: candidate.CandidateID}
+	resumeResult := ResumeResult{Operation: operation, BudgetApplied: true, CandidateID: candidate.CandidateID}
+	run.LastResumeResult = &resumeResult
 	if err := issueAction(run, durableRun, ActionOrient, "Re-orient after the explicit source amendment decision before selecting further work."); err != nil {
 		return "", false, err
 	}
@@ -1054,13 +1068,51 @@ func resolveSourceCandidate(run *Run, durableRun Run, options ResumeOptions) (st
 	if run.CurrentAction != nil {
 		actionID = run.CurrentAction.ActionID
 	}
-	run.LastSourceChoice = &SourceChoiceReceipt{
+	receipt := SourceChoiceReceipt{
 		CandidateID:       candidate.CandidateID,
 		Choice:            options.SourceChoice,
 		ResultingActionID: actionID,
 		At:                time.Now().UTC(),
 	}
+	run.LastSourceChoice = &receipt
+	run.sourceChoiceHistory = append(run.sourceChoiceHistory, sourceChoiceResolution{
+		Receipt: receipt,
+		Result:  resumeResult,
+	})
 	return operation, true, nil
+}
+
+func findSourceChoiceResolution(run Run, candidateID string) *sourceChoiceResolution {
+	for index := range run.sourceChoiceHistory {
+		if run.sourceChoiceHistory[index].Receipt.CandidateID == candidateID {
+			return &run.sourceChoiceHistory[index]
+		}
+	}
+	return nil
+}
+
+func validateSourceChoiceResolution(resolution sourceChoiceResolution) error {
+	receipt := resolution.Receipt
+	result := resolution.Result
+	if receipt.CandidateID == "" ||
+		(receipt.Choice != SourceChoicePinned && receipt.Choice != SourceChoiceAdopt) ||
+		receipt.ResultingActionID == "" || receipt.At.IsZero() {
+		return errors.New("invalid source choice resolution receipt")
+	}
+	if !result.BudgetApplied || result.CandidateID != receipt.CandidateID {
+		return errors.New("invalid source choice resolution result")
+	}
+	switch receipt.Choice {
+	case SourceChoicePinned:
+		if result.Operation != ResumeOperationSourcePinned {
+			return errors.New("pinned source choice resolution has the wrong operation")
+		}
+	case SourceChoiceAdopt:
+		if result.Operation != ResumeOperationSourceAmended {
+			return errors.New("adopted source choice resolution has the wrong operation")
+		}
+	}
+	return nil
 }
 
 func markActiveAnswersSuperseded(run *Run, requirementsRevision, supersededBy string) {
@@ -1133,13 +1185,13 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 		if eventType != "run_started" {
 			return errors.New("new run requires the run_started event")
 		}
-		if after.SourceCandidate != nil || after.LastSourceChoice != nil {
+		if after.SourceCandidate != nil || after.LastSourceChoice != nil || len(after.sourceChoiceHistory) != 0 {
 			return errors.New("new run cannot begin with source candidate state")
 		}
 		return nil
 	}
 	if before.PinnedSource == nil {
-		if after.PinnedSource != nil || after.SourceCandidate != nil || after.LastSourceChoice != nil {
+		if after.PinnedSource != nil || after.SourceCandidate != nil || after.LastSourceChoice != nil || len(after.sourceChoiceHistory) != 0 {
 			return errors.New("ad-hoc run cannot acquire issue source state")
 		}
 		return nil
@@ -1168,8 +1220,9 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 			after.LastResumeResult.CandidateID != after.SourceCandidate.CandidateID {
 			return errors.New("source candidate creation requires a matching resume receipt")
 		}
-		if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
-			return errors.New("source candidate creation cannot rewrite the prior choice receipt")
+		if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) ||
+			!reflect.DeepEqual(before.sourceChoiceHistory, after.sourceChoiceHistory) {
+			return errors.New("source candidate creation cannot rewrite prior choice receipts")
 		}
 		if after.State != RunPaused || after.PauseReason != PauseDecisionRequired ||
 			after.CurrentAction != nil || len(after.Actions) != len(before.Actions) {
@@ -1190,7 +1243,8 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 		if !reflect.DeepEqual(before.SourceCandidate, after.SourceCandidate) ||
 			!reflect.DeepEqual(before.PinnedSource, after.PinnedSource) ||
 			!reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) ||
-			!reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) {
+			!reflect.DeepEqual(before.LastResumeResult, after.LastResumeResult) ||
+			!reflect.DeepEqual(before.sourceChoiceHistory, after.sourceChoiceHistory) {
 			return errors.New("pending source candidate is immutable until resolved")
 		}
 		if after.CurrentAction != nil || len(after.Actions) != len(before.Actions) {
@@ -1201,7 +1255,8 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 		return validateCandidateResolution(eventType, before, after)
 	}
 
-	if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+	if !reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) ||
+		!reflect.DeepEqual(before.sourceChoiceHistory, after.sourceChoiceHistory) {
 		return errors.New("source choice receipt requires a current candidate")
 	}
 	pinnedChanged := !reflect.DeepEqual(before.PinnedSource, after.PinnedSource)
@@ -1225,9 +1280,6 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 		}
 		return validateFreshSourceOrient(before, after)
 	case ResumeOperationSourceRefreshSkipped:
-		if isBudgetBlockedDestructiveGrant(before) {
-			return validateBudgetBlockedDestructiveResume(before, after)
-		}
 		if pinnedChanged {
 			return errors.New("skipping source refresh cannot mutate pinned source")
 		}
@@ -1291,14 +1343,23 @@ func validateCandidateLineage(run Run, candidate SourceCandidate) error {
 
 func validateCandidateResolution(eventType string, before, after Run) error {
 	candidate := *before.SourceCandidate
-	receipt := after.LastSourceChoice
-	if receipt == nil || reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+	if len(after.sourceChoiceHistory) != len(before.sourceChoiceHistory)+1 {
+		return errors.New("source candidate resolution must append exactly one choice receipt")
+	}
+	for index := range before.sourceChoiceHistory {
+		if before.sourceChoiceHistory[index] != after.sourceChoiceHistory[index] {
+			return errors.New("source candidate resolution cannot rewrite prior choice receipts")
+		}
+	}
+	resolution := after.sourceChoiceHistory[len(after.sourceChoiceHistory)-1]
+	receipt := &resolution.Receipt
+	if !reflect.DeepEqual(after.LastSourceChoice, receipt) {
 		return errors.New("source candidate resolution requires a fresh choice receipt")
 	}
 	if receipt.CandidateID != candidate.CandidateID {
 		return errors.New("source choice receipt does not match the resolved candidate")
 	}
-	if after.LastResumeResult == nil ||
+	if after.LastResumeResult == nil || !reflect.DeepEqual(*after.LastResumeResult, resolution.Result) ||
 		!after.LastResumeResult.BudgetApplied ||
 		after.LastResumeResult.CandidateID != candidate.CandidateID {
 		return errors.New("source candidate resolution requires a matching resume receipt")
@@ -2326,6 +2387,7 @@ func runBeforeMutation(run Run) Run {
 		result := *run.LastResumeResult
 		run.LastResumeResult = &result
 	}
+	run.sourceChoiceHistory = append([]sourceChoiceResolution(nil), run.sourceChoiceHistory...)
 	if acceptedSourceComments := run.acceptedSourceComments; acceptedSourceComments != nil {
 		run.acceptedSourceComments = make(map[string]PinnedSourceSection, len(acceptedSourceComments))
 		for nodeID, section := range acceptedSourceComments {
@@ -2368,6 +2430,28 @@ func outcomePayloadSHA256(outcome Outcome) (string, error) {
 }
 
 func answerPayloadSHA256(actionID string, options AnswerOptions) (string, error) {
+	return framedRevision(
+		"slipway-answer/v1",
+		actionID,
+		fmt.Sprint(options.ConfirmDestructive),
+		options.ScopeSHA256,
+		options.Text,
+	), nil
+}
+
+func answerReceiptMatches(receipt AnswerRecord, options AnswerOptions, payloadSHA256 string) bool {
+	if receipt.PayloadSHA256 == payloadSHA256 {
+		return true
+	}
+	if receipt.Text != options.Text || receipt.ConfirmDestructive != options.ConfirmDestructive ||
+		receipt.ScopeSHA256 != options.ScopeSHA256 {
+		return false
+	}
+	legacyDigest, err := legacyAnswerPayloadSHA256(receipt.ActionID, options)
+	return err == nil && receipt.PayloadSHA256 == legacyDigest
+}
+
+func legacyAnswerPayloadSHA256(actionID string, options AnswerOptions) (string, error) {
 	payload := struct {
 		ActionID           string `json:"action_id"`
 		ConfirmDestructive bool   `json:"confirm_destructive"`
@@ -2381,7 +2465,7 @@ func answerPayloadSHA256(actionID string, options AnswerOptions) (string, error)
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("encode answer payload: %w", err)
+		return "", fmt.Errorf("encode legacy answer payload: %w", err)
 	}
 	digest := sha256.Sum256(encoded)
 	return fmt.Sprintf("sha256:%x", digest), nil
@@ -2456,44 +2540,6 @@ func validateBudgetBlockedDestructiveGrant(run Run) error {
 	} else if receipt.SourceRevision != run.PinnedSource.SourceRevision ||
 		receipt.RequirementsRevision != run.PinnedSource.RequirementsRevision {
 		return errors.New("budget-blocked destructive grant must match the pinned source revisions")
-	}
-	return nil
-}
-
-func validateBudgetBlockedDestructiveResume(before, after Run) error {
-	if err := validateBudgetBlockedDestructiveGrant(before); err != nil {
-		return err
-	}
-	if after.State != RunActive || after.PauseReason != "" || after.CurrentAction == nil ||
-		after.CurrentAction.Kind != ActionImplement || after.CurrentAction.DestructiveAuthorization == nil {
-		return errors.New("budget-blocked destructive resume must issue one authorized Implement action")
-	}
-	if !reflect.DeepEqual(before.PendingDestructiveRequest, after.PendingDestructiveRequest) ||
-		!reflect.DeepEqual(before.DestructiveGrant, after.DestructiveGrant) ||
-		!reflect.DeepEqual(after.CurrentAction.DestructiveAuthorization, after.DestructiveGrant) {
-		return errors.New("budget-blocked destructive resume must retain the exact confirmed scope")
-	}
-	if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) ||
-		!reflect.DeepEqual(before.SourceCandidate, after.SourceCandidate) ||
-		!reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
-		return errors.New("budget-blocked destructive resume cannot change source state")
-	}
-	if !reflect.DeepEqual(before.Answers, after.Answers) ||
-		!reflect.DeepEqual(before.PendingActions, after.PendingActions) {
-		return errors.New("budget-blocked destructive resume cannot change confirmed input state")
-	}
-	if len(after.Actions) != len(before.Actions)+1 ||
-		!reflect.DeepEqual(before.Actions, after.Actions[:len(before.Actions)]) ||
-		!reflect.DeepEqual(after.Actions[len(before.Actions)].Action, *after.CurrentAction) {
-		return errors.New("budget-blocked destructive resume must append exactly one fresh action")
-	}
-	expectedOperation := ResumeOperationAdHoc
-	if before.PinnedSource != nil {
-		expectedOperation = ResumeOperationSourceRefreshSkipped
-	}
-	if after.LastResumeResult == nil || after.LastResumeResult.Operation != expectedOperation ||
-		!after.LastResumeResult.BudgetApplied || after.LastResumeResult.CandidateID != "" {
-		return errors.New("budget-blocked destructive resume requires a matching resume receipt")
 	}
 	return nil
 }
@@ -2604,6 +2650,24 @@ func validateRunReceipts(run Run) error {
 	if err := validateRunResumeReceipt(run); err != nil {
 		return err
 	}
+	choiceCandidates := make(map[string]struct{}, len(run.sourceChoiceHistory))
+	for index, resolution := range run.sourceChoiceHistory {
+		if err := validateSourceChoiceResolution(resolution); err != nil {
+			return fmt.Errorf("source choice resolution %d: %w", index, err)
+		}
+		if _, exists := choiceCandidates[resolution.Receipt.CandidateID]; exists {
+			return fmt.Errorf("source choice resolution candidate_id %q is duplicated", resolution.Receipt.CandidateID)
+		}
+		choiceCandidates[resolution.Receipt.CandidateID] = struct{}{}
+	}
+	if len(run.sourceChoiceHistory) > 0 {
+		latest := run.sourceChoiceHistory[len(run.sourceChoiceHistory)-1].Receipt
+		if run.LastSourceChoice == nil || *run.LastSourceChoice != latest {
+			return errors.New("last source choice does not match append-only history")
+		}
+	} else if run.LastSourceChoice != nil {
+		return errors.New("last source choice has no append-only history")
+	}
 	answerActions := make(map[string]struct{}, len(run.Answers))
 	for index, answer := range run.Answers {
 		if strings.TrimSpace(answer.ActionID) == "" || !validSHA256(answer.PayloadSHA256) || answer.At.IsZero() {
@@ -2620,11 +2684,18 @@ func validateRunReceipts(run Run) error {
 		} else if answer.ScopeSHA256 != "" {
 			return fmt.Errorf("answer receipt %d has scope without confirmation", index)
 		}
-		digest, err := answerPayloadSHA256(answer.ActionID, AnswerOptions{
+		options := AnswerOptions{
 			Text: answer.Text, ConfirmDestructive: answer.ConfirmDestructive, ScopeSHA256: answer.ScopeSHA256,
-		})
-		if err != nil || digest != answer.PayloadSHA256 {
+		}
+		digest, err := answerPayloadSHA256(answer.ActionID, options)
+		if err != nil {
 			return fmt.Errorf("answer receipt %d payload digest does not match", index)
+		}
+		if digest != answer.PayloadSHA256 {
+			legacyDigest, legacyErr := legacyAnswerPayloadSHA256(answer.ActionID, options)
+			if legacyErr != nil || legacyDigest != answer.PayloadSHA256 {
+				return fmt.Errorf("answer receipt %d payload digest does not match", index)
+			}
 		}
 	}
 	for index, record := range run.Actions {

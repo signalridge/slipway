@@ -422,7 +422,7 @@ assert_action "$IMPLEMENT2" implement
 IMPLEMENT2_ID=$(json_get "$IMPLEMENT2" action.action_id)
 printf 'implementation change\n' >> "$REPO/README.md"
 IMPLEMENT2_OUTCOME="$TMP_ROOT/implement2-outcome.json"
-make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report included a test failure.' '{"implementation_result":"applied","files_changed":[],"activities":[{"kind":"test","command":"false","exit_code":1,"summary":"reported failure"}]}'
+make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report preserved a signal-style test exit.' '{"implementation_result":"applied","files_changed":[],"activities":[{"kind":"test","command":"killed-test-process","exit_code":-1,"summary":"terminated by signal before an exit status was available"}]}'
 REVIEW="$TMP_ROOT/review.json"
 "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$IMPLEMENT2_ID" --outcome-file "$IMPLEMENT2_OUTCOME" > "$REVIEW"
 assert_action "$REVIEW" review
@@ -446,7 +446,27 @@ with open(sys.argv[1], encoding="utf-8") as stream:
     data = json.load(stream)
 assert "observed_since_start: the current Git observation differs from the run-start snapshot." in data["summary"], data
 assert "attribution_uncertainty: concurrent user edits, another Run, or tools may have contributed" in data["summary"], data
-assert "- test: false (exit 1): reported failure" in data["summary"], data
+assert "- test: killed-test-process (exit -1): terminated by signal before an exit status was available" in data["summary"], data
+PY
+FINAL_STATUS="$TMP_ROOT/final-status.json"
+"$BIN" status "$RUN_ID" --root "$REPO" --json > "$FINAL_STATUS"
+python3 -I - "$FINAL_STATUS" "$IMPLEMENT2_ID" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    run = json.load(stream)
+records = [record for record in run["actions"] if record["action"]["action_id"] == sys.argv[2]]
+assert len(records) == 1, records
+activity = records[0]["outcome"]["implementation"]["activities"][0]
+assert activity == {
+    "kind": "test",
+    "command": "killed-test-process",
+    "exit_code": -1,
+    "summary": "terminated by signal before an exit status was available",
+}, activity
+assert run["activities"] == [activity], run["activities"]
+assert "exit -1" in run["summary"], run["summary"]
 PY
 ENDED_REPLAY="$TMP_ROOT/ended-replay.json"
 "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED_REPLAY"

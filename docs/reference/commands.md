@@ -23,7 +23,7 @@ Removes only hash-matching managed files. Modified files are preserved and repor
 
 ## `slipway list`
 
-Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface (missing/modified capability file or generated `.adapter-generated` sentinel) is not reported as healthy; any non-current manifest makes list fail closed. `needs_refresh` denotes drift, not permission to overwrite user changes: refresh can recreate missing pristine content, while modified files and a modified sentinel remain preserved until the user explicitly handles them. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
+Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface (missing/modified capability file or generated `.adapter-generated` sentinel) is not reported as healthy. A non-current manifest degrades only that host to `installed:false` with an optional `warning`; read-only listing continues for every other host without changing the filesystem. `needs_refresh` denotes drift, not permission to overwrite user changes: refresh can recreate missing pristine content, while modified files and a modified sentinel remain preserved until the user explicitly handles them. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities,warning?}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
 
 ## `slipway doctor`
 
@@ -43,14 +43,16 @@ slipway run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-revie
 
 Creates a journal and returns the initial `orient` Action. The default Action budget is 8; an explicit value must be from 1 through 1000. `--no-review` omits the recommended review after observed code changes. Without `--source-file`, the Run is ad-hoc. With `--source-file`, Slipway opens one strict Source Bundle v2 envelope, verifies the Issue-body manifest and its exact referenced comments, durably stores each normalized chapter by digest, and journals only the bounded catalog. The temporary file and GitHub are never needed for local material reads or resume.
 
+Host-generated and machine `start` commands always use the canonical safe variant `slipway run --budget N --json --root ABSOLUTE_ROOT [--no-review] [--source-file FILE] -- GOAL`; every flag is before the sole separator and GOAL is its one literal positional value. The public Cobra command also accepts equivalent legal flag placement typed by a human.
+
 Ad-hoc and issue-bound examples:
 
 ```bash
-slipway run "small private fix" --json
-slipway run "implement the bounded Change" --source-file /safe/temp/change-envelope.json --json
+slipway run --budget 8 --json --root /absolute/repository -- "small private fix"
+slipway run --budget 8 --json --root /absolute/repository --source-file /safe/temp/change-envelope.json -- "implement the bounded Change"
 ```
 
-Before source import, warn that accepted Requirements, goals, later answers, and command summaries may be sensitive. Raw Issue/comment bodies, tokens, labels, and the source-file path are not journal inputs; accepted chapter bytes live only in private per-Run material blobs. See [Runs and privacy](../explanation/runs-and-privacy.md).
+Before source import, warn that accepted Requirements, goals, later answers, and command summaries may be sensitive. The host transiently fetches only the exact Issue body and manifest-referenced raw comment fields, passes the raw envelope only to the CLI for consumption, and removes the temporary file. Raw Issue/comment envelopes, tokens, labels, and the source-file path are not journal inputs; only accepted normalized chapter bytes and bounded catalog/provenance persist. See [Runs and privacy](../explanation/runs-and-privacy.md).
 
 Host-only protocol commands are intentionally hidden from help:
 

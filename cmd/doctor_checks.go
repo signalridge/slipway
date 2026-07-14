@@ -71,7 +71,16 @@ func (writer *boundedDoctorBuffer) Write(data []byte) (int, error) {
 }
 
 func collectDoctorReport(ctx context.Context, root string, runner doctorCommandRunner) (adapter.DoctorReport, error) {
-	report, err := adapter.Doctor(root)
+	return collectDoctorReportWithAdapterDoctor(ctx, root, runner, adapter.Doctor)
+}
+
+func collectDoctorReportWithAdapterDoctor(
+	ctx context.Context,
+	root string,
+	runner doctorCommandRunner,
+	doctor func(string) (adapter.DoctorReport, error),
+) (adapter.DoctorReport, error) {
+	report, err := doctor(root)
 	if err != nil {
 		return adapter.DoctorReport{}, err
 	}

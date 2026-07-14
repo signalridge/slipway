@@ -62,19 +62,25 @@ The normalized Issue body has this first non-empty line and next non-empty block
 
 `parent_requirements_revision` is optional: omit it for an initial manifest; when present it is `sha256:` plus exactly 64 lowercase hexadecimal digits. The single entry above shows the field shape; a valid `change/v2` manifest includes at least one section for each role `outcome`, `requirements`, `acceptance_examples`, `constraints`, and `non_goals`. Each section has all six shown fields, keys and comment IDs are unique, and section array order is digest-significant.
 
-### Fetch the referenced comments
+### Fetch only the referenced comments
 
-After parsing the Issue-body manifest, fetch its declared comment IDs without searching or treating unreferenced discussion as source:
-
-```sh
-gh issue view <number> --json comments --jq '.comments[] | {node_id, database_id: .id, url, updated_at, author: .author.id, body}'
-```
-
-Map the fetched `author` value to envelope `author_id`, retain only the manifest-referenced IDs, and preserve trusted-host metadata including `is_minimized`; do not derive node IDs from URLs. A referenced comment with `is_minimized: true` is not a valid section. If that `gh issue view` surface is unavailable, use the official paginated REST endpoint and select the referenced IDs:
+Fetch the Issue identity and exact body before any comment request, then strictly parse the body marker and the one manifest fence. For example, obtain the repository/Issue node identities, canonical URL, exact title/body/update time, and labels from the trusted GraphQL surface:
 
 ```sh
-gh api repos/:owner/:repo/issues/:number/comments
+gh api graphql \
+  -f query='query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){id issue(number:$number){id number url title body updatedAt labels(first:100){totalCount nodes{name}}}}}' \
+  -F owner=OWNER -F repo=REPO -F number=NUMBER
 ```
+
+Reject a missing or conflicting marker, malformed/duplicate manifest field, more than 100 observed labels, duplicate comment identity, or more than 64 declared comments before fetching any comment. Submit exactly the manifest-declared node IDs—never enumerate Issue comments or ordinary discussion—to one `nodes(ids:...)` query (at most 64 IDs):
+
+```sh
+gh api graphql \
+  -f query='query($ids:[ID!]!){nodes(ids:$ids){... on IssueComment{id databaseId url updatedAt isMinimized body author{login ... on Node{id}} issue{id number url repository{id nameWithOwner}}}}}' \
+  -F 'ids[]=IC_MANIFEST_NODE_ID' # repeat once for each declared ID, at most 64
+```
+
+A null node, non-`IssueComment` node, missing field (including author node ID or login), duplicate result, result count mismatch, `databaseId` mismatch, cross-Issue/repository result, URL/identity inconsistency, minimized comment, bad section marker, or body-digest mismatch stops construction. Do not derive identities from URLs. Map trusted camelCase fields to the envelope's snake_case fields (`id` to `node_id`, `databaseId` to `database_id`, `updatedAt` to `updated_at`, `isMinimized` to `is_minimized`, and `author.id` to `author_id`), retain exact bodies, and initialize arrays. Write the resulting raw envelope only to a private temporary file for immediate CLI consumption; after the CLI accepts and normalizes it, remove the file. Only accepted normalized section materials and their bounded catalog/provenance persist; the raw Issue body and raw enclosing comment envelopes do not.
 
 ### Digests
 

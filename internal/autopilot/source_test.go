@@ -1,6 +1,7 @@
 package autopilot
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -369,6 +370,107 @@ func TestParseSourceCandidateClassifiesBundleFailuresWithoutPersistingRawData(t 
 	encoded, err := json.Marshal(candidate)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "Deliver **value**")
+}
+
+func FuzzParseSourceDeterministic(f *testing.F) {
+	valid, err := json.Marshal(validSourceEnvelope())
+	if err != nil {
+		f.Fatal(err)
+	}
+	duplicateKey := bytes.Replace(
+		valid,
+		[]byte(`"source_version":2`),
+		[]byte(`"source_version":2,"source_version":2`),
+		1,
+	)
+	controlEnvelope := validSourceEnvelope()
+	controlEnvelope.Title += "\u007f"
+	control, err := json.Marshal(controlEnvelope)
+	if err != nil {
+		f.Fatal(err)
+	}
+	for _, seed := range [][]byte{
+		valid,
+		[]byte(`{`),
+		duplicateKey,
+		control,
+		append([]byte(`{"source_version":2,"title":"`), 0xff, '"', '}'),
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		first, firstErr := ParseSource(raw)
+		if firstErr != nil {
+			return
+		}
+		second, secondErr := ParseSource(raw)
+		if secondErr != nil {
+			t.Fatalf("same successful input failed on repeat: %v", secondErr)
+		}
+		firstJSON, err := json.Marshal(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		secondJSON, err := json.Marshal(second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(firstJSON, secondJSON) {
+			t.Fatalf("same source input produced different pinned projections:\nfirst: %s\nsecond: %s", firstJSON, secondJSON)
+		}
+		if first.SourceVersion != SourceVersion || first.ParserVersion != ParserVersion ||
+			first.ManifestVersion != SourceManifestVersion || first.Profile != SourceProfileChangeV2 {
+			t.Fatalf("successful parse violated version/profile invariants: %+v", first)
+		}
+		for name, revision := range map[string]string{
+			"source": first.SourceRevision, "manifest": first.ManifestRevision, "requirements": first.RequirementsRevision,
+		} {
+			if !validSHA256(revision) {
+				t.Fatalf("%s revision is invalid: %q", name, revision)
+			}
+		}
+		if err := validateSourceMaterials(first, true); err != nil {
+			t.Fatalf("successful parse produced invalid materials: %v", err)
+		}
+		for _, section := range first.Sections {
+			if section.Bytes <= 0 || !validSHA256(section.SectionRevision) || !validSHA256(section.MaterialSHA256) {
+				t.Fatalf("successful parse produced invalid section metadata: %+v", section)
+			}
+		}
+	})
+}
+
+func FuzzSourceLineEndingsAndFramedRevisions(f *testing.F) {
+	f.Add("line one\nline two\n", "payload")
+	f.Add("line one\r\nline two\r", "")
+	f.Add("", "\u0000\u007f")
+
+	f.Fuzz(func(t *testing.T, first, second string) {
+		normalized := normalizeLineEndings(first)
+		if strings.ContainsRune(normalized, '\r') {
+			t.Fatalf("normalization retained CR: %q", normalized)
+		}
+		if normalizeLineEndings(normalized) != normalized {
+			t.Fatal("line-ending normalization is not idempotent")
+		}
+		crlf := strings.ReplaceAll(normalized, "\n", "\r\n")
+		cr := strings.ReplaceAll(normalized, "\n", "\r")
+		if normalizeLineEndings(crlf) != normalized || normalizeLineEndings(cr) != normalized {
+			t.Fatal("CRLF/CR/LF forms did not converge")
+		}
+		wantBodyRevision := commentBodyRevision(normalized)
+		if commentBodyRevision(normalizeLineEndings(crlf)) != wantBodyRevision ||
+			commentBodyRevision(normalizeLineEndings(cr)) != wantBodyRevision {
+			t.Fatal("normalized line-ending variants changed the comment-body revision")
+		}
+		if framedRevision(first, second) == framedRevision(first+second) {
+			t.Fatal("framing did not separate field boundaries")
+		}
+		if framedRevision("domain-a/v1", first, second) == framedRevision("domain-b/v1", first, second) {
+			t.Fatal("framed revision did not separate domains")
+		}
+	})
 }
 
 func sourceSectionKeys(sections []PinnedSourceSection) []string {
