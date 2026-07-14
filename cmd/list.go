@@ -50,6 +50,11 @@ func makeListCmd() *cobra.Command {
 				); err != nil {
 					return err
 				}
+				if status.Warning != "" {
+					if _, err := fmt.Fprintf(cmd.OutOrStdout(), "  warning: %s\n", status.Warning); err != nil {
+						return err
+					}
+				}
 			}
 			return nil
 		},

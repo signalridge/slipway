@@ -63,10 +63,23 @@ func TestRetiredArchitecturePackagesAreAbsent(t *testing.T) {
 	}
 }
 
-func TestRuntimeAndGeneratedCapabilitiesExcludeRetiredGovernanceTerms(t *testing.T) {
+// TestRuntimeAndGeneratedCapabilitiesExcludeRetiredGovernanceSurfaces enforces
+// issue #434 §15/§9.4 structurally: retired governance concepts (evidence,
+// gates, freshness, done-ready/ship-ready, lifecycle) must not reappear as a
+// public CLI command or as a machine-protocol JSON field/enum value. This is a
+// structural surface check, not a vocabulary ban: ordinary English usage of
+// these words in comments, error prose, or documentation must not fail CI, so
+// the assertion targets exact command/field shapes instead of grepping prose.
+func TestRuntimeAndGeneratedCapabilitiesExcludeRetiredGovernanceSurfaces(t *testing.T) {
 	t.Parallel()
 	root := repositoryRoot(t)
-	retired := regexp.MustCompile(`(?i)\b(?:evidence|gate|gates|freshness|done[_-]?ready|ship[_-]?ready|lifecycle)\b`)
+
+	// The retired concepts and the substrings that would betray their return
+	// as machine fields or enum values. We match on quoted JSON-ish tokens and
+	// CLI command names rather than bare words so legitimate prose is unaffected.
+	retiredField := regexp.MustCompile(`"(?:evidence|gate|gates|freshness|done_ready|ship_ready|done_ready_gate|ship_ready_gate|lifecycle)"`)
+	retiredCommand := regexp.MustCompile(`(?m)^\s*Use:\s+"(?:evidence|gate|freshness|lifecycle|done-ready|ship-ready)"`)
+
 	targets := []string{
 		filepath.Join(root, "cmd"),
 		filepath.Join(root, "internal", "adapter"),
@@ -89,7 +102,8 @@ func TestRuntimeAndGeneratedCapabilitiesExcludeRetiredGovernanceTerms(t *testing
 			if err != nil {
 				return err
 			}
-			assert.Empty(t, retired.Find(content), path)
+			assert.Emptyf(t, retiredField.Find(content), "%s: retired governance term reappeared as a quoted JSON field/enum token", path)
+			assert.Emptyf(t, retiredCommand.Find(content), "%s: retired governance term reappeared as a cobra command Use", path)
 			return nil
 		})
 		require.NoError(t, err)

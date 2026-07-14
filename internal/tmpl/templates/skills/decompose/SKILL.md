@@ -16,6 +16,8 @@ Show a numbered decomposition before writing: every Change's complete effective 
 
 GitHub `closed` status does not prove that a blocker Change was actually delivered. The planning frontier may use that state as a signal, but it must remain advisory rather than locked; the user retains authority to override it.
 
+{{ template "source-bundle" . }}
+
 ## GitHub compatibility, transfer, and publication
 
 Detect `gh --version`. For `gh >= 2.94.0`, use first-class parent/sub-issue/dependency operations; otherwise use the official REST API with existing authentication or report `environment_unavailable`. Never make a local relationship graph authoritative. Follow redirects or transfers only within `github.com`; refetch repository/Issue node IDs, canonical URL, labels, parent, dependencies, and revisions, preserve the old URL alias, and still compare body marker and source/Requirements revisions. Do not trust cross-host redirects.

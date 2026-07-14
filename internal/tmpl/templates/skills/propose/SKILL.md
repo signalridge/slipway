@@ -19,6 +19,8 @@ A managed Objective starts with the exact first non-empty line `<!-- slipway-lev
 
 For an existing Issue without a valid marker, do not rewrite it silently. Present exactly three choices: the user manually applies a normalized body; create a separately confirmed managed Change linked to it; or use a bounded summary in an explicit ad-hoc Run.
 
+{{ template "source-bundle" . }}
+
 ## GitHub compatibility and identity
 
 Detect `gh --version`. For `gh >= 2.94.0`, use first-class parent, sub-issue, and dependency operations. With an older or missing `gh`, use the official GitHub REST API with the user's existing authentication, or report `environment_unavailable`; never invent local authority. Respect the platform limits of 100 sub-issues per parent and 50 blocking plus 50 blocked-by dependencies per Issue.
