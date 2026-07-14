@@ -47,16 +47,19 @@ func TestRestrictToOwnerSetsProtectedUserAndSystemDACL(t *testing.T) {
 
 func TestRestrictToOwnerRemainsBoundToOpenedObjectAfterPathReplacement(t *testing.T) {
 	directory := t.TempDir()
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+
 	path := filepath.Join(directory, "private")
-	detached := filepath.Join(directory, "detached")
 	require.NoError(t, os.WriteFile(path, []byte("original"), 0o600))
-	original, err := os.OpenFile(path, os.O_RDWR, 0)
+	original, err := root.Open("private")
 	require.NoError(t, err)
 	defer original.Close()
 
-	require.NoError(t, os.Rename(path, detached))
+	require.NoError(t, root.Rename("private", "detached"))
 	require.NoError(t, os.WriteFile(path, []byte("replacement"), 0o600))
-	replacement, err := os.OpenFile(path, os.O_RDWR, 0)
+	replacement, err := root.Open("private")
 	require.NoError(t, err)
 	defer replacement.Close()
 
@@ -67,4 +70,24 @@ func TestRestrictToOwnerRemainsBoundToOpenedObjectAfterPathReplacement(t *testin
 	replacementPrivate, err := ownerACLIsPrivate(replacement)
 	require.NoError(t, err)
 	assert.False(t, replacementPrivate, "replacement pathname entry must not receive the opened object's DACL")
+}
+
+// TestRestrictToOwnerWorksWithReadOnlyRootOpenDirectoryHandle covers the
+// transaction path: os.Root.Open returns a FILE_GENERIC_READ directory handle
+// that ReOpenFile cannot reliably reopen with WRITE_DAC.
+func TestRestrictToOwnerWorksWithReadOnlyRootOpenDirectoryHandle(t *testing.T) {
+	parent := t.TempDir()
+	root, err := os.OpenRoot(parent)
+	require.NoError(t, err)
+	defer root.Close()
+
+	require.NoError(t, root.Mkdir("private", 0o700))
+	handle, err := root.Open("private")
+	require.NoError(t, err)
+	defer handle.Close()
+
+	require.NoError(t, RestrictToOwner(handle))
+	private, err := ownerACLIsPrivate(handle)
+	require.NoError(t, err)
+	assert.True(t, private)
 }

@@ -13,9 +13,26 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-const localSystemSID = "S-1-5-18"
+const (
+	localSystemSID     = "S-1-5-18"
+	extendedFileIDType = 2
+)
 
-var procReOpenFile = windows.NewLazySystemDLL("kernel32.dll").NewProc("ReOpenFile")
+var (
+	procOpenFileByID = windows.NewLazySystemDLL("kernel32.dll").NewProc("OpenFileById")
+	procReOpenFile   = windows.NewLazySystemDLL("kernel32.dll").NewProc("ReOpenFile")
+)
+
+type fileIDInfo struct {
+	volumeSerialNumber uint64
+	fileID             [16]byte
+}
+
+type fileIDDescriptor struct {
+	size   uint32
+	typeID uint32
+	fileID [16]byte
+}
 
 // RestrictToOwner applies a protected DACL that grants full control only to
 // the current user and LocalSystem.
@@ -68,7 +85,7 @@ func restrictToOwner(file *os.File) error {
 	); err != nil {
 		return fmt.Errorf("set owner-only DACL: %w", err)
 	}
-	private, err := ownerACLHandleIsPrivate(handle)
+	private, err := ownerACLHandleIsPrivate(handle, info.IsDir())
 	if err != nil {
 		return fmt.Errorf("verify owner-only DACL: %w", err)
 	}
@@ -76,8 +93,8 @@ func restrictToOwner(file *os.File) error {
 		return errors.New("verify owner-only DACL: target retained unexpected access")
 	}
 
-	// ReOpenFile performs a fresh access check while remaining bound to this
-	// filesystem object, so a pathname replacement cannot satisfy verification.
+	// The identity-bound reopen performs a fresh access check, so pathname
+	// replacement cannot satisfy the effective-access verification.
 	access, err := reopenFileHandle(file, windows.FILE_GENERIC_READ|windows.FILE_GENERIC_WRITE|windows.READ_CONTROL|windows.WRITE_DAC)
 	if err != nil {
 		return fmt.Errorf("verify effective owner access: %w", err)
@@ -117,15 +134,39 @@ func ownerACLIsPrivate(file *os.File) (bool, error) {
 	if file == nil {
 		return false, errors.New("verify owner ACL: nil file")
 	}
+	info, err := file.Stat()
+	if err != nil {
+		return false, err
+	}
 	handle, err := reopenFileHandle(file, windows.READ_CONTROL)
 	if err != nil {
 		return false, err
 	}
 	defer windows.CloseHandle(handle)
-	return ownerACLHandleIsPrivate(handle)
+	return ownerACLHandleIsPrivate(handle, info.IsDir())
 }
 
 func reopenFileHandle(file *os.File, access uint32) (windows.Handle, error) {
+	handle, err := reopenWithReOpenFile(file, access)
+	if err == nil {
+		return handle, nil
+	}
+	if !errors.Is(err, windows.ERROR_ACCESS_DENIED) {
+		return 0, err
+	}
+
+	// ReOpenFile can deny WRITE_DAC when the original directory handle came
+	// from os.Root.Open and therefore only carries FILE_GENERIC_READ. Open by
+	// the already-open object's file ID to perform a fresh access check without
+	// resolving a pathname or losing the object binding.
+	handle, byIDErr := reopenByFileID(file, access)
+	if byIDErr != nil {
+		return 0, errors.Join(err, fmt.Errorf("reopen by file ID: %w", byIDErr))
+	}
+	return handle, nil
+}
+
+func reopenWithReOpenFile(file *os.File, access uint32) (windows.Handle, error) {
 	handleValue, _, callErr := procReOpenFile.Call(
 		file.Fd(),
 		uintptr(access),
@@ -133,17 +174,51 @@ func reopenFileHandle(file *os.File, access uint32) (windows.Handle, error) {
 		uintptr(windows.FILE_FLAG_BACKUP_SEMANTICS),
 	)
 	runtime.KeepAlive(file)
-	handle := windows.Handle(handleValue)
-	if handle == windows.InvalidHandle {
-		if callErr == syscall.Errno(0) {
-			callErr = windows.ERROR_INVALID_HANDLE
-		}
-		return 0, callErr
-	}
-	return handle, nil
+	return checkedWindowsHandle(handleValue, callErr)
 }
 
-func ownerACLHandleIsPrivate(handle windows.Handle) (bool, error) {
+func reopenByFileID(file *os.File, access uint32) (windows.Handle, error) {
+	var info fileIDInfo
+	if err := windows.GetFileInformationByHandleEx(
+		windows.Handle(file.Fd()),
+		windows.FileIdInfo,
+		(*byte)(unsafe.Pointer(&info)),
+		uint32(unsafe.Sizeof(info)),
+	); err != nil {
+		runtime.KeepAlive(file)
+		return 0, fmt.Errorf("query file ID: %w", err)
+	}
+
+	descriptor := fileIDDescriptor{
+		size:   uint32(unsafe.Sizeof(fileIDDescriptor{})),
+		typeID: extendedFileIDType,
+		fileID: info.fileID,
+	}
+	handleValue, _, callErr := procOpenFileByID.Call(
+		file.Fd(),
+		uintptr(unsafe.Pointer(&descriptor)),
+		uintptr(access),
+		uintptr(windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE|windows.FILE_SHARE_DELETE),
+		0,
+		uintptr(windows.FILE_FLAG_BACKUP_SEMANTICS|windows.FILE_FLAG_OPEN_REPARSE_POINT),
+	)
+	runtime.KeepAlive(file)
+	runtime.KeepAlive(&descriptor)
+	return checkedWindowsHandle(handleValue, callErr)
+}
+
+func checkedWindowsHandle(handleValue uintptr, callErr error) (windows.Handle, error) {
+	handle := windows.Handle(handleValue)
+	if handle != windows.InvalidHandle {
+		return handle, nil
+	}
+	if callErr == syscall.Errno(0) {
+		callErr = windows.ERROR_INVALID_HANDLE
+	}
+	return 0, callErr
+}
+
+func ownerACLHandleIsPrivate(handle windows.Handle, directory bool) (bool, error) {
 	descriptor, err := windows.GetSecurityInfo(handle, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION)
 	if err != nil {
 		return false, err
@@ -151,6 +226,8 @@ func ownerACLHandleIsPrivate(handle windows.Handle) (bool, error) {
 	if descriptor == nil {
 		return false, nil
 	}
+	defer runtime.KeepAlive(descriptor)
+
 	control, _, err := descriptor.Control()
 	if err != nil {
 		return false, err
@@ -170,52 +247,74 @@ func ownerACLHandleIsPrivate(handle windows.Handle) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	expectedEntries := 2
+	trusteeCount := 2
 	if userSID.Equals(systemSID) {
-		expectedEntries = 1
+		trusteeCount = 1
 	}
-	if int(dacl.AceCount) != expectedEntries {
+	if int(dacl.AceCount) < trusteeCount || int(dacl.AceCount) > trusteeCount*2 {
 		return false, nil
 	}
-	seenUser := false
-	seenSystem := false
-	const allowedFlags = uint8(windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE)
+
+	type aceState struct {
+		effective   bool
+		inheritable bool
+	}
+	var user, system aceState
+	const allowedFlags = uint8(
+		windows.OBJECT_INHERIT_ACE |
+			windows.CONTAINER_INHERIT_ACE |
+			windows.INHERIT_ONLY_ACE,
+	)
+	const inheritanceFlags = uint8(windows.OBJECT_INHERIT_ACE | windows.CONTAINER_INHERIT_ACE)
 	for index := uint16(0); index < dacl.AceCount; index++ {
 		var ace *windows.ACCESS_ALLOWED_ACE
 		if err := windows.GetAce(dacl, uint32(index), &ace); err != nil {
 			return false, err
 		}
 		if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE ||
-			ace.Header.AceFlags & ^allowedFlags != 0 ||
+			ace.Header.AceFlags&^allowedFlags != 0 ||
 			ace.Header.AceSize < uint16(unsafe.Offsetof(ace.SidStart)+4) ||
 			!aceGrantsFullControl(ace.Mask) {
 			return false, nil
 		}
-		aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		if userSID.Equals(systemSID) {
-			if !userSID.Equals(aceSID) {
-				return false, nil
-			}
-			seenUser, seenSystem = true, true
-			continue
+
+		flags := ace.Header.AceFlags
+		inherits := flags&inheritanceFlags != 0
+		inheritOnly := flags&windows.INHERIT_ONLY_ACE != 0
+		if (!directory && flags != 0) || (inheritOnly && !inherits) {
+			return false, nil
 		}
+
+		aceSID := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		state := &user
 		switch {
 		case userSID.Equals(aceSID):
-			if seenUser {
-				return false, nil
-			}
-			seenUser = true
-		case systemSID.Equals(aceSID):
-			if seenSystem {
-				return false, nil
-			}
-			seenSystem = true
+		case !userSID.Equals(systemSID) && systemSID.Equals(aceSID):
+			state = &system
 		default:
 			return false, nil
 		}
+		if !inheritOnly {
+			if state.effective {
+				return false, nil
+			}
+			state.effective = true
+		}
+		if inherits {
+			if state.inheritable {
+				return false, nil
+			}
+			state.inheritable = true
+		}
 	}
-	runtime.KeepAlive(descriptor)
-	return seenUser && seenSystem, nil
+
+	complete := func(state aceState) bool {
+		return state.effective && (!directory || state.inheritable)
+	}
+	if userSID.Equals(systemSID) {
+		return complete(user), nil
+	}
+	return complete(user) && complete(system), nil
 }
 
 func aceGrantsFullControl(mask windows.ACCESS_MASK) bool {

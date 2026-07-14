@@ -466,28 +466,23 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 				Cause:        errors.Join(fmt.Errorf("private transaction quarantine could not be safely initialized: %w", cause), cleanupErr),
 			}
 		}
+
+		// Harden before any fault or concurrent-observation hook can force this
+		// directory to be retained as a recovery artifact. Validate it again
+		// afterward so a hook cannot replace or relax the opened namespace.
+		directory, _, err := secureTransactionQuarantineDirectory(parent, name, info)
+		if err != nil {
+			return allocationError(err)
+		}
+		if err := directory.Close(); err != nil {
+			return allocationError(err)
+		}
 		if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineMkdir, originalPath, directoryPath); err != nil {
 			return allocationError(fmt.Errorf("after quarantine mkdir: %w", err))
 		}
-		directory, err := parent.OpenRoot(name)
+		directory, current, err := secureTransactionQuarantineDirectory(parent, name, info)
 		if err != nil {
 			return allocationError(err)
-		}
-		dirFile, err := directory.Open(".")
-		if err != nil {
-			_ = directory.Close()
-			return allocationError(err)
-		}
-		opened, statErr := dirFile.Stat()
-		chmodErr := dirFile.Chmod(0o700)
-		aclErr := restrictToOwner(dirFile)
-		current, lstatErr := parent.Lstat(name)
-		private := lstatErr == nil && transactionQuarantineModeIsPrivate(directory, current.Mode())
-		closeErr := dirFile.Close()
-		if statErr != nil || chmodErr != nil || aclErr != nil || closeErr != nil || lstatErr != nil ||
-			!os.SameFile(info, opened) || !os.SameFile(opened, current) || !private {
-			_ = directory.Close()
-			return allocationError(errors.Join(errors.New("transaction quarantine is not private and stable"), statErr, chmodErr, aclErr, closeErr, lstatErr))
 		}
 		if err := callFileTransactionHook(filesystem.hooks.AfterQuarantineOpen, originalPath, directoryPath); err != nil {
 			_ = directory.Close()
@@ -524,6 +519,36 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		}, nil
 	}
 	return nil, errors.New("allocate private transaction quarantine: name attempts exhausted")
+}
+
+func secureTransactionQuarantineDirectory(parent *os.Root, name string, expected os.FileInfo) (*os.Root, os.FileInfo, error) {
+	directory, err := parent.OpenRoot(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	dirFile, err := directory.Open(".")
+	if err != nil {
+		return nil, nil, errors.Join(err, directory.Close())
+	}
+	opened, statErr := dirFile.Stat()
+	chmodErr := dirFile.Chmod(0o700)
+	aclErr := restrictToOwner(dirFile)
+	current, lstatErr := parent.Lstat(name)
+	private := lstatErr == nil && transactionQuarantineModeIsPrivate(directory, current.Mode())
+	closeErr := dirFile.Close()
+	if statErr != nil || chmodErr != nil || aclErr != nil || closeErr != nil || lstatErr != nil ||
+		!os.SameFile(expected, opened) || !os.SameFile(opened, current) || !private {
+		return nil, nil, errors.Join(
+			errors.New("transaction quarantine is not private and stable"),
+			statErr,
+			chmodErr,
+			aclErr,
+			closeErr,
+			lstatErr,
+			directory.Close(),
+		)
+	}
+	return directory, current, nil
 }
 
 func cleanupFailedQuarantineAllocation(parent *os.Root, name string, identity os.FileInfo) (bool, error) {

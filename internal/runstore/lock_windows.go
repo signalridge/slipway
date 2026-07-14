@@ -8,13 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/sys/windows"
 )
 
 type namedMutexWriterLock struct {
-	handle windows.Handle
+	handle       windows.Handle
+	threadLocked bool
 }
 
 func openRunWriterLock(run *runHandle) (runWriterLock, error) {
@@ -35,25 +37,46 @@ func openRunWriterLock(run *runHandle) (runWriterLock, error) {
 }
 
 func (lock *namedMutexWriterLock) tryLock() (bool, error) {
+	if lock.threadLocked {
+		return false, errors.New("run writer mutex is already owned")
+	}
+
+	// Windows mutex ownership belongs to the waiting OS thread, not to the Go
+	// goroutine. Pin before waiting so ReleaseMutex runs on the same thread even
+	// if the goroutine blocks or yields while the transaction is in progress.
+	runtime.LockOSThread()
 	result, err := windows.WaitForSingleObject(lock.handle, 0)
 	if err != nil {
+		runtime.UnlockOSThread()
 		return false, err
 	}
 	switch result {
 	case windows.WAIT_OBJECT_0, windows.WAIT_ABANDONED:
+		lock.threadLocked = true
 		return true, nil
 	case uint32(windows.WAIT_TIMEOUT):
+		runtime.UnlockOSThread()
 		return false, nil
 	default:
+		runtime.UnlockOSThread()
 		return false, fmt.Errorf("unexpected mutex wait result %#x", result)
 	}
 }
 
 func (lock *namedMutexWriterLock) unlock() error {
-	return windows.ReleaseMutex(lock.handle)
+	if !lock.threadLocked {
+		return errors.New("run writer mutex is not owned")
+	}
+	err := windows.ReleaseMutex(lock.handle)
+	lock.threadLocked = false
+	runtime.UnlockOSThread()
+	return err
 }
 
 func (lock *namedMutexWriterLock) close() error {
+	if lock.threadLocked {
+		return errors.New("close run writer mutex while owned")
+	}
 	if lock.handle == 0 {
 		return nil
 	}
