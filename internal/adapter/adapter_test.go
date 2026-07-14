@@ -467,15 +467,15 @@ func TestCurrentManifestCannotAuthorizeUnknownUserFile(t *testing.T) {
 	}
 }
 
-// TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath covers the
-// provenance gap that a path-only currentClaimAllowed check leaves open: an
-// attacker writes arbitrary user content at a real managed path and a forged
-// manifest whose self-reported sha256 matches that user content. The manifest
-// must not authorize deletion because the content is not what this version of
+// TestForgedCurrentManifestCannotAuthorizeAdapterMutation covers the
+// provenance gap that a path-only ownership check leaves open: an attacker
+// writes arbitrary user content at a real managed path and a forged manifest
+// whose self-reported sha256 matches that user content. The manifest must not
+// authorize any mutation because the content is not what this version of
 // Slipway actually generates. This is the P0 ownership-safety anchor required
 // by issue #434 §13 and acceptance scenario #29.
-func TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath(t *testing.T) {
-	for _, operation := range []string{"uninstall", "refresh"} {
+func TestForgedCurrentManifestCannotAuthorizeAdapterMutation(t *testing.T) {
+	for _, operation := range []string{"install", "refresh", "uninstall"} {
 		t.Run(operation, func(t *testing.T) {
 			root := t.TempDir()
 			host, ok := lookupHost("claude")
@@ -488,9 +488,12 @@ func TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath(t *testing.T)
 				ToolID:  host.ID,
 				Files:   []manifestFile{{Path: managedRelative, SHA256: hashBytes(userContent)}},
 			})
+			before := snapshotTestTree(t, root)
 
 			var err error
 			switch operation {
+			case "install":
+				_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}})
 			case "refresh":
 				_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
 			case "uninstall":
@@ -499,8 +502,10 @@ func TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath(t *testing.T)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "not a current pristine managed file")
 			// The user-written content at the managed path must survive: a forged
-			// manifest with a matching self-reported hash must never delete it.
+			// manifest with a matching self-reported hash must never authorize any
+			// adapter mutation, including an otherwise non-refresh install.
 			assertFileContent(t, root, managedRelative, userContent)
+			assert.Equal(t, before, snapshotTestTree(t, root))
 		})
 	}
 }
@@ -595,6 +600,14 @@ func TestCurrentManifestWithTrailingDataCannotAuthorizeDeletion(t *testing.T) {
 	content, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(managedRelative)))
 	require.NoError(t, readErr)
 	assert.Equal(t, managedContent, content)
+}
+
+func TestRejectDuplicateJSONKeysPreservesAdapterUTF8Acceptance(t *testing.T) {
+	t.Parallel()
+	raw := append([]byte(`{"value":"`), 0xff)
+	raw = append(raw, []byte(`"}`)...)
+
+	require.NoError(t, rejectDuplicateJSONKeys(raw))
 }
 
 func TestMalformedOwnershipManifestCannotAuthorizeAdapterMutation(t *testing.T) {
@@ -958,4 +971,45 @@ func assertFileContent(t *testing.T, root, relative string, expected []byte) {
 	content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
 	require.NoError(t, err)
 	assert.Equal(t, expected, content)
+}
+
+func snapshotTestTree(t *testing.T, root string) map[string]string {
+	t.Helper()
+	snapshot := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == root {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		key := filepath.ToSlash(relative)
+		switch {
+		case info.Mode()&os.ModeSymlink != 0:
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			snapshot[key] = info.Mode().String() + ":symlink:" + target
+		case info.Mode().IsRegular():
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			snapshot[key] = info.Mode().String() + ":" + hashBytes(content)
+		default:
+			snapshot[key] = info.Mode().String()
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	return snapshot
 }

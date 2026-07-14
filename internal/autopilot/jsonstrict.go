@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/signalridge/slipway/internal/jsonstrict"
 )
 
 const utf8BOM = "\xef\xbb\xbf"
@@ -27,7 +29,7 @@ func decodeStrictJSON(raw []byte, target any) error {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return errors.New("decode json: input is empty")
 	}
-	if err := validateJSONStructure(raw); err != nil {
+	if err := jsonstrict.ScanStructure(raw); err != nil {
 		return fmt.Errorf("decode json: %w", err)
 	}
 	if err := validateExactJSONSchema(raw, target); err != nil {
@@ -46,22 +48,6 @@ func decodeStrictJSON(raw []byte, target any) error {
 			return errors.New("decode json: trailing json value")
 		}
 		return fmt.Errorf("decode json: trailing data: %w", err)
-	}
-	return nil
-}
-
-func validateJSONStructure(raw []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := scanJSONValue(decoder, "$"); err != nil {
-		return err
-	}
-
-	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return errors.New("trailing json value")
-		}
-		return fmt.Errorf("trailing data: %w", err)
 	}
 	return nil
 }
@@ -183,65 +169,10 @@ func exactJSONStructFields(targetType reflect.Type) map[string]reflect.Type {
 	return fields
 }
 
-func scanJSONValue(decoder *json.Decoder, path string) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return fmt.Errorf("invalid value at %s: %w", path, err)
-	}
-
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-
-	switch delimiter {
-	case '{':
-		seen := make(map[string]struct{})
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return fmt.Errorf("invalid object key at %s: %w", path, err)
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return fmt.Errorf("invalid object key at %s", path)
-			}
-			if _, duplicate := seen[key]; duplicate {
-				return fmt.Errorf("duplicate object key %q at %s", key, path)
-			}
-			seen[key] = struct{}{}
-			if err := scanJSONValue(decoder, jsonChildPath(path, key)); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil {
-			return fmt.Errorf("invalid object at %s: %w", path, err)
-		}
-		if closing != json.Delim('}') {
-			return fmt.Errorf("invalid object closing delimiter at %s", path)
-		}
-	case '[':
-		index := 0
-		for decoder.More() {
-			if err := scanJSONValue(decoder, fmt.Sprintf("%s[%d]", path, index)); err != nil {
-				return err
-			}
-			index++
-		}
-		closing, err := decoder.Token()
-		if err != nil {
-			return fmt.Errorf("invalid array at %s: %w", path, err)
-		}
-		if closing != json.Delim(']') {
-			return fmt.Errorf("invalid array closing delimiter at %s", path)
-		}
-	default:
-		return fmt.Errorf("unexpected delimiter %q at %s", delimiter, path)
-	}
-	return nil
-}
-
+// jsonChildPath renders a JSON-pointer-ish location for the schema validator's
+// diagnostics. (The structural scanner in internal/jsonstrict has its own
+// equivalent; this one stays local because only the schema-reflection walk
+// uses it, not the duplicate-key scan.)
 func jsonChildPath(parent, key string) string {
 	if key == "" {
 		return parent + "[\"\"]"
