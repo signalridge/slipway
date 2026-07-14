@@ -99,7 +99,26 @@ func asCLIError(err error) *CLIError {
 	}
 	message := strings.TrimSpace(err.Error())
 	next := defaultErrorNext()
+	workspaceRoot := next.WorkspaceRoot()
 	lower := strings.ToLower(message)
+	// A journal-record-limit failure on Submit (for example a legitimate large
+	// Outcome accumulation that overflows the 4 MiB single-record cap) does not
+	// kill the persistent Run: the Run is still recoverable via `slipway status`
+	// and a targeted skip. Report a read-only inspection command instead of a
+	// terminal `none` so the user has a concrete next step (issue #434 §1.3).
+	if strings.Contains(lower, "journal record limit") || strings.Contains(lower, "event exceeds") {
+		statusNext, statusErr := autopilot.NewCommandNext(
+			autopilot.NextOperationCommand,
+			workspaceRoot,
+			"inspect-run",
+			[]string{"slipway", "status", "--root", workspaceRoot},
+			nil,
+		)
+		if statusErr == nil {
+			next = statusNext
+		}
+		return newRuntimeError("journal_record_too_large", message, next, nil)
+	}
 	if strings.Contains(lower, "unknown command") ||
 		strings.Contains(lower, "unknown flag") ||
 		strings.Contains(lower, "requires") ||

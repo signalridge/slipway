@@ -952,9 +952,10 @@ func validateImplementation(implementation Implementation) error {
 		if err := requireNonEmptyUTF8(fmt.Sprintf("implementation.activities[%d].summary", index), activity.Summary); err != nil {
 			return err
 		}
-		if activity.ExitCode < 0 {
-			return fmt.Errorf("implementation.activities[%d].exit_code cannot be negative", index)
-		}
+		// exit_code is reported verbatim. On POSIX a signal-terminated process
+		// surfaces as a negative value (e.g. -1 for Go's ExitCode when killed
+		// by a signal); issue #434 §9.3 requires honest activity reporting, so
+		// negative values must be accepted rather than rejected.
 	}
 	return nil
 }

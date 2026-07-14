@@ -138,9 +138,8 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 		NextOperationAnswer,
 		workspace,
 		"typed-answer",
-		[]string{"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace},
+		[]string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace},
 		[]NextInput{
-			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: true, Choices: []string{"safe", "exact"}},
 			{Name: "scope", Type: NextInputDigest, Flag: "--scope-sha256", Required: true},
 			{Name: "text", Type: NextInputString, Flag: "--text", Required: false},
 		},
@@ -151,12 +150,11 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	argv, err := next.Resolve("typed-answer", map[string]NextInputValue{
 		"text":  {Type: NextInputString, Value: text},
 		"scope": {Type: NextInputDigest, Value: digest},
-		"mode":  {Type: NextInputEnum, Value: "exact"},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace,
-		"--mode", "exact", "--scope-sha256", digest, "--text", text,
+		"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace,
+		"--scope-sha256", digest, "--text", text,
 	}, argv)
 }
 
@@ -210,10 +208,10 @@ func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
 	next, err := NewCommandNext(
-		NextOperationResume,
+		NextOperationCommand,
 		workspace,
 		"resolve",
-		[]string{"slipway", "_machine", "resume", "run-1", "--root", workspace},
+		[]string{"slipway", "status", "--root", workspace},
 		[]NextInput{
 			{Name: "path", Type: NextInputPath, Flag: "--source-file", Required: true},
 			{Name: "mode", Type: NextInputEnum, Flag: "--mode", Required: false, Choices: []string{"one", "two"}},
@@ -289,6 +287,44 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "--value"}, {Name: "value", Type: NextInputPath, Flag: "--path"}}
 		}, want: "duplicated"},
 		{name: "operation family mismatch", mutate: func(next *Next) { next.Operation = NextOperationAction }, want: "operation action"},
+		{name: "answer rejects bogus prefix-only argv", mutate: func(next *Next) {
+			next.Operation = NextOperationAnswer
+			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--bogus", "x", "--root", workspace}
+		}, want: "operation answer"},
+		{name: "answer requires run", mutate: func(next *Next) {
+			next.Operation = NextOperationAnswer
+			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--action", "action-1", "--root", workspace}
+		}, want: "operation answer"},
+		{name: "answer requires action", mutate: func(next *Next) {
+			next.Operation = NextOperationAnswer
+			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace}
+		}, want: "operation answer"},
+		{name: "answer rejects unknown typed input", mutate: func(next *Next) {
+			next.Operation = NextOperationAnswer
+			next.Variants[0].BaseArgv = []string{
+				"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace,
+			}
+			next.Variants[0].Inputs = []NextInput{{Name: "bogus", Type: NextInputString, Flag: "--bogus", Required: true}}
+		}, want: "unsupported flag"},
+		{name: "action rejects unknown flag", mutate: func(next *Next) {
+			next.Operation = NextOperationAction
+			next.Variants[0].BaseArgv = []string{
+				"slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
+				"--outcome-stdin", "--bogus",
+			}
+		}, want: "unsupported flag"},
+		{name: "action requires outcome mode", mutate: func(next *Next) {
+			next.Operation = NextOperationAction
+			next.Variants[0].BaseArgv = []string{
+				"slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
+			}
+		}, want: "exactly one"},
+		{name: "resume rejects unknown flag", mutate: func(next *Next) {
+			next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "--bogus", "x")
+		}, want: "unsupported flag"},
+		{name: "resume rejects missing flag value", mutate: func(next *Next) {
+			next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "--source-file")
+		}, want: "requires a value"},
 		{name: "skip action grammar mismatch", mutate: func(next *Next) { next.Variants[0].ID = "skip-action" }, want: "_machine skip"},
 		{name: "skip action rejects extra argv", mutate: func(next *Next) {
 			next.Variants[0].ID = "skip-action"

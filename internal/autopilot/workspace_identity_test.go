@@ -27,8 +27,13 @@ func TestServiceRejectsWrongLinkedWorktreeBeforeLoadAndEveryMutation(t *testing.
 		var protocolErr *ProtocolError
 		require.ErrorAs(t, err, &protocolErr)
 		assert.Equal(t, "workspace_identity_mismatch", protocolErr.Code)
-		assert.Equal(t, NextOperationNone, protocolErr.Next.Operation)
-		assert.Empty(t, protocolErr.Next.Variants)
+		// Issue #434 §1.3 / §12.3: a foreign-workspace mismatch must offer a
+		// usable recovery next pointing at the Run's own worktree, not a
+		// terminal `none`. The identity stays the Run's persisted identity.
+		assert.Equal(t, NextOperationCommand, protocolErr.Next.Operation)
+		require.Len(t, protocolErr.Next.Variants, 1)
+		assert.Equal(t, "inspect-run-in-its-workspace", protocolErr.Next.Variants[0].ID)
+		assert.Contains(t, protocolErr.Next.Variants[0].BaseArgv, run.Workspace)
 		assert.Equal(t, run.WorkspaceIdentity.ID, protocolErr.Next.WorkspaceIdentity)
 		assert.NotContains(t, protocolErr.Message, "retry")
 	}
@@ -104,8 +109,17 @@ func TestServiceRejectsSamePathReusedForDifferentGitIdentityBeforeMutation(t *te
 	var protocolErr *ProtocolError
 	require.True(t, errors.As(err, &protocolErr))
 	assert.Equal(t, "workspace_identity_mismatch", protocolErr.Code)
-	assert.Equal(t, NextOperationNone, protocolErr.Next.Operation)
+	// Issue #434 §1.3: the user owns the process, so the mismatch must carry
+	// a usable recovery next rather than a terminal `none`. The Run recorded
+	// its own worktree root (the moved root above), so the recovery command
+	// points there for the user to inspect or resume from the Run's canonical
+	// workspace.
+	assert.Equal(t, NextOperationCommand, protocolErr.Next.Operation)
 	assert.Equal(t, run.WorkspaceIdentity.ID, protocolErr.Next.WorkspaceIdentity)
+	require.NotEmpty(t, protocolErr.Next.Variants)
+	// The Run recorded its own worktree root; the recovery command points
+	// the user back at that persisted workspace path.
+	assert.Equal(t, oldCanonicalRoot, protocolErr.Next.Variants[0].BaseArgv[len(protocolErr.Next.Variants[0].BaseArgv)-1])
 	after, readErr := os.ReadFile(oldJournal)
 	require.NoError(t, readErr)
 	assert.Equal(t, before, after)

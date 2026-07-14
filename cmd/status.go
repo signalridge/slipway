@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/spf13/cobra"
@@ -11,6 +13,24 @@ import (
 type runStatusOutput struct {
 	autopilot.Run
 	Next autopilot.Next `json:"next"`
+}
+
+func (output runStatusOutput) MarshalJSON() ([]byte, error) {
+	if !output.WorkspaceForeign {
+		type localRunStatusOutput runStatusOutput
+		return json.Marshal(localRunStatusOutput(output))
+	}
+	return json.Marshal(map[string]any{
+		"contract_version":   output.ContractVersion,
+		"id":                 output.ID,
+		"goal":               output.Goal,
+		"workspace":          output.Workspace,
+		"workspace_identity": output.WorkspaceIdentity,
+		"workspace_foreign":  true,
+		"state":              output.State,
+		"created_at":         output.CreatedAt,
+		"next":               output.Next,
+	})
 }
 
 type statusListOutput struct {
@@ -77,6 +97,12 @@ func makeStatusCmd() *cobra.Command {
 				return err
 			}
 			for _, run := range runs {
+				if run.WorkspaceForeign {
+					if _, err := fmt.Fprintf(command.OutOrStdout(), "%s  %-7s  foreign=true  workspace=%s  %s\n", run.ID, run.State, run.Workspace, run.Goal); err != nil {
+						return err
+					}
+					continue
+				}
 				if _, err := fmt.Fprintf(command.OutOrStdout(), "%s  %-7s  remaining=%d  %s\n", run.ID, run.State, run.RemainingBudget, run.Goal); err != nil {
 					return err
 				}
@@ -90,11 +116,44 @@ func makeStatusCmd() *cobra.Command {
 }
 
 func makeRunStatusOutput(run autopilot.Run) (runStatusOutput, error) {
+	if run.WorkspaceForeign {
+		next, err := autopilot.NewCommandNext(
+			autopilot.NextOperationCommand,
+			run.Workspace,
+			"inspect-run-in-its-workspace",
+			[]string{"slipway", "status", run.ID, "--root", run.Workspace},
+			[]autopilot.NextInput{},
+		)
+		if err != nil {
+			return runStatusOutput{}, fmt.Errorf("derive foreign run next: %w", err)
+		}
+		return runStatusOutput{Run: run, Next: next}, nil
+	}
 	next, err := autopilot.DeriveNext(run)
 	if err != nil {
 		return runStatusOutput{}, fmt.Errorf("derive run next: %w", err)
 	}
 	return runStatusOutput{Run: run, Next: next}, nil
+}
+
+const maxPendingQuestionRunes = 200
+
+func pendingQuestionText(run autopilot.Run) string {
+	if run.CurrentAction == nil {
+		return ""
+	}
+	for index := len(run.Actions) - 1; index >= 0; index-- {
+		record := run.Actions[index]
+		if record.Action.ActionID != run.CurrentAction.ActionID || record.Outcome == nil || record.Outcome.Pause == nil {
+			continue
+		}
+		question := strings.Join(strings.Fields(record.Outcome.Pause.Question), " ")
+		if runes := []rune(question); len(runes) > maxPendingQuestionRunes {
+			question = string(runes[:maxPendingQuestionRunes-1]) + "…"
+		}
+		return question
+	}
+	return ""
 }
 
 func writeRunStatus(command *cobra.Command, run autopilot.Run) error {
@@ -116,6 +175,11 @@ func writeRunStatus(command *cobra.Command, run autopilot.Run) error {
 	}
 	if run.PauseReason != "" {
 		if _, err := fmt.Fprintf(writer, "Pause reason: %s\n", run.PauseReason); err != nil {
+			return err
+		}
+	}
+	if question := pendingQuestionText(run); question != "" {
+		if _, err := fmt.Fprintf(writer, "Pending question: %s\n", question); err != nil {
 			return err
 		}
 	}

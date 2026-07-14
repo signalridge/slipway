@@ -31,6 +31,10 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 		definition := schemaMap(t, definitions, name)
 		assert.False(t, definition["additionalProperties"].(bool), name)
 	}
+	runStatusProperties := schemaMap(t, schemaMap(t, definitions, "runStatus"), "properties")
+	assert.Contains(t, runStatusProperties, "workspace_foreign")
+	assert.NotContains(t, runStatusProperties, "decision_suggestions")
+	assert.NotContains(t, schemaMap(t, schemaMap(t, definitions, "protocolState"), "properties"), "suggested_actions")
 	action := schemaMap(t, definitions, "action")
 	outcome := schemaMap(t, definitions, "outcome")
 	next := schemaMap(t, definitions, "next")
@@ -129,6 +133,36 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, json.Unmarshal(marshalTestJSON(t, runFixture), &runObject))
 	runObject["next"] = marshalTestJSON(t, next)
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "runStatus"), marshalTestJSON(t, runObject))
+
+	foreignWorkspace := t.TempDir()
+	foreignNext, err := NewCommandNext(
+		NextOperationCommand,
+		foreignWorkspace,
+		"inspect-run-in-its-workspace",
+		[]string{"slipway", "status", "foreign-run", "--root", foreignWorkspace},
+		[]NextInput{},
+	)
+	require.NoError(t, err)
+	foreignRunObject := map[string]any{
+		"contract_version": ContractVersion,
+		"id":               "foreign-run",
+		"goal":             "foreign goal",
+		"workspace":        foreignWorkspace,
+		"workspace_identity": map[string]any{
+			"version": 1, "worktree_root": foreignWorkspace, "git_dir": filepath.Join(foreignWorkspace, ".git"),
+			"git_common_dir": filepath.Join(foreignWorkspace, ".git"),
+			"id":             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		"workspace_foreign": true,
+		"state":             RunActive,
+		"created_at":        "2026-01-01T00:00:00Z",
+		"next":              foreignNext,
+	}
+	assertSchemaObjectFixture(t, schemaMap(t, definitions, "runStatus"), marshalTestJSON(t, foreignRunObject))
+	runStatusSchema := compileMachineSchemaDefinition(t, "runStatus")
+	require.NoError(t, runStatusSchema.Validate(machineSchemaValue(t, foreignRunObject)))
+	foreignRunObject["initial_budget"] = 1
+	require.Error(t, runStatusSchema.Validate(machineSchemaValue(t, foreignRunObject)), "foreign headers must not expose fully replayed fields")
 
 	adHoc := testAction()
 	require.NoError(t, adHoc.Validate())

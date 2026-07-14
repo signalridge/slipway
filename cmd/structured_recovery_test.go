@@ -40,6 +40,7 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 
 	human, humanStderr, err := executeForTest(t, "status", action.RunID, "--root", repository)
 	require.NoError(t, err, humanStderr)
+	assert.Contains(t, human, "Pending question: Which channel?")
 	assert.Contains(t, human, "answer-decision: requires text (string via --text)")
 	assert.NotContains(t, human, "<answer>")
 
@@ -63,6 +64,22 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "unknown flag")
+}
+
+func TestPendingQuestionTextIsSingleLineAndBounded(t *testing.T) {
+	action := autopilot.Action{ActionID: "action-1"}
+	run := autopilot.Run{
+		CurrentAction: &action,
+		Actions: []autopilot.ActionRecord{{
+			Action:  action,
+			Outcome: &autopilot.Outcome{Pause: &autopilot.Pause{Question: "first line\n" + strings.Repeat("界", maxPendingQuestionRunes)}},
+		}},
+	}
+
+	question := pendingQuestionText(run)
+	assert.Len(t, []rune(question), maxPendingQuestionRunes)
+	assert.NotContains(t, question, "\n")
+	assert.True(t, strings.HasSuffix(question, "…"))
 }
 
 func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *testing.T) {
@@ -155,4 +172,48 @@ func TestStatusJSONListsDerivedNextForEveryRun(t *testing.T) {
 		assert.NotEqual(t, run.Workspace, run.Next.WorkspaceIdentity)
 		assert.NotEmpty(t, run.Next.Variants)
 	}
+}
+
+func TestStatusListMarksForeignWorkspaceRunsWithoutReplayingThem(t *testing.T) {
+	repository := newCLIRepository(t)
+	foreignRoot := filepath.Join(t.TempDir(), "foreign worktree")
+	runCLIGit(t, repository, "worktree", "add", "--detach", foreignRoot, "HEAD")
+
+	canonicalForeignRoot, err := filepath.EvalSymlinks(foreignRoot)
+	require.NoError(t, err)
+	startedJSON, stderr, err := executeForTest(t, "run", "foreign visibility", "--root", foreignRoot, "--json")
+	require.NoError(t, err, stderr)
+	started := decodeMutationAction(t, startedJSON)
+
+	stdout, stderr, err := executeForTest(t, "status", "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	listed := exactJSONObject(t, stdout, "contract_version", "runs")
+	listedRuns := rawJSONArray(t, listed, "runs")
+	require.Len(t, listedRuns, 1)
+	exactRawJSONObject(
+		t,
+		listedRuns[0],
+		"contract_version", "id", "goal", "workspace", "workspace_identity", "workspace_foreign", "state", "created_at", "next",
+	)
+	var output statusListOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &output))
+	require.Len(t, output.Runs, 1)
+	foreign := output.Runs[0]
+	assert.Equal(t, started.RunID, foreign.ID)
+	assert.True(t, foreign.WorkspaceForeign)
+	assert.Equal(t, canonicalForeignRoot, foreign.Workspace)
+	assert.Nil(t, foreign.CurrentAction)
+	assert.Nil(t, foreign.Actions)
+	assert.Zero(t, foreign.InitialBudget)
+	assert.Equal(t, autopilot.NextOperationCommand, foreign.Next.Operation)
+	require.Len(t, foreign.Next.Variants, 1)
+	assert.Equal(t, "inspect-run-in-its-workspace", foreign.Next.Variants[0].ID)
+	assert.Equal(t, []string{"slipway", "status", foreign.ID, "--root", canonicalForeignRoot}, foreign.Next.Variants[0].BaseArgv)
+
+	human, stderr, err := executeForTest(t, "status", "--root", repository)
+	require.NoError(t, err, stderr)
+	assert.Contains(t, human, foreign.ID)
+	assert.Contains(t, human, "foreign=true")
+	assert.Contains(t, human, "workspace="+canonicalForeignRoot)
+	assert.NotContains(t, human, "remaining=")
 }

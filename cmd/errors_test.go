@@ -59,3 +59,22 @@ func TestAsCLIErrorReportsMutationCommitStateWithoutRetry(t *testing.T) {
 		})
 	}
 }
+
+// TestAsCLIErrorJournalRecordLimitOffersRecoverableNext covers issue #434 §1.3:
+// a journal-record-limit failure on Submit does not kill the persistent Run,
+// so the error must offer a recoverable read-only inspection command rather
+// than a terminal `none`.
+func TestAsCLIErrorJournalRecordLimitOffersRecoverableNext(t *testing.T) {
+	for _, message := range []string{
+		"encode event data: payload exceeds journal record limit",
+		"append journal: event exceeds 4194304 bytes",
+	} {
+		actual := asCLIError(errors.New(message))
+		require.NotNil(t, actual)
+		assert.Equal(t, "journal_record_too_large", actual.Code)
+		assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation, "limit error must not surface as terminal none")
+		require.NotEmpty(t, actual.Next.Variants)
+		assert.Equal(t, "inspect-run", actual.Next.Variants[0].ID)
+		assert.Contains(t, actual.Next.Variants[0].BaseArgv, "status")
+	}
+}

@@ -53,7 +53,7 @@ func (service *Service) ReadActionMaterial(
 	err := service.store.VisitWithMaterialReader(
 		runID,
 		func(event runstore.Event) error {
-			return applyRunEvent(&run, event)
+			return replayRunProjectionEvent(&run, event)
 		},
 		func(readMaterial runstore.MaterialReader) error {
 			if run.ID != runID {
@@ -83,7 +83,7 @@ func (service *Service) ReadActionMaterial(
 				return &ProtocolError{
 					Code:    "material_unavailable",
 					Message: "ad-hoc action has no source material",
-					Next:    NoneNext(run.WorkspaceIdentity.ID),
+					Next:    materialRecoveryNext(run),
 				}
 			}
 
@@ -99,7 +99,7 @@ func (service *Service) ReadActionMaterial(
 				return &ProtocolError{
 					Code:    "material_section_not_found",
 					Message: fmt.Sprintf("section %q is not available to action %q", sectionKey, actionID),
-					Next:    NoneNext(run.WorkspaceIdentity.ID),
+					Next:    materialRecoveryNext(run),
 				}
 			}
 
@@ -108,7 +108,7 @@ func (service *Service) ReadActionMaterial(
 				return &ProtocolError{
 					Code:    "material_unavailable",
 					Message: "action section has no valid pinned material reference",
-					Next:    NoneNext(run.WorkspaceIdentity.ID),
+					Next:    materialRecoveryNext(run),
 				}
 			}
 			read, err := readMaterial(digest)
@@ -116,7 +116,7 @@ func (service *Service) ReadActionMaterial(
 				return &ProtocolError{
 					Code:    "material_unavailable",
 					Message: "pinned material cannot be read or verified: " + err.Error(),
-					Next:    NoneNext(run.WorkspaceIdentity.ID),
+					Next:    materialRecoveryNext(run),
 				}
 			}
 			data = read
@@ -131,7 +131,7 @@ func (service *Service) ReadActionMaterial(
 		return ActionMaterial{}, &ProtocolError{
 			Code:    "material_corrupt",
 			Message: "pinned material byte count does not match action catalog",
-			Next:    NoneNext(run.WorkspaceIdentity.ID),
+			Next:    materialRecoveryNext(run),
 		}
 	}
 	markdown := string(data)
@@ -142,7 +142,7 @@ func (service *Service) ReadActionMaterial(
 		return ActionMaterial{}, &ProtocolError{
 			Code:    "material_corrupt",
 			Message: "pinned material does not match the action section revision",
-			Next:    NoneNext(run.WorkspaceIdentity.ID),
+			Next:    materialRecoveryNext(run),
 		}
 	}
 	return ActionMaterial{
@@ -159,4 +159,18 @@ func (service *Service) ReadActionMaterial(
 			Markdown:        markdown,
 		},
 	}, nil
+}
+
+func materialRecoveryNext(run Run) Next {
+	root := run.Workspace
+	return Next{
+		Operation:         NextOperationCommand,
+		WorkspaceIdentity: run.WorkspaceIdentity.ID,
+		workspaceRoot:     root,
+		Variants: []NextVariant{{
+			ID:       "inspect-run",
+			BaseArgv: []string{"slipway", "status", "--root", root},
+			Inputs:   []NextInput{},
+		}},
+	}
 }

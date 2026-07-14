@@ -77,6 +77,13 @@ var (
 	}
 )
 
+// WorkspaceRoot returns the absolute workspace root this Next targets, or
+// the empty string when the Next is a terminal `none` without a root. It is a
+// read-only accessor used by rendering and error-recovery helpers.
+func (next Next) WorkspaceRoot() string {
+	return next.workspaceRoot
+}
+
 // Validate checks that Next can be expanded without shell interpretation.
 func (next Next) Validate() error {
 	switch next.Operation {
@@ -145,8 +152,9 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if operation != NextOperationAction && operation != NextOperationAnswer && operation != NextOperationResume {
 			return errors.New("skip-action is only valid for action, answer, or resume operations")
 		}
-		if len(argv) != 9 || argv[1] != "_machine" || argv[2] != "skip" ||
-			argv[3] != "--run" || argv[5] != "--action" || argv[7] != "--root" {
+		if len(argv) != 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "skip" ||
+			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
+			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
 			return errors.New("skip-action requires exact slipway _machine skip --run RUN --action ACTION --root ROOT grammar")
 		}
 		if len(variant.Inputs) != 0 {
@@ -157,21 +165,100 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 
 	switch operation {
 	case NextOperationAction:
-		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "submit" {
-			return errors.New("operation action requires base_argv to start with slipway _machine submit")
+		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "submit" ||
+			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
+			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
+			return errors.New("operation action requires exact slipway _machine submit --run RUN --action ACTION --root ROOT [--outcome-file FILE | --outcome-stdin] grammar")
+		}
+		baseOptions, inputOptions, err := validateNextOperationOptions(
+			"action", variant, 9,
+			[]string{"--outcome-file"},
+			[]string{"--outcome-stdin"},
+			[]string{"--outcome-file"},
+		)
+		if err != nil {
+			return err
+		}
+		_, outcomeFileInBase := baseOptions["--outcome-file"]
+		outcomeFileInput, outcomeFileInInputs := inputOptions["--outcome-file"]
+		_, outcomeStdin := baseOptions["--outcome-stdin"]
+		if outcomeFileInInputs && !outcomeFileInput.Required {
+			return errors.New("operation action requires the --outcome-file input to be required")
+		}
+		outcomeFile := outcomeFileInBase || outcomeFileInInputs
+		if outcomeFile == outcomeStdin {
+			return errors.New("operation action requires exactly one of --outcome-file or --outcome-stdin")
 		}
 	case NextOperationAnswer:
-		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "answer" {
-			return errors.New("operation answer requires base_argv to start with slipway _machine answer")
+		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "answer" ||
+			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
+			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
+			return errors.New("operation answer requires exact slipway _machine answer --run RUN --action ACTION --root ROOT [--text TEXT] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
+		}
+		if _, _, err := validateNextOperationOptions(
+			"answer", variant, 9,
+			[]string{"--text", "--scope-sha256"},
+			[]string{"--confirm-destructive"},
+			[]string{"--text", "--scope-sha256"},
+		); err != nil {
+			return err
 		}
 	case NextOperationResume:
-		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "resume" {
-			return errors.New("operation resume requires base_argv to start with slipway _machine resume")
+		if len(argv) < 6 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "resume" ||
+			strings.HasPrefix(argv[3], "--") || argv[4] != "--root" {
+			return errors.New("operation resume requires exact slipway _machine resume RUN --root ROOT [--budget N] [--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE] grammar")
+		}
+		baseOptions, inputOptions, err := validateNextOperationOptions(
+			"resume", variant, 6,
+			[]string{"--budget", "--source-file", "--source-choice", "--candidate"},
+			[]string{"--use-pinned-source"},
+			[]string{"--source-file", "--source-choice", "--candidate"},
+		)
+		if err != nil {
+			return err
+		}
+		_, sourceFileInBase := baseOptions["--source-file"]
+		_, sourceFileInInputs := inputOptions["--source-file"]
+		choice, sourceChoiceInBase := baseOptions["--source-choice"]
+		sourceChoiceInput, sourceChoiceInInputs := inputOptions["--source-choice"]
+		_, candidateInBase := baseOptions["--candidate"]
+		candidateInput, candidateInInputs := inputOptions["--candidate"]
+		_, usePinnedSource := baseOptions["--use-pinned-source"]
+
+		sourceChoicePresent := sourceChoiceInBase || sourceChoiceInInputs
+		candidatePresent := candidateInBase || candidateInInputs
+		if sourceChoicePresent != candidatePresent {
+			return errors.New("operation resume requires --source-choice and --candidate together")
+		}
+		if sourceChoiceInBase && choice != string(SourceChoicePinned) && choice != string(SourceChoiceAdopt) {
+			return errors.New("operation resume requires --source-choice to be pinned or adopt")
+		}
+		if sourceChoiceInInputs {
+			if !sourceChoiceInput.Required || sourceChoiceInput.Type != NextInputEnum ||
+				!nextSourceChoiceInputIsBounded(sourceChoiceInput) {
+				return errors.New("operation resume requires a source-choice input to be a required pinned/adopt enum")
+			}
+		}
+		if candidateInInputs && !candidateInput.Required {
+			return errors.New("operation resume requires a candidate input paired with source-choice to be required")
+		}
+		modeCount := 0
+		if sourceFileInBase || sourceFileInInputs {
+			modeCount++
+		}
+		if usePinnedSource {
+			modeCount++
+		}
+		if sourceChoicePresent {
+			modeCount++
+		}
+		if modeCount > 1 {
+			return errors.New("operation resume allows only one source mode")
 		}
 	case NextOperationStart:
-		validWithoutReview := len(argv) == 9 && argv[2] == "--budget" && argv[4] == "--json" &&
+		validWithoutReview := len(argv) == 9 && argv[0] == "slipway" && argv[2] == "--budget" && argv[4] == "--json" &&
 			argv[5] == "--root" && argv[7] == "--"
-		validWithReviewDisabled := len(argv) == 10 && argv[2] == "--budget" && argv[4] == "--json" &&
+		validWithReviewDisabled := len(argv) == 10 && argv[0] == "slipway" && argv[2] == "--budget" && argv[4] == "--json" &&
 			argv[5] == "--root" && argv[7] == "--no-review" && argv[8] == "--"
 		if len(argv) < 2 || argv[1] != "run" || (!validWithoutReview && !validWithReviewDisabled) {
 			return errors.New("operation start requires exact slipway run --budget N --json --root ROOT [--no-review] -- GOAL grammar")
@@ -190,6 +277,60 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		// Validated above; no variant reaches here.
 	}
 	return nil
+}
+
+func validateNextOperationOptions(
+	family string,
+	variant NextVariant,
+	start int,
+	baseValueFlags []string,
+	baseBooleanFlags []string,
+	inputValueFlags []string,
+) (map[string]string, map[string]NextInput, error) {
+	baseOptions := make(map[string]string)
+	for index := start; index < len(variant.BaseArgv); {
+		flag := variant.BaseArgv[index]
+		if _, duplicate := baseOptions[flag]; duplicate {
+			return nil, nil, fmt.Errorf("operation %s base_argv repeats flag %q", family, flag)
+		}
+		switch {
+		case containsString(baseBooleanFlags, flag):
+			baseOptions[flag] = "true"
+			index++
+		case containsString(baseValueFlags, flag):
+			if index+1 >= len(variant.BaseArgv) || strings.HasPrefix(variant.BaseArgv[index+1], "--") {
+				return nil, nil, fmt.Errorf("operation %s flag %q requires a value", family, flag)
+			}
+			baseOptions[flag] = variant.BaseArgv[index+1]
+			index += 2
+		default:
+			return nil, nil, fmt.Errorf("operation %s base_argv contains unsupported flag %q", family, flag)
+		}
+	}
+
+	inputOptions := make(map[string]NextInput, len(variant.Inputs))
+	for _, input := range variant.Inputs {
+		if !containsString(inputValueFlags, input.Flag) {
+			if containsString(baseBooleanFlags, input.Flag) {
+				return nil, nil, fmt.Errorf("operation %s boolean flag %q cannot be supplied as a typed input", family, input.Flag)
+			}
+			return nil, nil, fmt.Errorf("operation %s inputs contain unsupported flag %q", family, input.Flag)
+		}
+		if _, duplicate := baseOptions[input.Flag]; duplicate {
+			return nil, nil, fmt.Errorf("operation %s flag %q is present in both base_argv and inputs", family, input.Flag)
+		}
+		inputOptions[input.Flag] = input
+	}
+	return baseOptions, inputOptions, nil
+}
+
+func nextSourceChoiceInputIsBounded(input NextInput) bool {
+	for _, choice := range input.Choices {
+		if choice != string(SourceChoicePinned) && choice != string(SourceChoiceAdopt) {
+			return false
+		}
+	}
+	return true
 }
 
 func validateNextVariant(workspaceRoot string, variant NextVariant, variantIndex int) error {
@@ -426,6 +567,8 @@ func DeriveNext(run Run) (Next, error) {
 	case run.State == RunPaused && run.PauseReason == PauseEnvironmentUnavailable && run.CurrentAction != nil:
 		return environmentNext(run)
 	default:
+		// Replay rejects unknown state and pause-reason values; keep resume as the
+		// forward-compatible fallback for unmatched combinations of known values.
 		return resumeNext(run)
 	}
 }
@@ -532,7 +675,9 @@ func destructiveNext(run Run) (Next, error) {
 func resumeNext(run Run) (Next, error) {
 	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
 	next := Next{Operation: NextOperationResume, WorkspaceIdentity: run.WorkspaceIdentity.ID, workspaceRoot: run.Workspace}
-	if run.PinnedSource == nil {
+	if isBudgetBlockedDestructiveGrant(run) {
+		next.Variants = []NextVariant{{ID: "replenish-destructive-budget", BaseArgv: base, Inputs: []NextInput{}}}
+	} else if run.PinnedSource == nil {
 		next.Variants = []NextVariant{{ID: "resume-ad-hoc", BaseArgv: base, Inputs: []NextInput{}}}
 	} else {
 		next.Variants = []NextVariant{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 )
 
 func TestServiceCompleteRequestUsesDefaultRouteAndReportsActivitiesHonestly(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -52,6 +54,7 @@ func TestServiceCompleteRequestUsesDefaultRouteAndReportsActivitiesHonestly(t *t
 }
 
 func TestServiceOrientWithoutSuggestionRoutesSummary(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 4, false)
@@ -65,7 +68,47 @@ func TestServiceOrientWithoutSuggestionRoutesSummary(t *testing.T) {
 	assert.Equal(t, ActionSummarize, run.CurrentAction.Kind)
 }
 
+func TestServiceFinalSummaryIncludesConfirmedDecision(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 6, false)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:           OutcomeCompleted,
+		Summary:          "one human decision remains",
+		SuggestedActions: []SuggestedAction{{Kind: ActionClarify, Brief: "Choose the release channel."}},
+	})
+	require.NotNil(t, run.CurrentAction)
+	require.Equal(t, ActionClarify, run.CurrentAction.Kind)
+	clarifyActionID := run.CurrentAction.ActionID
+
+	const decision = "Use the stable release channel."
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "release channel required",
+		Pause:   pauseReport(PauseDecisionRequired, "Which release channel should be used?", nil),
+	})
+	run, err := service.Answer(run.ID, clarifyActionID, AnswerOptions{Text: decision})
+	require.NoError(t, err)
+	require.NotNil(t, run.CurrentAction)
+	require.Equal(t, ActionOrient, run.CurrentAction.Kind)
+
+	run = submitCurrent(t, service, run, Outcome{
+		Status:           OutcomeCompleted,
+		Summary:          "the confirmed decision resolves the request",
+		SuggestedActions: []SuggestedAction{},
+	})
+	require.NotNil(t, run.CurrentAction)
+	require.Equal(t, ActionSummarize, run.CurrentAction.Kind)
+	assert.Contains(t, run.CurrentAction.Brief, "confirmed human decisions")
+
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reported"})
+	require.Equal(t, RunEnded, run.State)
+	assert.Contains(t, run.Summary, "Confirmed decisions:\n- action "+clarifyActionID+": "+decision)
+}
+
 func TestServiceOrientAndClarifyChangesRequireReview(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []ActionKind{ActionOrient, ActionClarify} {
 		t.Run(string(kind), func(t *testing.T) {
 			repository := newTestRepository(t)
@@ -93,6 +136,7 @@ func TestServiceOrientAndClarifyChangesRequireReview(t *testing.T) {
 }
 
 func TestServiceCarriesReviewPendingAcrossDecisionAndBudgetPauses(t *testing.T) {
+	t.Parallel()
 	t.Run("decision", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
@@ -143,6 +187,7 @@ func TestServiceCarriesReviewPendingAcrossDecisionAndBudgetPauses(t *testing.T) 
 }
 
 func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 
@@ -168,6 +213,7 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 }
 
 func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	goal := strings.Repeat("g", maxActionBytes-maxActionBriefBytes/2)
@@ -207,6 +253,7 @@ func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
 }
 
 func TestServiceAcceptsMaxSizeImplementSuggestionBrief(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 4, false)
@@ -231,7 +278,8 @@ func TestServiceAcceptsMaxSizeImplementSuggestionBrief(t *testing.T) {
 	assert.True(t, strings.HasSuffix(run.CurrentAction.Brief, " Repair-attempt limit: 3."))
 }
 
-func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
+func TestServiceListShowsForeignHeadersAndSkipsCorruptRuns(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	local := startTestRun(t, service, 4, false)
@@ -266,9 +314,16 @@ func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
 
 	runs, err := service.List()
 	require.NoError(t, err)
-	require.Len(t, runs, 1)
-	assert.Equal(t, local.ID, runs[0].ID)
-	assert.NotEqual(t, foreign.ID, runs[0].ID)
+	require.Len(t, runs, 2)
+	listed := make(map[string]Run, len(runs))
+	for _, run := range runs {
+		listed[run.ID] = run
+	}
+	require.Contains(t, listed, local.ID)
+	assert.False(t, listed[local.ID].WorkspaceForeign)
+	require.Contains(t, listed, foreign.ID)
+	assert.Equal(t, foreignRunStub(foreign), listed[foreign.ID], "foreign runs must be FirstEvent-only header stubs")
+
 	foreignAfterList, err := os.ReadFile(foreignJournal)
 	require.NoError(t, err)
 	assert.Equal(t, foreignBefore, foreignAfterList, "listing must not repair a foreign journal tail")
@@ -279,6 +334,7 @@ func TestServiceListSkipsForeignAndCorruptRuns(t *testing.T) {
 }
 
 func TestServiceLoadRecreatesMissingLockForValidatedLocalRun(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 4, false)
@@ -302,6 +358,7 @@ func TestServiceLoadRecreatesMissingLockForValidatedLocalRun(t *testing.T) {
 }
 
 func TestServiceRejectsHostSkippedReviewStatus(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -321,6 +378,7 @@ func TestServiceRejectsHostSkippedReviewStatus(t *testing.T) {
 }
 
 func TestServiceGitObservationRecordsNeutralDiscrepancyAndRoutesDiffFirst(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -343,6 +401,7 @@ func TestServiceGitObservationRecordsNeutralDiscrepancyAndRoutesDiffFirst(t *tes
 }
 
 func TestServiceReviewsEachNewObservedGitRevision(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 10, true)
@@ -381,6 +440,7 @@ func TestServiceReviewsEachNewObservedGitRevision(t *testing.T) {
 }
 
 func TestServiceResumeVoidedReviewKeepsReviewPending(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -401,6 +461,7 @@ func TestServiceResumeVoidedReviewKeepsReviewPending(t *testing.T) {
 }
 
 func TestServicePreservesRunStartDirtyFilesAcrossGitDeltas(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	for _, name := range []string{"preexisting-a.txt", "preexisting-b.txt"} {
 		require.NoError(t, os.WriteFile(filepath.Join(repository, name), []byte("before\n"), 0o600))
@@ -432,6 +493,7 @@ func TestServicePreservesRunStartDirtyFilesAcrossGitDeltas(t *testing.T) {
 }
 
 func TestServiceClarifiesDependentDecisionsOneAtATime(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 10, true)
@@ -474,6 +536,7 @@ func TestServiceClarifiesDependentDecisionsOneAtATime(t *testing.T) {
 }
 
 func TestServiceSkipStopResumeAndStaleActionRejection(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -507,6 +570,7 @@ func TestServiceSkipStopResumeAndStaleActionRejection(t *testing.T) {
 }
 
 func TestServiceResumeVoidsSuggestedActionAndStartsFreshOrient(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 10, false)
@@ -535,6 +599,7 @@ func TestServiceResumeVoidsSuggestedActionAndStartsFreshOrient(t *testing.T) {
 }
 
 func TestServiceSkipReviewRecordsSkippedWorkAndEnds(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -569,6 +634,7 @@ func TestServiceSkipReviewRecordsSkippedWorkAndEnds(t *testing.T) {
 }
 
 func TestServiceFinalSummaryReobservesGitAfterReview(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -587,6 +653,7 @@ func TestServiceFinalSummaryReobservesGitAfterReview(t *testing.T) {
 }
 
 func TestServiceSkipPausedDecisionPreservesQuestionAndRecordsSkip(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -610,6 +677,7 @@ func TestServiceSkipPausedDecisionPreservesQuestionAndRecordsSkip(t *testing.T) 
 }
 
 func TestServiceSkipPausedEnvironmentActionUsesStructuredControl(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -630,6 +698,7 @@ func TestServiceSkipPausedEnvironmentActionUsesStructuredControl(t *testing.T) {
 }
 
 func TestServiceSkipPausedDestructiveActionClearsRequest(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -661,6 +730,7 @@ func TestServiceSkipPausedDestructiveActionClearsRequest(t *testing.T) {
 }
 
 func TestServiceDuplicateSubmitIsIdempotentAndConflictingDuplicateIsRejected(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -681,6 +751,7 @@ func TestServiceDuplicateSubmitIsIdempotentAndConflictingDuplicateIsRejected(t *
 }
 
 func TestServiceDuplicateSubmitReplayAcrossTerminalStates(t *testing.T) {
+	t.Parallel()
 	t.Run("voided remains stale", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
@@ -736,6 +807,7 @@ func TestServiceDuplicateSubmitReplayAcrossTerminalStates(t *testing.T) {
 }
 
 func TestServiceBudgetPauseAndResumeReplenishment(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 1, true)
@@ -760,6 +832,7 @@ func TestServiceBudgetPauseAndResumeReplenishment(t *testing.T) {
 }
 
 func TestServiceEnvironmentPauseProvidesResumeCommand(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -784,6 +857,7 @@ func TestServiceEnvironmentPauseProvidesResumeCommand(t *testing.T) {
 }
 
 func TestServiceNaturalLanguageDestructiveAnswerReorientsWithoutGrant(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -815,6 +889,7 @@ func TestServiceNaturalLanguageDestructiveAnswerReorientsWithoutGrant(t *testing
 }
 
 func TestServiceEndsWithoutActivitiesAndDoesNotInventThem(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -833,6 +908,7 @@ func TestServiceEndsWithoutActivitiesAndDoesNotInventThem(t *testing.T) {
 }
 
 func TestServiceConcurrentDuplicateSubmitRecordsOneTransition(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, true)
@@ -867,6 +943,7 @@ func TestServiceConcurrentDuplicateSubmitRecordsOneTransition(t *testing.T) {
 }
 
 func TestRunJournalStoresLinearDeltasInsteadOfRepeatedProjections(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 24, false)
@@ -910,7 +987,74 @@ func TestRunJournalStoresLinearDeltasInsteadOfRepeatedProjections(t *testing.T) 
 	}
 }
 
+func TestRunProjectionBoundsObservationsWhileJournalRemainsComplete(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 4, false)
+
+	observations := make([]string, maxRunProjectionObservations+2)
+	for index := range observations {
+		observations[index] = fmt.Sprintf("observation-%03d", index)
+	}
+	run = submitCurrent(t, service, run, Outcome{
+		Status:           OutcomeCompleted,
+		Summary:          "facts gathered",
+		Observations:     observations,
+		SuggestedActions: []SuggestedAction{},
+	})
+	require.Len(t, run.Observations, maxRunProjectionObservations+1)
+	assert.Equal(t, observationHistoryMarker(2), run.Observations[0])
+	assert.Equal(t, observations[2:], run.Observations[1:])
+
+	loaded, err := service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, run.Observations, loaded.Observations)
+	require.NotNil(t, loaded.Actions[0].Outcome)
+	assert.Equal(t, observations, loaded.Actions[0].Outcome.Observations)
+	_, err = DeriveNext(loaded)
+	require.NoError(t, err)
+
+	const latestObservation = "latest-observation"
+	run = submitCurrent(t, service, loaded, Outcome{
+		Status:       OutcomeCompleted,
+		Summary:      "reported",
+		Observations: []string{latestObservation},
+	})
+	wantRecent := append(append([]string(nil), observations[3:]...), latestObservation)
+	require.Len(t, run.Observations, maxRunProjectionObservations+1)
+	assert.Equal(t, observationHistoryMarker(3), run.Observations[0])
+	assert.Equal(t, wantRecent, run.Observations[1:])
+
+	runDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID)
+	journalContent, err := os.ReadFile(filepath.Join(runDirectory, "journal.jsonl"))
+	require.NoError(t, err)
+	journalLines := bytes.Split(bytes.TrimSpace(journalContent), []byte("\n"))
+	require.Len(t, journalLines, 3)
+	for index, want := range [][]string{nil, observations, {latestObservation}} {
+		var event runstore.Event
+		require.NoError(t, json.Unmarshal(journalLines[index], &event))
+		var delta runDelta
+		require.NoError(t, json.Unmarshal(event.Data, &delta))
+		assert.Equal(t, want, delta.ObservationsAppend)
+	}
+	assert.NotContains(t, string(journalContent), "earlier observations in journal")
+
+	projectionContent, err := os.ReadFile(filepath.Join(runDirectory, "run.json"))
+	require.NoError(t, err)
+	var snapshot runstore.Snapshot
+	require.NoError(t, json.Unmarshal(projectionContent, &snapshot))
+	var projection Run
+	require.NoError(t, json.Unmarshal(snapshot.Data, &projection))
+	assert.Equal(t, run.Observations, projection.Observations)
+
+	loaded, err = service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, run.Observations, loaded.Observations)
+}
+
 func TestRunJournalRejectsUnknownAndMislabeledEventTypes(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 4, false)
@@ -955,6 +1099,7 @@ func TestRunJournalRejectsUnknownAndMislabeledEventTypes(t *testing.T) {
 }
 
 func TestRunResumedJournalEventRequiresAdHocResumeReceipt(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 4, false)
@@ -993,6 +1138,7 @@ func TestBuildContextRetainsActiveDecisionsAndOutcomeProjectionsWithinBoundedUTF
 }
 
 func TestServiceOutcomeIdempotencyUsesExactOriginalPayloadBytes(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -1033,6 +1179,7 @@ func TestServiceOutcomeIdempotencyUsesExactOriginalPayloadBytes(t *testing.T) {
 }
 
 func TestServiceStructuredDestructiveGrantIsExactIdempotentAndScopeBound(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 12, false)
@@ -1142,7 +1289,67 @@ func TestServiceStructuredDestructiveGrantIsExactIdempotentAndScopeBound(t *test
 	assertProtocolError(t, err, "destructive_scope_mismatch")
 }
 
+func TestServiceConfirmedDestructiveGrantSurvivesPureBudgetResume(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 2)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+	require.Zero(t, run.RemainingBudget)
+	originatingActionID := run.CurrentAction.ActionID
+	request := destructiveRequestForTest(t)
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "confirmation required",
+		Pause:   pauseReport(PauseDestructiveConfirm, "Confirm the exact deletion?", &request),
+	})
+
+	blocked, err := service.Answer(run.ID, originatingActionID, AnswerOptions{
+		ConfirmDestructive: true,
+		ScopeSHA256:        request.ScopeSHA256,
+	})
+	assertProtocolError(t, err, "budget_exhausted")
+	require.Equal(t, RunPaused, blocked.State)
+	assert.Equal(t, PauseBudgetExhausted, blocked.PauseReason)
+	assert.Nil(t, blocked.CurrentAction)
+	require.NotNil(t, blocked.PendingDestructiveRequest)
+	require.NotNil(t, blocked.DestructiveGrant)
+	require.Len(t, blocked.Answers, 1)
+	assert.True(t, blocked.Answers[0].ConfirmDestructive)
+	assert.Equal(t, request.ScopeSHA256, blocked.Answers[0].ScopeSHA256)
+
+	next, err := DeriveNext(blocked)
+	require.NoError(t, err)
+	require.Len(t, next.Variants, 1)
+	assert.Equal(t, "replenish-destructive-budget", next.Variants[0].ID)
+	assert.NotContains(t, next.Variants[0].BaseArgv, "--source-file")
+	assert.NotContains(t, next.Variants[0].BaseArgv, "--use-pinned-source")
+
+	replacement := 2
+	resumed, err := service.Resume(run.ID, ResumeOptions{Budget: &replacement})
+	require.NoError(t, err)
+	require.Equal(t, RunActive, resumed.State)
+	require.NotNil(t, resumed.CurrentAction)
+	assert.Equal(t, ActionImplement, resumed.CurrentAction.Kind)
+	assert.Equal(t, 1, resumed.RemainingBudget)
+	require.NotNil(t, resumed.CurrentAction.DestructiveAuthorization)
+	require.NotNil(t, resumed.DestructiveGrant)
+	assert.Equal(t, *resumed.DestructiveGrant, *resumed.CurrentAction.DestructiveAuthorization)
+	assert.Equal(t, request.ScopeSHA256, resumed.DestructiveGrant.ScopeSHA256)
+	assert.Equal(t, originatingActionID, resumed.DestructiveGrant.OriginatingActionID)
+	assert.Len(t, resumed.Answers, 1, "budget resume must not require a second confirmation")
+	require.NotNil(t, resumed.LastResumeResult)
+	assert.Equal(t, ResumeOperationSourceRefreshSkipped, resumed.LastResumeResult.Operation)
+
+	replayed, err := service.Load(run.ID)
+	require.NoError(t, err)
+	assert.Equal(t, resumed.CurrentAction, replayed.CurrentAction)
+	assert.Equal(t, resumed.DestructiveGrant, replayed.DestructiveGrant)
+	assert.Len(t, replayed.Answers, 1)
+}
+
 func TestServiceAnswerIdempotencyUsesCanonicalStructuredPayload(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 8, false)
@@ -1183,7 +1390,39 @@ func TestServiceAnswerIdempotencyUsesCanonicalStructuredPayload(t *testing.T) {
 	assertProtocolError(t, err, "answer_conflict")
 }
 
+// TestServiceAnswerPreservesOriginalTextWhileTrimmingForIdempotency confirms
+// that surrounding whitespace is used only for idempotency digest comparison:
+// "alpha" and "  alpha  " dedup to the same recorded answer, but the caller's
+// original boundary text is preserved verbatim in the journal rather than
+// being silently erased (issue #434 §9.6: answer text is an uninterpreted
+// value).
+func TestServiceAnswerPreservesOriginalTextWhileTrimmingForIdempotency(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 8, false)
+	waitingID := run.CurrentAction.ActionID
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "decision required",
+		Pause:   pauseReport(PauseDecisionRequired, "Choose one?", nil),
+	})
+
+	original := "  choose alpha  "
+	answered, err := service.Answer(run.ID, waitingID, AnswerOptions{Text: original})
+	require.NoError(t, err)
+	require.Len(t, answered.Answers, 1)
+	assert.Equal(t, original, answered.Answers[0].Text, "original boundary text must be preserved verbatim")
+
+	// A retry that differs only in surrounding whitespace is idempotent.
+	retried, err := service.Answer(run.ID, waitingID, AnswerOptions{Text: "choose alpha"})
+	require.NoError(t, err)
+	assert.Equal(t, answered.Answers[0].PayloadSHA256, retried.Answers[0].PayloadSHA256)
+	assert.Equal(t, original, retried.Answers[0].Text, "first-recorded original text is retained on idempotent retry")
+}
+
 func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		mutate func(*testing.T, *Service, Run) Run
@@ -1264,9 +1503,30 @@ func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T)
 		assert.Nil(t, resumed.DestructiveGrant)
 		assert.Nil(t, resumed.PendingDestructiveRequest)
 	})
+
+	t.Run("source amendment resume", func(t *testing.T) {
+		repository := newTestRepository(t)
+		service := openTestService(t, repository)
+		authorized := authorizeDestructiveRunForTest(t, service, true)
+		envelope := validSourceEnvelope()
+		setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Adopt amended requirements.\n")
+		setEnvelopeParentRequirementsRevision(t, &envelope, authorized.PinnedSource.RequirementsRevision)
+		candidate := sourceCandidateForTest(t, envelope)
+
+		paused, err := service.Resume(authorized.ID, ResumeOptions{RefreshedSource: &candidate})
+		require.NoError(t, err)
+		require.NotNil(t, paused.SourceCandidate)
+		assert.Nil(t, paused.DestructiveGrant)
+		assert.Nil(t, paused.PendingDestructiveRequest)
+		replayed, err := service.Load(paused.ID)
+		require.NoError(t, err)
+		assert.Nil(t, replayed.DestructiveGrant)
+		assert.Nil(t, replayed.PendingDestructiveRequest)
+	})
 }
 
 func TestServiceSkipRoutesObservedDiffBeforeActionKind(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		setup func(*testing.T, *Service, Run) Run
@@ -1301,6 +1561,7 @@ func TestServiceSkipRoutesObservedDiffBeforeActionKind(t *testing.T) {
 }
 
 func TestServiceSummarySkipEndsWithMinimalFactualSummary(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startTestRun(t, service, 5, false)
@@ -1457,6 +1718,7 @@ func assertProtocolError(t *testing.T, err error, code string) {
 }
 
 func TestServiceReadsOnlyCurrentPinnedActionMaterial(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 5)
@@ -1472,6 +1734,13 @@ func TestServiceReadsOnlyCurrentPinnedActionMaterial(t *testing.T) {
 
 	_, err = service.ReadActionMaterial(run.ID, currentActionID, "missing")
 	assertProtocolError(t, err, "material_section_not_found")
+	var materialErr *ProtocolError
+	require.ErrorAs(t, err, &materialErr)
+	assert.Equal(t, NextOperationCommand, materialErr.Next.Operation)
+	assert.Equal(t, run.WorkspaceIdentity.ID, materialErr.Next.WorkspaceIdentity)
+	require.Len(t, materialErr.Next.Variants, 1)
+	assert.Equal(t, "inspect-run", materialErr.Next.Variants[0].ID)
+	assert.Equal(t, []string{"slipway", "status", "--root", run.Workspace}, materialErr.Next.Variants[0].BaseArgv)
 
 	completed := withEnvelope(currentActionID, ActionOrient, Outcome{
 		Status:           OutcomeCompleted,
@@ -1492,6 +1761,7 @@ func TestServiceReadsOnlyCurrentPinnedActionMaterial(t *testing.T) {
 }
 
 func TestServiceIssueBoundStartPersistsSafeDefensiveSnapshot(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	envelope := validSourceEnvelope()
@@ -1571,6 +1841,7 @@ func TestServiceIssueBoundStartPersistsSafeDefensiveSnapshot(t *testing.T) {
 }
 
 func TestServiceResumeModesSeparateAdHocAndIssueBoundRuns(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 
@@ -1610,11 +1881,11 @@ func TestServiceResumeModesSeparateAdHocAndIssueBoundRuns(t *testing.T) {
 	require.NotNil(t, oldRecord)
 	assert.True(t, oldRecord.Voided)
 	assert.Empty(t, resumed.PendingActions)
-	assert.Empty(t, resumed.DecisionSuggestions)
 	assertIssueActionMatchesPinned(t, resumed)
 }
 
 func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		mutate          func(*RawSourceEnvelope)
@@ -1697,6 +1968,7 @@ func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
 }
 
 func TestServiceRejectsInPlaceSectionAmendment(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 6)
@@ -1715,6 +1987,7 @@ func TestServiceRejectsInPlaceSectionAmendment(t *testing.T) {
 }
 
 func TestServiceRejectsAcceptedCommentDatabaseIdentityRebind(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 6)
@@ -1738,6 +2011,7 @@ func TestServiceRejectsAcceptedCommentDatabaseIdentityRebind(t *testing.T) {
 }
 
 func TestServiceManifestOnlyReplacementRequiresExplicitAdoption(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 7)
@@ -1785,6 +2059,7 @@ func TestServiceManifestOnlyReplacementRequiresExplicitAdoption(t *testing.T) {
 }
 
 func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 6)
@@ -1804,6 +2079,7 @@ func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
 }
 
 func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 15)
@@ -1847,7 +2123,6 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 	require.NotNil(t, outstandingRecord)
 	assert.True(t, outstandingRecord.Voided)
 	assert.Empty(t, paused.PendingActions)
-	assert.Empty(t, paused.DecisionSuggestions)
 	candidateID := paused.SourceCandidate.CandidateID
 
 	candidateInput.Snapshot.Sections[0].Title = "mutated after candidate creation"
@@ -1917,6 +2192,7 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 }
 
 func TestServiceSourceChoiceExactReplayAfterRunEnded(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 10)
@@ -1973,6 +2249,7 @@ func TestServiceSourceChoiceExactReplayAfterRunEnded(t *testing.T) {
 }
 
 func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 12)
@@ -2004,6 +2281,7 @@ func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {
 }
 
 func TestServiceInvalidCandidateAllowsOnlyPinnedChoice(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		mutate func(*RawSourceEnvelope)
@@ -2081,6 +2359,7 @@ func TestServiceInvalidCandidateAllowsOnlyPinnedChoice(t *testing.T) {
 }
 
 func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	source := mustParseSource(t, validSourceEnvelope())
@@ -2124,6 +2403,7 @@ func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
 }
 
 func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 10)
@@ -2180,6 +2460,7 @@ func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *test
 }
 
 func TestServicePinnedTransferChoiceKeepsRequirementsAndUpdatesProjection(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 10)
@@ -2221,6 +2502,7 @@ func TestServicePinnedTransferChoiceKeepsRequirementsAndUpdatesProjection(t *tes
 }
 
 func TestServiceResumeUsesImportedSourceAfterEphemeralFileRemoval(t *testing.T) {
+	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 7)

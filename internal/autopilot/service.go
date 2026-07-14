@@ -40,6 +40,8 @@ const (
 	ResumeOperationSourcePinned         = "source_pinned"
 )
 
+const maxRunProjectionObservations = 128
+
 type CreateOptions struct {
 	Budget        int
 	ReviewEnabled bool
@@ -109,6 +111,7 @@ type Run struct {
 	Goal                      string                     `json:"goal"`
 	Workspace                 string                     `json:"workspace"`
 	WorkspaceIdentity         runstore.WorkspaceIdentity `json:"workspace_identity"`
+	WorkspaceForeign          bool                       `json:"workspace_foreign,omitempty"`
 	State                     RunState                   `json:"state"`
 	PauseReason               PauseReason                `json:"pause_reason,omitempty"`
 	ReviewEnabled             bool                       `json:"review_enabled"`
@@ -125,7 +128,6 @@ type Run struct {
 	CurrentAction             *Action                    `json:"current_action,omitempty"`
 	Actions                   []ActionRecord             `json:"actions"`
 	PendingActions            []SuggestedAction          `json:"pending_actions,omitempty"`
-	DecisionSuggestions       []SuggestedAction          `json:"decision_suggestions,omitempty"`
 	Answers                   []AnswerRecord             `json:"answers,omitempty"`
 	Observations              []string                   `json:"observations,omitempty"`
 	KnownIssues               []string                   `json:"known_issues,omitempty"`
@@ -137,10 +139,44 @@ type Run struct {
 	CreatedAt                 time.Time                  `json:"created_at"`
 	UpdatedAt                 time.Time                  `json:"updated_at"`
 
+	// omittedObservations tracks the synthetic projection marker while replay
+	// keeps the authoritative journal history out of the in-memory Run.
+	omittedObservations int
+
 	// Rebuilt during journal replay so retired accepted comment identities remain
 	// immutable without adding another field to the public Run projection.
 	acceptedSourceComments    map[string]PinnedSourceSection
 	acceptedSourceDatabaseIDs map[int64]string
+}
+
+func projectRun(run Run) Run {
+	observations := run.Observations
+	if run.omittedObservations > 0 {
+		observations = observations[1:]
+	}
+	if len(observations) <= maxRunProjectionObservations {
+		return run
+	}
+
+	omitted := len(observations) - maxRunProjectionObservations
+	run.omittedObservations += omitted
+	recent := observations[omitted:]
+	run.Observations = make([]string, 0, len(recent)+1)
+	run.Observations = append(run.Observations, observationHistoryMarker(run.omittedObservations))
+	run.Observations = append(run.Observations, recent...)
+	return run
+}
+
+func observationHistoryMarker(omitted int) string {
+	return fmt.Sprintf("...[%d earlier observations in journal]", omitted)
+}
+
+func replayRunProjectionEvent(run *Run, event runstore.Event) error {
+	if err := applyRunEvent(run, event); err != nil {
+		return err
+	}
+	*run = projectRun(*run)
+	return nil
 }
 
 type Service struct {
@@ -197,10 +233,38 @@ func workspaceIdentityMismatchError(expected runstore.WorkspaceIdentity, observe
 		details["discovery_error"] = cause.Error()
 		message += ": " + cause.Error()
 	}
+	// Issue #434 §1.3: the user owns the process, so an error must carry a
+	// usable recovery next rather than a terminal `none`. When the persisted
+	// Run recorded its own worktree root, point the user at that workspace so
+	// they can inspect or resume from the Run's canonical location. Only fall
+	// back to `none` when no Run workspace is known at all.
+	next := NoneNext(expected.ID)
+	// Issue #434 §1.3: the user owns the process, so an error must carry a
+	// usable recovery next rather than a terminal `none`. Only the per-Run
+	// mismatch path (observed != nil) knows the Run's own worktree root to
+	// point at; the open-workspace discovery failure has no Run workspace yet.
+	// The identity is the Run's *persisted* identity, not a fresh re-discovery,
+	// so the recovery command stays accurate even when the path now hosts a
+	// different Git identity.
+	if observed != nil && expected.WorktreeRoot != "" {
+		next = Next{
+			Operation:         NextOperationCommand,
+			WorkspaceIdentity: expected.ID,
+			workspaceRoot:     expected.WorktreeRoot,
+			Variants: []NextVariant{{
+				ID:       "inspect-run-in-its-workspace",
+				BaseArgv: []string{"slipway", "status", "--root", expected.WorktreeRoot},
+				Inputs:   []NextInput{},
+			}},
+		}
+		if err := next.Validate(); err != nil {
+			next = NoneNext(expected.ID)
+		}
+	}
 	return &ProtocolError{
 		Code:    "workspace_identity_mismatch",
 		Message: message,
-		Next:    NoneNext(expected.ID),
+		Next:    next,
 		Details: details,
 	}
 }
@@ -293,7 +357,7 @@ func (service *Service) Load(runID string) (Run, error) {
 	}
 	var run Run
 	if err := service.store.Visit(runID, func(event runstore.Event) error {
-		return applyRunEvent(&run, event)
+		return replayRunProjectionEvent(&run, event)
 	}); err != nil {
 		return Run{}, err
 	}
@@ -306,7 +370,7 @@ func (service *Service) Load(runID string) (Run, error) {
 	return run, nil
 }
 
-func (service *Service) loadOwnedRunHeader(runID string) (Run, error) {
+func (service *Service) loadRunHeader(runID string) (Run, error) {
 	event, err := service.store.FirstEvent(runID)
 	if err != nil {
 		return Run{}, err
@@ -318,10 +382,31 @@ func (service *Service) loadOwnedRunHeader(runID string) (Run, error) {
 	if run.ID != runID {
 		return Run{}, errors.New("run journal identity mismatch")
 	}
+	return run, nil
+}
+
+func (service *Service) loadOwnedRunHeader(runID string) (Run, error) {
+	run, err := service.loadRunHeader(runID)
+	if err != nil {
+		return Run{}, err
+	}
 	if err := service.validateRunWorkspace(run); err != nil {
 		return Run{}, err
 	}
 	return run, nil
+}
+
+func foreignRunStub(run Run) Run {
+	return Run{
+		ContractVersion:   run.ContractVersion,
+		ID:                run.ID,
+		Goal:              run.Goal,
+		Workspace:         run.Workspace,
+		WorkspaceIdentity: run.WorkspaceIdentity,
+		WorkspaceForeign:  true,
+		State:             run.State,
+		CreatedAt:         run.CreatedAt,
+	}
 }
 
 func (service *Service) List() ([]Run, error) {
@@ -334,12 +419,20 @@ func (service *Service) List() ([]Run, error) {
 	}
 	runs := make([]Run, 0, len(ids))
 	for _, id := range ids {
-		if _, err := service.loadOwnedRunHeader(id); err != nil {
+		header, err := service.loadRunHeader(id)
+		if err != nil {
+			continue
+		}
+		if workspaceErr := service.validateRunWorkspace(header); workspaceErr != nil {
+			var protocolErr *ProtocolError
+			if errors.As(workspaceErr, &protocolErr) && protocolErr.Code == "workspace_identity_mismatch" {
+				runs = append(runs, foreignRunStub(header))
+			}
 			continue
 		}
 		var run Run
 		loadErr := service.store.Visit(id, func(event runstore.Event) error {
-			return applyRunEvent(&run, event)
+			return replayRunProjectionEvent(&run, event)
 		})
 		if loadErr != nil || run.ID != id {
 			continue
@@ -372,7 +465,7 @@ func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, er
 	var run Run
 	var result Run
 	err = service.store.UpdateStream(runID, func(event runstore.Event) error {
-		return applyRunEvent(&run, event)
+		return replayRunProjectionEvent(&run, event)
 	}, func() ([]runstore.Event, any, error) {
 		if run.ID != runID {
 			return nil, nil, errors.New("run journal identity mismatch")
@@ -419,8 +512,9 @@ func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, er
 		if err != nil {
 			return nil, nil, err
 		}
-		result = run
-		return []runstore.Event{event}, run, nil
+		projection := projectRun(run)
+		result = projection
+		return []runstore.Event{event}, projection, nil
 	})
 	return result, err
 }
@@ -432,7 +526,11 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 	if _, err := service.loadOwnedRunHeader(runID); err != nil {
 		return Run{}, err
 	}
-	options.Text = strings.TrimSpace(options.Text)
+	// The answer text is an uninterpreted value (issue #434 §9.6). Preserve
+	// the caller's original text verbatim in the journal; only the idempotency
+	// digest trims surrounding whitespace so that "  alpha  " and "alpha" are
+	// treated as the same decision for replay dedup, without silently erasing
+	// the caller's original boundaries from the record.
 	if !utf8.ValidString(options.Text) {
 		return Run{}, &ProtocolError{Code: "invalid_answer", Message: "answer text must be valid utf-8", Next: NoneNext(service.store.RepositoryRoot())}
 	}
@@ -443,8 +541,9 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 
 	var run Run
 	var result Run
+	var responseErr error
 	err = service.store.UpdateStream(runID, func(event runstore.Event) error {
-		return applyRunEvent(&run, event)
+		return replayRunProjectionEvent(&run, event)
 	}, func() ([]runstore.Event, any, error) {
 		if run.ID != runID {
 			return nil, nil, errors.New("run journal identity mismatch")
@@ -455,6 +554,9 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 		if receipt := findAnswerRecord(run, actionID); receipt != nil {
 			if receipt.PayloadSHA256 == payloadSHA256 {
 				result = run
+				if isBudgetBlockedDestructiveGrant(run) {
+					responseErr = resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
+				}
 				return nil, run, nil
 			}
 			return nil, nil, protocolRunError(run, "answer_conflict", "this action already has a different answer")
@@ -492,7 +594,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			if options.ConfirmDestructive || options.ScopeSHA256 != "" {
 				return nil, nil, protocolRunError(run, "destructive_confirmation_not_expected", "decision answer forbids destructive confirmation fields")
 			}
-			if options.Text == "" {
+			if strings.TrimSpace(options.Text) == "" {
 				return nil, nil, protocolRunError(run, "answer_required", "decision answer requires text")
 			}
 			if supersededActionID := decisionSupersessionForAction(run, actionID); supersededActionID != "" {
@@ -504,7 +606,6 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			clearDestructiveState(&run)
 			receipt.Active = true
 			run.Answers = append(run.Answers, receipt)
-			run.DecisionSuggestions = nil
 			run.PendingActions = nil
 			run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
 			if err := issueAction(&run, before, ActionOrient, "Re-orient after the user's decision before selecting further work."); err != nil {
@@ -519,14 +620,13 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 				if options.ScopeSHA256 != "" {
 					return nil, nil, protocolRunError(run, "destructive_confirmation_flag_required", "scope_sha256 requires confirm_destructive")
 				}
-				if options.Text == "" {
+				if strings.TrimSpace(options.Text) == "" {
 					return nil, nil, protocolRunError(run, "answer_required", "destructive feedback or decline requires text")
 				}
 				voidCurrentAction(&run)
 				clearDestructiveState(&run)
 				receipt.Active = true
 				run.Answers = append(run.Answers, receipt)
-				run.DecisionSuggestions = nil
 				run.PendingActions = nil
 				run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
 				if err := issueAction(&run, before, ActionOrient, "Reconsider non-destructive alternatives after destructive scope was declined or received feedback; do not perform the requested destructive operation."); err != nil {
@@ -539,9 +639,6 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			}
 			if options.ScopeSHA256 != request.ScopeSHA256 {
 				return nil, nil, protocolRunError(run, "destructive_scope_mismatch", "scope_sha256 does not match the current destructive request")
-			}
-			if run.RemainingBudget < 1 {
-				return nil, nil, resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
 			}
 			authorization := DestructiveAuthorization{
 				RequestID:           request.RequestID,
@@ -560,11 +657,18 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			// decline-or-feedback branch above.
 			receipt.Active = false
 			run.Answers = append(run.Answers, receipt)
-			run.DecisionSuggestions = nil
 			run.PendingActions = nil
-			run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
 			run.PendingDestructiveRequest = cloneDestructiveRequest(&request)
 			run.DestructiveGrant = cloneDestructiveAuthorization(&authorization)
+			if run.RemainingBudget < 1 {
+				// Persist the exact confirmed grant before asking for more budget. The
+				// paused grant is valid only for the pure budget-resume path below;
+				// every source or environment recovery still invalidates it.
+				run.State, run.PauseReason, run.CurrentAction = RunPaused, PauseBudgetExhausted, nil
+				responseErr = resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
+				break
+			}
+			run.State, run.PauseReason, run.CurrentAction = RunActive, "", nil
 			if err := issueAction(&run, before, ActionImplement, "Perform only the exact destructively authorized scope. If any target or impact changes, stop and return a fresh destructive request."); err != nil {
 				return nil, nil, err
 			}
@@ -578,9 +682,13 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 		if eventErr != nil {
 			return nil, nil, eventErr
 		}
-		result = run
-		return []runstore.Event{event}, run, nil
+		projection := projectRun(run)
+		result = projection
+		return []runstore.Event{event}, projection, nil
 	})
+	if err == nil && responseErr != nil {
+		return result, responseErr
+	}
 	return result, err
 }
 
@@ -594,7 +702,6 @@ func (service *Service) Skip(runID, actionID string) (Run, error) {
 		}
 		durableRun := runBeforeMutation(*run)
 		kind := run.CurrentAction.Kind
-		run.DecisionSuggestions = nil
 		run.PendingActions = nil
 		if record := findActionRecord(run, actionID); record != nil {
 			record.Skipped = true
@@ -642,7 +749,7 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 	var run Run
 	var result Run
 	err = service.store.UpdateStreamWithMaterials(runID, func(event runstore.Event) error {
-		return applyRunEvent(&run, event)
+		return replayRunProjectionEvent(&run, event)
 	}, func() (runstore.UpdateResult, error) {
 		if run.ID != runID {
 			return runstore.UpdateResult{}, errors.New("run journal identity mismatch")
@@ -686,10 +793,11 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 		if eventErr != nil {
 			return runstore.UpdateResult{}, eventErr
 		}
-		result = run
+		projection := projectRun(run)
+		result = projection
 		return runstore.UpdateResult{
 			Events:     []runstore.Event{event},
-			Projection: run,
+			Projection: projection,
 			Materials:  materials,
 		}, nil
 	})
@@ -731,6 +839,28 @@ func normalizeResumeOptions(workspace string, options ResumeOptions) (ResumeOpti
 }
 
 func resumeRun(run *Run, durableRun Run, options ResumeOptions) (string, bool, error) {
+	pureBudgetResume := options.RefreshedSource == nil && !options.UsePinnedSource &&
+		options.SourceChoice == "" && options.CandidateID == ""
+	if isBudgetBlockedDestructiveGrant(*run) && pureBudgetResume {
+		// Security: this is the only resume that retains a destructive grant. The
+		// journal proves that the exact scope was confirmed and blocked only by
+		// budget. Any source mode, candidate choice, or environment recovery falls
+		// through to the normal invalidation paths and clears the grant.
+		applyResumeBudget(run, options.Budget)
+		operation := ResumeOperationAdHoc
+		eventType := "run_resumed"
+		if run.PinnedSource != nil {
+			operation = ResumeOperationSourceRefreshSkipped
+			eventType = ResumeOperationSourceRefreshSkipped
+			run.Observations = append(run.Observations, ResumeOperationSourceRefreshSkipped)
+		}
+		run.LastResumeResult = &ResumeResult{Operation: operation, BudgetApplied: true}
+		if err := issueAction(run, durableRun, ActionImplement, "Perform only the exact destructively authorized scope. If any target or impact changes, stop and return a fresh destructive request."); err != nil {
+			return "", false, err
+		}
+		return eventType, true, nil
+	}
+
 	if run.PinnedSource == nil {
 		if options.RefreshedSource != nil || options.UsePinnedSource || options.SourceChoice != "" || options.CandidateID != "" {
 			return "", false, resumeProtocolError(*run, "source_mode_not_allowed", "ad-hoc run resume does not accept source options")
@@ -1045,8 +1175,8 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 			after.CurrentAction != nil || len(after.Actions) != len(before.Actions) {
 			return errors.New("source candidate creation must pause without issuing an action")
 		}
-		if len(after.PendingActions) != 0 || len(after.DecisionSuggestions) != 0 ||
-			after.PendingDestructiveRequest != nil || after.DestructiveGrant != nil {
+		if len(after.PendingActions) != 0 || after.PendingDestructiveRequest != nil ||
+			after.DestructiveGrant != nil {
 			return errors.New("source candidate creation must clear outstanding execution state")
 		}
 		if before.CurrentAction != nil {
@@ -1095,6 +1225,9 @@ func validateRunSourceTransition(eventType string, before, after Run) error {
 		}
 		return validateFreshSourceOrient(before, after)
 	case ResumeOperationSourceRefreshSkipped:
+		if isBudgetBlockedDestructiveGrant(before) {
+			return validateBudgetBlockedDestructiveResume(before, after)
+		}
 		if pinnedChanged {
 			return errors.New("skipping source refresh cannot mutate pinned source")
 		}
@@ -1229,8 +1362,8 @@ func validateFreshSourceOrient(before, after Run) error {
 			return errors.New("source resume must void the outstanding action")
 		}
 	}
-	if len(after.PendingActions) != 0 || len(after.DecisionSuggestions) != 0 ||
-		after.PendingDestructiveRequest != nil || after.DestructiveGrant != nil {
+	if len(after.PendingActions) != 0 || after.PendingDestructiveRequest != nil ||
+		after.DestructiveGrant != nil {
 		return errors.New("source resume must clear outstanding execution state")
 	}
 	return nil
@@ -1369,7 +1502,6 @@ func invalidateOutstandingResumeState(run *Run) {
 	voidCurrentAction(run)
 	run.CurrentAction = nil
 	run.PendingActions = nil
-	run.DecisionSuggestions = nil
 	clearDestructiveState(run)
 	run.State = RunActive
 	run.PauseReason = ""
@@ -1399,7 +1531,7 @@ func (service *Service) mutate(runID, eventType string, callback func(*Run) erro
 	var run Run
 	var result Run
 	err := service.store.UpdateStream(runID, func(event runstore.Event) error {
-		return applyRunEvent(&run, event)
+		return replayRunProjectionEvent(&run, event)
 	}, func() ([]runstore.Event, any, error) {
 		if run.ID != runID {
 			return nil, nil, errors.New("run journal identity mismatch")
@@ -1419,8 +1551,9 @@ func (service *Service) mutate(runID, eventType string, callback func(*Run) erro
 		if err != nil {
 			return nil, nil, err
 		}
-		result = run
-		return []runstore.Event{event}, run, nil
+		projection := projectRun(run)
+		result = projection
+		return []runstore.Event{event}, projection, nil
 	})
 	return result, err
 }
@@ -1724,7 +1857,7 @@ func defaultBrief(kind ActionKind) string {
 	case ActionReview:
 		return "Inspect intent and quality against the run-start Git baseline; report findings and uncertainties only, without modifying code."
 	case ActionSummarize:
-		return "Summarize observed changes, activities, known issues, uncertainties, skipped work, and pre-existing dirty files."
+		return "Summarize confirmed human decisions, observed changes, activities, known issues, uncertainties, skipped work, and pre-existing dirty files."
 	default:
 		return "Perform the requested action and report observations honestly."
 	}
@@ -2029,7 +2162,13 @@ func finalSummary(run Run) string {
 	builder.WriteString("Observed action reports:\n")
 
 	changedFiles := map[string]struct{}{}
-	var observations, reviewFindings, skipped, voided []string
+	var confirmedDecisions, observations, reviewFindings, skipped, voided []string
+	for _, answer := range run.Answers {
+		if !answer.Active || answer.SupersededBy != "" {
+			continue
+		}
+		confirmedDecisions = append(confirmedDecisions, fmt.Sprintf("action %s: %s", answer.ActionID, answer.Text))
+	}
 	var reviewOutcome *Outcome
 	var reviewSkippedByUser bool
 	for index := range run.Actions {
@@ -2094,6 +2233,9 @@ func finalSummary(run Run) string {
 		builder.WriteString("Files reported changed by Implement:\n- " + strings.Join(files, "\n- ") + "\n")
 	} else {
 		builder.WriteString("No files were reported changed by Implement.\n")
+	}
+	if len(confirmedDecisions) > 0 {
+		builder.WriteString("Confirmed decisions:\n- " + strings.Join(confirmedDecisions, "\n- ") + "\n")
 	}
 	if len(observations) > 0 {
 		builder.WriteString("Observations:\n- " + strings.Join(observations, "\n- ") + "\n")
@@ -2235,7 +2377,7 @@ func answerPayloadSHA256(actionID string, options AnswerOptions) (string, error)
 		ActionID:           actionID,
 		ConfirmDestructive: options.ConfirmDestructive,
 		ScopeSHA256:        options.ScopeSHA256,
-		Text:               options.Text,
+		Text:               strings.TrimSpace(options.Text),
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -2270,6 +2412,90 @@ func cloneDestructiveAuthorization(authorization *DestructiveAuthorization) *Des
 	clone := *authorization
 	clone.Targets = append([]DestructiveTarget(nil), authorization.Targets...)
 	return &clone
+}
+
+func isBudgetBlockedDestructiveGrant(run Run) bool {
+	return run.State == RunPaused && run.PauseReason == PauseBudgetExhausted &&
+		run.RemainingBudget == 0 && run.CurrentAction == nil && run.SourceCandidate == nil &&
+		run.PendingDestructiveRequest != nil && run.DestructiveGrant != nil
+}
+
+func validateBudgetBlockedDestructiveGrant(run Run) error {
+	if !isBudgetBlockedDestructiveGrant(run) {
+		return errors.New("budget-blocked destructive grant requires an exhausted paused run without a current action")
+	}
+	if len(run.PendingActions) != 0 {
+		return errors.New("budget-blocked destructive grant cannot retain an action queue")
+	}
+	grant := *run.DestructiveGrant
+	request := *run.PendingDestructiveRequest
+	if err := validateDestructiveGrant(grant, request, grant.OriginatingActionID); err != nil {
+		return err
+	}
+	record := findActionRecord(&run, grant.OriginatingActionID)
+	if record == nil || record.Action.Kind != ActionImplement || record.Outcome == nil ||
+		record.Outcome.Status != OutcomeNeedsInput || record.Outcome.Pause == nil ||
+		record.Outcome.Pause.Reason != PauseDestructiveConfirm ||
+		record.Outcome.Pause.DestructiveRequest == nil || record.Voided || record.Skipped {
+		return errors.New("budget-blocked destructive grant requires its unvoided originating confirmation action")
+	}
+	outcomeRequest, err := NormalizeDestructiveRequest(*record.Outcome.Pause.DestructiveRequest)
+	if err != nil || !reflect.DeepEqual(outcomeRequest, request) {
+		return errors.New("budget-blocked destructive grant differs from its originating action request")
+	}
+	receipt := findAnswerRecord(run, grant.OriginatingActionID)
+	if receipt == nil || !receipt.ConfirmDestructive || receipt.ScopeSHA256 != grant.ScopeSHA256 ||
+		receipt.Active || receipt.SupersededBy != "" ||
+		grant.ConfirmedAt != receipt.At.Format(time.RFC3339Nano) {
+		return errors.New("budget-blocked destructive grant requires its exact confirmation receipt")
+	}
+	if run.PinnedSource == nil {
+		if receipt.SourceRevision != "" || receipt.RequirementsRevision != "" {
+			return errors.New("ad-hoc budget-blocked destructive grant cannot retain source revisions")
+		}
+	} else if receipt.SourceRevision != run.PinnedSource.SourceRevision ||
+		receipt.RequirementsRevision != run.PinnedSource.RequirementsRevision {
+		return errors.New("budget-blocked destructive grant must match the pinned source revisions")
+	}
+	return nil
+}
+
+func validateBudgetBlockedDestructiveResume(before, after Run) error {
+	if err := validateBudgetBlockedDestructiveGrant(before); err != nil {
+		return err
+	}
+	if after.State != RunActive || after.PauseReason != "" || after.CurrentAction == nil ||
+		after.CurrentAction.Kind != ActionImplement || after.CurrentAction.DestructiveAuthorization == nil {
+		return errors.New("budget-blocked destructive resume must issue one authorized Implement action")
+	}
+	if !reflect.DeepEqual(before.PendingDestructiveRequest, after.PendingDestructiveRequest) ||
+		!reflect.DeepEqual(before.DestructiveGrant, after.DestructiveGrant) ||
+		!reflect.DeepEqual(after.CurrentAction.DestructiveAuthorization, after.DestructiveGrant) {
+		return errors.New("budget-blocked destructive resume must retain the exact confirmed scope")
+	}
+	if !reflect.DeepEqual(before.PinnedSource, after.PinnedSource) ||
+		!reflect.DeepEqual(before.SourceCandidate, after.SourceCandidate) ||
+		!reflect.DeepEqual(before.LastSourceChoice, after.LastSourceChoice) {
+		return errors.New("budget-blocked destructive resume cannot change source state")
+	}
+	if !reflect.DeepEqual(before.Answers, after.Answers) ||
+		!reflect.DeepEqual(before.PendingActions, after.PendingActions) {
+		return errors.New("budget-blocked destructive resume cannot change confirmed input state")
+	}
+	if len(after.Actions) != len(before.Actions)+1 ||
+		!reflect.DeepEqual(before.Actions, after.Actions[:len(before.Actions)]) ||
+		!reflect.DeepEqual(after.Actions[len(before.Actions)].Action, *after.CurrentAction) {
+		return errors.New("budget-blocked destructive resume must append exactly one fresh action")
+	}
+	expectedOperation := ResumeOperationAdHoc
+	if before.PinnedSource != nil {
+		expectedOperation = ResumeOperationSourceRefreshSkipped
+	}
+	if after.LastResumeResult == nil || after.LastResumeResult.Operation != expectedOperation ||
+		!after.LastResumeResult.BudgetApplied || after.LastResumeResult.CandidateID != "" {
+		return errors.New("budget-blocked destructive resume requires a matching resume receipt")
+	}
+	return nil
 }
 
 func clearDestructiveState(run *Run) {
@@ -2478,7 +2704,8 @@ func validateRunDestructiveState(run Run) error {
 			return err
 		}
 	}
-	if run.State == RunStopped || run.State == RunEnded || run.PauseReason == PauseDecisionRequired || run.PauseReason == PauseEnvironmentUnavailable || run.PauseReason == PauseBudgetExhausted {
+	if run.State == RunStopped || run.State == RunEnded ||
+		run.PauseReason == PauseDecisionRequired || run.PauseReason == PauseEnvironmentUnavailable {
 		if run.PendingDestructiveRequest != nil || run.DestructiveGrant != nil {
 			return errors.New("current run state cannot retain destructive request or grant")
 		}
@@ -2492,6 +2719,9 @@ func validateRunDestructiveState(run Run) error {
 		}
 	}
 	if run.DestructiveGrant != nil {
+		if isBudgetBlockedDestructiveGrant(run) {
+			return validateBudgetBlockedDestructiveGrant(run)
+		}
 		if run.State != RunActive || run.CurrentAction == nil || run.CurrentAction.Kind != ActionImplement || run.CurrentAction.DestructiveAuthorization == nil {
 			return errors.New("destructive grant requires the current authorized implement action")
 		}

@@ -70,8 +70,6 @@ type runDelta struct {
 	PendingDestructiveRequest    *DestructiveRequest       `json:"pending_destructive_request,omitempty"`
 	DestructiveGrantSet          bool                      `json:"destructive_grant_set,omitempty"`
 	DestructiveGrant             *DestructiveAuthorization `json:"destructive_grant,omitempty"`
-	DecisionSuggestionsSet       bool                      `json:"decision_suggestions_set,omitempty"`
-	DecisionSuggestions          []SuggestedAction         `json:"decision_suggestions,omitempty"`
 
 	ActionUpdates       []actionUpdate    `json:"action_updates,omitempty"`
 	AnswerUpdates       []answerUpdate    `json:"answer_updates,omitempty"`
@@ -94,6 +92,26 @@ func validRunEventType(eventType string) bool {
 	default:
 		return false
 	}
+}
+
+func validateRunJournalValues(state RunState, pauseReason PauseReason, remainingBudget int) error {
+	switch state {
+	case RunActive, RunPaused, RunStopped, RunEnded:
+	default:
+		return fmt.Errorf("unknown run state %q", state)
+	}
+
+	// The empty value is the canonical absence of a pause reason.
+	switch pauseReason {
+	case "", PauseDecisionRequired, PauseDestructiveConfirm, PauseEnvironmentUnavailable, PauseBudgetExhausted:
+	default:
+		return fmt.Errorf("unknown pause reason %q", pauseReason)
+	}
+
+	if remainingBudget < 0 {
+		return errors.New("remaining budget cannot be negative")
+	}
+	return nil
 }
 
 func validateRunEventMutation(eventType string, before, after Run, delta runDelta) error {
@@ -125,6 +143,9 @@ func validateRunEventMutation(eventType string, before, after Run, delta runDelt
 			return errors.New("run_stopped must enter stopped state")
 		}
 	case "run_resumed":
+		if isBudgetBlockedDestructiveGrant(before) {
+			return validateBudgetBlockedDestructiveResume(before, after)
+		}
 		if after.LastResumeResult == nil || after.LastResumeResult.Operation != ResumeOperationAdHoc {
 			return errors.New("run_resumed must record the ad-hoc resume operation")
 		}
@@ -270,10 +291,6 @@ func diffRun(eventType string, before, after Run) (runDelta, error) {
 		delta.DestructiveGrantSet = true
 		delta.DestructiveGrant = cloneDestructiveAuthorization(after.DestructiveGrant)
 	}
-	if !reflect.DeepEqual(before.DecisionSuggestions, after.DecisionSuggestions) {
-		delta.DecisionSuggestionsSet = true
-		delta.DecisionSuggestions = append([]SuggestedAction(nil), after.DecisionSuggestions...)
-	}
 
 	if len(after.Actions) < len(before.Actions) {
 		return runDelta{}, errors.New("run action history shrank")
@@ -331,8 +348,11 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 			return errors.New("run journal does not begin with run_started")
 		}
 		initial := delta.Initialize
-		if initial.Goal == "" || initial.Workspace == "" || initial.InitialBudget < 1 || initial.CreatedAt.IsZero() {
+		if initial.Goal == "" || initial.Workspace == "" || initial.CreatedAt.IsZero() {
 			return errors.New("run journal has invalid initialization")
+		}
+		if err := ValidateBudget(initial.InitialBudget); err != nil {
+			return fmt.Errorf("run journal has invalid initialization: %w", err)
 		}
 		if err := initial.WorkspaceIdentity.Validate(); err != nil {
 			return fmt.Errorf("run journal has invalid workspace identity: %w", err)
@@ -365,17 +385,27 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 		return errors.New("run journal identity or contract version mismatch")
 	}
 
+	state := run.State
 	if delta.State != nil {
-		run.State = *delta.State
+		state = *delta.State
 	}
+	pauseReason := run.PauseReason
 	if delta.PauseReason != nil {
-		run.PauseReason = *delta.PauseReason
+		pauseReason = *delta.PauseReason
 	}
+	remainingBudget := run.RemainingBudget
+	if delta.RemainingBudget != nil {
+		remainingBudget = *delta.RemainingBudget
+	}
+	// Validate the resulting projection for both initialization and later deltas.
+	if err := validateRunJournalValues(state, pauseReason, remainingBudget); err != nil {
+		return fmt.Errorf("invalid %s event state: %w", event.Type, err)
+	}
+	run.State = state
+	run.PauseReason = pauseReason
+	run.RemainingBudget = remainingBudget
 	if delta.ReviewPending != nil {
 		run.ReviewPending = *delta.ReviewPending
-	}
-	if delta.RemainingBudget != nil {
-		run.RemainingBudget = *delta.RemainingBudget
 	}
 	if delta.CurrentActionSet {
 		run.CurrentAction = delta.CurrentAction
@@ -468,11 +498,6 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 		}
 	} else if delta.DestructiveGrant != nil {
 		return errors.New("destructive_grant requires destructive_grant_set")
-	}
-	if delta.DecisionSuggestionsSet {
-		run.DecisionSuggestions = append([]SuggestedAction(nil), delta.DecisionSuggestions...)
-	} else if len(delta.DecisionSuggestions) > 0 {
-		return errors.New("decision_suggestions requires decision_suggestions_set")
 	}
 	for _, update := range delta.ActionUpdates {
 		switch {
