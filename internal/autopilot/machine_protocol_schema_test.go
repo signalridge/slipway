@@ -263,6 +263,52 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 	require.Error(t, stateSchema.Validate(machineSchemaValue(t, state)))
 	state["state"] = "paused"
 	require.NoError(t, stateSchema.Validate(machineSchemaValue(t, state)))
+
+	// resume_operation and budget_applied must appear together and the
+	// operation must be one of the closed resume-operation enum values.
+	resumeEnum := []string{
+		"ad_hoc_resumed", "source_refreshed", "source_candidate_created",
+		"source_refresh_skipped", "source_amended", "source_pinned",
+	}
+	withResume := map[string]any{
+		"contract_version": ContractVersion,
+		"run_id":           "run-1",
+		"state":            "paused",
+		"next":             map[string]any{"operation": "none", "workspace_identity": workspaceID, "variants": []any{}},
+		"resume_operation": "ad_hoc_resumed",
+		"budget_applied":   true,
+	}
+	require.NoError(t, stateSchema.Validate(machineSchemaValue(t, withResume)))
+
+	for _, value := range resumeEnum {
+		paired := map[string]any{}
+		for key, value := range withResume {
+			paired[key] = value
+		}
+		paired["resume_operation"] = value
+		require.NoError(t, stateSchema.Validate(machineSchemaValue(t, paired)))
+	}
+
+	resumesAlone := map[string]any{}
+	for key, value := range withResume {
+		resumesAlone[key] = value
+	}
+	delete(resumesAlone, "budget_applied")
+	require.Error(t, stateSchema.Validate(machineSchemaValue(t, resumesAlone)))
+
+	budgetAlone := map[string]any{}
+	for key, value := range withResume {
+		budgetAlone[key] = value
+	}
+	delete(budgetAlone, "resume_operation")
+	require.Error(t, stateSchema.Validate(machineSchemaValue(t, budgetAlone)))
+
+	badEnum := map[string]any{}
+	for key, value := range withResume {
+		badEnum[key] = value
+	}
+	badEnum["resume_operation"] = "not_a_real_resume_operation"
+	require.Error(t, stateSchema.Validate(machineSchemaValue(t, badEnum)))
 }
 
 func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
@@ -432,6 +478,81 @@ func TestMachineProtocolSchemaAcceptsSourceIssueMismatchErrorDetails(t *testing.
 
 	value["details"].(map[string]any)["unexpected"] = true
 	require.Error(t, schema.Validate(machineSchemaValue(t, value)))
+}
+
+func TestMachineProtocolSchemaAcceptsAdapterMutationErrorDetails(t *testing.T) {
+	t.Parallel()
+
+	workspaceIdentity := "sha256:" + strings.Repeat("a", 64)
+	base := map[string]any{
+		"contract_version": ContractVersion,
+		"code":             "install_failed",
+		"message":          "transaction failed",
+		"next":             NoneNext(workspaceIdentity),
+		"exit_code":        3,
+		"details": map[string]any{
+			"transaction_outcome": "rolled_back",
+			"report": map[string]any{
+				"contract_version":    ContractVersion,
+				"hosts":               []any{"claude"},
+				"transaction_outcome": "rolled_back",
+				"written":             []any{},
+				"removed":             []any{},
+				"preserved":           []any{},
+				"recovery_artifacts":  []any{},
+				"warnings":            []any{},
+			},
+		},
+	}
+	schema := compileMachineSchemaDefinition(t, "cliError")
+	require.NoError(t, schema.Validate(machineSchemaValue(t, base)))
+
+	for _, outcome := range []string{"committed", "rolled_back", "not_committed", "ambiguous"} {
+		variant := map[string]any{}
+		for key, value := range base {
+			variant[key] = value
+		}
+		details := map[string]any{}
+		for key, value := range base["details"].(map[string]any) {
+			details[key] = value
+		}
+		details["transaction_outcome"] = outcome
+		details["report"] = map[string]any{
+			"contract_version":    ContractVersion,
+			"hosts":               []any{"claude"},
+			"transaction_outcome": outcome,
+			"written":             []any{},
+			"removed":             []any{},
+			"preserved":           []any{},
+			"recovery_artifacts":  []any{},
+			"warnings":            []any{},
+		}
+		variant["details"] = details
+		require.NoError(t, schema.Validate(machineSchemaValue(t, variant)))
+	}
+
+	missingOutcome := map[string]any{}
+	for key, value := range base {
+		missingOutcome[key] = value
+	}
+	details := map[string]any{"report": base["details"].(map[string]any)["report"]}
+	missingOutcome["details"] = details
+	require.Error(t, schema.Validate(machineSchemaValue(t, missingOutcome)))
+
+	badOutcome := map[string]any{}
+	for key, value := range base {
+		badOutcome[key] = value
+	}
+	badDetails := map[string]any{}
+	for key, value := range base["details"].(map[string]any) {
+		badDetails[key] = value
+	}
+	badDetails["transaction_outcome"] = "partially_committed"
+	badOutcome["details"] = badDetails
+	require.Error(t, schema.Validate(machineSchemaValue(t, badOutcome)))
+
+	base["details"].(map[string]any)["unexpected"] = true
+	require.Error(t, schema.Validate(machineSchemaValue(t, base)))
 }
 
 func TestMachineProtocolResumeResultSchemaEnforcesReceiptMatrix(t *testing.T) {

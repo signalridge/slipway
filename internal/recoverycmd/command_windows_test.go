@@ -78,8 +78,3 @@ func TestCommandPreservesArgvThroughCommandPromptAndPowerShell(t *testing.T) {
 		})
 	}
 }
-
-func TestQuoteWindowsCommandArgumentDoublesTrailingBackslashes(t *testing.T) {
-	t.Parallel()
-	assert.Equal(t, `"C:\repo\\"`, quoteWindowsCommandArgument(`C:\repo\`))
-}

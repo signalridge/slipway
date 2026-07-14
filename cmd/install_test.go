@@ -26,4 +26,5 @@ func TestAdapterMutationErrorPreservesReportAndDisablesBlindRetry(t *testing.T) 
 	encodedReport, ok := cliErr.Details["report"].(changeReportOutput)
 	require.True(t, ok)
 	assert.Equal(t, makeChangeReportOutput(report), encodedReport)
+	assert.Equal(t, string(adapter.TransactionOutcomeAmbiguous), cliErr.Details["transaction_outcome"])
 }

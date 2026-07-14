@@ -53,30 +53,3 @@ func encodedPowerShellCommand(script string) string {
 	}
 	return "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand " + base64.StdEncoding.EncodeToString(encodedBytes)
 }
-
-// quoteWindowsCommandArgument follows the CommandLineToArgvW escaping rules
-// while always adding double quotes so cmd.exe cannot interpret metacharacters
-// in the argument as command separators.
-func quoteWindowsCommandArgument(value string) string {
-	var quoted strings.Builder
-	quoted.Grow(len(value) + 2)
-	quoted.WriteByte('"')
-	backslashes := 0
-	for _, character := range value {
-		switch character {
-		case '\\':
-			backslashes++
-		case '"':
-			quoted.WriteString(strings.Repeat("\\", backslashes*2+1))
-			quoted.WriteRune(character)
-			backslashes = 0
-		default:
-			quoted.WriteString(strings.Repeat("\\", backslashes))
-			quoted.WriteRune(character)
-			backslashes = 0
-		}
-	}
-	quoted.WriteString(strings.Repeat("\\", backslashes*2))
-	quoted.WriteByte('"')
-	return quoted.String()
-}

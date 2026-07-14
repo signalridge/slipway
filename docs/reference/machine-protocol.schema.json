@@ -563,13 +563,26 @@
         "suggested_actions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
         "pinned_source": { "$ref": "#/$defs/pinnedSource" },
         "source_candidate": { "$ref": "#/$defs/sourceCandidate" },
-        "resume_operation": { "type": "string", "minLength": 1 },
+        "resume_operation": {
+          "enum": [
+            "ad_hoc_resumed", "source_refreshed", "source_candidate_created", "source_refresh_skipped",
+            "source_amended", "source_pinned"
+          ]
+        },
         "budget_applied": { "type": "boolean" }
       },
       "allOf": [
         {
           "if": { "properties": { "state": { "const": "active" } } },
           "then": { "required": ["action"] }
+        },
+        {
+          "if": { "required": ["resume_operation"] },
+          "then": { "required": ["budget_applied"] }
+        },
+        {
+          "if": { "required": ["budget_applied"] },
+          "then": { "required": ["resume_operation"] }
         }
       ]
     },
@@ -618,8 +631,9 @@
     "adapterMutationErrorDetails": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["report"],
+      "required": ["transaction_outcome", "report"],
       "properties": {
+        "transaction_outcome": { "enum": ["committed", "rolled_back", "not_committed", "ambiguous"] },
         "report": { "$ref": "#/$defs/changeReport" }
       }
     },

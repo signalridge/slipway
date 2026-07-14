@@ -98,11 +98,12 @@ release:
 
     Installation: https://signalridge.github.io/slipway/installation/
 
-    Common paths:
+    Optional community-managed taps (published only when release secrets are
+    configured; otherwise use the Installation guide above):
 
-    - macOS: `brew install --cask signalridge/tap/slipway`
-    - Windows: add `signalridge/scoop-bucket`, then `scoop install slipway`
-    - Linux packages, direct archives, container, Go, and Nix are covered in Installation.
+    - macOS (optional): `brew install --cask signalridge/tap/slipway`
+    - Windows (optional): add `signalridge/scoop-bucket`, then `scoop install slipway`
+    - Linux packages, direct archives, container, Go, and Nix are always available; see Installation.
 homebrew_casks:
   - name: slipway
     repository:
