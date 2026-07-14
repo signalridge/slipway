@@ -71,7 +71,7 @@ func adapterMutationError(code string, err error, root string, report adapter.Ch
 		autopilot.NoneNext(root),
 		map[string]any{
 			"transaction_outcome": string(report.TransactionOutcome),
-			"report":             makeChangeReportOutput(report),
+			"report":              makeChangeReportOutput(report),
 		},
 	)
 }
