@@ -4,7 +4,7 @@
 
 ## 结构化 argv 是权威
 
-Recovery/pause 返回 `next.operation`、workspace identity 与 typed variants。每个 variant 包含完整 `base_argv` 和有序 inputs；展开时按 schema 顺序追加 input flag 与**一个原样、未引用的 argv value**。不得从 display prose 重建命令，也不得产生 `<answer>`/`<file>` 占位伪命令。
+Recovery/pause 返回 `next.operation`、workspace identity 与 typed variants。每个 variant 包含完整 `base_argv` 和有序 inputs；展开时按 schema 顺序把 input flag 与**一个原样、未引用的 argv value**插到唯一 `--` separator 前，没有 separator 时才追加。不得从 display prose 重建命令，也不得产生 `<answer>`/`<file>` 占位伪命令。
 
 Slipway 分别渲染 POSIX、`cmd.exe` 与 PowerShell display command；rendering 只用于展示/复制，不写 journal、不改变 machine operation。Root、Issue URL、source/outcome file、answer、candidate recovery 中的空格、引号、Unicode、CR/LF、`%`、`!`、`&`、`^` 必须保持原 argv。由于 cmd 会展开 `%`/`!`，renderer 可使用 PowerShell UTF-16LE `EncodedCommand` 或等价安全 argv 路径。必须在 `cmd.exe /v:on` 与 PowerShell native 进程实际捕获 argv；Linux cross-build 只证明能编译，不是 W evidence。
 

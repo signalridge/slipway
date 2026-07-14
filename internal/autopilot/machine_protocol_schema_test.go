@@ -50,7 +50,7 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	assert.Len(t, schemaSlice(t, action, "oneOf"), 6, "Action must distinguish ad-hoc/issue-bound and scoped/unscoped Implement")
 	assert.Len(t, schemaSlice(t, outcome, "oneOf"), 12, "Outcome must distinguish every action-specific matrix branch")
 	assert.ElementsMatch(t,
-		[]string{"contract_version", "hosts", "written", "removed", "preserved", "warnings"},
+		[]string{"contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"},
 		schemaStrings(t, schemaMap(t, definitions, "changeReport"), "required"),
 	)
 	assert.ElementsMatch(t,
@@ -95,8 +95,15 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "changeReport"), marshalTestJSON(t, map[string]any{
 		"contract_version": ContractVersion,
-		"hosts":            []string{"claude"}, "written": []string{}, "removed": []string{}, "preserved": []string{}, "warnings": []string{},
+		"hosts":            []string{"claude"}, "transaction_outcome": "committed", "written": []string{}, "removed": []string{},
+		"preserved": []string{}, "recovery_artifacts": []string{}, "warnings": []string{},
 	}))
+	changeReportSchema := compileMachineSchemaDefinition(t, "changeReport")
+	require.Error(t, changeReportSchema.Validate(machineSchemaValue(t, map[string]any{
+		"contract_version": ContractVersion,
+		"hosts":            []string{"claude"}, "transaction_outcome": "rolled_back", "written": []string{"claimed.md"}, "removed": []string{},
+		"preserved": []string{}, "recovery_artifacts": []string{}, "warnings": []string{},
+	})))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "listReport"), marshalTestJSON(t, map[string]any{
 		"contract_version": ContractVersion,
 		"hosts": []map[string]any{{
@@ -214,6 +221,48 @@ func TestMachineProtocolSchemaFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, decoded.Validate(ActionReview, "action-1"))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "outcome"), reviewJSON)
+}
+
+func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) {
+	t.Parallel()
+	workspaceID := "sha256:" + strings.Repeat("a", 64)
+	nextSchema := compileMachineSchemaDefinition(t, "next")
+
+	variant := func(id string, argv ...string) map[string]any {
+		return map[string]any{"id": id, "base_argv": argv, "inputs": []any{}}
+	}
+	invalid := []map[string]any{
+		{"operation": "action", "workspace_identity": workspaceID, "variants": []any{variant("submit", "slipway", "_machine", "resume", "run-1", "--root", "/workspace")}},
+		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "goal", "extra")}},
+		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant("bad-command", "slipway", "run", "--root", "/workspace", "--", "goal")}},
+		{"operation": "resume", "workspace_identity": workspaceID, "variants": []any{variant(
+			"skip-action", "slipway", "_machine", "skip", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--extra",
+		)}},
+		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "goal")}},
+		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "status", "--root", "/workspace")}},
+	}
+	for _, fixture := range invalid {
+		require.Error(t, nextSchema.Validate(machineSchemaValue(t, fixture)))
+	}
+	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
+		"operation": "start", "workspace_identity": workspaceID,
+		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "-leading goal")},
+	})))
+	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
+		"operation": "start", "workspace_identity": workspaceID,
+		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "--")},
+	})))
+
+	stateSchema := compileMachineSchemaDefinition(t, "protocolState")
+	state := map[string]any{
+		"contract_version": ContractVersion,
+		"run_id":           "run-1",
+		"state":            "active",
+		"next":             map[string]any{"operation": "none", "workspace_identity": workspaceID, "variants": []any{}},
+	}
+	require.Error(t, stateSchema.Validate(machineSchemaValue(t, state)))
+	state["state"] = "paused"
+	require.NoError(t, stateSchema.Validate(machineSchemaValue(t, state)))
 }
 
 func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {

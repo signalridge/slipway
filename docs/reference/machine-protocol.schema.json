@@ -46,15 +46,34 @@
     "changeReport": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "hosts", "written", "removed", "preserved", "warnings"],
+      "required": [
+        "contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"
+      ],
       "properties": {
         "contract_version": { "const": 2 },
         "hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "transaction_outcome": { "enum": ["committed", "rolled_back", "not_committed", "ambiguous"] },
         "written": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "removed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "preserved": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "recovery_artifacts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "warnings": { "type": "array", "items": { "type": "string", "minLength": 1 } }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transaction_outcome": { "enum": ["rolled_back", "not_committed", "ambiguous"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "written": { "maxItems": 0 },
+              "removed": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
     },
     "hostStatus": {
       "type": "object",
@@ -546,7 +565,13 @@
         "source_candidate": { "$ref": "#/$defs/sourceCandidate" },
         "resume_operation": { "type": "string", "minLength": 1 },
         "budget_applied": { "type": "boolean" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "active" } } },
+          "then": { "required": ["action"] }
+        }
+      ]
     },
     "mutationErrorDetails": {
       "type": "object",
@@ -648,9 +673,158 @@
       "required": ["id", "base_argv", "inputs"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-        "base_argv": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "base_argv": {
+          "type": "array",
+          "minItems": 2,
+          "prefixItems": [{ "const": "slipway" }],
+          "items": { "type": "string", "minLength": 1 }
+        },
         "inputs": { "type": "array", "items": { "$ref": "#/$defs/nextInput" } }
       }
+    },
+    "nextSkipVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "properties": {
+            "id": { "const": "skip-action" },
+            "base_argv": {
+              "minItems": 9,
+              "maxItems": 9,
+              "prefixItems": [
+                { "const": "slipway" },
+                { "const": "_machine" },
+                { "const": "skip" },
+                { "const": "--run" },
+                { "type": "string", "minLength": 1 },
+                { "const": "--action" },
+                { "type": "string", "minLength": 1 },
+                { "const": "--root" },
+                { "type": "string", "minLength": 1 }
+              ],
+              "items": false
+            },
+            "inputs": { "maxItems": 0 }
+          }
+        }
+      ]
+    },
+    "nextActionVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "not": { "const": "skip-action" } },
+                "base_argv": {
+                  "minItems": 4,
+                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "submit" }]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextAnswerVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "not": { "const": "skip-action" } },
+                "base_argv": {
+                  "minItems": 4,
+                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "answer" }]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextResumeVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "not": { "const": "skip-action" } },
+                "base_argv": {
+                  "minItems": 4,
+                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "resume" }]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextStartVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "properties": {
+            "id": { "not": { "const": "skip-action" } },
+            "base_argv": {
+              "oneOf": [
+                {
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" },
+                    { "const": "run" },
+                    { "const": "--budget" },
+                    { "type": "string", "minLength": 1 },
+                    { "const": "--json" },
+                    { "const": "--root" },
+                    { "type": "string", "minLength": 1 },
+                    { "const": "--" },
+                    { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" },
+                    { "const": "run" },
+                    { "const": "--budget" },
+                    { "type": "string", "minLength": 1 },
+                    { "const": "--json" },
+                    { "const": "--root" },
+                    { "type": "string", "minLength": 1 },
+                    { "const": "--no-review" },
+                    { "const": "--" },
+                    { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                }
+              ]
+          }
+        }
+        }
+      ]
+    },
+    "nextCommandVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "properties": {
+            "id": { "not": { "const": "skip-action" } },
+            "base_argv": {
+              "prefixItems": [{ "const": "slipway" }, { "not": { "enum": ["run", "_machine"] } }]
+            }
+          }
+        }
+      ]
     },
     "next": {
       "type": "object",
@@ -659,7 +833,7 @@
       "properties": {
         "operation": { "enum": ["action", "answer", "resume", "start", "command", "none"] },
         "workspace_identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "variants": { "type": "array", "items": { "$ref": "#/$defs/nextVariant" } }
+        "variants": { "type": "array" }
       },
       "oneOf": [
         {
@@ -670,8 +844,32 @@
         },
         {
           "properties": {
-            "operation": { "enum": ["action", "answer", "resume", "start", "command"] },
-            "variants": { "minItems": 1 }
+            "operation": { "const": "action" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextActionVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "answer" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextAnswerVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "resume" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextResumeVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "start" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextStartVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "command" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextCommandVariant" } }
           }
         }
       ]

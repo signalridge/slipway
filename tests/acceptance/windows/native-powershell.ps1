@@ -290,6 +290,22 @@ function Invoke-NextVariant {
     return Invoke-ResolvedArgv -CommandArgs $resolved.ToArray()
 }
 
+function Get-MutationAction {
+    param(
+        $Envelope,
+        [string]$ExpectedKind
+    )
+    Assert-True ($Envelope.contract_version -eq 2) 'mutation envelope did not return contract_version 2'
+    Assert-True ($Envelope.state -eq 'active') 'Action mutation did not return active state'
+    Assert-True ($Envelope.next.operation -eq 'action') 'Action mutation did not return structured action next'
+    Assert-True ($Envelope.PSObject.Properties.Name -contains 'action') 'mutation envelope omitted Action'
+    $action = $Envelope.action
+    Assert-True ($null -ne $action) 'mutation envelope returned a null Action'
+    Assert-True ($action.kind -eq $ExpectedKind) "mutation envelope did not return $ExpectedKind"
+    Assert-True ($action.run_id -eq $Envelope.run_id) 'mutation envelope Run ID does not match Action'
+    return $action
+}
+
 function New-Outcome {
     param(
         [string]$ActionId,
@@ -455,8 +471,8 @@ try {
     Assert-True ($null -ne $doctor.checks) 'doctor checks are missing'
 
     $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
-    $start = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
-    Assert-True ($start.kind -eq 'orient') 'ad-hoc start did not return Orient'
+    $startMutation = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
+    $start = Get-MutationAction -Envelope $startMutation -ExpectedKind 'orient'
     Assert-TextEqual -Actual ([string]$start.goal) -Expected $goal -Message 'special-character goal did not preserve exact text'
     $startStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-TextEqual -Actual ([string]$startStatus.goal) -Expected $goal -Message 'journaled goal did not preserve exact special characters or CRLF'
@@ -475,8 +491,8 @@ try {
 
     $specialAnswer = "answer spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
     $orientedText = Invoke-NextVariant -Next $paused.next -VariantId 'answer-decision' -InputValues @{ text = $specialAnswer }
-    $oriented = $orientedText | ConvertFrom-Json
-    Assert-True ($oriented.kind -eq 'orient') 'structured answer did not fresh-Orient'
+    $orientedMutation = $orientedText | ConvertFrom-Json
+    $oriented = Get-MutationAction -Envelope $orientedMutation -ExpectedKind 'orient'
     $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
     Assert-TextEqual -Actual ([string]$answeredStatus.answers[-1].text) -Expected $specialAnswer -Message 'journaled answer did not preserve exact special characters or CRLF'
     $normalizedAnswer = $specialAnswer.Replace("`r`n", "`n")
@@ -495,8 +511,8 @@ try {
         Write-Utf8 $secondOutcomePath $orientJson
         $implementedText = Invoke-ResolvedArgv -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
     }
-    $implemented = $implementedText | ConvertFrom-Json
-    Assert-True ($implemented.kind -eq 'implement') 'Outcome transport did not return Implement'
+    $implementedMutation = $implementedText | ConvertFrom-Json
+    $implemented = Get-MutationAction -Envelope $implementedMutation -ExpectedKind 'implement'
 
     $stopDisplay = Invoke-ResolvedArgv -CommandArgs @('stop', $start.run_id, '--root', $repo)
     $resumeLines = @($stopDisplay -split "`r?`n" | Where-Object { $_ -like '- resume-ad-hoc:*' })
@@ -514,14 +530,14 @@ try {
     $resumeExit = $LASTEXITCODE
     $resumeText = Join-NativeOutput $resumeOutput
     if ($resumeExit -ne 0) { Fail "rendered recovery command failed: $resumeText" }
-    $resumed = $resumeText | ConvertFrom-Json
-    Assert-True ($resumed.kind -eq 'orient') 'rendered recovery command did not return fresh Orient'
+    $resumedMutation = $resumeText | ConvertFrom-Json
+    $resumed = Get-MutationAction -Envelope $resumedMutation -ExpectedKind 'orient'
 
     $sourcePath = Join-Path $tempRoot ('source file % ! & ^ ' + $UnicodeProbe + '.json')
     $sourceInitial = New-SourceEnvelope -RequirementText 'Keep the initial Windows requirement.' -UpdatedAt '2026-07-12T09:00:00Z'
     Write-Utf8 $sourcePath (($sourceInitial | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $sourceStart = (Invoke-ResolvedArgv -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
-    Assert-True ($sourceStart.kind -eq 'orient') 'source-file start did not Orient'
+    $sourceStartMutation = (Invoke-ResolvedArgv -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
+    $sourceStart = Get-MutationAction -Envelope $sourceStartMutation -ExpectedKind 'orient'
     Assert-True ($sourceStart.source.kind -eq 'change_issue') 'source identity is missing'
     Assert-True ($sourceStart.requirements.sections.Count -eq 5) 'source section catalog is incomplete'
     $initialMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $sourceStart.action_id, '--section', 'requirements')) | ConvertFrom-Json
@@ -536,8 +552,8 @@ try {
     $candidateId = [string]$candidate.source_candidate.candidate_id
 
     $adoptedText = Invoke-NextVariant -Next $candidate.next -VariantId 'adopt' -InputValues @{}
-    $adopted = $adoptedText | ConvertFrom-Json
-    Assert-True ($adopted.kind -eq 'orient') 'current-candidate adopt did not Orient'
+    $adoptedMutation = $adoptedText | ConvertFrom-Json
+    $adopted = Get-MutationAction -Envelope $adoptedMutation -ExpectedKind 'orient'
     $adoptedMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $adopted.action_id, '--section', 'requirements')) | ConvertFrom-Json
     Assert-True ($adoptedMaterial.section.markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements material'
 

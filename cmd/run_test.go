@@ -37,7 +37,7 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 
 	stdout, stderr, err = executeForTest(t, "stop", action.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	var state protocolStateOutput
+	var state mutationEnvelope
 	require.NoError(t, json.Unmarshal([]byte(stdout), &state))
 	assert.Equal(t, autopilot.RunStopped, state.State)
 	assert.Equal(t, autopilot.NextOperationResume, state.Next.Operation)
@@ -199,6 +199,7 @@ func TestMachineUsageValidationPrecedesRunstoreOpen(t *testing.T) {
 		args []string
 	}{
 		{name: "run budget", code: "invalid_budget", args: []string{"run", "inspect", "--budget", "1001", "--json"}},
+		{name: "run source file", code: "source_file_required", args: []string{"run", "inspect", "--source-file", "", "--json"}},
 		{name: "submit mode", code: "outcome_mode_required", args: []string{"_machine", "submit", "--run", "run-1", "--action", "action-1"}},
 		{name: "answer run", code: "run_id_required", args: []string{"_machine", "answer", "--run", "", "--action", "action-1"}},
 		{name: "skip action", code: "action_id_required", args: []string{"_machine", "skip", "--run", "run-1", "--action", ""}},
@@ -209,6 +210,158 @@ func TestMachineUsageValidationPrecedesRunstoreOpen(t *testing.T) {
 			repository := newCLIRepository(t)
 			args := append(append([]string(nil), test.args...), "--root", repository)
 			stdout, stderr, err := executeForTest(t, args...)
+			require.Error(t, err)
+			assert.Empty(t, stdout)
+			assert.Contains(t, stderr, `"code":"`+test.code+`"`)
+			assert.Contains(t, stderr, `"exit_code":2`)
+			_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+			require.ErrorIs(t, statErr, os.ErrNotExist)
+		})
+	}
+}
+
+func TestRunStartRecoveryPreservesOptionsAndDashLeadingGoal(t *testing.T) {
+	repository := newCLIRepository(t)
+	canonicalRepository, err := resolveRoot(repository)
+	require.NoError(t, err)
+	invalidSource := filepath.Join(t.TempDir(), "invalid-source.json")
+	require.NoError(t, os.WriteFile(invalidSource, []byte("{}\n"), 0o600))
+
+	stdout, stderr, err := executeForTest(
+		t,
+		"run", "--budget", "9", "--no-review", "--source-file", invalidSource,
+		"--root", repository, "--json", "--", "-leading goal",
+	)
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	var cliErr CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+	assert.Equal(t, "invalid_source", cliErr.Code)
+	assert.Equal(t, autopilot.NextOperationStart, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, []string{
+		"slipway", "run", "--budget", "9", "--json", "--root", canonicalRepository,
+		"--no-review", "--", "-leading goal",
+	}, cliErr.Next.Variants[0].BaseArgv)
+	resolved, resolveErr := cliErr.Next.Resolve("start-with-source", map[string]autopilot.NextInputValue{
+		"source_file": {Type: autopilot.NextInputPath, Value: "/tmp/retry-source.json"},
+	})
+	require.NoError(t, resolveErr)
+	assert.Equal(t, []string{
+		"slipway", "run", "--budget", "9", "--json", "--root", canonicalRepository,
+		"--no-review", "--source-file", "/tmp/retry-source.json", "--", "-leading goal",
+	}, resolved)
+	_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+
+	successRepository := newCLIRepository(t)
+	stdout, stderr, err = executeForTest(t, "run", "--root", successRepository, "--json", "--", "-leading goal")
+	require.NoError(t, err, stderr)
+	action := decodeMutationAction(t, stdout)
+	assert.Equal(t, "-leading goal", action.Goal)
+
+	rootFlagGoalRepository := newCLIRepository(t)
+	stdout, stderr, err = executeForTest(t, "run", "--root", rootFlagGoalRepository, "--json", "--", "--root")
+	require.NoError(t, err, stderr)
+	action = decodeMutationAction(t, stdout)
+	assert.Equal(t, "--root", action.Goal)
+
+	separatorGoalRepository := newCLIRepository(t)
+	stdout, stderr, err = executeForTest(t, "run", "--root", separatorGoalRepository, "--json", "--", "--")
+	require.NoError(t, err, stderr)
+	action = decodeMutationAction(t, stdout)
+	assert.Equal(t, "--", action.Goal)
+}
+
+func TestResumeSourceRecoveryPreservesReplacementBudget(t *testing.T) {
+	repository := newCLIRepository(t)
+	canonicalRepository, err := resolveRoot(repository)
+	require.NoError(t, err)
+	invalidSource := filepath.Join(t.TempDir(), "invalid-source.json")
+	require.NoError(t, os.WriteFile(invalidSource, []byte("{}\n"), 0o600))
+
+	stdout, stderr, err := executeForTest(
+		t,
+		"_machine", "resume", "run-1", "--budget", "9", "--source-file", invalidSource,
+		"--root", repository,
+	)
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	var cliErr CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+	assert.Equal(t, "invalid_source_candidate", cliErr.Code)
+	assert.Equal(t, exitCodeUsage, cliErr.ExitCode)
+	assert.Equal(t, autopilot.NextOperationResume, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, []string{
+		"slipway", "_machine", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
+	}, cliErr.Next.Variants[0].BaseArgv)
+	resolved, resolveErr := cliErr.Next.Resolve("refresh-source", map[string]autopilot.NextInputValue{
+		"source_file": {Type: autopilot.NextInputPath, Value: "/tmp/retry-source.json"},
+	})
+	require.NoError(t, resolveErr)
+	assert.Equal(t, []string{
+		"slipway", "_machine", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
+		"--source-file", "/tmp/retry-source.json",
+	}, resolved)
+	_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestFileAndFlagPreflightFailuresDoNotOpenRunstore(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		args    func(repository, path string) []string
+		code    string
+	}{
+		{
+			name: "blank goal",
+			args: func(repository, _ string) []string {
+				return []string{"run", "   ", "--root", repository, "--json"}
+			},
+			code: "goal_required",
+		},
+		{
+			name:    "invalid start source",
+			content: "{}\n",
+			args: func(repository, path string) []string {
+				return []string{"run", "goal", "--source-file", path, "--root", repository, "--json"}
+			},
+			code: "invalid_source",
+		},
+		{
+			name:    "invalid resume source candidate",
+			content: "{}\n",
+			args: func(repository, path string) []string {
+				return []string{"_machine", "resume", "run-1", "--source-file", path, "--root", repository}
+			},
+			code: "invalid_source_candidate",
+		},
+		{
+			name:    "invalid outcome",
+			content: `{"contract_version":2}`,
+			args: func(repository, path string) []string {
+				return []string{"_machine", "submit", "--run", "run-1", "--action", "action-1", "--outcome-file", path, "--root", repository}
+			},
+			code: "invalid_outcome",
+		},
+		{
+			name: "malformed budget flag",
+			args: func(repository, _ string) []string {
+				return []string{"run", "goal", "--budget", "not-an-integer", "--root", repository, "--json"}
+			},
+			code: "invalid_usage",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := newCLIRepository(t)
+			path := filepath.Join(t.TempDir(), "input.json")
+			if test.content != "" {
+				require.NoError(t, os.WriteFile(path, []byte(test.content), 0o600))
+			}
+			stdout, stderr, err := executeForTest(t, test.args(repository, path)...)
 			require.Error(t, err)
 			assert.Empty(t, stdout)
 			assert.Contains(t, stderr, `"code":"`+test.code+`"`)
@@ -413,7 +566,7 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-file", candidatePath, "--budget", "20")
 	require.NoError(t, err, stderr)
 	require.NoError(t, os.Remove(candidatePath))
-	var paused protocolStateOutput
+	var paused mutationEnvelope
 	require.NoError(t, json.Unmarshal([]byte(stdout), &paused))
 	assert.Equal(t, autopilot.RunPaused, paused.State)
 	assert.Equal(t, autopilot.PauseDecisionRequired, paused.PauseReason)

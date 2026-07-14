@@ -45,12 +45,23 @@ type UninstallOptions struct {
 	Tools []string
 }
 
+type TransactionOutcome string
+
+const (
+	TransactionOutcomeCommitted    TransactionOutcome = "committed"
+	TransactionOutcomeRolledBack   TransactionOutcome = "rolled_back"
+	TransactionOutcomeNotCommitted TransactionOutcome = "not_committed"
+	TransactionOutcomeAmbiguous    TransactionOutcome = "ambiguous"
+)
+
 type ChangeReport struct {
-	Hosts     []string `json:"hosts"`
-	Written   []string `json:"written,omitempty"`
-	Removed   []string `json:"removed,omitempty"`
-	Preserved []string `json:"preserved,omitempty"`
-	Warnings  []string `json:"warnings,omitempty"`
+	Hosts              []string           `json:"hosts"`
+	TransactionOutcome TransactionOutcome `json:"transaction_outcome"`
+	Written            []string           `json:"written,omitempty"`
+	Removed            []string           `json:"removed,omitempty"`
+	Preserved          []string           `json:"preserved,omitempty"`
+	RecoveryArtifacts  []string           `json:"recovery_artifacts,omitempty"`
+	Warnings           []string           `json:"warnings,omitempty"`
 }
 
 type HostStatus struct {
@@ -90,20 +101,20 @@ type hostPlan struct {
 }
 
 func Install(options InstallOptions) (ChangeReport, error) {
+	report := ChangeReport{TransactionOutcome: TransactionOutcomeNotCommitted}
 	root, err := validatedRoot(options.Root)
 	if err != nil {
-		return ChangeReport{}, err
+		return report, err
 	}
 	selected, err := resolveHosts(root, options.Tools, true)
 	if err != nil {
-		return ChangeReport{}, err
+		return report, err
 	}
-	report := ChangeReport{}
 	var operations []fsutil.FileTransactionOp
 	for _, host := range selected {
 		plan, err := planInstall(root, host, options.Refresh)
 		if err != nil {
-			return ChangeReport{}, err
+			return transactionFailureReport(root, report, err), err
 		}
 		report.Hosts = append(report.Hosts, host.ID)
 		report.Written = append(report.Written, plan.written...)
@@ -115,24 +126,25 @@ func Install(options InstallOptions) (ChangeReport, error) {
 	if err := fsutil.ApplyFileTransactionWithin(root, operations); err != nil {
 		return transactionFailureReport(root, report, err), fmt.Errorf("install adapters transactionally: %w", err)
 	}
+	report.TransactionOutcome = TransactionOutcomeCommitted
 	return normalizeReport(report), nil
 }
 
 func Uninstall(options UninstallOptions) (ChangeReport, error) {
+	report := ChangeReport{TransactionOutcome: TransactionOutcomeNotCommitted}
 	root, err := validatedRoot(options.Root)
 	if err != nil {
-		return ChangeReport{}, err
+		return report, err
 	}
 	selected, err := uninstallHosts(root, options.Tools)
 	if err != nil {
-		return ChangeReport{}, err
+		return report, err
 	}
-	report := ChangeReport{}
 	var operations []fsutil.FileTransactionOp
 	for _, host := range selected {
 		plan, err := planUninstall(root, host)
 		if err != nil {
-			return ChangeReport{}, err
+			return transactionFailureReport(root, report, err), err
 		}
 		report.Hosts = append(report.Hosts, host.ID)
 		report.Removed = append(report.Removed, plan.removed...)
@@ -143,27 +155,45 @@ func Uninstall(options UninstallOptions) (ChangeReport, error) {
 	if err := fsutil.ApplyFileTransactionWithin(root, operations); err != nil {
 		return transactionFailureReport(root, report, err), fmt.Errorf("uninstall adapters transactionally: %w", err)
 	}
+	report.TransactionOutcome = TransactionOutcomeCommitted
 	return normalizeReport(report), nil
 }
 
 func transactionFailureReport(root string, report ChangeReport, transactionErr error) ChangeReport {
-	var cleanupErr *fsutil.FileTransactionCleanupError
-	if !errors.As(transactionErr, &cleanupErr) {
+	report.TransactionOutcome = classifyTransactionOutcome(transactionErr)
+	if report.TransactionOutcome != TransactionOutcomeCommitted {
 		report.Written = nil
 		report.Removed = nil
 	}
 	recoveries := transactionRecoveryErrors(transactionErr)
 	for _, recovery := range recoveries {
-		report.Preserved = append(report.Preserved, relativeToRoot(root, recovery.OriginalPath))
+		artifactPath := recovery.OriginalPath
 		if recovery.RecoveryPath != "" && !recovery.Reattached {
-			report.Preserved = append(report.Preserved, relativeToRoot(root, recovery.RecoveryPath))
+			artifactPath = recovery.RecoveryPath
 		}
+		report.RecoveryArtifacts = append(report.RecoveryArtifacts, relativeToRoot(root, artifactPath))
 		report.Warnings = append(report.Warnings, recovery.Error())
 	}
-	if cleanupErr != nil && len(recoveries) == 0 {
+	var cleanupErr *fsutil.FileTransactionCleanupError
+	if errors.As(transactionErr, &cleanupErr) && len(recoveries) == 0 {
 		report.Warnings = append(report.Warnings, cleanupErr.Error())
 	}
 	return normalizeReport(report)
+}
+
+func classifyTransactionOutcome(transactionErr error) TransactionOutcome {
+	var transaction *fsutil.FileTransactionError
+	if errors.As(transactionErr, &transaction) {
+		if len(transaction.RollbackErrs) == 0 {
+			return TransactionOutcomeRolledBack
+		}
+		return TransactionOutcomeAmbiguous
+	}
+	var cleanup *fsutil.FileTransactionCleanupError
+	if errors.As(transactionErr, &cleanup) {
+		return TransactionOutcomeCommitted
+	}
+	return TransactionOutcomeNotCommitted
 }
 
 func transactionRecoveryErrors(err error) []*fsutil.FileTransactionRecoveryError {
@@ -262,17 +292,22 @@ func Doctor(root string) (DoctorReport, error) {
 			return DoctorReport{}, err
 		}
 		switch {
+		case inspection.SentinelModified:
+			detail := "generated sentinel was modified and is preserved as user content"
+			if inspection.Modified > 1 {
+				detail += fmt.Sprintf("; %d additional managed files changed or missing", inspection.Modified-1)
+			}
+			detail += "; inspect it and remove it manually before slipway install --refresh if regeneration is desired"
+			report.Checks = append(report.Checks, DoctorCheck{
+				Code: "adapter_modified", Status: "warning", HostID: host.ID, Name: "adapter", Detail: detail,
+			})
 		case !inspection.Complete || inspection.SentinelMissing:
 			report.Checks = append(report.Checks, DoctorCheck{
 				Code: "adapter_refresh_required", Status: "warning", HostID: host.ID, Name: "adapter", Detail: "managed capability set or generated sentinel is incomplete or outdated; run slipway install --refresh",
 			})
 		case inspection.Modified > 0:
-			detail := fmt.Sprintf("%d managed files changed or missing", inspection.Modified)
-			if inspection.SentinelModified {
-				detail = "generated sentinel was modified; run slipway install --refresh to restore it"
-			}
 			report.Checks = append(report.Checks, DoctorCheck{
-				Code: "adapter_modified", Status: "warning", HostID: host.ID, Name: "adapter", Detail: detail,
+				Code: "adapter_modified", Status: "warning", HostID: host.ID, Name: "adapter", Detail: fmt.Sprintf("%d managed files changed or missing", inspection.Modified),
 			})
 		default:
 			report.Checks = append(report.Checks, DoctorCheck{
@@ -785,10 +820,18 @@ func relativeToRoot(root, path string) string {
 }
 
 func normalizeReport(report ChangeReport) ChangeReport {
+	if report.TransactionOutcome == "" {
+		report.TransactionOutcome = TransactionOutcomeNotCommitted
+	}
+	if report.TransactionOutcome != TransactionOutcomeCommitted {
+		report.Written = nil
+		report.Removed = nil
+	}
 	report.Hosts = uniqueSorted(report.Hosts)
 	report.Written = uniqueSorted(report.Written)
 	report.Removed = uniqueSorted(report.Removed)
 	report.Preserved = uniqueSorted(report.Preserved)
+	report.RecoveryArtifacts = uniqueSorted(report.RecoveryArtifacts)
 	report.Warnings = uniqueSorted(report.Warnings)
 	return report
 }
@@ -837,11 +880,10 @@ func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (
 		}
 		inspection.HealthyFiles[record.Path] = true
 	}
-	// The sentinel (.adapter-generated) is the generated support surface that
-	// install/refresh/uninstall maintain alongside the v2 ownership manifest. It
-	// is not ownership authority (the manifest is), but health must honestly
-	// reflect its state: a missing or modified sentinel means the generated
-	// surface is incomplete and refresh is required.
+	// The sentinel (.adapter-generated) is a generated health signal maintained
+	// alongside the v2 ownership manifest, not ownership authority. A missing
+	// sentinel can be refreshed; a modified sentinel is user content that requires
+	// explicit inspection or removal rather than an overwrite.
 	_, sentinelPath, err := ownershipPaths(root, host)
 	if err != nil {
 		return managedSurfaceInspection{}, err

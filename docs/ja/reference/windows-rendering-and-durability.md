@@ -4,7 +4,7 @@
 
 ## Structured argv が authority
 
-Recovery/pause は `next.operation`、workspace identity、typed variants を返します。各 variant の完全な `base_argv` に、schema 順で input flag と exact unquoted value を1 argv element として追加します。Display prose から command を再構築せず、`<answer>`/`<file>` placeholder を作りません。
+Recovery/pause は `next.operation`、workspace identity、typed variants を返します。各 variant の完全な `base_argv` に、schema 順で input flag と exact unquoted value を、唯一の `--` separator があればその直前へ挿入し、なければ末尾へ追加します。Display prose から command を再構築せず、`<answer>`/`<file>` placeholder を作りません。
 
 POSIX、`cmd.exe`、PowerShell の rendering は display/copy 専用で journal に保存されず、machine operation を変えません。Root、Issue URL、source/outcome file、answer、candidate recovery の space、quote、Unicode、CR/LF、`%`、`!`、`&`、`^` をそのまま保ちます。cmd expansion を避けるため PowerShell UTF-16LE `EncodedCommand` または同等の safe argv path を利用できます。`cmd.exe /v:on` と PowerShell の native process で実 argv を捕捉する必要があり、Linux cross-build は W evidence ではありません。
 

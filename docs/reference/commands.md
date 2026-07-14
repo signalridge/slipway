@@ -10,7 +10,7 @@ This English reference is non-normative. The [Chinese product contract](../zh/re
 slipway install [--root PATH] [--tool ID]... [--refresh] [--json]
 ```
 
-Installs six explicit host capabilities. Without `--tool`, uses detected hosts. `--tool all` selects every supported host. With `--json`, install returns exactly `{contract_version,hosts,written,removed,preserved,warnings}`; every list is present even when empty.
+Installs six explicit host capabilities. Without `--tool`, uses detected hosts. `--tool all` selects every supported host. With `--json`, install returns exactly `{contract_version,hosts,transaction_outcome,written,removed,preserved,recovery_artifacts,warnings}`; every list is present even when empty. `transaction_outcome` is `committed|rolled_back|not_committed|ambiguous`. `preserved` is ordinary user-modified ownership content; retained transaction/quarantine paths are reported separately in `recovery_artifacts`. Non-committed outcomes never claim planned `written` or `removed` paths.
 A first install does not require `--refresh`. If a current ownership manifest already exists, plain `install` leaves it unchanged; use `--refresh` to repair missing pristine files or update owned capabilities. A marker without a current manifest produces a no-op safety warning. Any non-current manifest is unreadable and the command fails without mutation.
 
 ## `slipway uninstall`
@@ -23,7 +23,7 @@ Removes only hash-matching managed files. Modified files are preserved and repor
 
 ## `slipway list`
 
-Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface (missing/modified capability file or generated `.adapter-generated` sentinel) is not reported as healthy; any non-current manifest makes list fail closed. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
+Lists every adapter with `detected`, `installed`, `needs_refresh`, and capability information. An incomplete current managed surface (missing/modified capability file or generated `.adapter-generated` sentinel) is not reported as healthy; any non-current manifest makes list fail closed. `needs_refresh` denotes drift, not permission to overwrite user changes: refresh can recreate missing pristine content, while modified files and a modified sentinel remain preserved until the user explicitly handles them. JSON is exactly `{contract_version,hosts:[{id,detected,installed,needs_refresh,capabilities}]}`; an empty result is `{"contract_version":2,"hosts":[]}`.
 
 ## `slipway doctor`
 

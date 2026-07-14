@@ -14,9 +14,8 @@ import (
 type fileTransactionOpKind string
 
 const (
-	fileTransactionOpWrite     fileTransactionOpKind = "write"
-	fileTransactionOpRemove    fileTransactionOpKind = "remove"
-	fileTransactionOpRemoveAll fileTransactionOpKind = "remove_all"
+	fileTransactionOpWrite  fileTransactionOpKind = "write"
+	fileTransactionOpRemove fileTransactionOpKind = "remove"
 )
 
 type fileTransactionPrecondition string
@@ -71,12 +70,6 @@ func RemoveFileTransactionOp(path string) FileTransactionOp {
 	return FileTransactionOp{kind: fileTransactionOpRemove, path: path}
 }
 
-// RemoveAllTransactionOp returns a transaction operation that removes a file,
-// symbolic link, or directory tree when it exists.
-func RemoveAllTransactionOp(path string) FileTransactionOp {
-	return FileTransactionOp{kind: fileTransactionOpRemoveAll, path: path}
-}
-
 // WithExpectedMissing requires the path to still be absent when the operation
 // is applied.
 func (op FileTransactionOp) WithExpectedMissing() FileTransactionOp {
@@ -93,40 +86,26 @@ func (op FileTransactionOp) WithExpectedSHA256(expected string) FileTransactionO
 	return op
 }
 
-// FileTransactionHook is a deterministic, per-transaction test hook. The
+// fileTransactionHook is a deterministic, per-transaction test hook. The
 // recovery path is empty until a path has been moved into private quarantine.
-type FileTransactionHook func(originalPath, recoveryPath string) error
+type fileTransactionHook func(originalPath, recoveryPath string) error
 
-// FileTransactionHooks exposes exact transaction windows for adversarial tests.
+// fileTransactionHooks exposes exact transaction windows for adversarial tests.
 // Hooks belong to one transaction; no package-global mutation is involved.
-type FileTransactionHooks struct {
-	BeforeMutation                            FileTransactionHook
-	AfterMutation                             FileTransactionHook
-	AfterGuardBeforeQuarantine                FileTransactionHook
-	AfterQuarantineBeforeValidation           FileTransactionHook
-	AfterValidationBeforeRestore              FileTransactionHook
-	DuringExclusiveRestore                    FileTransactionHook
-	AfterRestoreBeforePostValidation          FileTransactionHook
-	DuringQuarantineCleanup                   FileTransactionHook
-	AfterQuarantineValidationBeforeRelocation FileTransactionHook
-}
-
-// ApplyFileTransaction applies ordered file writes/removes. If an operation
-// fails, safely attributable mutations are rolled back. Concurrent user paths
-// are preserved and reported.
-func ApplyFileTransaction(ops []FileTransactionOp) error {
-	return applyFileTransactionAt("", ops, FileTransactionHooks{}, false)
-}
-
-// ApplyFileTransactionWithHooks applies a transaction with deterministic
-// concurrency hooks. It is intended for adversarial tests.
-func ApplyFileTransactionWithHooks(ops []FileTransactionOp, hooks FileTransactionHooks) error {
-	return applyFileTransactionAt("", ops, hooks, false)
+type fileTransactionHooks struct {
+	BeforeMutation                            fileTransactionHook
+	AfterMutation                             fileTransactionHook
+	AfterGuardBeforeQuarantine                fileTransactionHook
+	AfterQuarantineBeforeValidation           fileTransactionHook
+	AfterValidationBeforeRestore              fileTransactionHook
+	DuringExclusiveRestore                    fileTransactionHook
+	AfterRestoreBeforePostValidation          fileTransactionHook
+	DuringQuarantineCleanup                   fileTransactionHook
+	AfterQuarantineValidationBeforeRelocation fileTransactionHook
 }
 
 type fileSnapshot struct {
 	existed        bool
-	isDir          bool
 	isSymlink      bool
 	data           []byte
 	linkTarget     string
@@ -135,15 +114,6 @@ type fileSnapshot struct {
 	parentObserved bool
 	parentExisted  bool
 	parentIdentity os.FileInfo
-	entries        []fileTreeSnapshotEntry
-}
-
-type fileTreeSnapshotEntry struct {
-	rel      string
-	isDir    bool
-	data     []byte
-	perm     os.FileMode
-	identity os.FileInfo
 }
 
 type appliedFileTransactionOp struct {
@@ -341,7 +311,7 @@ func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *tra
 			if writeErr != nil {
 				return transactionFailure(fmt.Errorf("write %s: %w", op.path, writeErr), applied, filesystem)
 			}
-		case fileTransactionOpRemove, fileTransactionOpRemoveAll:
+		case fileTransactionOpRemove:
 			item.mutationApplied = moved
 		}
 		if err := callFileTransactionHook(filesystem.hooks.AfterMutation, op.path, recoveryPath(quarantine)); err != nil {
@@ -518,10 +488,7 @@ func missingSnapshotWithParent(snapshot fileSnapshot) fileSnapshot {
 	}
 }
 
-func snapshotKind(snapshot fileSnapshot) fileTransactionOpKind {
-	if snapshot.isDir {
-		return fileTransactionOpRemoveAll
-	}
+func snapshotKind(fileSnapshot) fileTransactionOpKind {
 	return fileTransactionOpRemove
 }
 
@@ -540,27 +507,13 @@ func transactionSnapshotsMatch(actual, expected fileSnapshot, exactIdentity bool
 	if !expected.existed {
 		return true
 	}
-	if actual.isDir != expected.isDir || actual.isSymlink != expected.isSymlink ||
+	if actual.isSymlink != expected.isSymlink ||
 		!transactionModesMatch(actual.perm, expected.perm) || !slices.Equal(actual.data, expected.data) ||
 		actual.linkTarget != expected.linkTarget {
 		return false
 	}
 	if exactIdentity && expected.identity != nil && (actual.identity == nil || !os.SameFile(actual.identity, expected.identity)) {
 		return false
-	}
-	if len(actual.entries) != len(expected.entries) {
-		return false
-	}
-	for index := range expected.entries {
-		actualEntry := actual.entries[index]
-		expectedEntry := expected.entries[index]
-		if actualEntry.rel != expectedEntry.rel || actualEntry.isDir != expectedEntry.isDir ||
-			!transactionModesMatch(actualEntry.perm, expectedEntry.perm) || !slices.Equal(actualEntry.data, expectedEntry.data) {
-			return false
-		}
-		if exactIdentity && expectedEntry.identity != nil && (actualEntry.identity == nil || !os.SameFile(actualEntry.identity, expectedEntry.identity)) {
-			return false
-		}
 	}
 	return true
 }
@@ -585,7 +538,7 @@ func validateFileTransactionOps(ops []FileTransactionOp) error {
 			return errors.New("file transaction path is required")
 		}
 		switch op.kind {
-		case fileTransactionOpWrite, fileTransactionOpRemove, fileTransactionOpRemoveAll:
+		case fileTransactionOpWrite, fileTransactionOpRemove:
 		default:
 			return fmt.Errorf("unknown file transaction operation %q for %s", op.kind, op.path)
 		}
@@ -613,7 +566,7 @@ func checkFileTransactionPrecondition(op FileTransactionOp, before fileSnapshot)
 		}
 		return fmt.Errorf("%w: expected %s to be missing", ErrFileTransactionPrecondition, op.path)
 	case fileTransactionExpectSHA256:
-		if !before.existed || before.isDir || before.isSymlink {
+		if !before.existed || before.isSymlink {
 			return fmt.Errorf("%w: expected regular file %s", ErrFileTransactionPrecondition, op.path)
 		}
 		actual := sha256.Sum256(before.data)
@@ -626,7 +579,7 @@ func checkFileTransactionPrecondition(op FileTransactionOp, before fileSnapshot)
 	}
 }
 
-func callFileTransactionHook(hook FileTransactionHook, originalPath, recoveryPath string) error {
+func callFileTransactionHook(hook fileTransactionHook, originalPath, recoveryPath string) error {
 	if hook == nil {
 		return nil
 	}

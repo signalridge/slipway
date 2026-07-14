@@ -61,7 +61,7 @@ nix profile install github:signalridge/slipway
 
 ## 任意の package-manager チャネル
 
-Homebrew と Scoop は `GH_PAT` secret、AUR は AUR SSH key に依存します。いずれも GoReleaser の `skip_upload: auto` 対象なので、secret がない release では更新されない場合があります。任意チャネルであり、release gate ではありません。
+Homebrew、Scoop、AUR は独立した best-effort channel です。Core release は三つを明示的に skip し、archive、Linux package、checksum、SBOM、provenance、container を先に独立して公開します。`GH_PAT`（Homebrew/Scoop）または AUR SSH key がある場合だけ、失敗可能な別 publish/verify job を実行し、reproducible rebuild の archive checksum が公開済み core release と完全一致した場合だけ channel を更新します。Publisher、checksum verification、channel verification の失敗は core release を block も無効化もしないため、欠落・遅延する場合があります。利用前に表示 version を確認してください。
 
 ```bash
 brew install --cask signalridge/tap/slipway
@@ -79,7 +79,7 @@ scoop install signalridge/slipway
 slipway install --tool claude
 ```
 
-`claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` をサポートします。`--tool` は複数指定でき、`--tool all` も使えます。省略時は検出したホストだけを対象にします。
+`claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` をサポートします。`--tool` は複数指定でき、`--tool all` も使えます。省略時は検出したホストだけを対象にします。Copilot auto-detection は `.github/copilot`、`.github/prompts`、`.github/skills` のいずれかを認識し、生成 capability は `.github/skills` に配置します。
 
 ```bash
 slipway list

@@ -30,10 +30,6 @@ type mutationEnvelope struct {
 	BudgetApplied    *bool                       `json:"budget_applied,omitempty"`
 }
 
-// protocolStateOutput remains as an alias for tests that decode non-active
-// projections; its JSON shape is identical to mutationEnvelope.
-type protocolStateOutput = mutationEnvelope
-
 func makeRunCmd() *cobra.Command {
 	var root string
 	var sourceFile string
@@ -47,32 +43,35 @@ func makeRunCmd() *cobra.Command {
 			"  slipway run \"<bounded goal>\" --source-file FILE --budget 8 --json",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			goal := strings.TrimSpace(args[0])
+			if goal == "" {
+				return newUsageError("goal_required", "goal cannot be empty", defaultErrorNext())
+			}
 			if err := autopilot.ValidateBudget(budget); err != nil {
 				return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
 			}
 			if command.Flags().Changed("source-file") && sourceFile == "" {
 				return newUsageError("source_file_required", "source-file cannot be empty", defaultErrorNext())
 			}
-			service, err := openAutopilot(root)
+			workspace, err := resolveRoot(root)
 			if err != nil {
 				return err
 			}
-			defer func() { _ = service.Close() }()
-			workspace := service.RepositoryRoot()
-			startNext := runStartNext(workspace, args[0], budget, noReview, true)
+			startNext := runStartNext(workspace, goal, budget, noReview, true)
 			var pinnedSource *autopilot.PinnedSource
 			if sourceFile != "" {
 				imported, err := autopilot.ImportSourceFile(sourceFile)
 				if err != nil {
-					return &autopilot.ProtocolError{
-						Code:    "invalid_source",
-						Message: sourceImportErrorMessage(err),
-						Next:    startNext,
-					}
+					return newUsageError("invalid_source", sourceImportErrorMessage(err), startNext)
 				}
 				pinnedSource = &imported
 			}
-			run, err := service.Start(args[0], autopilot.CreateOptions{
+			service, err := openAutopilotResolved(workspace)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
+			run, err := service.Start(goal, autopilot.CreateOptions{
 				Budget:        budget,
 				ReviewEnabled: !noReview,
 				PinnedSource:  pinnedSource,
@@ -141,27 +140,38 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 			if fileSet && strings.TrimSpace(outcomeFile) == "" {
 				return newUsageError("outcome_file_required", "outcome-file cannot be empty", defaultErrorNext())
 			}
-			service, err := openAutopilot(*root)
+
+			workspace, err := resolveRoot(*root)
 			if err != nil {
 				return err
 			}
-			defer func() { _ = service.Close() }()
-			next := nextForRunOrNone(service, runID)
+			retryNext := submitRetryNext(workspace, runID, actionID, stdinSet)
 			reader, closeReader, err := outcomeReader(command, outcomeFile, stdinSet)
 			if err != nil {
-				return newUsageError("outcome_unavailable", err.Error(), next)
+				return newUsageError("outcome_unavailable", err.Error(), retryNext)
 			}
 			if closeReader != nil {
-				defer closeReader()
+				defer func() { _ = closeReader() }()
 			}
 			outcome, err := autopilot.DecodeOutcome(reader)
 			if err != nil {
 				var versionErr *autopilot.VersionError
 				if errors.As(err, &versionErr) {
-					return newRuntimeError("contract_version_mismatch", err.Error(), inputlessCommandNext(service.RepositoryRoot(), "refresh-adapters", "slipway", "install", "--refresh", "--root", service.RepositoryRoot()), nil)
+					return newRuntimeError(
+						"contract_version_mismatch",
+						err.Error(),
+						inputlessCommandNext(workspace, "refresh-adapters", "slipway", "install", "--refresh", "--root", workspace),
+						nil,
+					)
 				}
-				return newUsageError("invalid_outcome", err.Error(), next)
+				return newUsageError("invalid_outcome", err.Error(), retryNext)
 			}
+
+			service, err := openAutopilotResolved(workspace)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = service.Close() }()
 			run, err := service.Submit(runID, actionID, outcome)
 			if err != nil {
 				return err
@@ -277,6 +287,11 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 					return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
 				}
 			}
+			var replacementBudget *int
+			if budgetSet {
+				replacement := budget
+				replacementBudget = &replacement
+			}
 			if sourceFileSet && sourceFile == "" {
 				return newUsageError("source_file_required", "source-file cannot be empty", defaultErrorNext())
 			}
@@ -300,29 +315,24 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", defaultErrorNext())
 			}
 
-			service, err := openAutopilot(*root)
+			workspace, err := resolveRoot(*root)
 			if err != nil {
 				return err
 			}
-			defer func() { _ = service.Close() }()
-			next := nextForResumeOrNone(service, args[0])
 			var refreshedSource *autopilot.SourceCandidateInput
 			if sourceFileSet {
 				imported, err := autopilot.ImportSourceCandidateFile(sourceFile)
 				if err != nil {
-					return &autopilot.ProtocolError{
-						Code:    "invalid_source_candidate",
-						Message: sourceImportErrorMessage(err),
-						Next:    next,
-					}
+					return newUsageError("invalid_source_candidate", sourceImportErrorMessage(err), resumeSourceNext(workspace, args[0], replacementBudget))
 				}
 				refreshedSource = &imported
 			}
-			var replacementBudget *int
-			if budgetSet {
-				replacement := budget
-				replacementBudget = &replacement
+
+			service, err := openAutopilotResolved(workspace)
+			if err != nil {
+				return err
 			}
+			defer func() { _ = service.Close() }()
 			run, err := service.Resume(args[0], autopilot.ResumeOptions{
 				Budget:          replacementBudget,
 				RefreshedSource: refreshedSource,
@@ -349,6 +359,10 @@ func openAutopilot(root string) (*autopilot.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	return openAutopilotResolved(resolved)
+}
+
+func openAutopilotResolved(resolved string) (*autopilot.Service, error) {
 	service, err := autopilot.OpenService(resolved)
 	if err != nil {
 		return nil, newRuntimeError(
@@ -399,6 +413,9 @@ func sourceImportErrorMessage(err error) string {
 }
 
 func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
+	if run.State == autopilot.RunActive && run.CurrentAction == nil {
+		return errors.New("active protocol result requires a current action")
+	}
 	next, err := autopilot.DeriveNext(run)
 	if err != nil {
 		return fmt.Errorf("derive next protocol operation: %w", err)
@@ -424,10 +441,11 @@ func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
 }
 
 func runStartNext(workspace, goal string, budget int, noReview, sourceRequired bool) autopilot.Next {
-	base := []string{"slipway", "run", goal, "--budget", fmt.Sprint(budget), "--json", "--root", workspace}
+	base := []string{"slipway", "run", "--budget", fmt.Sprint(budget), "--json", "--root", workspace}
 	if noReview {
 		base = append(base, "--no-review")
 	}
+	base = append(base, "--", goal)
 	inputs := []autopilot.NextInput{}
 	variantID := "retry-run"
 	if sourceRequired {
@@ -437,26 +455,36 @@ func runStartNext(workspace, goal string, budget int, noReview, sourceRequired b
 	return commandNext(workspace, autopilot.NextOperationStart, variantID, base, inputs)
 }
 
-func nextForRunOrNone(service *autopilot.Service, runID string) autopilot.Next {
-	run, err := service.Load(runID)
-	if err != nil {
-		return autopilot.NoneNext(service.RepositoryRoot())
+func submitRetryNext(workspace, runID, actionID string, stdin bool) autopilot.Next {
+	base := []string{"slipway", "_machine", "submit", "--run", runID, "--action", actionID, "--root", workspace}
+	if stdin {
+		return commandNext(
+			workspace,
+			autopilot.NextOperationAction,
+			"submit-outcome-stdin",
+			append(base, "--outcome-stdin"),
+			[]autopilot.NextInput{},
+		)
 	}
-	next, err := autopilot.DeriveNext(run)
-	if err != nil {
-		return autopilot.NoneNext(service.RepositoryRoot())
-	}
-	return next
+	return commandNext(
+		workspace,
+		autopilot.NextOperationAction,
+		"submit-outcome-file",
+		base,
+		[]autopilot.NextInput{{Name: "outcome_file", Type: autopilot.NextInputPath, Flag: "--outcome-file", Required: true}},
+	)
 }
 
-func nextForResumeOrNone(service *autopilot.Service, runID string) autopilot.Next {
-	run, err := service.Load(runID)
-	if err != nil {
-		return autopilot.NoneNext(service.RepositoryRoot())
+func resumeSourceNext(workspace, runID string, budget *int) autopilot.Next {
+	base := []string{"slipway", "_machine", "resume", runID, "--root", workspace}
+	if budget != nil {
+		base = append(base, "--budget", fmt.Sprint(*budget))
 	}
-	next, err := autopilot.DeriveResumeNext(run)
-	if err != nil {
-		return autopilot.NoneNext(service.RepositoryRoot())
-	}
-	return next
+	return commandNext(
+		workspace,
+		autopilot.NextOperationResume,
+		"refresh-source",
+		base,
+		[]autopilot.NextInput{{Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true}},
+	)
 }

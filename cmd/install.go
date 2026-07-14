@@ -10,22 +10,26 @@ import (
 )
 
 type changeReportOutput struct {
-	ContractVersion int      `json:"contract_version"`
-	Hosts           []string `json:"hosts"`
-	Written         []string `json:"written"`
-	Removed         []string `json:"removed"`
-	Preserved       []string `json:"preserved"`
-	Warnings        []string `json:"warnings"`
+	ContractVersion    int                        `json:"contract_version"`
+	Hosts              []string                   `json:"hosts"`
+	TransactionOutcome adapter.TransactionOutcome `json:"transaction_outcome"`
+	Written            []string                   `json:"written"`
+	Removed            []string                   `json:"removed"`
+	Preserved          []string                   `json:"preserved"`
+	RecoveryArtifacts  []string                   `json:"recovery_artifacts"`
+	Warnings           []string                   `json:"warnings"`
 }
 
 func makeChangeReportOutput(report adapter.ChangeReport) changeReportOutput {
 	return changeReportOutput{
-		ContractVersion: machineContractVersion,
-		Hosts:           append([]string{}, report.Hosts...),
-		Written:         append([]string{}, report.Written...),
-		Removed:         append([]string{}, report.Removed...),
-		Preserved:       append([]string{}, report.Preserved...),
-		Warnings:        append([]string{}, report.Warnings...),
+		ContractVersion:    machineContractVersion,
+		Hosts:              append([]string{}, report.Hosts...),
+		TransactionOutcome: report.TransactionOutcome,
+		Written:            append([]string{}, report.Written...),
+		Removed:            append([]string{}, report.Removed...),
+		Preserved:          append([]string{}, report.Preserved...),
+		RecoveryArtifacts:  append([]string{}, report.RecoveryArtifacts...),
+		Warnings:           append([]string{}, report.Warnings...),
 	}
 }
 
@@ -86,6 +90,11 @@ func writeChangeReport(cmd *cobra.Command, verb string, report adapter.ChangeRep
 	}
 	for _, path := range report.Preserved {
 		if _, err := fmt.Fprintf(w, "  preserved user-modified %s\n", path); err != nil {
+			return err
+		}
+	}
+	for _, path := range report.RecoveryArtifacts {
+		if _, err := fmt.Fprintf(w, "  recovery artifact: %s\n", path); err != nil {
 			return err
 		}
 	}

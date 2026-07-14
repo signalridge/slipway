@@ -13,10 +13,10 @@ import (
 func TestAdapterMutationErrorPreservesReportAndDisablesBlindRetry(t *testing.T) {
 	t.Parallel()
 	report := adapter.ChangeReport{
-		Hosts:     []string{"claude"},
-		Written:   []string{".claude/skills/slipway-run/SKILL.md"},
-		Preserved: []string{".claude/slipway/recovery-file"},
-		Warnings:  []string{"rollback preserved a concurrent edit"},
+		Hosts:              []string{"claude"},
+		TransactionOutcome: adapter.TransactionOutcomeAmbiguous,
+		RecoveryArtifacts:  []string{".claude/slipway/recovery-file"},
+		Warnings:           []string{"rollback preserved a concurrent edit"},
 	}
 
 	cliErr := adapterMutationError("install_failed", errors.New("transaction failed"), "/workspace", report)

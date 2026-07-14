@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-07-13.
+Accepted — 2026-07-13. Adopted by the live v2 body of Issue #434, which supersedes that Issue's earlier v1 source/protocol sections. This ADR records the technical decision and rationale; it does not compete with the live product definition or the versioned machine schema.
 
 ## Context
 

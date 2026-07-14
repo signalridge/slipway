@@ -6,8 +6,8 @@ package recoverycmd
 
 import "strings"
 
-// Quote quotes one argument for a POSIX shell.
-func Quote(value string) string {
+// quote quotes one argument for a POSIX shell.
+func quote(value string) string {
 	if value != "" && !strings.ContainsAny(value, " \t\r\n\"'\\$`;&|<>()[]{}*?!#~") {
 		return value
 	}
@@ -18,7 +18,7 @@ func Quote(value string) string {
 func Command(arguments ...string) string {
 	quoted := make([]string, len(arguments))
 	for index, argument := range arguments {
-		quoted[index] = Quote(argument)
+		quoted[index] = quote(argument)
 	}
 	return strings.Join(quoted, " ")
 }

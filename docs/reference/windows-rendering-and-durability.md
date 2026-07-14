@@ -4,7 +4,7 @@
 
 ## Structured argv is authority
 
-Recovery and pause responses expose `next.operation`, a workspace identity, and typed variants. Each variant has a complete `base_argv` and ordered inputs. Resolve by appending each input flag and its exact, unquoted value as one argv element. Never reconstruct a command from display prose and never substitute literal `<answer>` or `<file>` placeholders.
+Recovery and pause responses expose `next.operation`, a workspace identity, and typed variants. Each variant has a complete `base_argv` and ordered inputs. Resolve in schema order by inserting each input flag and its exact, unquoted value immediately before the sole `--` separator when present, or appending it when absent. Never reconstruct a command from display prose and never substitute literal `<answer>` or `<file>` placeholders.
 
 Slipway renders a complete resolved argv separately for POSIX, `cmd.exe`, and PowerShell. Rendering is for display/copy only and is not journaled. It must preserve spaces, quotes, Unicode, CR/LF, `%`, `!`, `&`, and `^` in root paths, Issue URLs, source/outcome files, answers, and recovery choices. Because `%` and `!` can expand in cmd, the renderer may use a PowerShell UTF-16LE `EncodedCommand` or an equivalent safe argv path. Native tests must capture the actual process argv under both `cmd.exe /v:on` and PowerShell; a Linux cross-build proves only compilation.
 

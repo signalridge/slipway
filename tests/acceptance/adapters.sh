@@ -197,8 +197,10 @@ specific = {
 repo = Path(sys.argv[2])
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
-assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
+assert set(report) == {"contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"}, report
 assert report["contract_version"] == 2, report
+assert report["transaction_outcome"] == "committed", report
+assert report["recovery_artifacts"] == [], report
 assert report["hosts"] == hosts, report
 expected_written = len(hosts) * (len(capabilities) + 1 + 2) + len(capabilities)
 assert len(report["written"]) == expected_written, {"expected": expected_written, "report": report}
@@ -390,8 +392,10 @@ roots = {
 }
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
-assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
+assert set(report) == {"contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"}, report
 assert report["contract_version"] == 2, report
+assert report["transaction_outcome"] == "committed", report
+assert report["recovery_artifacts"] == [], report
 expected = {f"{root}/slipway-review/SKILL.md" for root in roots.values()}
 assert set(report["preserved"]) == expected, report
 for host, root in roots.items():
@@ -433,8 +437,10 @@ roots = {
 repo = Path(sys.argv[2])
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
-assert set(report) == {"contract_version", "hosts", "written", "removed", "preserved", "warnings"}, report
+assert set(report) == {"contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"}, report
 assert report["contract_version"] == 2, report
+assert report["transaction_outcome"] == "committed", report
+assert report["recovery_artifacts"] == [], report
 assert report["hosts"] == hosts, report
 expected_preserved = {f"{root}/slipway-implement/SKILL.md" for root in skills.values()}
 assert set(report["preserved"]) == expected_preserved, report

@@ -1,10 +1,10 @@
 # 运行日志与隐私
 
-恢复数据位于 Git common directory：`.git/slipway/runs/<run-id>/{journal.jsonl,run.json,run.lock}`。`journal.jsonl` 是唯一 append-only 恢复权威；`run.json` 是可重建 projection；`run.lock` 只串行 journal mutation。Unix 目标权限为目录 `0700`、leaf `0600`。旧 `events.jsonl` 以及 `runtime/cache/scope-root/scopes/locks/processes/repair-backups` 是 unowned residue：Run 忽略，doctor 只看 top-level name 给 advisory，任何命令都不读、迁移、别名或删除其任务内容。
+恢复数据位于 Git common directory：`.git/slipway/runs/<run-id>/{journal.jsonl,run.json,run.lock}`，但 workspace identity 仍按 worktree 区分。无 ID 的 `status` 只列当前 canonical workspace 所属 Run；兄弟 linked worktree 的 Run 即使物理上共享 common directory，也不会出现在列表中，且只能从原 workspace 查看恢复路由或执行 mutation。`journal.jsonl` 是唯一 append-only 恢复权威；`run.json` 是可重建 projection；`run.lock` 只串行 journal mutation。Unix 目标权限为目录 `0700`、leaf `0600`。旧 `events.jsonl` 以及 `runtime/cache/scope-root/scopes/locks/processes/repair-backups` 是 unowned residue：Run 忽略，doctor 只看 top-level name 给 advisory，任何命令都不读、迁移、别名或删除其任务内容。
 
 ## 保存内容与真实隐私承诺
 
-Journal 包含原始 goal、canonical workspace identity、immutable initial Git observation、Git delta、issue-bound accepted five-section Requirements、Actions/Outcomes、answers 与 supersession metadata、skip/stop、source choice、destructive request/grant、budget、如实的 activity command summaries、known issues 和 uncertainties。**Goal、accepted Requirements、用户回答与命令摘要可能包含敏感文本。** Source import 或 journal creation 前必须警告，并把 `.git/slipway/runs/` 当作本地私密数据。
+Journal 包含原始 goal、canonical workspace identity、immutable initial Git observation、structured Git delta、bounded issue-source chapter catalog/provenance、Actions/Outcomes、answers 与 supersession metadata、skip/stop、source choice、destructive request/grant、budget、如实的 activity command summaries、known issues 和 uncertainties。Accepted chapter Markdown 只在私有 content-addressed `materials/` 中存一份，不复制到每个 Action 或 journal event。**Goal、accepted Requirements、用户回答与命令摘要可能包含敏感文本。** Source import 或 journal creation 前必须警告，并把 `.git/slipway/runs/` 当作本地私密数据。
 
 Slipway 不绝对承诺 journal 没有 secret。它承诺最小化：不主动收 GitHub token、credential store、raw Issue body、raw/full comments、环境变量 dump、无关文件内容、完整会话 transcript 或 hidden reasoning。Source 只保存 accepted sections、identity 和 revisions。Git path observation 只含 category/state、size、bounded SHA-256；regular hash 超过 16 MiB 或 unreadable 时只记状态。
 

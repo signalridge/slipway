@@ -160,6 +160,52 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	}, argv)
 }
 
+func TestResolveStartNextInsertsInputsBeforeGoalSeparator(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	next, err := NewCommandNext(
+		NextOperationStart,
+		workspace,
+		"start-with-source",
+		[]string{"slipway", "run", "--budget", "9", "--json", "--root", workspace, "--no-review", "--", "-leading goal"},
+		[]NextInput{{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}},
+	)
+	require.NoError(t, err)
+
+	argv, err := next.Resolve("start-with-source", map[string]NextInputValue{
+		"source_file": {Type: NextInputPath, Value: "/tmp/source.json"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"slipway", "run", "--budget", "9", "--json", "--root", workspace,
+		"--no-review", "--source-file", "/tmp/source.json", "--", "-leading goal",
+	}, argv)
+}
+
+func TestStartNextAllowsFlagLikeGoals(t *testing.T) {
+	for _, goal := range []string{"--root", "--"} {
+		goal := goal
+		t.Run(goal, func(t *testing.T) {
+			t.Parallel()
+			workspace := t.TempDir()
+			next, err := NewCommandNext(
+				NextOperationStart,
+				workspace,
+				"retry-run",
+				[]string{"slipway", "run", "--budget", "4", "--json", "--root", workspace, "--", goal},
+				[]NextInput{},
+			)
+			require.NoError(t, err)
+
+			argv, err := next.Resolve("retry-run", map[string]NextInputValue{})
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"slipway", "run", "--budget", "4", "--json", "--root", workspace, "--", goal,
+			}, argv)
+		})
+	}
+}
+
 func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
@@ -242,6 +288,18 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 		{name: "duplicate input", mutate: func(next *Next) {
 			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "--value"}, {Name: "value", Type: NextInputPath, Flag: "--path"}}
 		}, want: "duplicated"},
+		{name: "operation family mismatch", mutate: func(next *Next) { next.Operation = NextOperationAction }, want: "operation action"},
+		{name: "skip action grammar mismatch", mutate: func(next *Next) { next.Variants[0].ID = "skip-action" }, want: "_machine skip"},
+		{name: "skip action rejects extra argv", mutate: func(next *Next) {
+			next.Variants[0].ID = "skip-action"
+			next.Variants[0].BaseArgv = []string{
+				"slipway", "_machine", "skip", "--run", "run-1", "--action", "action-1", "--root", workspace, "--extra",
+			}
+		}, want: "exact slipway _machine skip"},
+		{name: "command cannot carry run grammar", mutate: func(next *Next) {
+			next.Operation = NextOperationCommand
+			next.Variants[0].BaseArgv = []string{"slipway", "run", "--root", workspace, "--", "goal"}
+		}, want: "must not carry run"},
 	}
 	for _, test := range tests {
 		test := test

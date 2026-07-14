@@ -219,7 +219,7 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 		return Run{}, &ProtocolError{Code: "goal_required", Message: "goal cannot be empty", Next: NoneNext(identity.ID)}
 	}
 	if err := ValidateBudget(options.Budget); err != nil {
-		return Run{}, &ProtocolError{Code: "invalid_budget", Message: err.Error(), Next: startRunNext(workspace, goal, false)}
+		return Run{}, &ProtocolError{Code: "invalid_budget", Message: err.Error(), Next: startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, false)}
 	}
 	pinnedSource := clonePinnedSource(options.PinnedSource)
 	if pinnedSource != nil {
@@ -227,20 +227,20 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 			return Run{}, &ProtocolError{
 				Code:    "invalid_source",
 				Message: "invalid pinned source: " + err.Error(),
-				Next:    startRunNext(workspace, goal, true),
+				Next:    startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, true),
 			}
 		}
 		if err := validateSourceMaterials(*pinnedSource, true); err != nil {
 			return Run{}, &ProtocolError{
 				Code:    "invalid_source",
 				Message: "invalid pinned source materials: " + err.Error(),
-				Next:    startRunNext(workspace, goal, true),
+				Next:    startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, true),
 			}
 		}
 	}
 	observation, err := runstore.ObserveGit(workspace)
 	if err != nil {
-		return Run{}, &ProtocolError{Code: "git_observation_failed", Message: err.Error(), Next: startRunNext(workspace, goal, pinnedSource != nil)}
+		return Run{}, &ProtocolError{Code: "git_observation_failed", Message: err.Error(), Next: startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, pinnedSource != nil)}
 	}
 	materials := runstoreMaterials(pinnedSource)
 	if pinnedSource != nil {
@@ -267,7 +267,7 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 	durableRun := runBeforeMutation(run)
 	if err := issueAction(&run, durableRun, ActionOrient, "Investigate repository facts, relevant code, Git state, and build/test/lint conventions before deciding what to do."); err != nil {
 		if protocolErr, ok := err.(*ProtocolError); ok {
-			protocolErr.Next = startRunNext(workspace, goal, pinnedSource != nil)
+			protocolErr.Next = startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, pinnedSource != nil)
 		}
 		return Run{}, err
 	}
@@ -789,7 +789,7 @@ func refreshIssueSource(run *Run, durableRun Run, refreshed SourceCandidateInput
 	}
 	if refreshed.IssueID != current.IssueID {
 		err := resumeProtocolError(*run, "source_issue_mismatch", "refreshed source belongs to a different issue; start a new run")
-		err.Next = startRunNext(run.Workspace, run.Goal, true)
+		err.Next = startRunNext(run.Workspace, run.Goal, run.InitialBudget, run.ReviewEnabled, true)
 		err.Details["pinned_issue_id"] = current.IssueID
 		err.Details["refreshed_issue_id"] = refreshed.IssueID
 		return "", false, err
@@ -803,7 +803,7 @@ func refreshIssueSource(run *Run, durableRun Run, refreshed SourceCandidateInput
 			"source_alias_limit",
 			"source transfer history exceeds the URL alias limit; start a new run from the refreshed source",
 		)
-		err.Next = startRunNext(run.Workspace, run.Goal, true)
+		err.Next = startRunNext(run.Workspace, run.Goal, run.InitialBudget, run.ReviewEnabled, true)
 		return "", false, err
 	}
 	if err := validateSourceCandidateInput(refreshed); err != nil {
@@ -2594,8 +2594,15 @@ func mustDeriveResumeNext(run Run) Next {
 	return NoneNext(run.WorkspaceIdentity.ID)
 }
 
-func startRunNext(workspace, goal string, sourceRequired bool) Next {
-	base := []string{"slipway", "run", goal, "--budget", fmt.Sprint(DefaultBudget), "--json", "--root", workspace}
+func startRunNext(workspace, goal string, budget int, reviewEnabled, sourceRequired bool) Next {
+	if ValidateBudget(budget) != nil {
+		budget = DefaultBudget
+	}
+	base := []string{"slipway", "run", "--budget", fmt.Sprint(budget), "--json", "--root", workspace}
+	if !reviewEnabled {
+		base = append(base, "--no-review")
+	}
+	base = append(base, "--", goal)
 	inputs := []NextInput{}
 	variantID := "retry-run"
 	if sourceRequired {

@@ -40,6 +40,9 @@ func newRootCmd() *cobra.Command {
 		SilenceErrors: true,
 		Version:       version,
 	}
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return newUsageError("invalid_usage", err.Error(), defaultErrorNext())
+	})
 	root.SetVersionTemplate(fmt.Sprintf("slipway %s\n  commit: %s\n  built:  %s\n", version, commit, date))
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(

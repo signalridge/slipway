@@ -73,7 +73,7 @@ nix profile install github:signalridge/slipway
 
 ## Optional package-manager channels
 
-Homebrew, Scoop, and AUR are optional release outputs. GoReleaser uses `skip_upload: auto` for them: Homebrew and Scoop publishing requires the `GH_PAT` secret, while AUR publishing requires an AUR SSH key. A release may therefore omit updates to these channels when the corresponding secret is unavailable; this does not make them release gates.
+Homebrew, Scoop, and AUR are optional release outputs. The core release explicitly skips all three and publishes archives, Linux packages, checksums, SBOMs, provenance, and the container independently. Separate best-effort jobs run only when `GH_PAT` (Homebrew/Scoop) or an AUR SSH key is available; before updating a channel, each job requires its reproducibly rebuilt archive checksums to match the already-published core release. Publisher, checksum-verification, or channel-verification failure cannot block or invalidate the core release, so an optional channel may be absent or lag behind. Confirm its displayed version before relying on it.
 
 ### Homebrew cask
 
@@ -107,6 +107,7 @@ slipway install --tool claude
 Use repeated `--tool`, a comma-separated value, or `--tool all`. Without `--tool`, Slipway installs adapters whose host directories it detects. `--refresh` updates only files whose ownership hash still matches.
 
 Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`.
+Copilot auto-detection recognizes any of `.github/copilot`, `.github/prompts`, or `.github/skills`; generated capabilities are installed under `.github/skills`.
 
 ```bash
 slipway list

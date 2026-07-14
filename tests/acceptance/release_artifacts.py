@@ -335,7 +335,9 @@ def native_linux_smoke(
     return True
 
 
-def validate(dist: Path, repo: Path, expected_version: str | None) -> dict[str, Any]:
+def validate(
+    dist: Path, repo: Path, expected_version: str | None, core_only: bool
+) -> dict[str, Any]:
     if not dist.is_dir():
         fail(f"GoReleaser output directory is missing: {dist}")
     artifacts_path = dist / "artifacts.json"
@@ -354,16 +356,30 @@ def validate(dist: Path, repo: Path, expected_version: str | None) -> dict[str, 
         fail(f"GoReleaser version differs: expected {expected_version!r}, got {version!r}")
 
     archives, contents = validate_archives(artifacts, dist, repo)
-    scoop = validate_scoop(artifacts, archives, dist, repo)
-    aur = validate_aur(artifacts, archives, dist, repo)
+    scoop: Path | None = None
+    aur: Path | None = None
+    optional_types = {"Homebrew Cask", "Scoop Manifest", "PKGBUILD", "SRCINFO"}
+    if core_only:
+        unexpected = sorted(
+            str(artifact.get("type"))
+            for artifact in artifacts
+            if artifact.get("type") in optional_types
+        )
+        if unexpected:
+            fail(f"core release unexpectedly contains optional publisher artifacts: {unexpected}")
+    else:
+        scoop = validate_scoop(artifacts, archives, dist, repo)
+        aur = validate_aur(artifacts, archives, dist, repo)
     validate_linux_packages(artifacts, dist, repo)
     native_smoke = native_linux_smoke(archives, contents)
     return {
         "archive_count": len(archives),
-        "aur": str(aur.relative_to(repo) if aur.is_relative_to(repo) else aur),
+        "aur": str(aur.relative_to(repo) if aur and aur.is_relative_to(repo) else aur) if aur else None,
         "license_sha256": sha256(repo / "LICENSE"),
         "native_linux_smoke": native_smoke,
-        "scoop": str(scoop.relative_to(repo) if scoop.is_relative_to(repo) else scoop),
+        "scoop": str(scoop.relative_to(repo) if scoop and scoop.is_relative_to(repo) else scoop)
+        if scoop
+        else None,
         "version": version,
     }
 
@@ -374,11 +390,16 @@ def main() -> int:
     parser.add_argument("--repo-root", type=Path, default=default_repo)
     parser.add_argument("--dist", type=Path, default=Path("dist"))
     parser.add_argument("--expected-version")
+    parser.add_argument(
+        "--core-only",
+        action="store_true",
+        help="validate core archives and Linux packages when optional publisher artifacts were skipped",
+    )
     args = parser.parse_args()
     repo = args.repo_root.resolve()
     dist = args.dist if args.dist.is_absolute() else repo / args.dist
     try:
-        summary = validate(dist.resolve(), repo, args.expected_version)
+        summary = validate(dist.resolve(), repo, args.expected_version, args.core_only)
     except (CheckFailure, OSError, UnicodeError, subprocess.SubprocessError) as error:
         print(f"release artifact smoke failed: {error}", file=sys.stderr)
         return 1

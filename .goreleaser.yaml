@@ -10,6 +10,9 @@ builds:
     binary: slipway
     env:
       - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
     goos:
       - linux
       - darwin
@@ -21,9 +24,11 @@ builds:
       - -s -w
       - -X github.com/signalridge/slipway/cmd.version={{.Version}}
       - -X github.com/signalridge/slipway/cmd.commit={{.ShortCommit}}
-      - -X github.com/signalridge/slipway/cmd.date={{.Date}}
+      - -X github.com/signalridge/slipway/cmd.date={{.CommitDate}}
 archives:
   - id: slipway
+    builds_info:
+      mtime: "{{ .CommitDate }}"
     formats:
       - tar.gz
     format_overrides:
@@ -32,8 +37,12 @@ archives:
           - zip
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
-      - README.md
-      - LICENSE
+      - src: README.md
+        info:
+          mtime: "{{ .CommitDate }}"
+      - src: LICENSE
+        info:
+          mtime: "{{ .CommitDate }}"
 checksum:
   name_template: checksums.txt
   algorithm: sha256
@@ -71,6 +80,7 @@ changelog:
       - "Merge pull request"
       - "Merge branch"
 release:
+  disable: '{{ index .Env "OPTIONAL_PUBLISH_ONLY" }}'
   github:
     owner: signalridge
     name: slipway
@@ -102,12 +112,13 @@ homebrew_casks:
     homepage: "https://github.com/signalridge/slipway"
     description: "User-controlled soft autopilot for AI coding"
     license: "BSD-3-Clause"
-    skip_upload: auto
+    skip_upload: true
     ids:
       - slipway
     binaries:
       - slipway
     url:
+      template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
       verified: github.com/signalridge/slipway/
     hooks:
       post:
@@ -124,7 +135,8 @@ scoops:
     homepage: "https://github.com/signalridge/slipway"
     description: "User-controlled soft autopilot for AI coding"
     license: BSD-3-Clause
-    skip_upload: auto
+    url_template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    skip_upload: true
 nfpms:
   - id: slipway
     package_name: slipway
@@ -152,13 +164,14 @@ nfpms:
 aurs:
   - name: slipway-bin
     homepage: "https://github.com/signalridge/slipway"
+    url_template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     description: "User-controlled soft autopilot for AI coding"
     maintainers:
       - "SignalRidge <support@signalridge.com>"
     license: BSD-3-Clause
     private_key: "{{ .Env.HOME }}/.ssh/aur_key"
     git_url: "ssh://aur@aur.archlinux.org/slipway-bin.git"
-    skip_upload: auto
+    skip_upload: true
     package: |-
       install -Dm755 "./slipway" "${pkgdir}/usr/bin/slipway"
       install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/slipway/README.md"

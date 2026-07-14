@@ -333,7 +333,37 @@ func TestListAndDoctorReportSentinelHealth(t *testing.T) {
 		check := doctorCheckForHost(doctor, "claude")
 		assert.Equal(t, "adapter_modified", check.Code)
 		assert.Contains(t, check.Detail, "sentinel")
+		assert.Contains(t, check.Detail, "preserved as user content")
+		assert.NotContains(t, check.Detail, "refresh to restore")
 	})
+}
+
+func TestDoctorPrioritizesModifiedSentinelWhenManifestIsIncomplete(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
+	require.NoError(t, err)
+	host, ok := lookupHost("claude")
+	require.True(t, ok)
+	manifest, found, err := loadManifest(root, host)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Greater(t, len(manifest.Files), 1)
+	manifest.Files = manifest.Files[1:]
+	encoded, err := encodeManifest(manifest)
+	require.NoError(t, err)
+	manifestPath, sentinelPath, err := ownershipPaths(root, host)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(manifestPath, encoded, 0o600))
+	require.NoError(t, os.WriteFile(sentinelPath, []byte("user marker\n"), 0o600))
+
+	doctor, err := Doctor(root)
+	require.NoError(t, err)
+	check := doctorCheckForHost(doctor, "claude")
+	assert.Equal(t, "adapter_modified", check.Code)
+	assert.Contains(t, check.Detail, "preserved as user content")
+	assert.Contains(t, check.Detail, "remove it manually")
+	assert.NotContains(t, check.Detail, "run slipway install --refresh")
 }
 
 func doctorCheckForHost(report DoctorReport, hostID string) DoctorCheck {
@@ -506,6 +536,24 @@ func TestMalformedOwnershipManifestCannotAuthorizeAdapterMutation(t *testing.T) 
 			assert.Equal(t, sentinelBefore, sentinelAfter)
 		})
 	}
+}
+
+func TestPlanningFailureClearsUncommittedChangeClaims(t *testing.T) {
+	root := t.TempDir()
+	codex, ok := lookupHost("codex")
+	require.True(t, ok)
+	manifestPath, _, err := ownershipPaths(root, codex)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0o700))
+	require.NoError(t, os.WriteFile(manifestPath, []byte("{}\n"), 0o600))
+
+	report, err := Install(InstallOptions{Root: root, Tools: []string{"claude", "codex"}})
+	require.ErrorContains(t, err, "unsupported ownership manifest version")
+	assert.Equal(t, TransactionOutcomeNotCommitted, report.TransactionOutcome)
+	assert.Empty(t, report.Written)
+	assert.Empty(t, report.Removed)
+	_, statErr := os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
+	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 func TestInstallRejectsSymlinkedHostPathWithoutWritingThroughIt(t *testing.T) {
@@ -728,22 +776,37 @@ func TestTransactionFailureReportDoesNotClaimIncompleteChanges(t *testing.T) {
 		Removed: []string{"removed.md"},
 	}
 
-	incomplete := transactionFailureReport(root, report, &fsutil.FileTransactionError{
+	ambiguous := transactionFailureReport(root, report, &fsutil.FileTransactionError{
 		OperationErr: errors.New("later operation failed"),
 		RollbackErrs: []error{recoveryErr},
 	})
-	assert.Empty(t, incomplete.Written)
-	assert.Empty(t, incomplete.Removed)
-	assert.Contains(t, incomplete.Preserved, ".claude/skills/managed.md")
-	assert.Contains(t, incomplete.Preserved, ".claude/skills/.slipway-recovery-token/snapshot")
-	assert.Contains(t, strings.Join(incomplete.Warnings, "\n"), original)
-	assert.Contains(t, strings.Join(incomplete.Warnings, "\n"), recovery)
+	assert.Equal(t, TransactionOutcomeAmbiguous, ambiguous.TransactionOutcome)
+	assert.Empty(t, ambiguous.Written)
+	assert.Empty(t, ambiguous.Removed)
+	assert.Empty(t, ambiguous.Preserved)
+	assert.Equal(t, []string{".claude/skills/.slipway-recovery-token/snapshot"}, ambiguous.RecoveryArtifacts)
+	assert.Contains(t, strings.Join(ambiguous.Warnings, "\n"), original)
+	assert.Contains(t, strings.Join(ambiguous.Warnings, "\n"), recovery)
+
+	rolledBack := transactionFailureReport(root, report, &fsutil.FileTransactionError{
+		OperationErr: errors.New("later operation failed"),
+	})
+	assert.Equal(t, TransactionOutcomeRolledBack, rolledBack.TransactionOutcome)
+	assert.Empty(t, rolledBack.Written)
+	assert.Empty(t, rolledBack.Removed)
+	assert.Empty(t, rolledBack.RecoveryArtifacts)
+
+	notCommitted := transactionFailureReport(root, report, errors.New("preflight failed"))
+	assert.Equal(t, TransactionOutcomeNotCommitted, notCommitted.TransactionOutcome)
+	assert.Empty(t, notCommitted.Written)
+	assert.Empty(t, notCommitted.Removed)
 
 	committed := transactionFailureReport(root, report, &fsutil.FileTransactionCleanupError{Errors: []error{recoveryErr}})
+	assert.Equal(t, TransactionOutcomeCommitted, committed.TransactionOutcome)
 	assert.Equal(t, []string{"written.md"}, committed.Written)
 	assert.Equal(t, []string{"removed.md"}, committed.Removed)
-	assert.Contains(t, committed.Preserved, ".claude/skills/managed.md")
-	assert.Contains(t, committed.Preserved, ".claude/skills/.slipway-recovery-token/snapshot")
+	assert.Empty(t, committed.Preserved)
+	assert.Equal(t, []string{".claude/skills/.slipway-recovery-token/snapshot"}, committed.RecoveryArtifacts)
 }
 
 func writeTestManifest(t *testing.T, root string, host Host, manifest ownershipManifest) {

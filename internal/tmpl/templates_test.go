@@ -11,10 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func templateFS(t *testing.T) fs.FS {
+	t.Helper()
+	sub, err := fs.Sub(embeddedTemplates, "templates")
+	require.NoError(t, err)
+	return sub
+}
+
 func TestEmbeddedSurfaceContainsOnlySixCapabilitiesAndOneReference(t *testing.T) {
 	t.Parallel()
 	var files []string
-	err := fs.WalkDir(TemplateFS(), "skills", func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(templateFS(t), "skills", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -42,7 +49,7 @@ func TestCapabilityPromptsEncodeAcceptanceBehavior(t *testing.T) {
 		path     string
 		contains []string
 	}{
-		{path: "skills/run/SKILL.md", contains: []string{"explicitly asks", "marker-valid Run", "structured `next.variants`", "ordered chapter catalog", "`grill-me` design-tree discipline", "shared understanding", "Strict Outcome shape", "`action_kind` is mandatory", "`skipped` is emitted only by the CLI", "Review never needs input", "Every waiting Action may be skipped", "another non-ended Run pinned to the same Issue identity", "overrides and discards that pending suggestion", "later revision after a prior Review", "automatic Action queue is empty", "`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "accepted chapter materials", "Redact recognized credentials", "source_unavailable"}},
+		{path: "skills/run/SKILL.md", contains: []string{"explicitly asks", "marker-valid Run", "structured `next.variants`", "ordered chapter catalog", "`grill-me` design-tree discipline", "shared understanding", "Strict Outcome shape", "`action_kind` is mandatory", "`skipped` is emitted only by the CLI", "Review never needs input", "Every waiting Action may be skipped", "another non-ended Run pinned to the same Issue identity", "overrides and discards that pending suggestion", "later revision after a prior Review", "automatic Action queue is empty", "`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "accepted chapter materials", "Redact recognized credentials", "source_unavailable", "mutation envelope", "non-null `action`"}},
 		{path: "skills/clarify/SKILL.md", contains: []string{"explicitly invokes", "design-tree discipline", "exactly one decision", "recommended option", "ask zero questions", "shared understanding", "wrap up", "Do not implement", "stateless", "`grill-with-docs`"}},
 		{path: "skills/propose/SKILL.md", contains: []string{"explicitly asks", "self-contained", "exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`", "marker remains authority", "exactly three choices", "`gh >= 2.94.0`", "official GitHub REST API", "100 sub-issues", "50 blocking", "same-host redirect or transfer", "two confirmations", "operation UUID", "expected parent requirements revision", "second current confirmation", "Unreferenced comments remain drafts", "timeout-after-success", "indexing delay", "`created`, `matched`, `failed`, or `ambiguous`", "Zero matches", "public repository has no per-Issue private switch", "Redact recognized credential values", "environment_unavailable"}},
 		{path: "skills/decompose/SKILL.md", contains: []string{"explicitly asks", "tracer-bullet Changes", "runtime inheritance", "exactly one `level:objective`", "exactly one `level:change`", "100 sub-issues", "50 dependencies", "`gh >= 2.94.0`", "official REST API", "cross-host redirects", "two confirmed phases", "operation/item UUIDs", "second current commit confirmation", "read back the complete graph", "duplicate marker matches", "Zero marker matches", "public Issue has no private switch", "amendment mode", "Never propagate in the background", "`closed` status does not prove"}},
@@ -89,11 +96,11 @@ func TestSharedCapabilityBoundariesEncodeTrustAndUserControl(t *testing.T) {
 func TestGeneratedTemplatesAvoidRetiredRuntimeVocabularyAndReviewRatings(t *testing.T) {
 	t.Parallel()
 	retired := regexp.MustCompile(`(?i)\b(?:gate|done[_-]?ready|ship[_-]?ready|lifecycle)\b`)
-	err := fs.WalkDir(TemplateFS(), "skills", func(path string, entry fs.DirEntry, err error) error {
+	err := fs.WalkDir(templateFS(t), "skills", func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
-		content, err := fs.ReadFile(TemplateFS(), path)
+		content, err := fs.ReadFile(templateFS(t), path)
 		if err != nil {
 			return err
 		}

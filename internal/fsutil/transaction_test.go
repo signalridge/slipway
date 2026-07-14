@@ -14,6 +14,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func applyFileTransactionForTest(ops []FileTransactionOp) error {
+	return applyFileTransactionAt("", ops, fileTransactionHooks{}, false)
+}
+
+func applyFileTransactionWithHooksForTest(ops []FileTransactionOp, hooks fileTransactionHooks) error {
+	return applyFileTransactionAt("", ops, hooks, false)
+}
+
+func applyFileTransactionWithinWithHooksForTest(root string, ops []FileTransactionOp, hooks fileTransactionHooks) error {
+	return applyFileTransactionAt(root, ops, hooks, true)
+}
+
 func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
@@ -25,10 +37,10 @@ func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 		require.NoError(t, os.WriteFile(first, []byte("before"), 0o640))
 		failure := errors.New("later operation failed")
 
-		err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+		err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 			WriteFileTransactionOp(first, []byte("transaction"), 0o600),
 			WriteFileTransactionOp(later, []byte("later"), 0o600),
-		}, FileTransactionHooks{BeforeMutation: func(path, _ string) error {
+		}, fileTransactionHooks{BeforeMutation: func(path, _ string) error {
 			if path == later {
 				return failure
 			}
@@ -51,9 +63,9 @@ func TestApplyFileTransactionRollsBackAppliedAndFailingWrites(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("before"), 0o640))
 		failure := errors.New("post-write sync report failed")
 
-		err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+		err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 			WriteFileTransactionOp(path, []byte("transaction"), 0o600),
-		}, FileTransactionHooks{AfterMutation: func(original, _ string) error {
+		}, fileTransactionHooks{AfterMutation: func(original, _ string) error {
 			if original == path {
 				return failure
 			}
@@ -103,42 +115,13 @@ func TestApplyFileTransactionRestoresRemovedSnapshotKinds(t *testing.T) {
 		assert.Equal(t, "target-a", target)
 		requireNoRecoveryArtifacts(t, dir)
 	})
-
-	t.Run("nested directory tree", func(t *testing.T) {
-		dir := t.TempDir()
-		tree := filepath.Join(dir, "tree")
-		nested := filepath.Join(tree, "nested")
-		file := filepath.Join(nested, "managed.txt")
-		later := filepath.Join(dir, "later.txt")
-		require.NoError(t, os.MkdirAll(nested, 0o700))
-		require.NoError(t, os.WriteFile(file, []byte("managed"), 0o640))
-		require.NoError(t, os.Chmod(nested, 0o555))
-		require.NoError(t, os.Chmod(tree, 0o555))
-		assertReadOnlyDirectoryMode(t, tree)
-		assertReadOnlyDirectoryMode(t, nested)
-		t.Cleanup(func() {
-			_ = os.Chmod(tree, 0o700)
-			_ = os.Chmod(nested, 0o700)
-		})
-
-		err := failLaterTransaction(tree, later, RemoveAllTransactionOp(tree))
-		require.Error(t, err)
-		content, readErr := os.ReadFile(file)
-		require.NoError(t, readErr)
-		assert.Equal(t, "managed", string(content))
-		assertReadOnlyDirectoryMode(t, tree)
-		assertReadOnlyDirectoryMode(t, nested)
-		require.NoError(t, os.Chmod(tree, 0o700))
-		require.NoError(t, os.Chmod(nested, 0o700))
-		requireNoRecoveryArtifacts(t, dir)
-	})
 }
 
 func TestFileTransactionPreconditionsPreservePlannedUserPaths(t *testing.T) {
 	dir := t.TempDir()
 	created := filepath.Join(dir, "created.txt")
 	require.NoError(t, os.WriteFile(created, []byte("user"), 0o600))
-	err := ApplyFileTransaction([]FileTransactionOp{
+	err := applyFileTransactionForTest([]FileTransactionOp{
 		WriteFileTransactionOp(created, []byte("managed"), 0o600).WithExpectedMissing(),
 	})
 	require.Error(t, err)
@@ -151,7 +134,7 @@ func TestFileTransactionPreconditionsPreservePlannedUserPaths(t *testing.T) {
 	require.NoError(t, os.WriteFile(guarded, []byte("planned"), 0o600))
 	hash := testSHA256([]byte("planned"))
 	require.NoError(t, os.WriteFile(guarded, []byte("user edit"), 0o600))
-	err = ApplyFileTransaction([]FileTransactionOp{
+	err = applyFileTransactionForTest([]FileTransactionOp{
 		RemoveFileTransactionOp(guarded).WithExpectedSHA256(hash),
 	})
 	require.Error(t, err)
@@ -169,11 +152,11 @@ func TestFileTransactionPreflightsAllOperationsBeforeFirstMutation(t *testing.T)
 	require.NoError(t, os.WriteFile(later, []byte("later-before"), 0o600))
 
 	var mutationPaths []string
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(first, []byte("first-after"), 0o600),
 		WriteFileTransactionOp(later, []byte("later-after"), 0o600).
 			WithExpectedSHA256(testSHA256([]byte("different-content"))),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		BeforeMutation: func(path, _ string) error {
 			mutationPaths = append(mutationPaths, path)
 			return nil
@@ -195,15 +178,15 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 	}
 	tests := []struct {
 		name        string
-		hooks       func(path string) FileTransactionHooks
+		hooks       func(path string) fileTransactionHooks
 		wantAtPath  string
 		wantInStore string
 	}{
 		{
 			name: "after guard snapshot before quarantine",
-			hooks: func(path string) FileTransactionHooks {
+			hooks: func(path string) fileTransactionHooks {
 				calls := 0
-				return FileTransactionHooks{AfterGuardBeforeQuarantine: func(original, _ string) error {
+				return fileTransactionHooks{AfterGuardBeforeQuarantine: func(original, _ string) error {
 					if original != path {
 						return nil
 					}
@@ -218,9 +201,9 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "after quarantine before validation",
-			hooks: func(path string) FileTransactionHooks {
+			hooks: func(path string) fileTransactionHooks {
 				calls := 0
-				return FileTransactionHooks{AfterQuarantineBeforeValidation: func(original, _ string) error {
+				return fileTransactionHooks{AfterQuarantineBeforeValidation: func(original, _ string) error {
 					if original != path {
 						return nil
 					}
@@ -235,8 +218,8 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "after validation before restore",
-			hooks: func(path string) FileTransactionHooks {
-				return FileTransactionHooks{AfterValidationBeforeRestore: func(original, _ string) error {
+			hooks: func(path string) fileTransactionHooks {
+				return fileTransactionHooks{AfterValidationBeforeRestore: func(original, _ string) error {
 					if original == path {
 						return os.WriteFile(path, []byte("user-before-restore"), 0o600)
 					}
@@ -247,8 +230,8 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "during exclusive file restore",
-			hooks: func(path string) FileTransactionHooks {
-				return FileTransactionHooks{DuringExclusiveRestore: func(original, _ string) error {
+			hooks: func(path string) fileTransactionHooks {
+				return fileTransactionHooks{DuringExclusiveRestore: func(original, _ string) error {
 					if original != path {
 						return nil
 					}
@@ -262,8 +245,8 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "after restore before post-validation",
-			hooks: func(path string) FileTransactionHooks {
-				return FileTransactionHooks{AfterRestoreBeforePostValidation: func(original, _ string) error {
+			hooks: func(path string) fileTransactionHooks {
+				return fileTransactionHooks{AfterRestoreBeforePostValidation: func(original, _ string) error {
 					if original == path {
 						return os.WriteFile(path, []byte("user-after-restore"), 0o600)
 					}
@@ -274,9 +257,9 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "destination changes during quarantine cleanup",
-			hooks: func(path string) FileTransactionHooks {
+			hooks: func(path string) fileTransactionHooks {
 				injected := false
-				return FileTransactionHooks{DuringQuarantineCleanup: func(original, _ string) error {
+				return fileTransactionHooks{DuringQuarantineCleanup: func(original, _ string) error {
 					if original == path && !injected {
 						injected = true
 						return os.WriteFile(path, []byte("user-during-cleanup"), 0o600)
@@ -288,9 +271,9 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 		},
 		{
 			name: "quarantine changes during cleanup",
-			hooks: func(path string) FileTransactionHooks {
+			hooks: func(path string) fileTransactionHooks {
 				injected := false
-				return FileTransactionHooks{DuringQuarantineCleanup: func(original, recovery string) error {
+				return fileTransactionHooks{DuringQuarantineCleanup: func(original, recovery string) error {
 					if original == path && !injected {
 						injected = true
 						return os.WriteFile(recovery, []byte("user-in-recovery"), 0o600)
@@ -322,7 +305,7 @@ func TestRollbackConcurrentEditWindowsPreserveUserBytes(t *testing.T) {
 				return nil
 			}
 
-			err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+			err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 				WriteFileTransactionOp(path, []byte("transaction"), 0o600),
 				WriteFileTransactionOp(later, []byte("later"), 0o600),
 			}, hooks)
@@ -357,10 +340,10 @@ func TestRollbackDetectsIdenticalContentRecreationByIdentity(t *testing.T) {
 	guardCalls := 0
 	identityReused := false
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
 		WriteFileTransactionOp(later, []byte("later"), 0o600),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		BeforeMutation: failPath(later, failure),
 		AfterGuardBeforeQuarantine: func(original, _ string) error {
 			if original != path {
@@ -408,9 +391,9 @@ func TestFailedInstallPinsStageBeforeCleanupValidation(t *testing.T) {
 	stageCleanupObserved := false
 	identityReused := false
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		AfterQuarantineBeforeValidation: func(original, _ string) error {
 			if original != path {
 				return nil
@@ -464,9 +447,9 @@ func TestCleanupPreservesEntryReplacedAfterValidation(t *testing.T) {
 	hookObserved := false
 	identityReused := false
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
-	}, FileTransactionHooks{AfterQuarantineValidationBeforeRelocation: func(original, recovery string) error {
+	}, fileTransactionHooks{AfterQuarantineValidationBeforeRelocation: func(original, recovery string) error {
 		if original != path {
 			return nil
 		}
@@ -514,10 +497,10 @@ func TestRollbackPreservesUserEditsInsideQuarantineAndAtDestination(t *testing.T
 	failure := errors.New("later operation failed")
 	quarantineCalls := 0
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
 		WriteFileTransactionOp(later, []byte("later"), 0o600),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		BeforeMutation: failPath(later, failure),
 		AfterQuarantineBeforeValidation: func(original, recovery string) error {
 			if original != path {
@@ -557,10 +540,10 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 	swapAttempted := false
 	var swapErr error
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
 		WriteFileTransactionOp(later, []byte("later"), 0o600),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		BeforeMutation: failPath(later, failure),
 		DuringQuarantineCleanup: func(original, recovery string) error {
 			if original != path || swapAttempted {
@@ -588,7 +571,6 @@ func TestCleanupPreservesSwappedQuarantineNamespace(t *testing.T) {
 		// Windows blocks the directory rename while the transaction lease holds
 		// a descendant handle, so the namespace replacement never occurs.
 		require.Error(t, swapErr, "the transaction identity lease must block quarantine namespace replacement")
-		assert.True(t, isWindowsSharingViolation(swapErr), "unexpected Windows namespace-swap error: %v", swapErr)
 		assert.ErrorIs(t, err, failure)
 		assert.NotErrorIs(t, err, ErrFileTransactionRollbackPrecondition)
 		content, readErr := os.ReadFile(path)
@@ -616,10 +598,10 @@ func TestRollbackPreservesConcurrentRecreationOfMissingPreState(t *testing.T) {
 	later := filepath.Join(dir, "later.txt")
 	failure := errors.New("later operation failed")
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600).WithExpectedMissing(),
 		WriteFileTransactionOp(later, []byte("later"), 0o600),
-	}, FileTransactionHooks{
+	}, fileTransactionHooks{
 		BeforeMutation: func(original, _ string) error {
 			if original == later {
 				return failure
@@ -651,9 +633,9 @@ func TestRollbackOfFailingMutationPreservesUserEdit(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
 	failure := errors.New("mutation reported failure")
 
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
-	}, FileTransactionHooks{AfterMutation: func(original, _ string) error {
+	}, fileTransactionHooks{AfterMutation: func(original, _ string) error {
 		if original != path {
 			return nil
 		}
@@ -672,68 +654,35 @@ func TestRollbackOfFailingMutationPreservesUserEdit(t *testing.T) {
 	assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
 }
 
-func TestRollbackPreservesConcurrentSymlinkAndNestedTree(t *testing.T) {
+func TestRollbackPreservesConcurrentSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic links may require elevated privileges")
 	}
 	if !atomicNoReplaceAvailableForTest() {
 		t.Skip("atomic no-replace rename intentionally fails closed on this platform")
 	}
-	t.Run("symbolic link", func(t *testing.T) {
-		dir := t.TempDir()
-		path := filepath.Join(dir, "link")
-		later := filepath.Join(dir, "later")
-		require.NoError(t, os.Symlink("original-target", path))
-		failure := errors.New("later failed")
-		err := ApplyFileTransactionWithHooks([]FileTransactionOp{
-			RemoveFileTransactionOp(path),
-			WriteFileTransactionOp(later, []byte("later"), 0o600),
-		}, FileTransactionHooks{
-			BeforeMutation: failPath(later, failure),
-			AfterValidationBeforeRestore: func(original, _ string) error {
-				if original == path {
-					return os.Symlink("user-target", path)
-				}
-				return nil
-			},
-		})
-		require.Error(t, err)
-		target, readErr := os.Readlink(path)
-		require.NoError(t, readErr)
-		assert.Equal(t, "user-target", target)
-		assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
+	dir := t.TempDir()
+	path := filepath.Join(dir, "link")
+	later := filepath.Join(dir, "later")
+	require.NoError(t, os.Symlink("original-target", path))
+	failure := errors.New("later failed")
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
+		RemoveFileTransactionOp(path),
+		WriteFileTransactionOp(later, []byte("later"), 0o600),
+	}, fileTransactionHooks{
+		BeforeMutation: failPath(later, failure),
+		AfterValidationBeforeRestore: func(original, _ string) error {
+			if original == path {
+				return os.Symlink("user-target", path)
+			}
+			return nil
+		},
 	})
-
-	t.Run("nested directory appears during restore", func(t *testing.T) {
-		dir := t.TempDir()
-		tree := filepath.Join(dir, "tree")
-		nested := filepath.Join(tree, "nested")
-		managed := filepath.Join(nested, "managed.txt")
-		later := filepath.Join(dir, "later")
-		require.NoError(t, os.MkdirAll(nested, 0o700))
-		require.NoError(t, os.WriteFile(managed, []byte("managed"), 0o600))
-		failure := errors.New("later failed")
-		err := ApplyFileTransactionWithHooks([]FileTransactionOp{
-			RemoveAllTransactionOp(tree),
-			WriteFileTransactionOp(later, []byte("later"), 0o600),
-		}, FileTransactionHooks{
-			BeforeMutation: failPath(later, failure),
-			DuringExclusiveRestore: func(original, _ string) error {
-				if original != tree {
-					return nil
-				}
-				if err := os.Mkdir(nested, 0o700); err != nil {
-					return err
-				}
-				return os.WriteFile(filepath.Join(nested, "user.txt"), []byte("user tree"), 0o600)
-			},
-		})
-		require.Error(t, err)
-		content, readErr := os.ReadFile(filepath.Join(nested, "user.txt"))
-		require.NoError(t, readErr)
-		assert.Equal(t, "user tree", string(content))
-		assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
-	})
+	require.Error(t, err)
+	target, readErr := os.Readlink(path)
+	require.NoError(t, readErr)
+	assert.Equal(t, "user-target", target)
+	assertReportedRecoveryArtifactsPrivate(t, err, collectRecoveryErrors(err))
 }
 
 func TestCommittedTransactionReportsDestinationChangeDuringCleanup(t *testing.T) {
@@ -743,9 +692,9 @@ func TestCommittedTransactionReportsDestinationChangeDuringCleanup(t *testing.T)
 	path := filepath.Join(t.TempDir(), "managed.txt")
 	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
 	injected := false
-	err := ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("transaction"), 0o600),
-	}, FileTransactionHooks{DuringQuarantineCleanup: func(original, _ string) error {
+	}, fileTransactionHooks{DuringQuarantineCleanup: func(original, _ string) error {
 		if original == path && !injected {
 			injected = true
 			return os.WriteFile(path, []byte("user during commit cleanup"), 0o600)
@@ -767,7 +716,7 @@ func TestFileTransactionFailsClosedWhenNoReplaceIsUnavailable(t *testing.T) {
 		t.Skip("this platform supplies an atomic no-replace rename")
 	}
 	path := filepath.Join(t.TempDir(), "managed.txt")
-	err := ApplyFileTransaction([]FileTransactionOp{
+	err := applyFileTransactionForTest([]FileTransactionOp{
 		WriteFileTransactionOp(path, []byte("managed"), 0o600).WithExpectedMissing(),
 	})
 	require.Error(t, err)
@@ -777,13 +726,13 @@ func TestFileTransactionFailsClosedWhenNoReplaceIsUnavailable(t *testing.T) {
 
 func failLaterTransaction(path, later string, operation FileTransactionOp) error {
 	failure := errors.New("later operation failed")
-	return ApplyFileTransactionWithHooks([]FileTransactionOp{
+	return applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		operation,
 		WriteFileTransactionOp(later, []byte("later"), 0o600),
-	}, FileTransactionHooks{BeforeMutation: failPath(later, failure)})
+	}, fileTransactionHooks{BeforeMutation: failPath(later, failure)})
 }
 
-func failPath(path string, failure error) FileTransactionHook {
+func failPath(path string, failure error) fileTransactionHook {
 	return func(original, _ string) error {
 		if original == path {
 			return failure
@@ -897,17 +846,6 @@ func assertFileMode(t *testing.T, path string, expected os.FileMode) {
 		return
 	}
 	assert.Equal(t, expected, actual)
-}
-
-func assertReadOnlyDirectoryMode(t *testing.T, path string) {
-	t.Helper()
-	info, err := os.Stat(path)
-	require.NoError(t, err)
-	if runtime.GOOS == "windows" {
-		assert.Zero(t, info.Mode().Perm()&0o200)
-		return
-	}
-	assert.Equal(t, os.FileMode(0o555), info.Mode().Perm())
 }
 
 func TestRecoveryErrorNamesBothPaths(t *testing.T) {

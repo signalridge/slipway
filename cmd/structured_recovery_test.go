@@ -21,7 +21,7 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	waiting.Pause = &autopilot.Pause{Reason: autopilot.PauseDecisionRequired, Question: "Which channel?"}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, waiting))
 	require.NoError(t, err, stderr)
-	var state protocolStateOutput
+	var state mutationEnvelope
 	require.NoError(t, json.Unmarshal([]byte(stdout), &state))
 	assert.Equal(t, autopilot.RunPaused, state.State)
 	assert.Equal(t, autopilot.NextOperationAnswer, state.Next.Operation)
@@ -92,7 +92,7 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	}
 	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, pause))
 	require.NoError(t, err, stderr)
-	var state protocolStateOutput
+	var state mutationEnvelope
 	require.NoError(t, json.Unmarshal([]byte(stdout), &state))
 	assert.Equal(t, autopilot.PauseDestructiveConfirm, state.PauseReason)
 	assert.Equal(t, autopilot.NextOperationAnswer, state.Next.Operation)

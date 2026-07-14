@@ -27,7 +27,7 @@ const (
 	NextOperationNone    NextOperation = "none"
 )
 
-// NextInputType describes one value that a host must append to a variant.
+// NextInputType describes one typed value that a host can supply.
 type NextInputType string
 
 const (
@@ -52,7 +52,7 @@ type NextVariant struct {
 	Inputs   []NextInput `json:"inputs"`
 }
 
-// NextInput describes one flag/value pair appended during resolution.
+// NextInput describes one flag/value pair applied during resolution.
 type NextInput struct {
 	Name     string        `json:"name"`
 	Type     NextInputType `json:"type"`
@@ -136,44 +136,55 @@ func (next Next) Validate() error {
 // its variants may carry. The coarse operation label is advertised as semantic
 // authority, so it must agree with base_argv instead of letting any producer
 // label, for example, a read-only status retry as operation "resume".
-// validateNextOperationFamily couples each Next operation to the argv grammar
-// its variants may carry. The coarse operation label is advertised as semantic
-// authority, so it must agree with base_argv instead of letting any producer
-// label, for example, a read-only status retry as operation "resume".
 //
 // The skip-action variant is a universal escape hatch available on every waiting
 // Action regardless of operation, so it is exempt from the grammar check.
 func validateNextOperationFamily(operation NextOperation, variant NextVariant) error {
+	argv := variant.BaseArgv
 	if variant.ID == "skip-action" {
+		if operation != NextOperationAction && operation != NextOperationAnswer && operation != NextOperationResume {
+			return errors.New("skip-action is only valid for action, answer, or resume operations")
+		}
+		if len(argv) != 9 || argv[1] != "_machine" || argv[2] != "skip" ||
+			argv[3] != "--run" || argv[5] != "--action" || argv[7] != "--root" {
+			return errors.New("skip-action requires exact slipway _machine skip --run RUN --action ACTION --root ROOT grammar")
+		}
+		if len(variant.Inputs) != 0 {
+			return errors.New("skip-action cannot require inputs")
+		}
 		return nil
 	}
-	argv := variant.BaseArgv
+
 	switch operation {
 	case NextOperationAction:
 		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "submit" {
-			return errors.New("operation action requires base_argv slipway _machine submit ...")
+			return errors.New("operation action requires base_argv to start with slipway _machine submit")
 		}
 	case NextOperationAnswer:
 		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "answer" {
-			return errors.New("operation answer requires base_argv slipway _machine answer ...")
+			return errors.New("operation answer requires base_argv to start with slipway _machine answer")
 		}
 	case NextOperationResume:
-		if len(argv) < 3 || argv[1] != "_machine" || argv[2] != "resume" {
-			return errors.New("operation resume requires base_argv slipway _machine resume ...")
+		if len(argv) < 4 || argv[1] != "_machine" || argv[2] != "resume" {
+			return errors.New("operation resume requires base_argv to start with slipway _machine resume")
 		}
 	case NextOperationStart:
-		if len(argv) < 2 || argv[1] != "run" {
-			return errors.New("operation start requires base_argv slipway run ...")
+		validWithoutReview := len(argv) == 9 && argv[2] == "--budget" && argv[4] == "--json" &&
+			argv[5] == "--root" && argv[7] == "--"
+		validWithReviewDisabled := len(argv) == 10 && argv[2] == "--budget" && argv[4] == "--json" &&
+			argv[5] == "--root" && argv[7] == "--no-review" && argv[8] == "--"
+		if len(argv) < 2 || argv[1] != "run" || (!validWithoutReview && !validWithReviewDisabled) {
+			return errors.New("operation start requires exact slipway run --budget N --json --root ROOT [--no-review] -- GOAL grammar")
 		}
 	case NextOperationCommand:
 		if len(argv) < 2 {
 			return errors.New("operation command requires a nonempty slipway base_argv")
 		}
 		// Command covers read-only or advisory recovery commands that are not a
-		// Run mutation (status, doctor, list, install --refresh). It must never
-		// carry the _machine/submit/answer/resume grammar owned by other ops.
-		if argv[1] == "_machine" {
-			return errors.New("operation command must not carry _machine mutation grammar")
+		// Run mutation (status, doctor, list, install --refresh). The run and
+		// _machine grammars are owned by start and the mutation operations.
+		if argv[1] == "_machine" || argv[1] == "run" {
+			return errors.New("operation command must not carry run or _machine grammar")
 		}
 	case NextOperationNone:
 		// Validated above; no variant reaches here.
@@ -253,8 +264,9 @@ func validateNextVariant(workspaceRoot string, variant NextVariant, variantIndex
 	return nil
 }
 
-// Resolve expands one variant by appending supplied inputs in schema order.
-// Values remain individual argv elements and receive no shell interpretation.
+// Resolve expands one variant with supplied inputs in schema order. Inputs are
+// inserted before a `--` separator when present, so positional values remain
+// positional. Values remain individual argv elements and receive no shell interpretation.
 func (next Next) Resolve(variantID string, values map[string]NextInputValue) ([]string, error) {
 	if err := next.Validate(); err != nil {
 		return nil, err
@@ -282,7 +294,7 @@ func (next Next) Resolve(variantID string, values map[string]NextInputValue) ([]
 		}
 	}
 
-	resolved := append([]string(nil), selected.BaseArgv...)
+	resolvedInputs := make([]string, 0, len(selected.Inputs)*2)
 	for _, input := range selected.Inputs {
 		value, supplied := values[input.Name]
 		if !supplied {
@@ -307,8 +319,17 @@ func (next Next) Resolve(variantID string, values map[string]NextInputValue) ([]
 				return nil, fmt.Errorf("input %q must use lowercase sha256:<64 hex> format", input.Name)
 			}
 		}
-		resolved = append(resolved, input.Flag, value.Value)
+		resolvedInputs = append(resolvedInputs, input.Flag, value.Value)
 	}
+
+	insertAt := len(selected.BaseArgv)
+	if separator := indexOfArg(selected.BaseArgv, "--"); separator >= 0 {
+		insertAt = separator
+	}
+	resolved := make([]string, 0, len(selected.BaseArgv)+len(resolvedInputs))
+	resolved = append(resolved, selected.BaseArgv[:insertAt]...)
+	resolved = append(resolved, resolvedInputs...)
+	resolved = append(resolved, selected.BaseArgv[insertAt:]...)
 	return resolved, nil
 }
 
@@ -317,6 +338,9 @@ func variantWorkspaceRoot(variant NextVariant, variantIndex int) (string, error)
 	rootCount := 0
 	root := ""
 	for index, argument := range variant.BaseArgv {
+		if argument == "--" {
+			break
+		}
 		if argument != "--root" {
 			continue
 		}
@@ -327,7 +351,7 @@ func variantWorkspaceRoot(variant NextVariant, variantIndex int) (string, error)
 		root = variant.BaseArgv[index+1]
 	}
 	if rootCount != 1 {
-		return "", fmt.Errorf("next.variants[%d].base_argv must contain exactly one --root", variantIndex)
+		return "", fmt.Errorf("next.variants[%d].base_argv must contain exactly one --root option before --", variantIndex)
 	}
 	if err := validateWorkspaceRoot(root); err != nil {
 		return "", fmt.Errorf("next.variants[%d]: %w", variantIndex, err)
@@ -567,6 +591,15 @@ func isPseudoValue(value string) bool {
 		return true
 	}
 	return strings.HasPrefix(normalized, "<") && strings.HasSuffix(normalized, ">")
+}
+
+func indexOfArg(argv []string, target string) int {
+	for index, argument := range argv {
+		if argument == target {
+			return index
+		}
+	}
+	return -1
 }
 
 func containsString(values []string, value string) bool {

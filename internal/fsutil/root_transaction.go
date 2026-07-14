@@ -22,7 +22,7 @@ const (
 type transactionFilesystem struct {
 	rootPath      string
 	root          *os.Root
-	hooks         FileTransactionHooks
+	hooks         fileTransactionHooks
 	identityLease *transactionIdentityLease
 }
 
@@ -42,15 +42,10 @@ type fileQuarantine struct {
 
 // ApplyFileTransactionWithin confines every mutation to root using os.Root.
 func ApplyFileTransactionWithin(rootPath string, ops []FileTransactionOp) error {
-	return applyFileTransactionAt(rootPath, ops, FileTransactionHooks{}, true)
+	return applyFileTransactionAt(rootPath, ops, fileTransactionHooks{}, true)
 }
 
-// ApplyFileTransactionWithinWithHooks is the rooted adversarial-test variant.
-func ApplyFileTransactionWithinWithHooks(rootPath string, ops []FileTransactionOp, hooks FileTransactionHooks) error {
-	return applyFileTransactionAt(rootPath, ops, hooks, true)
-}
-
-func applyFileTransactionAt(rootPath string, ops []FileTransactionOp, hooks FileTransactionHooks, restricted bool) error {
+func applyFileTransactionAt(rootPath string, ops []FileTransactionOp, hooks fileTransactionHooks, restricted bool) error {
 	if err := validateFileTransactionOps(ops); err != nil {
 		return err
 	}
@@ -172,7 +167,7 @@ func (filesystem *transactionFilesystem) snapshotGuard(path string, kind fileTra
 	return snapshot, nil
 }
 
-func snapshotPathForTransactionInRoot(root *os.Root, name, displayPath string, kind fileTransactionOpKind, lease *transactionIdentityLease) (snapshot fileSnapshot, resultErr error) {
+func snapshotPathForTransactionInRoot(root *os.Root, name, displayPath string, _ fileTransactionOpKind, lease *transactionIdentityLease) (snapshot fileSnapshot, resultErr error) {
 	// A caller-owned lease pins transaction guards for the full transaction.
 	// Read-only validation snapshots get a local lease so every identity remains
 	// pinned until that whole snapshot has been assembled and checked.
@@ -181,9 +176,6 @@ func snapshotPathForTransactionInRoot(root *os.Root, name, displayPath string, k
 		defer func() {
 			resultErr = errors.Join(resultErr, lease.close())
 		}()
-	}
-	if kind == fileTransactionOpRemoveAll {
-		return snapshotTreeForTransactionInRoot(root, name, displayPath, lease)
 	}
 	return snapshotFileForTransactionInRoot(root, name, displayPath, lease)
 }
@@ -255,96 +247,6 @@ func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string, l
 	}
 	lease.add(file)
 	return fileSnapshot{existed: true, data: data, perm: info.Mode().Perm(), identity: info}, nil
-}
-
-func snapshotTreeForTransactionInRoot(root *os.Root, name, displayPath string, lease *transactionIdentityLease) (fileSnapshot, error) {
-	info, err := root.Lstat(name)
-	if errors.Is(err, fs.ErrNotExist) {
-		return fileSnapshot{}, nil
-	}
-	if err != nil {
-		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return snapshotFileForTransactionInRoot(root, name, displayPath, lease)
-	}
-	treeRoot, err := root.OpenRoot(name)
-	if err != nil {
-		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", displayPath, err)
-	}
-	retainedTreeRoot := false
-	defer func() {
-		if !retainedTreeRoot {
-			_ = treeRoot.Close()
-		}
-	}()
-	directory, err := treeRoot.Open(".")
-	if err != nil {
-		return fileSnapshot{}, fmt.Errorf("open snapshot root %s: %w", displayPath, err)
-	}
-	opened, statErr := directory.Stat()
-	closeErr := directory.Close()
-	current, lstatErr := root.Lstat(name)
-	if statErr != nil || closeErr != nil || lstatErr != nil || current.Mode()&os.ModeSymlink != 0 || !current.IsDir() || !os.SameFile(info, opened) || !os.SameFile(opened, current) {
-		return fileSnapshot{}, fmt.Errorf("snapshot %s: directory changed while opening", displayPath)
-	}
-	lease.add(treeRoot)
-	retainedTreeRoot = true
-	snapshot := fileSnapshot{existed: true, isDir: true, perm: info.Mode().Perm(), identity: info}
-	err = fs.WalkDir(treeRoot.FS(), ".", func(entryPath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entryPath == "." {
-			return nil
-		}
-		local := filepath.FromSlash(entryPath)
-		entryInfo, err := treeRoot.Lstat(local)
-		if err != nil {
-			return err
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 || (!entryInfo.IsDir() && !entryInfo.Mode().IsRegular()) {
-			return fmt.Errorf("snapshot %s: tree contains a symlink or special file", filepath.Join(displayPath, local))
-		}
-		item := fileTreeSnapshotEntry{rel: local, isDir: entryInfo.IsDir(), perm: entryInfo.Mode().Perm(), identity: entryInfo}
-		if entryInfo.IsDir() {
-			childRoot, err := treeRoot.OpenRoot(local)
-			if err != nil {
-				return err
-			}
-			directory, err := childRoot.Open(".")
-			if err != nil {
-				_ = childRoot.Close()
-				return err
-			}
-			opened, statErr := directory.Stat()
-			closeErr := directory.Close()
-			current, lstatErr := treeRoot.Lstat(local)
-			if statErr != nil || closeErr != nil || lstatErr != nil || !opened.IsDir() || current.Mode()&os.ModeSymlink != 0 || !current.IsDir() || !os.SameFile(entryInfo, opened) || !os.SameFile(opened, current) {
-				_ = childRoot.Close()
-				return errors.Join(fmt.Errorf("snapshot %s: directory changed while pinning", filepath.Join(displayPath, local)), statErr, closeErr, lstatErr)
-			}
-			lease.add(childRoot)
-			item.identity = opened
-		} else if !entryInfo.IsDir() {
-			fileSnapshot, err := snapshotFileForTransactionInRoot(treeRoot, local, filepath.Join(displayPath, local), lease)
-			if err != nil {
-				return err
-			}
-			item.data = fileSnapshot.data
-			item.identity = fileSnapshot.identity
-		}
-		snapshot.entries = append(snapshot.entries, item)
-		return nil
-	})
-	if err != nil {
-		return fileSnapshot{}, fmt.Errorf("snapshot %s: %w", displayPath, err)
-	}
-	current, err = root.Lstat(name)
-	if err != nil || !current.IsDir() || !os.SameFile(info, current) {
-		return fileSnapshot{}, fmt.Errorf("snapshot %s: directory changed while reading", displayPath)
-	}
-	return snapshot, nil
 }
 
 func rootDirectoryInfo(root *os.Root) (os.FileInfo, error) {
@@ -699,9 +601,6 @@ func (filesystem *transactionFilesystem) restoreSnapshotExclusive(path string, s
 		}
 		return current, nil
 	}
-	if snapshot.isDir {
-		return filesystem.restoreTreeExclusive(path, snapshot, namespaceGuard, lease)
-	}
 	if snapshot.isSymlink {
 		return filesystem.restoreSymlinkExclusive(path, snapshot, namespaceGuard, lease)
 	}
@@ -802,143 +701,6 @@ func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, sn
 	return restored, nil
 }
 
-func (filesystem *transactionFilesystem) restoreTreeExclusive(path string, snapshot, namespaceGuard fileSnapshot, lease *transactionIdentityLease) (fileSnapshot, error) {
-	parent, base, err := filesystem.openStableParent(path, true)
-	if err != nil {
-		return fileSnapshot{}, err
-	}
-	defer parent.Close()
-	parentInfo, err := validateGuardedParent(parent, path, namespaceGuard)
-	if err != nil {
-		return fileSnapshot{}, err
-	}
-	if err := parent.Mkdir(base, 0o700); err != nil {
-		return fileSnapshot{}, fmt.Errorf("exclusive directory create %s: %w", path, err)
-	}
-	created, err := parent.Lstat(base)
-	if err != nil || !created.IsDir() || created.Mode()&os.ModeSymlink != 0 {
-		return fileSnapshot{}, fmt.Errorf("validate restored directory %s: %w", path, err)
-	}
-	treeRoot, err := parent.OpenRoot(base)
-	if err != nil {
-		return fileSnapshot{}, err
-	}
-	rootFile, err := treeRoot.Open(".")
-	if err != nil {
-		_ = treeRoot.Close()
-		return fileSnapshot{}, err
-	}
-	opened, err := rootFile.Stat()
-	closeErr := rootFile.Close()
-	if err != nil || closeErr != nil || !os.SameFile(created, opened) {
-		_ = treeRoot.Close()
-		return fileSnapshot{}, fmt.Errorf("restored directory %s changed while opening", path)
-	}
-	lease.add(treeRoot)
-	if err := callFileTransactionHook(filesystem.hooks.DuringExclusiveRestore, path, ""); err != nil {
-		return fileSnapshot{}, err
-	}
-
-	restored := snapshot
-	restored.identity = opened
-	restored.parentObserved = true
-	restored.parentExisted = true
-	restored.parentIdentity = parentInfo
-	restored.entries = slices.Clone(snapshot.entries)
-	roots := map[string]*os.Root{".": treeRoot}
-
-	for index, item := range snapshot.entries {
-		clean, err := cleanTreeSnapshotPath(item.rel)
-		if err != nil {
-			return fileSnapshot{}, err
-		}
-		parentRel := filepath.Dir(clean)
-		parentRoot, ok := roots[parentRel]
-		if !ok {
-			return fileSnapshot{}, fmt.Errorf("restore tree %s: parent %s is missing from snapshot", path, parentRel)
-		}
-		name := filepath.Base(clean)
-		if item.isDir {
-			if err := parentRoot.Mkdir(name, 0o700); err != nil {
-				return fileSnapshot{}, fmt.Errorf("exclusive directory create %s: %w", filepath.Join(path, clean), err)
-			}
-			info, err := parentRoot.Lstat(name)
-			if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				return fileSnapshot{}, fmt.Errorf("validate restored directory %s: %w", filepath.Join(path, clean), err)
-			}
-			childRoot, err := parentRoot.OpenRoot(name)
-			if err != nil {
-				return fileSnapshot{}, err
-			}
-			dirFile, err := childRoot.Open(".")
-			if err != nil {
-				_ = childRoot.Close()
-				return fileSnapshot{}, err
-			}
-			opened, err := dirFile.Stat()
-			closeErr := dirFile.Close()
-			if err != nil || closeErr != nil || !os.SameFile(info, opened) {
-				_ = childRoot.Close()
-				return fileSnapshot{}, fmt.Errorf("restored directory %s changed while opening", filepath.Join(path, clean))
-			}
-			roots[clean] = childRoot
-			lease.add(childRoot)
-			restored.entries[index].identity = opened
-			continue
-		}
-		file, err := parentRoot.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err != nil {
-			return fileSnapshot{}, fmt.Errorf("exclusive file create %s: %w", filepath.Join(path, clean), err)
-		}
-		if _, err := file.Write(item.data); err != nil {
-			_ = file.Close()
-			return fileSnapshot{}, err
-		}
-		if err := file.Chmod(item.perm); err != nil {
-			_ = file.Close()
-			return fileSnapshot{}, err
-		}
-		if err := file.Sync(); err != nil {
-			_ = file.Close()
-			return fileSnapshot{}, err
-		}
-		info, statErr := file.Stat()
-		if statErr != nil {
-			closeErr := file.Close()
-			return fileSnapshot{}, errors.Join(statErr, closeErr)
-		}
-		lease.add(file)
-		restored.entries[index].identity = info
-	}
-	for index := len(snapshot.entries) - 1; index >= 0; index-- {
-		item := snapshot.entries[index]
-		if !item.isDir {
-			continue
-		}
-		if err := roots[item.rel].Chmod(".", item.perm); err != nil {
-			return fileSnapshot{}, err
-		}
-	}
-	if err := treeRoot.Chmod(".", snapshot.perm); err != nil {
-		return fileSnapshot{}, err
-	}
-	if err := syncRootDirectory(treeRoot); err != nil {
-		return fileSnapshot{}, err
-	}
-	if err := syncRootDirectory(parent); err != nil {
-		return fileSnapshot{}, err
-	}
-	return restored, nil
-}
-
-func cleanTreeSnapshotPath(path string) (string, error) {
-	clean := filepath.Clean(path)
-	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("unsafe tree snapshot path %q", path)
-	}
-	return clean, nil
-}
-
 func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuarantine, expected fileSnapshot, destinationExpected *fileSnapshot, rollback bool) error {
 	if quarantine == nil || quarantine.closed {
 		return nil
@@ -986,11 +748,7 @@ func (filesystem *transactionFilesystem) cleanupQuarantine(quarantine *fileQuara
 		}
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(err, closeErr))
 	}
-	if expected.isDir {
-		err = quarantine.directory.RemoveAll(quarantine.itemName)
-	} else {
-		err = quarantine.directory.Remove(quarantine.itemName)
-	}
+	err = quarantine.directory.Remove(quarantine.itemName)
 	closeErr := deletionLease.close()
 	if err != nil {
 		return preserveQuarantineFailure(quarantine, rollback, observedPath, errors.Join(fmt.Errorf("remove isolated transaction quarantine: %w", err), closeErr))

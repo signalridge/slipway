@@ -155,6 +155,12 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 	assert.Equal(t, "retry-run", protocolErr.Next.Variants[0].ID)
 	assert.NotEqual(t, "resume-ad-hoc", protocolErr.Next.Variants[0].ID)
 	assert.NotEqual(t, "refresh-source", protocolErr.Next.Variants[0].ID)
+	argv := protocolErr.Next.Variants[0].BaseArgv
+	budgetIndex := indexOfString(argv, "--budget")
+	require.GreaterOrEqual(t, budgetIndex, 0)
+	assert.Equal(t, "4", argv[budgetIndex+1])
+	assert.Contains(t, argv, "--no-review")
+	assert.Equal(t, []string{"--", strings.Repeat("g", maxActionBytes)}, argv[len(argv)-2:])
 
 	runs, listErr := service.List()
 	require.NoError(t, listErr)
@@ -2104,6 +2110,12 @@ func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
 	require.ErrorAs(t, err, &protocolErr)
 	require.Len(t, protocolErr.Next.Variants, 1)
 	assert.Equal(t, "start-with-source", protocolErr.Next.Variants[0].ID)
+	argv := protocolErr.Next.Variants[0].BaseArgv
+	budgetIndex := indexOfString(argv, "--budget")
+	require.GreaterOrEqual(t, budgetIndex, 0)
+	assert.Equal(t, "6", argv[budgetIndex+1])
+	assert.Contains(t, argv, "--no-review")
+	assert.Equal(t, []string{"--", run.Goal}, argv[len(argv)-2:])
 
 	unchanged, err := service.Load(run.ID)
 	require.NoError(t, err)

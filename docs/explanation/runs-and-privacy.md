@@ -1,6 +1,6 @@
 # Runs and privacy
 
-Run recovery data lives in the Git common directory so linked worktrees see the same run list while each journal records its owning canonical workspace.
+Run recovery data lives in the Git common directory, but workspace identity remains per worktree. A no-ID `status` lists only runs owned by the current canonical workspace; runs from sibling linked worktrees remain physically discoverable by exact ID but are rejected for status-derived recovery or mutation outside their original workspace. Each journal records that owning canonical workspace.
 
 ```text
 .git/slipway/runs/<run-id>/

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/signalridge/slipway/internal/autopilot"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,12 +16,14 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 
 	installJSON, stderr, err := executeForTest(t, "install", "--root", repository, "--tool", "claude", "--json")
 	require.NoError(t, err, stderr)
-	install := exactJSONObject(t, installJSON, "contract_version", "hosts", "written", "removed", "preserved", "warnings")
+	install := exactJSONObject(t, installJSON, "contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings")
 	assertContractVersion(t, install)
 	assertJSONArray(t, install, "hosts")
+	assertJSONString(t, install, "transaction_outcome")
 	assertJSONArray(t, install, "written")
 	assertJSONArray(t, install, "removed")
 	assertJSONArray(t, install, "preserved")
+	assertJSONArray(t, install, "recovery_artifacts")
 	assertJSONArray(t, install, "warnings")
 
 	listJSON, stderr, err := executeForTest(t, "list", "--root", repository, "--json")
@@ -90,10 +94,18 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 
 	uninstallJSON, stderr, err := executeForTest(t, "uninstall", "--root", repository, "--tool", "claude", "--json")
 	require.NoError(t, err, stderr)
-	uninstall := exactJSONObject(t, uninstallJSON, "contract_version", "hosts", "written", "removed", "preserved", "warnings")
+	uninstall := exactJSONObject(t, uninstallJSON, "contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings")
 	assertContractVersion(t, uninstall)
+	assertJSONString(t, uninstall, "transaction_outcome")
 	assertJSONArray(t, uninstall, "written")
+	assertJSONArray(t, uninstall, "recovery_artifacts")
 	assertJSONArray(t, uninstall, "warnings")
+}
+
+func TestProtocolResultRejectsActiveStateWithoutAction(t *testing.T) {
+	t.Parallel()
+	err := writeProtocolResult(&cobra.Command{}, autopilot.Run{State: autopilot.RunActive})
+	assert.EqualError(t, err, "active protocol result requires a current action")
 }
 
 func TestMachineErrorsHaveExactVersionedShape(t *testing.T) {

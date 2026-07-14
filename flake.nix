@@ -19,16 +19,23 @@
         version =
           let
             manifest = builtins.fromJSON (builtins.readFile ./.release-please-manifest.json);
+            manifestVersion = manifest.".";
+            core = "(0|[1-9][0-9]*)";
+            prereleaseIdentifier = "(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)";
+            semverPattern = "${core}\\.${core}\\.${core}(-${prereleaseIdentifier}(\\.${prereleaseIdentifier})*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?";
           in
-          manifest."." or "dev";
+          assert builtins.isString manifestVersion && builtins.match semverPattern manifestVersion != null;
+          manifestVersion;
         commit = self.shortRev or "unknown";
-        go_1_26_5 = pkgs.go_1_26.overrideAttrs (finalAttrs: previousAttrs: {
-          version = "1.26.5";
-          src = pkgs.fetchurl {
-            url = "https://go.dev/dl/go${finalAttrs.version}.src.tar.gz";
-            hash = "sha256-SVvkvIcXasVnOS5bQRar2YRm0z17SdQedkzMaXay3EI=";
-          };
-        });
+        go_1_26_5 = pkgs.go_1_26.overrideAttrs (
+          finalAttrs: previousAttrs: {
+            version = "1.26.5";
+            src = pkgs.fetchurl {
+              url = "https://go.dev/dl/go${finalAttrs.version}.src.tar.gz";
+              hash = "sha256-SVvkvIcXasVnOS5bQRar2YRm0z17SdQedkzMaXay3EI=";
+            };
+          }
+        );
         buildGoModule = pkgs.buildGoModule.override { go = go_1_26_5; };
       in
       {
@@ -39,7 +46,7 @@
             src = ./.;
 
             subPackages = [ "." ];
-            vendorHash = "sha256-BaoZEgjt+eVe5yD8j3SKcTef9uAlRgyX/zmrwlIwrUQ=";
+            vendorHash = "sha256-OLi4HY+n3RaBFW5sHDp19G+QNg2t8eODP+Gj0uLAamg=";
             doCheck = false;
 
             ldflags = [

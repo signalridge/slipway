@@ -61,7 +61,7 @@ nix profile install github:signalridge/slipway
 
 ## 可选包管理渠道
 
-Homebrew 和 Scoop 依赖 `GH_PAT` secret，AUR 依赖 AUR SSH key；它们都使用 GoReleaser 的 `skip_upload: auto`。缺少对应 secret 时，某次 release 可能不会更新这些渠道。它们是可选渠道，不是 release gate。
+Homebrew、Scoop 与 AUR 都是独立 best-effort 渠道。核心 release 显式跳过三者，先独立发布压缩包、Linux 软件包、checksum、SBOM、provenance 与容器；只有存在 `GH_PAT`（Homebrew/Scoop）或 AUR SSH key 时才运行单独可失败的发布/验证 job。每个 job 只有在可复现重建的 archive checksum 与已发布核心 release 完全一致后才更新渠道。Publisher、checksum 验证或渠道验证失败都不会阻塞或否定核心 release，因此可选渠道可能缺失或滞后；使用前请核对显示版本。
 
 ```bash
 brew install --cask signalridge/tap/slipway
@@ -79,7 +79,7 @@ scoop install signalridge/slipway
 slipway install --tool claude
 ```
 
-支持 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`；可以重复 `--tool` 或使用 `--tool all`。不指定时只安装检测到的宿主。
+支持 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`；可以重复 `--tool` 或使用 `--tool all`。不指定时只安装检测到的宿主。Copilot 自动探测识别 `.github/copilot`、`.github/prompts` 或 `.github/skills` 任一目录，生成能力写入 `.github/skills`。
 
 ```bash
 slipway list

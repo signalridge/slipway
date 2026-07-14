@@ -90,7 +90,7 @@ func TestWindowsExistingSymlinkRemainsUntouchedWhenTransactionFailsClosed(t *tes
 
 			before, err := root.Lstat("link")
 			require.NoError(t, err)
-			err = ApplyFileTransaction([]FileTransactionOp{RemoveFileTransactionOp(filepath.Join(directory, "link"))})
+			err = applyFileTransactionForTest([]FileTransactionOp{RemoveFileTransactionOp(filepath.Join(directory, "link"))})
 			require.ErrorIs(t, err, ErrFileTransactionSymlinkUnsupported)
 			after, err := root.Lstat("link")
 			require.NoError(t, err, "unsupported link must remain untouched")
@@ -115,10 +115,10 @@ func TestWindowsLaterSymlinkFailsBeforeEarlierMutation(t *testing.T) {
 	}
 
 	var mutationStarted bool
-	err = ApplyFileTransactionWithHooks([]FileTransactionOp{
+	err = applyFileTransactionWithHooksForTest([]FileTransactionOp{
 		WriteFileTransactionOp(first, []byte("after"), 0o600),
 		RemoveFileTransactionOp(filepath.Join(directory, "link")),
-	}, FileTransactionHooks{BeforeMutation: func(_, _ string) error {
+	}, fileTransactionHooks{BeforeMutation: func(_, _ string) error {
 		mutationStarted = true
 		return nil
 	}})

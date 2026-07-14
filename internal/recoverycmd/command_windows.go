@@ -12,14 +12,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Quote quotes one argument for cmd.exe.
-func Quote(value string) string {
-	if value != "" && !strings.ContainsAny(value, " \t\r\n\"\\&|<>()^%!") {
-		return value
-	}
-	return quoteWindowsCommandArgument(value)
-}
-
 // Command renders arguments as one command that can be executed as written.
 // The encoded PowerShell launcher keeps user values out of cmd.exe parsing and
 // assigns a command line composed with the native CommandLineToArgvW rules

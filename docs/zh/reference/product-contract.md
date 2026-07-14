@@ -1,6 +1,6 @@
-# Slipway 产品契约（v2 参考快照）
+# Slipway 产品契约（v2）
 
-> 本页是 v2 实现（[ADR-0001](../../decisions/0001-source-bundle-v2.md) 所定义的 manifest-addressed source bundle）的**非权威参考快照**，描述当前分支已采纳的 v2 设计；它**不是** [Issue #434](https://github.com/signalridge/slipway/issues/434) 的权威正文，也不是实现权威。[Issue #434](https://github.com/signalridge/slipway/issues/434) 的 live 正文仍是 v1，v2 是对其 source/protocol 章节的预期 supersession（待 Issue 正式修订或 PR 合并后生效）。机器字段的实现权威是 [machine-protocol.schema.json](../../reference/machine-protocol.schema.json)；产品语义的最终权威是 Issue #434 修订后的正文。在 v2 正式并入 Issue 前，本页用于让仓库内代码、文档和测试保持内部一致。
+> [Issue #434](https://github.com/signalridge/slipway/issues/434) 的 live v2 正文是本次变更的产品定义，并已明确 supersede 该 Issue 先前的 v1 source/protocol 章节。本页是仓库内已采纳 v2 产品语义的实现契约，不是第二个独立产品决策；[ADR-0001](../../decisions/0001-source-bundle-v2.md) 记录 manifest-addressed source bundle 的技术决定与原因，[machine-protocol.schema.json](../../reference/machine-protocol.schema.json) 约束机器字段。三者与代码、测试、用户文档必须同步；交付后，当前代码、测试、文档与运行行为按 Requirements-only 原则接管系统事实，Issue/ADR 保留决策与历史原因。
 
 Slipway 是一个由用户显式启动、Issue 驱动但不被 GitHub 阻塞、CLI 调度、可中断恢复的 AI coding 软自动驾驶：
 
@@ -232,13 +232,14 @@ Per-run lock 不锁 Git/Issue/用户。多个 Run 可共存；歧义 stop/resume
 
 ## 13. 十个 adapters 与 ownership
 
-支持 Claude Code、Codex、GitHub Copilot、Cursor、Kilo Code、Kiro、OpenCode、Pi、Qwen Code、Windsurf。每宿主精确生成六能力，无 ambient hook。Doctor 的 GitHub version/auth/permission 仅 capability warning；GitHub 不可用不使 ad-hoc Run unhealthy。
+支持 Claude Code、Codex、GitHub Copilot、Cursor、Kilo Code、Kiro、OpenCode、Pi、Qwen Code、Windsurf。每宿主精确生成六能力，无 ambient hook。Copilot 自动探测识别 `.github/copilot`、`.github/prompts` 或 `.github/skills` 任一表面，能力写入 `.github/skills`。Doctor 的 GitHub version/auth/permission 仅 capability warning；GitHub 不可用不使 ad-hoc Run unhealthy。
 
 Versioned host-specific ownership manifest 只接受当前唯一版本和精确生成路径；任何非当前版本、malformed、duplicate、out-of-host 或 unknown claim 在用于 mutation 前 fail closed。不读取 v1/旧 manifest 作为删除或替换证明，不维护旧路径 inventory，不迁移旧 manifest/marker/settings，也不从旧格式推断 ownership；旧 manifest、marker-only state、retired hooks/settings 与其他未被当前 manifest 认领的内容保持未归属、原样保留，只允许用户显式手工处理。Refresh/uninstall 只依据当前 manifest 删除 hash-matching pristine managed files，用户改动保留并报告。所有 mutation 使用 root-anchored transaction/precondition/rollback validation；在每个 identity validation point 观察到的并发用户改动必须保留并报告，最终 pathname deletion gap 服从上面的 residual limitation，不宣称 linearizable exact-object delete。Windows 不依赖 POSIX shell 或 Unix mode；对无法在当前权限下精确重建的 pre-existing symbolic link，transaction 在 mutation 前安全拒绝，因而不依赖 symlink privilege 完成 rollback。六能力共享 untrusted Issue、trusted fetch、publication reconciliation、privacy 与 destructive grant 边界。
+Adapter report 必须区分 `transaction_outcome=committed|rolled_back|not_committed|ambiguous`：仅 committed 可保留计划的 written/removed claim；普通用户修改只进 `preserved`，事务/quarantine 恢复路径单列 `recovery_artifacts`。`.adapter-generated` sentinel 只作 health evidence；缺失可 refresh 重建，修改后作为用户内容保留，doctor 只能建议检查并按需手工删除后重建，不能承诺 refresh 覆盖。
 
 ## 14. 结构化恢复与跨平台 rendering
 
-Machine next 是 `{operation,workspace_identity,variants[]}`；每个 variant 有稳定 `id`、完整 `base_argv` 和按 schema 顺序的 typed `inputs{name,type,flag,required,choices?}`。Type 只允许 string/path/enum/digest。展开规则是复制 base argv，再对每个 input 追加 flag 和**一个未引用的精确 argv value**。禁止 `<answer>`/`<file>` 占位伪命令。
+Machine next 是 `{operation,workspace_identity,variants[]}`；每个 variant 有稳定 `id`、完整 `base_argv` 和按 schema 顺序的 typed `inputs{name,type,flag,required,choices?}`。Type 只允许 string/path/enum/digest。展开规则是复制 base argv，再把每个 input 的 flag 和**一个未经 shell 解释的精确 argv value**插到唯一 `--` separator 前；无 separator 时追加。`start` 的 goal（含 `-` 开头）是 `--` 后唯一 element。Go 与 schema 同时约束 action/answer/resume/start/command 的 argv family；禁止 `<answer>`/`<file>` 占位伪命令。
 
 Ad-hoc resume 是无输入 variant；issue-bound 提供 fresh source 或 explicit pinned；material candidate 提供绑定 current ID 的 keep-pinned/adopt，invalid 只 keep-pinned。Source temp file 导入后即 ephemeral。每个 variant 保留 absolute root 与 workspace identity。只有 argv 完整后才做 display rendering，display 不写 journal也不改变语义。POSIX、cmd.exe、PowerShell 分别渲染；cmd `%`/`!` expansion 可用 PowerShell UTF-16LE EncodedCommand 或等价安全 argv path。Native Windows 必须实际捕获空格、引号、Unicode、CR/LF、`% ! & ^` 下的原 argv，覆盖 root、Issue URL、source/outcome file、answer 与 recovery。
 
