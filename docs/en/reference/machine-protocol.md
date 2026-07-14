@@ -1,6 +1,6 @@
 # Machine protocol
 
-Contract version: **2**. The normative schemas are [machine-protocol.schema.json](machine-protocol.schema.json) and [source-envelope.schema.json](source-envelope.schema.json). The source model is recorded in [ADR-0001](../decisions/0001-source-bundle-v2.md).
+Contract version: **2**. The normative schemas are [machine-protocol.schema.json](../../reference/machine-protocol.schema.json) and [source-envelope.schema.json](../../reference/source-envelope.schema.json). The source model is recorded in [ADR-0001](../../decisions/0001-source-bundle-v2.md).
 
 The AI coding host executes Actions; Slipway schedules them, observes Git independently, and stores recovery history. Unknown contract versions and unknown or duplicate JSON fields are rejected.
 

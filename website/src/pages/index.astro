@@ -1,0 +1,22 @@
+---
+// The English docs live under the named default locale `/en/` (see
+// astro.config.mjs `defaultLocale: 'en'`). Starlight serves no prefix-less
+// landing page in that mode, so this thin page redirects the bare site root
+// `/slipway/` to the English splash at `/slipway/en/`.
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const destination = `${base}/en/`;
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta http-equiv="refresh" content={`0;url=${destination}`} />
+		<meta name="robots" content="noindex" />
+		<link rel="canonical" href={destination} />
+		<title>Slipway</title>
+	</head>
+	<body>
+		<p>Redirecting to <a href={destination}>Slipway documentation</a>.</p>
+	</body>
+</html>

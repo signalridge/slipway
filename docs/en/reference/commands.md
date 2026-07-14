@@ -2,7 +2,7 @@
 
 Slipway exposes exactly seven public commands.
 
-This English reference is non-normative. The [Chinese product contract](../zh/reference/product-contract.md) and [machine schema](machine-protocol.schema.json) are authoritative. Slipway is issue-first, not issue-gated; see the [Issue workflow](issue-workflow.md).
+This English reference is non-normative. The [Chinese product contract](../../zh/reference/product-contract.md) and [machine schema](../../reference/machine-protocol.schema.json) are authoritative. Slipway is issue-first, not issue-gated; see the [Issue workflow](issue-workflow.md).
 
 ## `slipway install`
 

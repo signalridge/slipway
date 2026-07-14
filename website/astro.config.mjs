@@ -18,9 +18,9 @@ export default defineConfig({
 			],
 			editLink: { baseUrl: 'https://github.com/signalridge/slipway/edit/main/docs/' },
 			lastUpdated: true,
-			defaultLocale: 'root',
+			defaultLocale: 'en',
 			locales: {
-				root: { label: 'English', lang: 'en' },
+				en: { label: 'English', lang: 'en' },
 				zh: { label: '简体中文', lang: 'zh-CN' },
 				ja: { label: '日本語', lang: 'ja' },
 			},

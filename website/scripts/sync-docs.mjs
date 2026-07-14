@@ -28,7 +28,7 @@ const REPOSITORY_BLOB = 'https://github.com/signalridge/slipway/blob/main';
 
 // Hand-authored pages preserved across regeneration (the splash landing pages,
 // one per locale). Everything else under OUT_DIR is generated and wiped.
-const KEEP_IN_OUT = new Set(['index.mdx', 'zh/index.mdx', 'ja/index.mdx']);
+const KEEP_IN_OUT = new Set(['en/index.mdx', 'zh/index.mdx', 'ja/index.mdx']);
 const IMAGE_EXT = /\.(svg|png|jpe?g|gif|webp|avif)$/i;
 
 async function walk(dir, rootRel = '') {

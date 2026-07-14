@@ -1,6 +1,6 @@
 # Windows rendering and durability (non-normative)
 
-> This is a non-normative platform guide. The [Chinese product contract](../zh/reference/product-contract.md) and [machine schema](machine-protocol.schema.json) are authoritative.
+> This is a non-normative platform guide. The [Chinese product contract](../../zh/reference/product-contract.md) and [machine schema](../../reference/machine-protocol.schema.json) are authoritative.
 
 ## Structured argv is authority
 
@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\nat
 cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
-The scripts cover doctor, initial Orient, issue source import, Outcome file/stdin where supported, decision answer, ad-hoc resume, current-candidate keep/adopt recovery, and special argv. See the [acceptance matrix](../../tests/acceptance/README.md). Workflow wiring remains only a W collector. [Run 29197908671, Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) completed both native assets against source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` and records W for that source, binary, and asset set. Later relevant changes require a new completed collection; syntax checks and cross-builds remain non-W evidence.
+The scripts cover doctor, initial Orient, issue source import, Outcome file/stdin where supported, decision answer, ad-hoc resume, current-candidate keep/adopt recovery, and special argv. See the [acceptance matrix](../../../tests/acceptance/README.md). Workflow wiring remains only a W collector. [Run 29197908671, Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) completed both native assets against source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` and records W for that source, binary, and asset set. Later relevant changes require a new completed collection; syntax checks and cross-builds remain non-W evidence.
 
 ## Symbolic-link transaction boundary
 

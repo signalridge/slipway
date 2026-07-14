@@ -1,6 +1,6 @@
 # Pre-release prompt scenarios
 
-These twelve prompt-level evaluations cover host behavior that deterministic tests cannot establish alone. Run them against Claude, Codex, and Pi and sample the other adapters. They complement—not replace—the 35-scenario [evidence matrix](../../../tests/acceptance/README.md).
+These twelve prompt-level evaluations cover host behavior that deterministic tests cannot establish alone. Run them against Claude, Codex, and Pi and sample the other adapters. They complement—not replace—the 35-scenario [evidence matrix](../README.md).
 
 For every scenario record the binary revision, host/version, generated capability digest, fixture revision, sanitized transcript location, observed Actions, exact submitted Outcome JSON, and evaluator notes. Never infer an activity from prose; compare the Outcome and journal. Do not fabricate uncollected transcripts.
 

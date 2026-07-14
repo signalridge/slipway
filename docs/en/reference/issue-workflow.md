@@ -1,6 +1,6 @@
 # Issue workflow (non-normative)
 
-> **Non-normative localized guide.** The [Chinese product contract](../zh/reference/product-contract.md) and [machine schema](machine-protocol.schema.json) are authoritative.
+> **Non-normative localized guide.** The [Chinese product contract](../../zh/reference/product-contract.md) and [machine schema](../../reference/machine-protocol.schema.json) are authoritative.
 
 Use an Objective only when one outcome necessarily needs multiple independently deliverable Changes. A Change is the only issue-backed Run source. Every Change must contain all effective execution requirements; parent bodies and comments are not runtime inheritance. Tiny, sensitive, emergency, offline, or deliberately untracked work can use `slipway run --budget N --json --root ABSOLUTE_ROOT -- GOAL`.
 

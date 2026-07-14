@@ -1,6 +1,6 @@
 # Acceptance and evidence (non-normative)
 
-> This guide explains evidence collection; it is not a release verdict or CLI routing authority. The [Chinese product contract](../zh/reference/product-contract.md) defines all 35 scenarios. The executable [acceptance matrix](../../tests/acceptance/README.md) records current artifacts and honest gaps.
+> This guide explains evidence collection; it is not a release verdict or CLI routing authority. The [Chinese product contract](../../zh/reference/product-contract.md) defines all 35 scenarios. The executable [acceptance matrix](../../../tests/acceptance/README.md) records current artifacts and honest gaps.
 
 Evidence labels are complementary:
 

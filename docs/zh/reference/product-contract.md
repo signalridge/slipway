@@ -1,6 +1,7 @@
 > 本正文为 v2，supersedes 此 Issue 之前的 v1 source/protocol 章节（change/v1 → change/v2 manifest-addressed、contract_version 1 → 2）。v2 与 ADR-0001、machine-protocol.schema.json 一致。
 
 # 产品定义
+
 > Slipway 是一个由用户显式启动、Issue 驱动但不被 GitHub 阻塞、CLI 调度、可中断恢复的 AI coding 软自动驾驶。
 
 核心工作流：
@@ -907,11 +908,11 @@ Host Outcome 的 `status` 只允许 `completed|needs_input|partial|error`；`ski
 | Orient | needs_input | implementation=null, review=null | decision/environment | none |
 | Clarify | completed/error | implementation=null, review=null | none | Clarify、Implement 或 Summarize，0..1 |
 | Clarify | needs_input | implementation=null, review=null | decision/environment | none |
-| Implement | completed | implementation.result=`applied|not_needed`, review=null | none | none |
+| Implement | completed | implementation.result=`applied\|not_needed`, review=null | none | none |
 | Implement | partial | implementation.result=`partial`, review=null | none | none |
 | Implement | error | implementation.result=`unable`, review=null | none | none |
 | Implement | needs_input | implementation=null, review=null | decision/destructive/environment | none |
-| Review | completed | review.result=`no_findings_reported|findings_reported`, implementation=null | none | none |
+| Review | completed | review.result=`no_findings_reported\|findings_reported`, implementation=null | none | none |
 | Review | partial | review.result=`inconclusive`, implementation=null | none | none |
 | Review | error | review.result=`error`, implementation=null | none | none |
 | Summarize | completed/error | implementation=null, review=null | none | none |
