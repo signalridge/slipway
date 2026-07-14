@@ -168,6 +168,17 @@ func parseSourceManifest(body string) (SourceManifest, error) {
 				"source body contains multiple manifest fences",
 			)
 		}
+		// Issue #434 §4.2: a managed Change body must not contain any
+		// `slipway-level:` marker outside the opening level marker / manifest
+		// fence. The first line already established the Level authority; any
+		// later level marker is a conflicting or duplicate authority and must
+		// be rejected rather than silently accepted.
+		if strings.Contains(lines[index], "<!-- slipway-level:") {
+			return SourceManifest{}, newSourceBundleError(
+				SourceClassificationManifestInvalid,
+				"source body contains an additional slipway-level marker outside the manifest fence",
+			)
+		}
 	}
 
 	manifestJSON := strings.Join(lines[fenceIndex+1:closingIndex], "\n")

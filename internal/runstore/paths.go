@@ -3,6 +3,7 @@ package runstore
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/signalridge/slipway/internal/fsutil"
@@ -37,7 +39,9 @@ const (
 	// details. The complete set still contributes to PathFingerprint.
 	maxGitObservationDetailBytes = 512 << 10
 
-	oversizeFileSampleBytes int64 = 64 << 10
+	maxGitCommandOutputBytes int64 = 16 << 20
+	gitCommandTimeout              = 30 * time.Second
+	oversizeFileSampleBytes  int64 = 64 << 10
 )
 
 type Paths struct {
@@ -90,6 +94,40 @@ type statusPath struct {
 	path     string
 	category string
 	state    string
+}
+
+// GitObservationLimitError reports Git output that exceeded the bounded raw
+// observation buffer.
+type GitObservationLimitError struct {
+	Stream string
+	Limit  int64
+}
+
+func (err *GitObservationLimitError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("git observation exceeds %d-byte limit on %s", err.Limit, err.Stream)
+}
+
+// GitObservationTimeoutError reports a Git observation terminated by its
+// context deadline.
+type GitObservationTimeoutError struct {
+	Cause error
+}
+
+func (err *GitObservationTimeoutError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("git observation timed out: %v", err.Cause)
+}
+
+func (err *GitObservationTimeoutError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.Cause
 }
 
 func pathsFor(commonDir, runID string) (Paths, error) {
@@ -721,19 +759,106 @@ func gitOutput(root string, args ...string) (string, error) {
 	return string(output), nil
 }
 
+type gitOutputReadResult struct {
+	stream        string
+	output        []byte
+	err           error
+	limitExceeded bool
+}
+
+func readBoundedGitOutput(stream string, reader io.Reader, cancel context.CancelFunc) gitOutputReadResult {
+	output, err := io.ReadAll(io.LimitReader(reader, maxGitCommandOutputBytes+1))
+	limitExceeded := int64(len(output)) > maxGitCommandOutputBytes
+	if limitExceeded {
+		output = output[:maxGitCommandOutputBytes]
+	}
+	if limitExceeded || err != nil {
+		cancel()
+	}
+	return gitOutputReadResult{stream: stream, output: output, err: err, limitExceeded: limitExceeded}
+}
+
+func gitObservationContextError(cause error) error {
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return &GitObservationTimeoutError{Cause: cause}
+	}
+	return fmt.Errorf("git observation canceled: %w", cause)
+}
+
 func gitBytes(root string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal argument sets; no shell interpretation.
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
+	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
+	defer cancel()
+	return gitBytesContext(ctx, root, args...)
+}
+
+func gitBytesContext(parent context.Context, root string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal argument sets; no shell interpretation.
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("prepare git %s stdout: %w", strings.Join(args, " "), err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		_ = stdout.Close()
+		return nil, fmt.Errorf("prepare git %s stderr: %w", strings.Join(args, " "), err)
+	}
+	if err := cmd.Start(); err != nil {
+		_ = stdout.Close()
+		_ = stderr.Close()
+		if parent.Err() != nil {
+			return nil, gitObservationContextError(parent.Err())
+		}
+		return nil, fmt.Errorf("start git %s: %w", strings.Join(args, " "), err)
+	}
+
+	results := make(chan gitOutputReadResult, 2)
+	go func() { results <- readBoundedGitOutput("stdout", stdout, cancel) }()
+	go func() { results <- readBoundedGitOutput("stderr", stderr, cancel) }()
+
+	var stdoutResult, stderrResult gitOutputReadResult
+	commandDone := ctx.Done()
+	for count := 0; count < 2; {
+		select {
+		case result := <-results:
+			if result.stream == "stdout" {
+				stdoutResult = result
+			} else {
+				stderrResult = result
+			}
+			count++
+		case <-commandDone:
+			_ = stdout.Close()
+			_ = stderr.Close()
+			commandDone = nil
+		}
+	}
+	waitErr := cmd.Wait()
+
+	if stdoutResult.limitExceeded {
+		return nil, &GitObservationLimitError{Stream: stdoutResult.stream, Limit: maxGitCommandOutputBytes}
+	}
+	if stderrResult.limitExceeded {
+		return nil, &GitObservationLimitError{Stream: stderrResult.stream, Limit: maxGitCommandOutputBytes}
+	}
+	if parent.Err() != nil {
+		return nil, gitObservationContextError(parent.Err())
+	}
+	if stdoutResult.err != nil {
+		return nil, fmt.Errorf("read git %s stdout: %w", strings.Join(args, " "), stdoutResult.err)
+	}
+	if stderrResult.err != nil {
+		return nil, fmt.Errorf("read git %s stderr: %w", strings.Join(args, " "), stderrResult.err)
+	}
+	if waitErr != nil {
+		detail := strings.TrimSpace(string(stderrResult.output))
 		if detail == "" {
-			detail = err.Error()
+			detail = waitErr.Error()
 		}
 		return nil, fmt.Errorf("git %s: %s", strings.Join(args, " "), detail)
 	}
-	return stdout.Bytes(), nil
+	return stdoutResult.output, nil
 }
 
 func discover(start string) (fsutil.GitRepository, error) {

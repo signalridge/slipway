@@ -127,6 +127,14 @@ func TestCopilotDetectionRecognizesItsSupportedProjectSurfaces(t *testing.T) {
 	}
 }
 
+func TestCopilotOwnershipRejectsRetiredPromptSurface(t *testing.T) {
+	host, ok := lookupHost("copilot")
+	require.True(t, ok)
+	assert.True(t, claimAllowed(host, ".github/copilot"))
+	assert.True(t, claimAllowed(host, ".github/skills/slipway-run/SKILL.md"))
+	assert.False(t, claimAllowed(host, ".github/prompts/slipway-run.prompt.md"))
+}
+
 func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {
 	root := t.TempDir()
 	_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}})
@@ -228,7 +236,27 @@ func TestNonCurrentManifestCannotAuthorizeAnyAdapterOperation(t *testing.T) {
 				case "uninstall":
 					_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
 				case "list":
-					_, err = List(root)
+					// Listing is read-only: a non-current manifest must degrade this
+					// host to an advisory warning rather than aborting the whole
+					// report (issue #434 §13). The mutation safety below is still
+					// verified by the install/refresh/uninstall branches and the
+					// doctor advisory.
+					statuses, listErr := List(root)
+					require.NoError(t, listErr, "read-only list must not fail on a non-current manifest")
+					require.NotEmpty(t, statuses)
+					assert.False(t, statuses[0].Installed)
+					assert.Contains(t, statuses[0].Warning, "unsupported ownership manifest version")
+					assertFileContent(t, root, managedRelative, managedContent)
+					assertFileContent(t, root, settingsRelative, settingsContent)
+					assertFileContent(t, root, relativeToRoot(root, manifestPath), manifestContent)
+					assertFileContent(t, root, relativeToRoot(root, sentinelPath), sentinelContent)
+					assert.NoFileExists(t, filepath.Join(root, ".claude/skills/slipway-review/SKILL.md"))
+
+					doctor, doctorErr := Doctor(root)
+					require.NoError(t, doctorErr)
+					check := doctorCheckForHost(doctor, host.ID)
+					assert.Equal(t, "adapter_manifest_unreadable", check.Code)
+					return
 				}
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "unsupported ownership manifest version")
@@ -417,16 +445,103 @@ func TestCurrentManifestCannotAuthorizeUnknownUserFile(t *testing.T) {
 			case "uninstall":
 				_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
 			case "list":
-				_, err = List(root)
+				// read-only: degrade per-host instead of failing (issue #434 §13)
+				statuses, listErr := List(root)
+				require.NoError(t, listErr)
+				require.NotEmpty(t, statuses)
+				assert.False(t, statuses[0].Installed)
+				assert.Contains(t, statuses[0].Warning, "not a current pristine managed file")
+				assertFileContent(t, root, unknownRelative, unknownContent)
+				assertFileContent(t, root, settingsRelative, settingsContent)
+				_, statErr := os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
+				assert.ErrorIs(t, statErr, os.ErrNotExist)
+				return
 			}
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "unknown managed path")
+			assert.Contains(t, err.Error(), "not a current pristine managed file")
 			assertFileContent(t, root, unknownRelative, unknownContent)
 			assertFileContent(t, root, settingsRelative, settingsContent)
 			_, statErr := os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
 			assert.ErrorIs(t, statErr, os.ErrNotExist)
 		})
 	}
+}
+
+// TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath covers the
+// provenance gap that a path-only currentClaimAllowed check leaves open: an
+// attacker writes arbitrary user content at a real managed path and a forged
+// manifest whose self-reported sha256 matches that user content. The manifest
+// must not authorize deletion because the content is not what this version of
+// Slipway actually generates. This is the P0 ownership-safety anchor required
+// by issue #434 §13 and acceptance scenario #29.
+func TestForgedCurrentManifestCannotDeleteUserContentAtManagedPath(t *testing.T) {
+	for _, operation := range []string{"uninstall", "refresh"} {
+		t.Run(operation, func(t *testing.T) {
+			root := t.TempDir()
+			host, ok := lookupHost("claude")
+			require.True(t, ok)
+			managedRelative := ".claude/skills/slipway-run/SKILL.md"
+			userContent := []byte("attacker-controlled content at a managed path\n")
+			writeTestFile(t, root, managedRelative, userContent)
+			writeTestManifest(t, root, host, ownershipManifest{
+				Version: currentManifestVersion,
+				ToolID:  host.ID,
+				Files:   []manifestFile{{Path: managedRelative, SHA256: hashBytes(userContent)}},
+			})
+
+			var err error
+			switch operation {
+			case "refresh":
+				_, err = Install(InstallOptions{Root: root, Tools: []string{host.ID}, Refresh: true})
+			case "uninstall":
+				_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{host.ID}})
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "not a current pristine managed file")
+			// The user-written content at the managed path must survive: a forged
+			// manifest with a matching self-reported hash must never delete it.
+			assertFileContent(t, root, managedRelative, userContent)
+		})
+	}
+}
+
+// TestListDegradesPerHostWhenOneManifestIsUnreadable covers issue #434 §13:
+// listing is non-mutating, so a malformed/stale manifest for one host must
+// degrade to an advisory warning instead of aborting the whole multi-host
+// report. The other hosts must still be reported.
+func TestListDegradesPerHostWhenOneManifestIsUnreadable(t *testing.T) {
+	root := t.TempDir()
+	claudeHost, ok := lookupHost("claude")
+	require.True(t, ok)
+	codexHost, ok := lookupHost("codex")
+	require.True(t, ok)
+
+	// codex is healthy.
+	_, err := Install(InstallOptions{Root: root, Tools: []string{"codex"}})
+	require.NoError(t, err)
+
+	// claude has a malformed manifest (invalid JSON).
+	manifestPath := filepath.Join(root, filepath.FromSlash(claudeHost.OwnershipRoot), "slipway", manifestFileName)
+	require.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0o700))
+	require.NoError(t, os.WriteFile(manifestPath, []byte("{not valid json"), 0o600))
+
+	statuses, err := List(root)
+	require.NoError(t, err, "read-only list must not fail when one host manifest is malformed")
+
+	statusByID := map[string]HostStatus{}
+	for _, status := range statuses {
+		statusByID[status.ID] = status
+	}
+	claudeStatus, hasClaude := statusByID[claudeHost.ID]
+	require.True(t, hasClaude, "claude must still be reported even though its manifest is unreadable")
+	assert.False(t, claudeStatus.Installed)
+	assert.Contains(t, claudeStatus.Warning, "ownership manifest could not be read")
+
+	codexStatus, hasCodex := statusByID[codexHost.ID]
+	require.True(t, hasCodex)
+	assert.True(t, codexStatus.Installed, "codex health must be unaffected by claude's bad manifest")
+	assert.Empty(t, codexStatus.Warning)
+	_ = codexHost // silence unused if lookup shape changes
 }
 
 func TestInstallRejectsDuplicateAndOutOfHostManifestClaims(t *testing.T) {
@@ -526,8 +641,13 @@ func TestMalformedOwnershipManifestCannotAuthorizeAdapterMutation(t *testing.T) 
 			require.ErrorContains(t, installErr, test.want)
 			_, uninstallErr := Uninstall(UninstallOptions{Root: root, Tools: []string{"claude"}})
 			require.ErrorContains(t, uninstallErr, test.want)
-			_, listErr := List(root)
-			require.ErrorContains(t, listErr, test.want)
+			// read-only List degrades per-host instead of failing (issue #434 §13);
+			// the malformed manifest is surfaced as an advisory warning.
+			statuses, listErr := List(root)
+			require.NoError(t, listErr)
+			require.NotEmpty(t, statuses)
+			assert.False(t, statuses[0].Installed)
+			assert.Contains(t, statuses[0].Warning, test.want)
 			managedAfter, err := os.ReadFile(managedPath)
 			require.NoError(t, err)
 			assert.Equal(t, managedBefore, managedAfter)

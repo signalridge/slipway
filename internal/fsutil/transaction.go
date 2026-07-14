@@ -48,6 +48,22 @@ var ErrFileTransactionNoReplaceUnsupported = errors.New("atomic no-replace renam
 // before mutation rather than guessing a different link kind.
 var ErrFileTransactionSymlinkUnsupported = errors.New("exact symbolic-link transaction unsupported")
 
+// FileTransactionSnapshotLimitError reports a managed file that cannot be
+// snapshotted within the transaction's bounded rollback buffer.
+type FileTransactionSnapshotLimitError struct {
+	Path        string
+	Observation string
+	Size        int64
+	Limit       int64
+}
+
+func (err *FileTransactionSnapshotLimitError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("managed file exceeds %d-byte limit (observed %d bytes)", err.Limit, err.Size)
+}
+
 // FileTransactionOp describes one ordered file mutation in a file transaction.
 type FileTransactionOp struct {
 	kind           fileTransactionOpKind

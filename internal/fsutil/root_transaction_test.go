@@ -2,6 +2,7 @@ package fsutil
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -84,6 +85,38 @@ func TestTransactionLeaseOwnsGuardAndStageIdentities(t *testing.T) {
 		assert.False(t, applied)
 		assert.True(t, observed)
 	})
+}
+
+func TestFileTransactionReportsOversizeManagedSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.txt")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	_, err = file.WriteString("preserved")
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(maxManagedSnapshotBytes+1))
+	require.NoError(t, file.Close())
+
+	err = ApplyFileTransactionWithin(dir, []FileTransactionOp{
+		WriteFileTransactionOp(path, []byte("replacement"), 0o600),
+	})
+	var limitErr *FileTransactionSnapshotLimitError
+	require.ErrorAs(t, err, &limitErr)
+	assert.Equal(t, path, limitErr.Path)
+	assert.Equal(t, "oversize", limitErr.Observation)
+	assert.Equal(t, int64(maxManagedSnapshotBytes+1), limitErr.Size)
+	assert.Equal(t, int64(maxManagedSnapshotBytes), limitErr.Limit)
+
+	info, statErr := os.Stat(path)
+	require.NoError(t, statErr)
+	assert.Equal(t, int64(maxManagedSnapshotBytes+1), info.Size())
+	preserved, openErr := os.Open(path)
+	require.NoError(t, openErr)
+	prefix := make([]byte, len("preserved"))
+	_, readErr := io.ReadFull(preserved, prefix)
+	closeErr := preserved.Close()
+	require.NoError(t, errors.Join(readErr, closeErr))
+	assert.Equal(t, "preserved", string(prefix))
 }
 
 func transactionLeaseOwnsFileIdentity(lease *transactionIdentityLease, expected os.FileInfo) bool {

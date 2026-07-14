@@ -27,6 +27,24 @@ func TestMain(testingMain *testing.M) {
 	os.Exit(testingMain.Run())
 }
 
+func TestCommandUsesSystemPowerShellPath(t *testing.T) {
+	t.Setenv("SystemRoot", `C:\Windows`)
+	path := systemPowerShellPath()
+	assert.True(t, filepath.IsAbs(path))
+	assert.Contains(t, path, "System32")
+	assert.Contains(t, path, "WindowsPowerShell")
+	assert.Contains(t, Command("slipway", "status"), path)
+}
+
+func TestSystemPowerShellPathFallsBackToWindowsDirectory(t *testing.T) {
+	t.Setenv("SystemRoot", "")
+	assert.Equal(
+		t,
+		filepath.Join(`C:\Windows`, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+		systemPowerShellPath(),
+	)
+}
+
 func TestCommandPreservesArgvThroughCommandPromptAndPowerShell(t *testing.T) {
 	directory := t.TempDir()
 	capture := filepath.Join(directory, "arguments.json")

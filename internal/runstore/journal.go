@@ -347,6 +347,9 @@ func appendEncodedJournalContext(context journalContext, name string, encoded []
 		return context.tracker.fail(PhaseJournalOpen, false, fmt.Errorf("open journal: %w", err))
 	}
 	defer file.Close()
+	if err := restrictPrivateFile(file, 0o600); err != nil {
+		return context.tracker.fail(PhaseJournalOpen, false, fmt.Errorf("secure journal ACL: %w", err))
+	}
 	if err := context.hooks.at(faultJournalOpened); err != nil {
 		return context.tracker.fail(PhaseJournalVerify, false, err)
 	}

@@ -673,6 +673,9 @@ func readSourceFile(path string) ([]byte, error) {
 }
 
 func readSourceFileInRoot(root *os.Root, name string) ([]byte, error) {
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return nil, fmt.Errorf("source file requires one leaf name: %q", name)
+	}
 	before, err := root.Lstat(name)
 	if err != nil {
 		return nil, fmt.Errorf("inspect %q: %w", name, err)
@@ -681,7 +684,7 @@ func readSourceFileInRoot(root *os.Root, name string) ([]byte, error) {
 		return nil, fmt.Errorf("path %q is not a regular file", name)
 	}
 
-	file, err := root.OpenFile(name, os.O_RDONLY, 0)
+	file, err := openSourceFileNoFollow(root, name)
 	if err != nil {
 		return nil, fmt.Errorf("open %q: %w", name, err)
 	}

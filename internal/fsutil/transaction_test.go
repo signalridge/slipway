@@ -781,12 +781,12 @@ func assertReportedRecoveryArtifactsPrivate(t *testing.T, transactionErr error, 
 		require.NoError(t, err, recovery.RecoveryPath)
 		assert.True(t, info.IsDir())
 		assert.Zero(t, info.Mode()&os.ModeSymlink)
-		if runtime.GOOS == "windows" {
-			// Windows reports ACLs through security descriptors rather than
-			// os.FileMode permission bits.
-			continue
-		}
-		assert.Zero(t, info.Mode().Perm()&0o077, "recovery directory must be private: %s", recovery.RecoveryPath)
+		assert.True(
+			t,
+			ownerProtectionIsPrivate(filepath.Dir(recovery.RecoveryPath), info.Mode()),
+			"recovery directory must be private: %s",
+			recovery.RecoveryPath,
+		)
 	}
 }
 

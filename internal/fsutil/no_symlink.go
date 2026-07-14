@@ -1,33 +1,52 @@
 package fsutil
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"os"
+	"path/filepath"
 )
 
 // ReadFileNoSymlink reads a regular file after rejecting direct symlink paths.
 func ReadFileNoSymlink(path string) ([]byte, error) {
-	if err := requireRegularNonSymlink(path, false); err != nil {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
 		return nil, err
 	}
-	return os.ReadFile(path) // #nosec G304 -- direct symlink targets are rejected with Lstat before reading.
-}
-
-func requireRegularNonSymlink(path string, allowMissing bool) error {
-	info, err := os.Lstat(path)
+	root, err := os.OpenRoot(filepath.Dir(absolute))
 	if err != nil {
-		if allowMissing && errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return err
+		return nil, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refuse symlink file path %q", path)
+	defer root.Close()
+
+	name := filepath.Base(absolute)
+	before, err := root.Lstat(name)
+	if err != nil {
+		return nil, err
 	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("refuse non-regular file path %q", path)
+	if before.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("refuse symlink file path %q", path)
 	}
-	return nil
+	if !before.Mode().IsRegular() {
+		return nil, fmt.Errorf("refuse non-regular file path %q", path)
+	}
+
+	file, err := openFileNoFollow(root, name)
+	if err != nil {
+		return nil, fmt.Errorf("open no-follow file %q: %w", name, err)
+	}
+	defer file.Close()
+
+	opened, statErr := file.Stat()
+	current, lstatErr := root.Lstat(name)
+	if statErr != nil {
+		return nil, statErr
+	}
+	if lstatErr != nil {
+		return nil, lstatErr
+	}
+	if !opened.Mode().IsRegular() || current.Mode()&os.ModeSymlink != 0 || !current.Mode().IsRegular() || !os.SameFile(before, opened) || !os.SameFile(opened, current) {
+		return nil, fmt.Errorf("file path %q changed or is not the opened regular file", path)
+	}
+	return io.ReadAll(file)
 }

@@ -6,6 +6,8 @@ package recoverycmd
 
 import (
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf16"
 
@@ -13,6 +15,8 @@ import (
 )
 
 // Command renders arguments as one command that can be executed as written.
+// It only renders text; when argv[0] is unqualified, users should invoke the
+// displayed command from a trusted location where it resolves as intended.
 // The encoded PowerShell launcher keeps user values out of cmd.exe parsing and
 // assigns a command line composed with the native CommandLineToArgvW rules
 // directly to ProcessStartInfo, bypassing PowerShell's lossy native argv binder.
@@ -51,5 +55,13 @@ func encodedPowerShellCommand(script string) string {
 		encodedBytes[index*2] = byte(unit)
 		encodedBytes[index*2+1] = byte(unit >> 8)
 	}
-	return "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand " + base64.StdEncoding.EncodeToString(encodedBytes)
+	return windows.EscapeArg(systemPowerShellPath()) + " -NoLogo -NoProfile -NonInteractive -EncodedCommand " + base64.StdEncoding.EncodeToString(encodedBytes)
+}
+
+func systemPowerShellPath() string {
+	systemRoot := os.Getenv("SystemRoot")
+	if systemRoot == "" || !filepath.IsAbs(systemRoot) {
+		systemRoot = `C:\Windows`
+	}
+	return filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 }

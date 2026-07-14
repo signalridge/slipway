@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 type Store struct {
@@ -484,6 +486,11 @@ func openPrivateChild(parent *os.Root, name string, create bool) (*os.Root, os.F
 			_ = directory.Close()
 			_ = child.Close()
 			return nil, nil, false, fmt.Errorf("secure private directory: %w", err)
+		}
+		if err := fsutil.RestrictToOwner(directory.Name()); err != nil {
+			_ = directory.Close()
+			_ = child.Close()
+			return nil, nil, false, fmt.Errorf("secure private directory ACL: %w", err)
 		}
 		if err := directory.Close(); err != nil {
 			_ = child.Close()

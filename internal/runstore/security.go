@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 const (
@@ -21,6 +23,16 @@ const (
 type leafIdentity struct {
 	exists bool
 	info   os.FileInfo
+}
+
+func restrictPrivateFile(file *os.File, perm os.FileMode) error {
+	if perm.Perm()&0o077 != 0 {
+		return nil
+	}
+	if err := fsutil.RestrictToOwner(file.Name()); err != nil {
+		return fmt.Errorf("restrict private file to owner: %w", err)
+	}
+	return nil
 }
 
 func openRegularFileInRoot(root *os.Root, name string, flags int, perm os.FileMode, create bool) (*os.File, bool, error) {
@@ -41,6 +53,10 @@ func openRegularFileInRoot(root *os.Root, name string, flags int, perm os.FileMo
 				return nil, false, openErr
 			}
 			if err := verifyOpenedRegularFileInRoot(root, name, file); err != nil {
+				_ = file.Close()
+				return nil, false, err
+			}
+			if err := restrictPrivateFile(file, perm); err != nil {
 				_ = file.Close()
 				return nil, false, err
 			}
@@ -135,6 +151,11 @@ func createTemporaryFileInRoot(root *os.Root, destination string, perm os.FileMo
 		}
 		if err := verifyOpenedRegularFileInRoot(root, name, file); err != nil {
 			_ = file.Close()
+			return "", nil, err
+		}
+		if err := restrictPrivateFile(file, perm); err != nil {
+			_ = file.Close()
+			_ = root.Remove(name)
 			return "", nil, err
 		}
 		return name, file, nil

@@ -172,6 +172,12 @@ func TestParseSourceRejectsV1AndMalformedManifest(t *testing.T) {
 		{name: "objective marker", mutate: func(value *RawSourceEnvelope) {
 			value.Body = strings.Replace(value.Body, changeSourceMarker, "<!-- slipway-level: objective/v1 -->", 1)
 		}, want: "must begin"},
+		{name: "extra level marker after manifest fence", mutate: func(value *RawSourceEnvelope) {
+			// Issue #434 §4.2: a managed Change must not contain any
+			// slipway-level marker outside the opening marker and manifest
+			// fence. Append a conflicting marker after the manifest fence.
+			value.Body = value.Body + "\n\n<!-- slipway-level: objective/v1 -->\n"
+		}, want: "additional slipway-level marker"},
 		{name: "duplicate comment id", mutate: func(value *RawSourceEnvelope) {
 			value.Comments[1].NodeID = value.Comments[0].NodeID
 		}, want: "duplicated"},
@@ -282,6 +288,23 @@ func TestImportSourceFileReadsOnceAndDoesNotPersistPath(t *testing.T) {
 	assert.NotContains(t, string(encoded), path)
 	assert.NotContains(t, string(encoded), "markdown")
 	assert.NotContains(t, string(encoded), "Deliver **value**")
+}
+
+func TestImportSourceFileRejectsSymlink(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(validSourceEnvelope())
+	require.NoError(t, err)
+	directory := t.TempDir()
+	target := filepath.Join(directory, "source.json")
+	require.NoError(t, os.WriteFile(target, raw, 0o600))
+	link := filepath.Join(directory, "source-link.json")
+	if err := os.Symlink(filepath.Base(target), link); err != nil {
+		t.Skipf("create source symlink: %v", err)
+	}
+
+	_, err = ImportSourceFile(link)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular file")
 }
 
 func TestParseSourceCandidateAllowsEmptyCommentsForInvalidHead(t *testing.T) {

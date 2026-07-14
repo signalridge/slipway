@@ -1,6 +1,7 @@
 package runstore
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -93,6 +94,45 @@ func TestObserveGitUsesExactPorcelainV2AndIndexFingerprints(t *testing.T) {
 	assert.Equal(t, staged.IndexFingerprint, unstaged.IndexFingerprint, "unstaged content must not alter the index fingerprint")
 	assert.NotEqual(t, staged.StatusFingerprint, unstaged.StatusFingerprint)
 	assert.True(t, unstaged.ChangedFrom(staged))
+}
+
+func TestGitBytesContextHonorsCancellationAndDeadline(t *testing.T) {
+	repository := createRepository(t)
+
+	t.Run("canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := gitBytesContext(ctx, repository, "status", "--porcelain=v2")
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 0)
+		defer cancel()
+
+		_, err := gitBytesContext(ctx, repository, "status", "--porcelain=v2")
+		var timeoutErr *GitObservationTimeoutError
+		require.ErrorAs(t, err, &timeoutErr)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+}
+
+func TestGitBytesRejectsOutputBeyondRawLimit(t *testing.T) {
+	repository := createRepository(t)
+	path := filepath.Join(repository, "oversize-git-output.bin")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(maxGitCommandOutputBytes+1))
+	require.NoError(t, file.Close())
+
+	object, err := gitOutput(repository, "hash-object", "-w", path)
+	require.NoError(t, err)
+	_, err = gitBytes(repository, "cat-file", "blob", object)
+	var limitErr *GitObservationLimitError
+	require.ErrorAs(t, err, &limitErr)
+	assert.Equal(t, "stdout", limitErr.Stream)
+	assert.Equal(t, maxGitCommandOutputBytes, limitErr.Limit)
 }
 
 func TestObserveGitHashesUntrackedUnicodeContentAndRenameOrigins(t *testing.T) {
