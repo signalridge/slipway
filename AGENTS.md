@@ -12,7 +12,9 @@ Slipway is a user-invoked soft autopilot. This file states principles only; comm
 
 - Investigate the current repository, Git state, relevant code, and development conventions before asking the user.
 - Ask only for a genuine human decision, one at a time, with a recommendation, rationale, and alternatives.
-- If the request is complete, proceed without asking the user to repeat authorization.
+- If the request is complete, ask zero questions and proceed without repeated authorization.
+- If clarification changes the implementation understanding, summarize the shared understanding and obtain one confirmation before implementation.
+- Stop clarification immediately when the user asks to wrap up.
 
 ## Honest reporting
 

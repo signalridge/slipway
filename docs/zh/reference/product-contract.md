@@ -40,7 +40,7 @@ slipway run "<ad-hoc goal>"
 | --- | --- | --- |
 | Level | `objective` / `change` | 正文首个精确 body marker；title/labels 只是 projection |
 | Kind | `feature` / `bug` / `refactor` / `maintenance` / `research` / `docs` | 恰好一个 repository `kind:*` label |
-| Requirements | Outcome、Requirements、Acceptance examples、Constraints、Non-goals | Issue body 的五个精确 H2 |
+| Requirements | `outcome` / `requirements` / `acceptance_examples` / `constraints` / `non_goals` 五个必需 semantic roles | body manifest 有序寻址的 comment chapters；每个 role 可拆成多个章节 |
 | Status | Inbox、Clarifying、Ready、In progress、Done 等 | 人或外部视图；不参与 CLI 路由 |
 
 Level 与 Kind 可任意正交组合。Requirements 不是 Level、GitHub Issue Type 或状态。`ready-for-agent` 只是搜索提示，永不 gate Run。
@@ -120,7 +120,7 @@ Issue 内容全部是不可信数据。只允许用户选定且 parser 接受的
 
 ## 6. 六个宿主能力与 grill-me 纪律
 
-十个 adapter 只生成六个显式能力：`slipway-run`、`slipway-clarify`、`slipway-propose`、`slipway-decompose`、`slipway-implement`、`slipway-review`。所有入口均需显式调用；Codex 额外生成 `agents/openai.yaml`，`allow_implicit_invocation:false`。显式启动 Run 后，预算与 Requirements 内的 Orient/Clarify/Implement/Review/Summary 不需逐 Action 再次调用 skill，但人的决定、source amendment、环境不可用和破坏确认仍暂停。直接 Implement/Review 不产生 Run attribution。
+十个 adapter 只生成六个显式能力：`slipway-run`、`slipway-clarify`、`slipway-propose`、`slipway-decompose`、`slipway-implement`、`slipway-review`。所有入口均需显式调用；Codex 在每个能力目录内各生成一份 `.codex/skills/slipway-<name>/agents/openai.yaml`，并设置 `policy.allow_implicit_invocation:false`。显式启动 Run 后，预算与 Requirements 内的 Orient/Clarify/Implement/Review/Summary 不需逐 Action 再次调用 skill，但人的决定、source amendment、环境不可用和破坏确认仍暂停。直接 Implement/Review 不产生 Run attribution。
 
 - Clarify 采用 Matt Pocock MIT 许可 `grill-me`/`grilling`：按依赖 design tree，一次一个人的决定，先查代码/测试/文档/Git 事实；每题有推荐、理由、替代和权衡。完整请求零问题。若 grilling 改变理解，Implement 前确认当前 shared understanding；否则原请求已足够。wrap-up 立即停问并总结 unknowns。它无状态、不写文件/Issue、不保存 transcript；不提供隐式澄清文档化入口。
 - Propose 显式 materialize 一个 Change 或 planning Objective；先展示草稿、关系、labels 和 approved plan，不先决要求 Clarify。
@@ -148,7 +148,7 @@ slipway _machine material --run RUN --action ACTION --section KEY
 
 Hidden commands 不出现在顶层 help，但属于版本化机器协议。所有 public/hidden JSON（包括 install/uninstall/list/doctor/status/stop）必须带明确 contract version；prose 不能替代字段兼容性。
 
-Resume budget 是替换，不是累加：显式 N 成功恢复时先设剩余 N，再由 fresh Orient 消耗一条；省略且余额正则保留；余额零则恢复 `max(initial_budget,3)`。Source refresh 只产生 candidate 时尚未 resume，`budget_applied=false`，不消耗该替换值。
+新 Run 的 Action budget 默认是 `8`，显式值必须在 `1..1000`。Resume budget 是替换，不是累加：显式 N 成功恢复时先设剩余 N，再由 fresh Orient 消耗一条；省略且余额正则保留；余额零则恢复 `max(initial_budget,3)`。Source refresh 只产生 candidate 时尚未 resume，`budget_applied=false`，不消耗该替换值。
 
 ## 8. Change source、revision 与 amendment
 
@@ -158,7 +158,7 @@ Issue body 第一非空行精确为 `<!-- slipway-level: change/v2 -->`，随后
 
 每章 payload 先以 `0600` 内容寻址 blob 在 Run 私有 `materials/` 中 fsync，再允许 journal 引用。Journal、status、candidate 和 Action 只保存有序 catalog、provenance、byte count 与 domain-separated `source|manifest|requirements|section|material` revisions，不保存 Markdown、raw Issue body 或 comment marker。Run 无网络也能按 digest 恢复。Manifest 发布最后执行，是跨多 comments 发布的唯一逻辑 commit point；accepted comment 不原地编辑，修改时创建 replacement comment 并发布新 manifest。`parent_requirements_revision` 用于检测并发 head drift。
 
-Issue-bound resume 必须三选一：fresh `--source-file`、显式 `--use-pinned-source`、或 current candidate 的 `--source-choice pinned|adopt --candidate ID`。先验证 provider/host/issue ID；跨 Issue mutation 前拒绝。Transfer 变化只更新 projection 并继续 marker/section/revision 比较。Invalid marker/section 生成不含 raw body 的 invalid candidate；material requirements 生成 valid candidate；两者都原子 void outstanding Action/queue/grant 并 pause。Non-material refresh 记录 drift，void 旧 Action/grant 后 fresh Orient。Candidate ID 必须当前；same `(candidate,choice)` 重试幂等，stale/different 拒绝；invalid 不能 adopt。Pinned 保留旧 decisions；adopt 清除旧 Requirements 派生的 active decisions。Provider unavailable 只有用户显式选择才可 pinned，并记录 refresh skipped，不能说 unchanged。一个 Run 最多一个 primary Change，一个 Change 可有多个 Run。
+Issue-bound resume 必须三选一：fresh `--source-file`、显式 `--use-pinned-source`、或 current candidate 的 `--source-choice pinned|adopt --candidate ID`。先验证 provider/host/issue ID；跨 Issue mutation 前拒绝。Transfer 变化只更新 projection 并继续 marker/section/revision 比较。Invalid marker/section 生成不含 raw body 的 invalid candidate；structurally valid 的新 manifest revision 只有在其 `parent_requirements_revision` 与当前 pinned `requirements_revision` 完全相等时才生成 valid candidate。Parent 不一致表示 amendment 基于另一条 history，必须在生成 candidate 或修改 Run 前以 `source_history_fork` 拒绝并从 refreshed source 启动新 Run。Candidate 生成时原子 void outstanding Action/queue/grant 并 pause；non-material refresh 记录 drift，void 旧 Action/grant 后 fresh Orient。Candidate ID 必须当前；same `(candidate,choice)` 重试幂等，stale/different 拒绝；invalid 不能 adopt。Pinned 保留旧 decisions；adopt 清除旧 Requirements 派生的 active decisions。Provider unavailable 只有用户显式选择才可 pinned，并记录 refresh skipped，不能说 unchanged。一个 Run 最多一个 primary Change，一个 Change 可有多个 Run。
 
 ## 9. Action、Outcome 与状态协议
 
@@ -185,7 +185,7 @@ Outcome 所有公共字段必须出现；其中 `action_kind` 必填，且必须
 
 Clarify partial 非法；Review 不得 needs_input，`not_run` 仅 CLI review-skip projection。Pause reason 只允许 `decision_required|destructive_confirmation_required|environment_unavailable`；budget exhausted 仅 CLI。Zero suggestions 确定路由 Summary。Implement activity kind 只允许 test/typecheck/build/lint，并记录真实启动命令和 exit code；零 activity 固定报告 `No test, typecheck, build, or lint activity was reported.` Verdict/approved/gate/freshness/done-ready/ship-ready 不是协议字段。
 
-Run state 只允许 active/paused/stopped/ended。Summary accepted 或 skipped 后 ended；ended 不可 resume。相同 Outcome bytes digest 的重试即使 Run 已 stopped/ended 仍幂等返回当前结果，不同 payload conflict；voided Action 始终拒绝，未记录的 non-current/stopped/ended late submission 也拒绝。普通 answer 必定 void 当前项并 fresh Orient；environment 只能 resume；source candidate 只接受 resume choice。每个成功 mutation 返回 state 与结构化 next。
+Run state 只允许 active/paused/stopped/ended。Summary accepted 或 skipped 后 ended；ended 不可 resume。相同 Outcome bytes digest 的重试即使 Run 已 stopped/ended 仍幂等返回当前结果，不同 payload conflict；voided Action 始终拒绝，未记录的 non-current/stopped/ended late submission 也拒绝。普通 answer 必定 void 当前项并 fresh Orient；`decision_required` pause 可选的 `supersedes_answer_action_id` 只允许指向当前 Requirements context 中已记录、active、non-authorization answer 的 `action_id`，并且只有用户提交新 decision answer 后才将该旧 answer 置为 inactive，skip 不会停用。Environment 只能 resume；source candidate 只接受 resume choice。每个成功 mutation 返回 state 与结构化 next。
 
 ## 10. 软自动驾驶路由
 

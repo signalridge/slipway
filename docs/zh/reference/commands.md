@@ -9,8 +9,8 @@ Slipway 只有七个公开命令：
 - `uninstall`：仅删除仍保持原样的托管文件。
 - `list`：列出宿主检测、安装、`needs_refresh` 与 capability 状态；非当前版本 manifest 会 fail closed。`needs_refresh` 表示 drift，不授权覆盖用户修改：缺失 pristine 内容可由 refresh 重建，修改后的文件或 sentinel 会一直保留，直到用户显式处理。
 - `doctor`：诊断适配器和运行环境，不检查代码改动；非当前版本 manifest 报告 `adapter_manifest_unreadable`，不完整 current surface 报告 `needs_refresh`/warning。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；带 source 时只读取一次严格 Source Bundle v2 envelope，把 manifest 引用章节固定为本地内容寻址 material，并仅在 journal 中持久化 catalog/provenance。
-- `status [run-id] [--root ROOT] [--json]`：列出或查看 Run。无 ID 时只列 canonical workspace identity 与当前 worktree 匹配的 Run；其他 linked worktree 的 Run 不出现，只能从其原 workspace 恢复或修改。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`：启动软自动驾驶；Action budget 默认是 `8`，显式值必须在 `1..1000`。带 source 时只读取一次严格 Source Bundle v2 envelope，把 manifest 引用章节固定为本地内容寻址 material，并仅在 journal 中持久化 catalog/provenance。
+- `status [run-id] [--root ROOT] [--json]`：列出或查看 Run。无 ID 时列出当前仓库的所有 Run：当前 canonical workspace 的 Run 完整 replay；其他 linked worktree 的 Run 仅以 `FirstEvent` header stub 出现，JSON 标记 `workspace_foreign:true`，人类输出标记 `foreign=true` 并显示所属 workspace。Foreign stub 只用于发现；Load、resume 与 mutation 仍必须从原 workspace 执行。
 - `stop [run-id] [--root ROOT] [--json]`：停止但保留恢复日志。
 
 ```bash

@@ -16,18 +16,17 @@ import (
 // other states retain action when a current Action remains and otherwise omit it.
 // This keeps the public surface uniform so a host never has to guess what follows.
 type mutationEnvelope struct {
-	ContractVersion  int                         `json:"contract_version"`
-	RunID            string                      `json:"run_id"`
-	State            autopilot.RunState          `json:"state"`
-	PauseReason      autopilot.PauseReason       `json:"pause_reason,omitempty"`
-	Summary          string                      `json:"summary,omitempty"`
-	Action           *autopilot.Action           `json:"action,omitempty"`
-	Next             autopilot.Next              `json:"next"`
-	SuggestedActions []autopilot.SuggestedAction `json:"suggested_actions,omitempty"`
-	PinnedSource     *autopilot.PinnedSource     `json:"pinned_source,omitempty"`
-	SourceCandidate  *autopilot.SourceCandidate  `json:"source_candidate,omitempty"`
-	ResumeOperation  string                      `json:"resume_operation,omitempty"`
-	BudgetApplied    *bool                       `json:"budget_applied,omitempty"`
+	ContractVersion int                        `json:"contract_version"`
+	RunID           string                     `json:"run_id"`
+	State           autopilot.RunState         `json:"state"`
+	PauseReason     autopilot.PauseReason      `json:"pause_reason,omitempty"`
+	Summary         string                     `json:"summary,omitempty"`
+	Action          *autopilot.Action          `json:"action,omitempty"`
+	Next            autopilot.Next             `json:"next"`
+	PinnedSource    *autopilot.PinnedSource    `json:"pinned_source,omitempty"`
+	SourceCandidate *autopilot.SourceCandidate `json:"source_candidate,omitempty"`
+	ResumeOperation string                     `json:"resume_operation,omitempty"`
+	BudgetApplied   *bool                      `json:"budget_applied,omitempty"`
 }
 
 func makeRunCmd() *cobra.Command {
@@ -421,16 +420,15 @@ func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
 		return fmt.Errorf("derive next protocol operation: %w", err)
 	}
 	output := mutationEnvelope{
-		ContractVersion:  autopilot.ContractVersion,
-		RunID:            run.ID,
-		State:            run.State,
-		PauseReason:      run.PauseReason,
-		Summary:          run.Summary,
-		Action:           run.CurrentAction,
-		Next:             next,
-		SuggestedActions: run.DecisionSuggestions,
-		PinnedSource:     run.PinnedSource,
-		SourceCandidate:  run.SourceCandidate,
+		ContractVersion: autopilot.ContractVersion,
+		RunID:           run.ID,
+		State:           run.State,
+		PauseReason:     run.PauseReason,
+		Summary:         run.Summary,
+		Action:          run.CurrentAction,
+		Next:            next,
+		PinnedSource:    run.PinnedSource,
+		SourceCandidate: run.SourceCandidate,
 	}
 	if command.Name() == "resume" && run.LastResumeResult != nil {
 		budgetApplied := run.LastResumeResult.BudgetApplied

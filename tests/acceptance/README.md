@@ -1,6 +1,6 @@
 # Issue #434 acceptance evidence matrix
 
-This matrix maps all 35 normative scenarios to reproducible artifacts and honest evidence gaps. It is an evidence index, not a release verdict, Issue status, Run gate, Review result, or CLI progression input.
+This matrix maps all 35 normative scenarios to reproducible artifacts and honest evidence gaps. It is an evidence index, not a release verdict, Issue status, Run routing input, Review result, or CLI progression input.
 
 Evidence labels have exact meanings:
 
@@ -22,7 +22,7 @@ C cannot substitute for H. A fake endpoint or this deterministic harness cannot 
 | 5 | Decompose to self-contained vertical Changes with native parent/blockers and explicit amendment diffs | G+H | [decompose template](../../internal/tmpl/templates/skills/decompose/SKILL.md), [Issue guide](../../docs/reference/issue-workflow.md), [live fixture guide](live-github/README.md) | G and H **not collected / external**; no claim that static decomposition prose proves GitHub relations. |
 | 6 | Operate in a user-owned non-Organization repository without Issue Types/Fields/Project | G | [live fixture guide](live-github/README.md), [Issue guide](../../docs/reference/issue-workflow.md) | G **not collected / external**. No organization-only prerequisite is documented. |
 | 7 | Publication timeout/partial/duplicates/index delay reconcile to created/matched/failed/ambiguous without blind retry | G+H | [fault harness](github_publication_fault_harness.py), [fixture](fixtures/github-publication-faults.json), [fixture notes](fixtures/README.md), [live guide](live-github/README.md) | Local H/G-adjacent harness **available**; required live G and real H **not collected / external**. Harness success must not be labeled G or H. |
-| 8 | Body marker controls Level; invalid/conflicting marker rejects; projection drift warns and `ready-for-agent` does not gate | C+G | [source tests](../../internal/autopilot/source_test.go), [service source tests](../../internal/autopilot/service_test.go), [template tests](../../internal/tmpl/templates_test.go), [live guide](live-github/README.md) | C **available**; G **not collected / external** for live label/title repair. |
+| 8 | Body marker controls Level; invalid/conflicting marker rejects; projection drift warns and `ready-for-agent` does not control Run eligibility | C+G | [source tests](../../internal/autopilot/source_test.go), [service source tests](../../internal/autopilot/service_test.go), [template tests](../../internal/tmpl/templates_test.go), [live guide](live-github/README.md) | C **available**; G **not collected / external** for live label/title repair. |
 | 9 | Deterministic source sections/revisions and strict duplicate/oversize/UTF-8/symlink rejection | C+S | [source tests](../../internal/autopilot/source_test.go), [strict JSON tests](../../internal/autopilot/jsonstrict_test.go), [machine Shell](machine-protocol.sh) | C and S **available**. Cross-platform digest parity still depends on the platform suites that run these same fixtures. |
 | 10 | Untrusted Issue injection, unrelated commands, credential requests, and links have no instruction authority | C+H | [shared template tests](../../internal/tmpl/templates_test.go), [common boundary](../../internal/tmpl/templates/_partials/common.tmpl), [transcript format](transcripts/README.md) | C **available** for generated boundaries; H **not collected / external** for actual host behavior. |
 | 11 | Issue-bound Run preserves identity/revisions/accepted sections and never persists raw body | C+S | [source tests](../../internal/autopilot/source_test.go), [service tests](../../internal/autopilot/service_test.go), [machine Shell](machine-protocol.sh) | C and S **available**. |
@@ -32,7 +32,7 @@ C cannot substitute for H. A fake endpoint or this deterministic harness cannot 
 | 15 | Dependent decisions are one-at-a-time; answer fresh-Orients; environment only resumes; zero suggestion summarizes | C+H | [service routing tests](../../internal/autopilot/service_test.go), [template tests](../../internal/tmpl/templates_test.go), [prompt 03](../../docs/acceptance/scenarios/03-dependent-decisions.md) | C **available**; H **not collected / external**. |
 | 16 | Submit/answer/candidate retries are idempotent and conflicting/stale values reject | C+S | [service idempotency tests](../../internal/autopilot/service_test.go), [CLI resume tests](../../cmd/run_test.go), [machine Shell](machine-protocol.sh) | C and S **available**. |
 | 17 | Skip needs no reason; stop resumes; successful resume voids stale state and fresh-Orients; ended cannot resume | C+S | [service control tests](../../internal/autopilot/service_test.go), [CLI tests](../../cmd/run_test.go), [machine Shell](machine-protocol.sh) | C and S **available**. |
-| 18 | A real non-zero activity is recorded and does not gate Summary | C+S | [service activity tests](../../internal/autopilot/service_test.go), [machine Shell](machine-protocol.sh), [prompt 06](../../docs/acceptance/scenarios/06-failed-activity.md) | C and S **available**. |
+| 18 | A real non-zero activity is recorded and does not control Summary routing | C+S | [service activity tests](../../internal/autopilot/service_test.go), [machine Shell](machine-protocol.sh), [prompt 06](../../docs/acceptance/scenarios/06-failed-activity.md) | C and S **available**. |
 | 19 | Review findings are read-only, never needs-input/suggest Implement/pause/repair/re-review, and flow to Summary | C+S+H | [contract tests](../../internal/autopilot/contract_test.go), [CLI Review test](../../cmd/run_test.go), [machine Shell](machine-protocol.sh), [prompt 07](../../docs/acceptance/scenarios/07-review-findings.md) | C and S **available**; H **not collected / external**. |
 | 20 | Destructive authority requires exact structured scope; prose, digest mismatch, expansion, resume, or Action change invalidates it | C+S+H | [structured recovery tests](../../cmd/structured_recovery_test.go), [service grant tests](../../internal/autopilot/service_test.go), [machine Shell](machine-protocol.sh), [prompt 11](../../docs/acceptance/scenarios/11-destructive-confirmation.md) | C and S **available**; H **not collected / external**. |
 | 21 | Bug/refactor granularity uses small Change or large Objective+Changes; Level and Kind remain orthogonal | G+H | [Issue guide](../../docs/reference/issue-workflow.md), [product contract §2/§4](../../docs/zh/reference/product-contract.md), [live guide](live-github/README.md) | G and H **not collected / external**. |
@@ -53,16 +53,18 @@ C cannot substitute for H. A fake endpoint or this deterministic harness cannot 
 
 ## R validation package
 
-R does not replace any row's required C/S/G/H/W evidence. Repository-side R artifacts include the three-locale [documentation](../../docs/index.md), authoritative [Chinese contract](../../docs/zh/reference/product-contract.md), [website navigation](../../website/astro.config.mjs), stdlib [link checker](link_check.py), reproducible [release artifact checker](release_artifacts.py), and CI/docs/release workflow gates. The checker assets and workflow wiring are **available**. A successful invocation establishes only that invocation's R result; command outcomes belong in the implementation handoff and are not a delivery certification.
+R does not replace any row's required C/S/G/H/W evidence. Repository-side R artifacts include the three-locale [documentation](../../docs/index.md), authoritative [Chinese contract](../../docs/zh/reference/product-contract.md), [website navigation](../../website/astro.config.mjs), stdlib [link checker](link_check.py), reproducible [release artifact checker](release_artifacts.py), and CI/docs/release workflow evidence collectors. The checker assets and workflow wiring are **available**. A successful invocation establishes only that invocation's R result; command outcomes belong in the implementation handoff and are not a delivery certification.
 
 ## Commands
 
 From the repository root, with a temporary binary outside the tree:
 
 ```bash
-go build -o "$TMPDIR/slipway-acceptance-bin" .
-SLIPWAY_BIN="$TMPDIR/slipway-acceptance-bin" sh tests/acceptance/machine-protocol.sh
-SLIPWAY_BIN="$TMPDIR/slipway-acceptance-bin" sh tests/acceptance/adapters.sh
+acceptance_tmp="$(mktemp -d)"
+trap 'rm -rf "$acceptance_tmp"' EXIT
+go build -o "$acceptance_tmp/slipway-acceptance-bin" .
+SLIPWAY_BIN="$acceptance_tmp/slipway-acceptance-bin" sh tests/acceptance/machine-protocol.sh
+SLIPWAY_BIN="$acceptance_tmp/slipway-acceptance-bin" sh tests/acceptance/adapters.sh
 python3 -I tests/acceptance/github_publication_fault_harness.py
 python3 -I tests/acceptance/link_check.py --self-test
 # After `npm --prefix website ci && npm --prefix website run build`:

@@ -9,8 +9,8 @@
 - `uninstall`: 未変更の管理ファイルだけを削除。
 - `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は fail closed です。`needs_refresh` は drift を示すだけで user edit の上書きを許可しません。Missing pristine content は refresh で再作成できますが、modified file/sentinel はユーザーが明示的に扱うまで保持されます。
 - `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。non-current manifest は `adapter_manifest_unreadable`、不完全な current surface は `needs_refresh`/warning になります。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。source 付きでは strict Source Bundle v2 envelope を一度だけ読み、manifest が参照する chapter を local content-addressed material として固定し、journal には catalog/provenance だけを永続化します。
-- `status [run-id] [--root ROOT] [--json]`: Run を一覧・表示。ID なしでは current worktree と canonical workspace identity が一致する Run だけを列挙します。他の linked worktree の Run は表示されず、元の workspace からだけ resume/mutation できます。
+- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。Action budget のデフォルトは `8` で、明示値は `1..1000` です。source 付きでは strict Source Bundle v2 envelope を一度だけ読み、manifest が参照する chapter を local content-addressed material として固定し、journal には catalog/provenance だけを永続化します。
+- `status [run-id] [--root ROOT] [--json]`: Run を一覧・表示。ID なしでは current repository の全 Run を列挙します。Current canonical workspace の Run は full replay し、別 linked worktree の Run は `FirstEvent` header stub としてだけ表示し、JSON は `workspace_foreign:true`、human output は `foreign=true` と owning workspace を示します。Foreign stub は discovery 専用で、Load・resume・mutation は引き続き元の workspace からだけ実行できます。
 - `stop [run-id] [--root ROOT] [--json]`: journal を残して停止。
 
 ```bash

@@ -11,8 +11,9 @@ Slipway is a user-invoked, interruptible soft autopilot for AI coding. Detailed 
 ## Investigate before clarifying
 
 - Read the current Git state, relevant code, and repository build/test/typecheck/lint conventions yourself.
-- Ask only decisions that repository investigation cannot settle.
-- Ask one decision at a time and include a recommendation, rationale, and concrete alternatives.
+- Ask zero questions when the request is complete; proceed without repeated authorization.
+- Ask only decisions that repository investigation cannot settle, one at a time, with a recommendation, rationale, and concrete alternatives.
+- If clarification changes the implementation understanding, summarize the shared understanding and obtain one confirmation before implementation.
 - Stop the interview immediately when the user asks to wrap up.
 
 ## Report, do not certify

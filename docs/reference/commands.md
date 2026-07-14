@@ -41,7 +41,7 @@ Legacy codes are `legacy_runtime_residue`, `legacy_cache_residue`, `legacy_scope
 slipway run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
 ```
 
-Creates a journal and returns the initial `orient` Action. The default Action budget is 8. `--no-review` omits the recommended review after observed code changes. Without `--source-file`, the Run is ad-hoc. With `--source-file`, Slipway opens one strict Source Bundle v2 envelope, verifies the Issue-body manifest and its exact referenced comments, durably stores each normalized chapter by digest, and journals only the bounded catalog. The temporary file and GitHub are never needed for local material reads or resume.
+Creates a journal and returns the initial `orient` Action. The default Action budget is 8; an explicit value must be from 1 through 1000. `--no-review` omits the recommended review after observed code changes. Without `--source-file`, the Run is ad-hoc. With `--source-file`, Slipway opens one strict Source Bundle v2 envelope, verifies the Issue-body manifest and its exact referenced comments, durably stores each normalized chapter by digest, and journals only the bounded catalog. The temporary file and GitHub are never needed for local material reads or resume.
 
 Ad-hoc and issue-bound examples:
 
@@ -72,7 +72,7 @@ The first resume form is ad-hoc only. Issue-bound resume requires exactly one so
 slipway status [run-id] [--root ROOT] [--json]
 ```
 
-Without an ID, lists only runs whose canonical workspace identity matches the current workspace. Runs from other linked worktrees do not appear; they can be resumed or changed only from their original workspace. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":2,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
+Without an ID, lists every Run stored for the current repository. Runs owned by the current canonical workspace are fully replayed; Runs owned by another linked worktree appear as FirstEvent-only header stubs marked `workspace_foreign:true`, and human output marks them `foreign=true` with their owning workspace. Foreign stubs are discovery-only: loading, resuming, or mutating the Run still requires its original workspace. JSON list output is exactly `{contract_version,runs:[...]}` and an empty list is `{"contract_version":2,"runs":[]}`. With an ID, JSON remains the documented flat Run status projection: its mandatory top-level `contract_version` and freshly derived `next` sit beside the Run fields.
 
 ## `slipway stop`
 

@@ -84,7 +84,8 @@
         "detected": { "type": "boolean" },
         "installed": { "type": "boolean" },
         "needs_refresh": { "type": "boolean" },
-        "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+        "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "warning": { "type": "string", "description": "Advisory note when a read-only listing could not fully inspect this host (e.g. an unreadable manifest). Listing is non-mutating, so one host's problem degrades to a warning rather than aborting the whole report." }
       }
     },
     "listReport": {
@@ -499,9 +500,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "contract_version", "id", "goal", "workspace", "workspace_identity", "state", "review_enabled", "review_pending",
-        "initial_budget", "remaining_budget", "initial_git", "current_git", "final_git_observed", "actions",
-        "created_at", "updated_at", "next"
+        "contract_version", "id", "goal", "workspace", "workspace_identity", "state", "created_at", "next"
       ],
       "properties": {
         "contract_version": { "const": 2 },
@@ -509,6 +508,7 @@
         "goal": { "type": "string", "minLength": 1 },
         "workspace": { "type": "string", "minLength": 1 },
         "workspace_identity": { "$ref": "#/$defs/workspaceIdentity" },
+        "workspace_foreign": { "type": "boolean", "description": "True only for a FirstEvent-only list stub owned by another worktree of the same repository. Such a stub is visible for discovery but is not loaded or mutable from the current workspace." },
         "state": { "enum": ["active", "paused", "stopped", "ended"] },
         "pause_reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable", "budget_exhausted"] },
         "review_enabled": { "type": "boolean" },
@@ -525,7 +525,6 @@
         "current_action": { "$ref": "#/$defs/action" },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/actionRecord" } },
         "pending_actions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
-        "decision_suggestions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
         "answers": { "type": "array", "items": { "$ref": "#/$defs/answerRecord" } },
         "observations": { "type": "array", "items": { "type": "string" } },
         "known_issues": { "type": "array", "items": { "type": "string" } },
@@ -537,7 +536,46 @@
         "created_at": { "type": "string", "format": "date-time" },
         "updated_at": { "type": "string", "format": "date-time" },
         "next": { "$ref": "#/$defs/next" }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "review_enabled", "review_pending", "initial_budget", "remaining_budget", "initial_git", "current_git",
+            "final_git_observed", "actions", "updated_at"
+          ],
+          "properties": { "workspace_foreign": { "const": false } }
+        },
+        {
+          "required": ["workspace_foreign"],
+          "properties": {
+            "workspace_foreign": { "const": true },
+            "pause_reason": false,
+            "review_enabled": false,
+            "review_pending": false,
+            "initial_budget": false,
+            "remaining_budget": false,
+            "initial_git": false,
+            "current_git": false,
+            "final_git_observed": false,
+            "pinned_source": false,
+            "source_candidate": false,
+            "last_source_choice": false,
+            "last_resume_result": false,
+            "current_action": false,
+            "actions": false,
+            "pending_actions": false,
+            "answers": false,
+            "observations": false,
+            "known_issues": false,
+            "uncertainties": false,
+            "activities": false,
+            "summary": false,
+            "pending_destructive_request": false,
+            "destructive_grant": false,
+            "updated_at": false
+          }
+        }
+      ]
     },
     "statusList": {
       "type": "object",
@@ -560,7 +598,6 @@
         "summary": { "type": "string", "minLength": 1 },
         "action": { "$ref": "#/$defs/action" },
         "next": { "$ref": "#/$defs/next" },
-        "suggested_actions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
         "pinned_source": { "$ref": "#/$defs/pinnedSource" },
         "source_candidate": { "$ref": "#/$defs/sourceCandidate" },
         "resume_operation": {
