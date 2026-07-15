@@ -168,7 +168,7 @@ jobs:
         env:
           TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
         run: >-
-          python3 -I tests/acceptance/release_artifacts.py --dist dist
+          python3 -I acceptance/release_artifacts.py --dist dist
           --expected-version "${TAG_NAME}" --core-only
       - name: Verify GoReleaser hook preserved module files
         run: git diff --exit-code -- go.mod go.sum

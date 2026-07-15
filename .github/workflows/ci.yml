@@ -67,9 +67,9 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/slipway-pycache
         run: |
           set -euo pipefail
-          find tests/acceptance -type f -name '*.sh' -exec shellcheck {} +
-          find tests/acceptance -type f -name '*.sh' -exec sh -n {} +
-          mapfile -d '' python_files < <(find tests/acceptance -type f -name '*.py' -print0)
+          find acceptance -type f -name '*.sh' -exec shellcheck {} +
+          find acceptance -type f -name '*.sh' -exec sh -n {} +
+          mapfile -d '' python_files < <(find acceptance -type f -name '*.py' -print0)
           if [ "${#python_files[@]}" -eq 0 ]; then
             echo '::error::No Python acceptance assets were found'
             exit 1
@@ -77,11 +77,11 @@ jobs:
           python3 -I -m py_compile "${python_files[@]}"
       - name: Check local Markdown and website routes
         run: |
-          python3 -I tests/acceptance/link_check.py --self-test
+          python3 -I acceptance/link_check.py --self-test
       - name: Run deterministic GitHub publication fault harness
         run: |
           summary="${RUNNER_TEMP}/github-publication-faults.json"
-          python3 -I tests/acceptance/github_publication_fault_harness.py > "$summary"
+          python3 -I acceptance/github_publication_fault_harness.py > "$summary"
           python3 -I - "$summary" <<'PY'
           import json
           from pathlib import Path
@@ -132,8 +132,8 @@ jobs:
         env:
           SLIPWAY_BIN: ${{ github.workspace }}/bin/slipway
         run: |
-          ./tests/acceptance/machine-protocol.sh
-          ./tests/acceptance/adapters.sh
+          ./acceptance/machine-protocol.sh
+          ./acceptance/adapters.sh
       - name: Build native Windows acceptance binary
         if: runner.os == 'Windows'
         shell: pwsh
@@ -147,7 +147,7 @@ jobs:
         shell: pwsh
         run: |
           $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
-          $script = (Resolve-Path -LiteralPath tests/acceptance/windows/native-powershell.ps1).Path
+          $script = (Resolve-Path -LiteralPath acceptance/windows/native-powershell.ps1).Path
           $arguments = @(
             '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
             '-File', $script, '-SlipwayExe', $binary, '-Mode', 'PowerShell'
@@ -159,7 +159,7 @@ jobs:
         shell: pwsh
         run: |
           $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
-          $script = (Resolve-Path -LiteralPath tests/acceptance/windows/native-cmd.cmd).Path
+          $script = (Resolve-Path -LiteralPath acceptance/windows/native-cmd.cmd).Path
           $command = 'call "{0}" "{1}"' -f $script.Replace('"', '""'), $binary.Replace('"', '""')
           & $env:ComSpec '/d' '/v:on' '/s' '/c' $command
           if ($LASTEXITCODE -ne 0) { throw 'native cmd.exe acceptance failed' }
@@ -206,7 +206,7 @@ jobs:
           version: v2.16.0
           args: release --snapshot --clean --skip=publish,sign
       - name: Check snapshot artifacts
-        run: python3 -I tests/acceptance/release_artifacts.py --dist dist
+        run: python3 -I acceptance/release_artifacts.py --dist dist
       - name: Verify GoReleaser hook preserved module files
         run: git diff --exit-code -- go.mod go.sum
   build:

@@ -9,8 +9,8 @@ Recovery/pause は `next.operation`、workspace identity、typed variants を返
 POSIX、`cmd.exe`、PowerShell の rendering は display/copy 専用で journal に保存されず、machine operation を変えません。Root、Issue URL、source/outcome file、answer、candidate recovery の space、quote、Unicode、CR/LF、`%`、`!`、`&`、`^` をそのまま保ちます。cmd expansion を避けるため PowerShell UTF-16LE `EncodedCommand` または同等の safe argv path を利用できます。`cmd.exe /v:on` と PowerShell の native process で実 argv を捕捉する必要があり、Linux cross-build は W evidence ではありません。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
-cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
+cmd.exe /d /v:on /c acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
 CI matrix は `slipway.exe` を build して両方の native entry point を実行します。Scripts は doctor、initial Orient、issue source、Outcome file/stdin（対応する shell）、decision answer、ad-hoc resume、current-candidate keep/adopt、special argv を検査します。Workflow wiring 自体は引き続き W collector にすぎません。[run 29197908671 / Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) は source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` に対して両 native asset を完了し、その source、binary、asset set に W を記録します。後続の関連変更には新しい completed collection が必要です。

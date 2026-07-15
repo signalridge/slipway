@@ -32,4 +32,4 @@ Objective Issue (optional planning parent; never executable)
 ## 意思決定とシナリオ
 
 - [アーキテクチャ上の意思決定](../decisions/0001-source-bundle-v2.md) — manifest-addressed source bundle。
-- [Prompt scenario](../../tests/acceptance/README.md) — host behavior の評価。
+- [Prompt scenario](../../acceptance/README.md) — host behavior の評価。

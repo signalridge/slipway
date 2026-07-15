@@ -54,7 +54,7 @@ class Link:
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[1]
 
 
 def line_number(text: str, offset: int) -> int:
@@ -283,7 +283,7 @@ def exact_case_exists(path: Path, root: Path) -> bool:
 
 def source_files(root: Path) -> list[Path]:
     files = [root / name for name in sorted(SOURCE_NAMES) if (root / name).is_file()]
-    for base in (root / "docs", root / "tests" / "acceptance"):
+    for base in (root / "docs", root / "acceptance"):
         if base.is_dir():
             files.extend(path for path in base.rglob("*.md") if path.is_file())
     content = root / "website" / "src" / "content" / "docs"
@@ -535,7 +535,7 @@ def self_test() -> None:
     with tempfile.TemporaryDirectory(prefix="slipway-link-check-") as directory:
         root = Path(directory)
         (root / "docs").mkdir()
-        (root / "tests" / "acceptance").mkdir(parents=True)
+        (root / "acceptance").mkdir(parents=True)
         (root / "website" / "src" / "content" / "docs").mkdir(parents=True)
         (root / "docs" / "index.md").write_text("# Docs\n\n[Guide](guide.md#hello-world)\n")
         (root / "docs" / "guide.md").write_text("# Hello, world!\n")

@@ -47,7 +47,7 @@ goreleaser check
 - Generated files are deterministic, transactional, symlink-safe, and ownership-aware.
 - Do not add aliases or readers for the retired runtime.
 
-See [architecture](docs/en/explanation/architecture.md), [machine protocol](docs/en/reference/machine-protocol.md), and [acceptance scenarios](tests/acceptance/README.md).
+See [architecture](docs/en/explanation/architecture.md), [machine protocol](docs/en/reference/machine-protocol.md), and [acceptance scenarios](acceptance/README.md).
 
 ## Commits and pull requests
 

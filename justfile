@@ -32,8 +32,8 @@ test-race:
 
 [group('test')]
 acceptance: build-bin
-    SLIPWAY_BIN="$PWD/slipway" ./tests/acceptance/machine-protocol.sh
-    SLIPWAY_BIN="$PWD/slipway" ./tests/acceptance/adapters.sh
+    SLIPWAY_BIN="$PWD/slipway" ./acceptance/machine-protocol.sh
+    SLIPWAY_BIN="$PWD/slipway" ./acceptance/adapters.sh
 
 [group('test')]
 coverage:

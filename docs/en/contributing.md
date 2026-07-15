@@ -15,7 +15,7 @@ internal/recoverycmd/   POSIX/cmd/PowerShell display rendering from argv
 internal/jsonstrict/    shared strict-JSON structural scanner
 internal/testlint/      repository test analyzer
 docs/                   authoritative documentation (website syncs from here)
-tests/acceptance/       shell, fixture, and host acceptance assets
+acceptance/             black-box E2E, fixtures, and host acceptance assets
 ```
 
 Dependency direction is fixed and enforced: `cmd → autopilot → runstore`, `cmd → adapter → tmpl`, `cmd → recoverycmd`, and the lower packages depend only on `fsutil` primitives as needed. See [Architecture](explanation/architecture.md).
@@ -60,4 +60,4 @@ Also exercise built-binary help and JSON behavior after public-surface changes.
 - Generated files are deterministic, transactional, symlink-safe, and ownership-aware.
 - Do not add aliases, readers, or compatibility modes for the retired runtime.
 
-See [architecture](explanation/architecture.md), [machine protocol](reference/machine-protocol.md), and [acceptance scenarios](../../tests/acceptance/README.md).
+See [architecture](explanation/architecture.md), [machine protocol](reference/machine-protocol.md), and [acceptance scenarios](../../acceptance/README.md).

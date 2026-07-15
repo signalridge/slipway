@@ -11,11 +11,11 @@ Slipway renders a complete resolved argv separately for POSIX, `cmd.exe`, and Po
 The CI matrix runs both native assets after building `slipway.exe`; the same commands can be run from a Developer Command Prompt or PowerShell:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
-cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
+cmd.exe /d /v:on /c acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
-The scripts cover doctor, initial Orient, issue source import, Outcome file/stdin where supported, decision answer, ad-hoc resume, current-candidate keep/adopt recovery, and special argv. See the [acceptance matrix](../../../tests/acceptance/README.md). Workflow wiring remains only a W collector. [Run 29197908671, Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) completed both native assets against source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` and records W for that source, binary, and asset set. Later relevant changes require a new completed collection; syntax checks and cross-builds remain non-W evidence.
+The scripts cover doctor, initial Orient, issue source import, Outcome file/stdin where supported, decision answer, ad-hoc resume, current-candidate keep/adopt recovery, and special argv. See the [acceptance matrix](../../../acceptance/README.md). Workflow wiring remains only a W collector. [Run 29197908671, Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) completed both native assets against source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` and records W for that source, binary, and asset set. Later relevant changes require a new completed collection; syntax checks and cross-builds remain non-W evidence.
 
 ## Symbolic-link transaction boundary
 

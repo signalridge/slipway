@@ -11,8 +11,8 @@ Slipway 分别渲染 POSIX、`cmd.exe` 与 PowerShell display command；renderin
 CI matrix 构建 `slipway.exe` 后会执行以下两个 native 入口，本地 Windows 也可运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
-cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd C:\path\slipway.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File acceptance\windows\native-powershell.ps1 -SlipwayExe C:\path\slipway.exe
+cmd.exe /d /v:on /c acceptance\windows\native-cmd.cmd C:\path\slipway.exe
 ```
 
 资产覆盖 doctor、initial Orient、issue source、Outcome file/stdin（平台支持处）、decision answer、ad-hoc resume、current-candidate keep/adopt 和特殊 argv。Workflow wiring 本身仍只是 W collector；[run 29197908671 / Windows job 86664073429](https://github.com/signalridge/slipway/actions/runs/29197908671/job/86664073429) 已针对 source `4c1741ae35b42d903fa1ccc4ec5ae32469aaca47` 完成两个 native assets，因此为该 source、binary 与 assets 记录 W。后续相关修改必须重新完成收集；静态语法或 cross-build 仍不能冒充 W。

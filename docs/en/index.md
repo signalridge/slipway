@@ -32,4 +32,4 @@ Objective Issue (optional planning parent; never executable)
 ## Decisions and scenarios
 
 - [Architecture decisions](../decisions/0001-source-bundle-v2.md) — manifest-addressed source bundles.
-- [Prompt scenarios](../../tests/acceptance/README.md) — host-behavior evaluations.
+- [Prompt scenarios](../../acceptance/README.md) — host-behavior evaluations.

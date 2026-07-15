@@ -32,4 +32,4 @@ Objective Issue (optional planning parent; never executable)
 ## 决策与场景
 
 - [架构决策](../decisions/0001-source-bundle-v2.md) — manifest-addressed source bundle。
-- [Prompt 场景](../../tests/acceptance/README.md) — 宿主行为评估。
+- [Prompt 场景](../../acceptance/README.md) — 宿主行为评估。

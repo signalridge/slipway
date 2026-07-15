@@ -1269,7 +1269,7 @@ internal/adapter/       十宿主 registry 与 ownership-safe transaction planni
 internal/tmpl/          六个显式能力模板
 internal/fsutil/        atomic/rooted transaction、Git discovery、symlink/reparse defense
 internal/recoverycmd/   纯 POSIX/cmd/PowerShell display rendering；只消费结构化 argv
-tests/acceptance/       实际 Shell、GitHub fixture 与宿主验收
+acceptance/             构建后二进制 E2E Shell、GitHub fixture 与宿主验收
 ```
 
 依赖方向固定为：
@@ -1321,14 +1321,14 @@ GitHub 读取/写入由宿主能力和用户已有认证工具完成；Go binary
 
 ```text
 C  deterministic Go contract/property/race test：只证明 CLI/core 可观察语义或静态模板约束
-S  tests/acceptance 下实际调用构建后二进制的 Shell test
+S  acceptance 下实际调用构建后二进制的 Shell test
 G  隔离 GitHub.com User-owned fixture 或 host-side fault-injection API harness
 H  Claude/Codex/Pi 真实 prompt transcript + evaluator notes
 W  native Windows cmd.exe + PowerShell test
 R  docs/package/release validation
 ```
 
-标签表示最适合该执行边界的证据类型，不是自动 pass/fail 或 progression gate。相关场景应在 `tests/acceptance/README.md` 链接可重复取得的证据；缺口如实记录为 uncertainty。CLI/core 行为用 C/S，提示与宿主自主行为用 H，GitHub 原生语义用 G，Windows 声明用 W。组合标签表示互补视角；静态 C 不能替代模型行为 H，fake endpoint 也不能替代真实 GitHub fixture。本矩阵不参与 Run 路由或状态判断。
+标签表示最适合该执行边界的证据类型，不是自动 pass/fail 或 progression gate。相关场景应在 `acceptance/README.md` 链接可重复取得的证据；缺口如实记录为 uncertainty。CLI/core 行为用 C/S，提示与宿主自主行为用 H，GitHub 原生语义用 G，Windows 声明用 W。组合标签表示互补视角；静态 C 不能替代模型行为 H，fake endpoint 也不能替代真实 GitHub fixture。本矩阵不参与 Run 路由或状态判断。
 
 1. **显式启动 `[H]`**：普通聊天不启动 Slipway；用户明确运行后才开始 Orient。
 2. **Stateless clarify `[C+H]`**：事实自行调查、决定交给人类、一次一个并给推荐；完整请求零问题；若 grilling 改变执行理解，用户确认共同理解后才 Implement；wrap-up 立即停止，不写文件、不创建 Issue、不偷渡 docs。
@@ -1381,7 +1381,7 @@ R  docs/package/release validation
 - `go vet`、testlint、golangci-lint 与架构依赖守卫；
 - Windows amd64 与 Linux amd64 交叉编译；
 - Windows native cmd/PowerShell argv/recovery suite；
-- `tests/acceptance/*.sh` 实际调用构建后二进制，不能只测试 helper JSON；
+- `acceptance/*.sh` 实际调用构建后二进制，不能只测试 helper JSON；
 - 十宿主 adapter Shell 验收；
 - host-side reproducible GitHub fault-injection harness + 隔离 GitHub.com User-owned fixture repository；该 harness 由 generated capabilities/宿主验收消费，不伪装成 CLI binary 的 deterministic Go contract；
 - Claude、Codex、Pi prompt-level matrix，特别覆盖 publication timeout/partial/retry 与 grill-me 决策边界；transcript 必须脱敏；
@@ -1391,7 +1391,7 @@ R  docs/package/release validation
 - Docker Git-backed doctor/run/source smoke；
 - GoReleaser check/snapshot、archive LICENSE 与 Homebrew/Scoop/AUR 安装 smoke。
 
-Shell、fixtures、requirements matrix 和 sanitized transcripts 位于 `tests/acceptance/`；不得把可执行验收资产放回 `scripts/`。需要 GitHub credential 的 live fixture 使用受保护测试账号/repository，不在 fork PR 暴露 secret；无凭据 CI 仍运行 host-side reproducible fault harness，但不把它冒充真实 GitHub 语义或模型行为证明。
+Shell、fixtures、requirements matrix 和 sanitized transcripts 位于 `acceptance/`；不得把可执行验收资产放回 `scripts/`。需要 GitHub credential 的 live fixture 使用受保护测试账号/repository，不在 fork PR 暴露 secret；无凭据 CI 仍运行 host-side reproducible fault harness，但不把它冒充真实 GitHub 语义或模型行为证明。
 
 ---
 
