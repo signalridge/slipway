@@ -221,12 +221,12 @@ func assertJSONString(t *testing.T, object map[string]json.RawMessage, key strin
 func assertMachineSchemaOutput(t *testing.T, definition, raw string) {
 	t.Helper()
 
-	schemaRaw, err := os.ReadFile(filepath.Join("..", "docs", "reference", "machine-protocol.schema.json"))
+	schemaRaw, err := os.ReadFile(filepath.Join("..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaRaw))
 	require.NoError(t, err)
 
-	const schemaURL = "https://signalridge.github.io/slipway/reference/machine-protocol.schema.json"
+	const schemaURL = "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json"
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	require.NoError(t, compiler.AddResource(schemaURL, document))

@@ -4,8 +4,10 @@
 
 現在の JSON contract version は **2** です。
 
-- [machine-protocol.schema.json](../../reference/machine-protocol.schema.json) は public command、Action、Outcome、status、error、recovery の shape を定義します。
-- [source-envelope.schema.json](../../reference/source-envelope.schema.json) は GitHub source transport shape を定義します。
+- [machine-protocol.schema.json](../../reference/v2/machine-protocol.schema.json) は public command、Action、Outcome、status、error、recovery の shape を定義します。
+- [source-envelope.schema.json](../../reference/v2/source-envelope.schema.json) は GitHub source transport shape を定義します。
+
+実行可能な開始から終了までの host exchange は[マシンプロトコル v2 チュートリアル](../guides/machine-protocol-v2.md)を参照してください。
 
 Schema は serialization shape を定義します。Runtime は JSON Schema で表現しきれないルールも検証します。Embedded manifest syntax、ordering、hash、cross-field identity、idempotency、workspace state、filesystem safety などです。Schema を検証し、prose から Go validator を再実装せず、CLI error を保持してください。
 

@@ -176,6 +176,38 @@ jobs:
           cache: true
       - name: Run race tests
         run: go test -timeout=20m ./... -race -count=1
+  coverage:
+    name: Kernel Coverage Gate
+    # The committed percentage baseline is measured on Linux. The test matrix above
+    # exercises platform-specific files on macOS and Windows.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Measure soft-autopilot coverage
+        run: |
+          mkdir -p tmp
+          gated_packages="$(go list \
+            ./cmd \
+            ./internal/adapter \
+            ./internal/autopilot \
+            ./internal/fsutil \
+            ./internal/jsonstrict \
+            ./internal/recoverycmd \
+            ./internal/runstore \
+            ./internal/testlint \
+            ./internal/tmpl | paste -sd, -)"
+          go test -timeout=20m ./... -count=1 \
+            -coverpkg="${gated_packages}" \
+            -coverprofile=tmp/coverage-gated.out
+      - name: Enforce coverage baseline
+        run: >-
+          go run ./internal/covergate/cmd/covergate
+          -check -profile tmp/coverage-gated.out -baseline coverage-baseline.json
   release-config:
     name: Release Config
     runs-on: ubuntu-latest

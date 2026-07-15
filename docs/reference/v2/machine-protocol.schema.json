@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://signalridge.github.io/slipway/reference/machine-protocol.schema.json",
+  "$id": "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json",
   "title": "Slipway machine protocol v2",
   "description": "Strict Slipway machine inputs, source bundles, success reports, status projections, and errors for contract_version 2.",
   "oneOf": [

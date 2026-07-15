@@ -18,6 +18,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: signalridge/slipway
 
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   validate-tag:
     name: Validate Release Tag
@@ -98,7 +102,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [validate-tag]
+    needs: [validate-tag, test]
     permissions:
       actions: read
       attestations: write

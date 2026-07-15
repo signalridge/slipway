@@ -16,11 +16,12 @@ import (
 func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	t.Parallel()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)
 	var schema map[string]any
 	require.NoError(t, json.Unmarshal(raw, &schema))
 	assert.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema["$schema"])
+	assert.Equal(t, "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json", schema["$id"])
 	require.Len(t, schemaSlice(t, schema, "oneOf"), 11)
 
 	definitions := schemaMap(t, schema, "$defs")
@@ -83,7 +84,7 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	// These hand-built values exercise the full contract matrix. Real command
 	// emitter bytes are validated separately in cmd/machine_output_test.go.
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)
 	var schema map[string]any
 	require.NoError(t, json.Unmarshal(raw, &schema))
@@ -376,14 +377,17 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "..", "docs", "reference", "source-envelope.schema.json")
+	path := filepath.Join("..", "..", "docs", "reference", "v2", "source-envelope.schema.json")
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
+	const schemaURL = "https://signalridge.github.io/slipway/reference/v2/source-envelope.schema.json"
+	var metadata map[string]any
+	require.NoError(t, json.Unmarshal(raw, &metadata))
+	assert.Equal(t, schemaURL, metadata["$id"])
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	require.NoError(t, err)
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
-	const schemaURL = "https://signalridge.github.io/slipway/reference/source-envelope.schema.json"
 	require.NoError(t, compiler.AddResource(schemaURL, document))
 	schema, err := compiler.Compile(schemaURL)
 	require.NoError(t, err)
@@ -430,12 +434,12 @@ func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 func TestMachineAndSourceSchemasShareRawEnvelopeDefinitions(t *testing.T) {
 	t.Parallel()
 
-	machineRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
+	machineRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)
 	var machineSchema map[string]any
 	require.NoError(t, json.Unmarshal(machineRaw, &machineSchema))
 
-	sourceRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "source-envelope.schema.json"))
+	sourceRaw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "source-envelope.schema.json"))
 	require.NoError(t, err)
 	var sourceSchema map[string]any
 	require.NoError(t, json.Unmarshal(sourceRaw, &sourceSchema))
@@ -730,12 +734,12 @@ func compileMachineOutcomeSchema(t *testing.T) *jsonschema.Schema {
 func compileMachineSchemaDefinition(t *testing.T, name string) *jsonschema.Schema {
 	t.Helper()
 
-	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "machine-protocol.schema.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)
 	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	require.NoError(t, err)
 
-	const schemaURL = "https://signalridge.github.io/slipway/reference/machine-protocol.schema.json"
+	const schemaURL = "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json"
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	require.NoError(t, compiler.AddResource(schemaURL, document))

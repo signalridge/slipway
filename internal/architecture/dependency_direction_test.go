@@ -23,6 +23,7 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 		"runstore":    {"fsutil": true, "jsonstrict": true},
 		"adapter":     {"fsutil": true, "tmpl": true, "jsonstrict": true},
 		"recoverycmd": {},
+		"covergate":   {},
 		"tmpl":        {},
 		"fsutil":      {},
 		"jsonstrict":  {},

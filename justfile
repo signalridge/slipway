@@ -40,6 +40,27 @@ coverage:
     go test -timeout=20m ./... -coverprofile=coverage.txt -count=1
     go tool cover -func=coverage.txt
 
+[group('test')]
+coverage-gate mode="check":
+    mkdir -p tmp
+    set -eu; \
+    if [ "{{mode}}" = write ] && [ "$(go env GOOS)" != linux ]; then echo 'coverage baselines must be written on linux' >&2; exit 1; fi; \
+    gated_packages="$(go list \
+        ./cmd \
+        ./internal/adapter \
+        ./internal/autopilot \
+        ./internal/fsutil \
+        ./internal/jsonstrict \
+        ./internal/recoverycmd \
+        ./internal/runstore \
+        ./internal/testlint \
+        ./internal/tmpl | paste -sd, -)"; \
+    go test -timeout=20m ./... -count=1 \
+        -coverpkg="$gated_packages" \
+        -coverprofile=tmp/coverage-gated.out; \
+    go run ./internal/covergate/cmd/covergate \
+        -{{mode}} -profile=tmp/coverage-gated.out -baseline=coverage-baseline.json
+
 [group('lint')]
 lint:
     go vet ./...

@@ -7,6 +7,7 @@ import argparse
 from dataclasses import dataclass
 import html
 from html.parser import HTMLParser
+import xml.etree.ElementTree as ET
 from pathlib import Path
 import re
 import sys
@@ -322,7 +323,123 @@ def website_routes(root: Path) -> dict[str, Path]:
         path = content / relative
         if path.is_file():
             routes[route] = path
+
+    english_prefix = f"{SITE_BASE}/en/"
+    for route, source in list(routes.items()):
+        if route.startswith(english_prefix):
+            routes[f"{SITE_BASE}/{route.removeprefix(english_prefix)}"] = source
     return routes
+
+
+def localized_doc_parity(root: Path) -> list[Problem]:
+    locales = ("en", "zh", "ja")
+    locale_dirs = {locale: root / "docs" / locale for locale in locales}
+    if not any(path.is_dir() for path in locale_dirs.values()):
+        return []
+
+    problems = [
+        Problem(f"docs/{locale}", 1, "localized documentation directory is missing")
+        for locale, path in locale_dirs.items()
+        if not path.is_dir()
+    ]
+    if problems:
+        return problems
+
+    files = {
+        locale: {path.relative_to(directory) for path in directory.rglob("*.md")}
+        for locale, directory in locale_dirs.items()
+    }
+    reference = files["en"]
+    for locale in locales[1:]:
+        for relative in sorted(reference - files[locale]):
+            problems.append(
+                Problem(
+                    f"docs/{locale}",
+                    1,
+                    f"localized documentation is missing {relative.as_posix()} (present in docs/en)",
+                )
+            )
+        for relative in sorted(files[locale] - reference):
+            problems.append(
+                Problem(
+                    f"docs/{locale}/{relative.as_posix()}",
+                    1,
+                    "localized documentation has no matching docs/en page",
+                )
+            )
+    return problems
+
+
+def legacy_english_redirects(root: Path) -> dict[Path, str]:
+    redirects: dict[Path, str] = {}
+    english = root / "docs" / "en"
+    if not english.is_dir():
+        return redirects
+    for source in sorted(english.rglob("*.md")):
+        relative = source.relative_to(english).with_suffix("")
+        parts = list(relative.parts)
+        if parts[-1].lower() == "index":
+            parts = parts[:-1]
+        suffix = "/".join(parts)
+        output = Path(*parts) / "index.html" if parts else Path("index.html")
+        target = f"{SITE_BASE}/en/{suffix}/" if suffix else f"{SITE_BASE}/en/"
+        redirects[output] = target
+    return redirects
+
+
+def check_sitemap(site_dir: Path) -> tuple[int, list[Problem]]:
+    sitemap_files = sorted(
+        path for path in site_dir.glob("sitemap-*.xml") if path.name != "sitemap-index.xml"
+    )
+    if not sitemap_files:
+        return 0, [Problem(str(site_dir / "sitemap-index.xml"), 1, "page sitemap is missing")]
+
+    namespace = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    xhtml = "http://www.w3.org/1999/xhtml"
+    locations: list[str] = []
+    alternates: list[tuple[str, str]] = []
+    problems: list[Problem] = []
+    for sitemap in sitemap_files:
+        try:
+            document = ET.parse(sitemap)
+        except (ET.ParseError, OSError) as error:
+            problems.append(Problem(str(sitemap), 1, f"cannot parse sitemap: {error}"))
+            continue
+        for entry in document.getroot().findall(f".//{{{namespace}}}url"):
+            location = entry.find(f"{{{namespace}}}loc")
+            if location is not None and location.text:
+                locations.append(location.text)
+            seen_languages: set[str] = set()
+            for link in entry.findall(f"{{{xhtml}}}link"):
+                language = link.attrib.get("hreflang", "")
+                href = link.attrib.get("href", "")
+                alternates.append((language, href))
+                if language in seen_languages:
+                    problems.append(
+                        Problem(str(sitemap), 1, f"duplicate sitemap hreflang {language!r}")
+                    )
+                seen_languages.add(language)
+
+    site_root = "https://signalridge.github.io/slipway"
+    root_aliases = {site_root, f"{site_root}/"}
+    for alias in sorted(root_aliases.intersection(locations)):
+        problems.append(Problem("website/dist/sitemap-*.xml", 1, f"redirect URL is indexed: {alias}"))
+    for language, href in alternates:
+        if href in root_aliases:
+            problems.append(
+                Problem(
+                    "website/dist/sitemap-*.xml",
+                    1,
+                    f"redirect URL is advertised as hreflang {language!r}: {href}",
+                )
+            )
+    if f"{site_root}/en/" not in locations:
+        problems.append(
+            Problem("website/dist/sitemap-*.xml", 1, "canonical English landing page is missing")
+        )
+    if len(locations) != len(set(locations)):
+        problems.append(Problem("website/dist/sitemap-*.xml", 1, "duplicate canonical URLs found"))
+    return len(locations), problems
 
 
 def split_target(target: str) -> tuple[str, str]:
@@ -530,6 +647,53 @@ def check_built_site(root: Path, site_dir: Path) -> tuple[int, list[Problem]]:
                             f"built fragment #{fragment} was not found in {candidate.relative_to(site_dir)}",
                         )
                     )
+    for relative, expected_target in legacy_english_redirects(root).items():
+        redirect_page = (site_dir / relative).resolve()
+        checked += 1
+        if not exact_case_exists(redirect_page, site_dir):
+            problems.append(
+                Problem(
+                    str((site_dir / relative).relative_to(root)),
+                    1,
+                    f"legacy English redirect is missing; expected target {expected_target}",
+                )
+            )
+            continue
+        parser = parsed_pages.get(redirect_page)
+        if parser is None:
+            parser = BuiltHTMLParser()
+            parser.feed(redirect_page.read_text(encoding="utf-8"))
+            parser.close()
+            parsed_pages[redirect_page] = parser
+        if expected_target not in parser.links:
+            problems.append(
+                Problem(
+                    str(redirect_page.relative_to(root)),
+                    1,
+                    f"legacy English route does not redirect to {expected_target}",
+                )
+            )
+
+    for name in ("machine-protocol.schema.json", "source-envelope.schema.json"):
+        versioned = site_dir / "reference" / "v2" / name
+        compatibility = site_dir / "reference" / name
+        checked += 2
+        if not exact_case_exists(versioned, site_dir):
+            problems.append(Problem(str(versioned.relative_to(root)), 1, "versioned schema is missing"))
+            continue
+        if not exact_case_exists(compatibility, site_dir):
+            problems.append(
+                Problem(str(compatibility.relative_to(root)), 1, "unversioned schema compatibility alias is missing")
+            )
+            continue
+        if versioned.read_bytes() != compatibility.read_bytes():
+            problems.append(
+                Problem(str(compatibility.relative_to(root)), 1, "schema compatibility alias differs from canonical v2 schema")
+            )
+
+    sitemap_entries, sitemap_problems = check_sitemap(site_dir)
+    checked += sitemap_entries
+    problems.extend(sitemap_problems)
     return checked, problems
 
 
@@ -538,6 +702,7 @@ def check_repository(root: Path, require_site: bool) -> tuple[int, int, int, lis
     routes = website_routes(root)
     files = source_files(root)
     problems: list[Problem] = []
+    problems.extend(localized_doc_parity(root))
     link_count = 0
     for path in files:
         try:
@@ -600,8 +765,20 @@ def self_test() -> None:
         built_page.write_text(
             '<a href="https://github.com/signalridge/slipway/edit/main/docs/guide.md">Edit</a>\n'
         )
+        (site_dir / "sitemap-0.xml").write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            '<url><loc>https://signalridge.github.io/slipway/en/</loc></url>'
+            '</urlset>\n'
+        )
+        versioned_reference = site_dir / "reference" / "v2"
+        versioned_reference.mkdir(parents=True)
+        compatibility_reference = site_dir / "reference"
+        for name in ("machine-protocol.schema.json", "source-envelope.schema.json"):
+            (versioned_reference / name).write_text("{}\n")
+            (compatibility_reference / name).write_text("{}\n")
         checked, problems = check_built_site(root, site_dir)
-        assert checked == 1 and not problems, problems
+        assert checked == 6 and not problems, problems
 
         built_page.write_text(
             '<a href="https://github.com/signalridge/slipway/edit/main/docs/src/content/docs/guide.md">Edit</a>\n'
@@ -610,6 +787,17 @@ def self_test() -> None:
         assert any(
             "repository source target does not exist" in problem.message for problem in problems
         ), problems
+
+        for locale in ("en", "zh", "ja"):
+            locale_dir = root / "docs" / locale
+            locale_dir.mkdir(parents=True)
+            (locale_dir / "same.md").write_text("# Same\n")
+        assert not localized_doc_parity(root)
+        (root / "docs" / "zh" / "extra.md").write_text("# Extra\n")
+        assert any(
+            "no matching docs/en page" in problem.message
+            for problem in localized_doc_parity(root)
+        )
     print("link-check self-test: ok")
 
 

@@ -1,11 +1,39 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import sitemap from '@astrojs/sitemap';
+
+const BASE = '/slipway';
+const legacyEnglishRedirects = {
+	'/': `${BASE}/en/`,
+	'/start-here': `${BASE}/en/start-here/`,
+	'/installation': `${BASE}/en/installation/`,
+	'/guides/github-issues': `${BASE}/en/guides/github-issues/`,
+	'/guides/runs-and-recovery': `${BASE}/en/guides/runs-and-recovery/`,
+	'/guides/machine-protocol-v2': `${BASE}/en/guides/machine-protocol-v2/`,
+	'/reference/commands': `${BASE}/en/reference/commands/`,
+	'/reference/machine-protocol': `${BASE}/en/reference/machine-protocol/`,
+	'/reference/adapters': `${BASE}/en/reference/adapters/`,
+	'/explanation/concepts': `${BASE}/en/explanation/concepts/`,
+	'/explanation/architecture': `${BASE}/en/explanation/architecture/`,
+	'/contributing': `${BASE}/en/contributing/`,
+};
 
 export default defineConfig({
 	site: 'https://signalridge.github.io',
-	base: '/slipway',
+	base: BASE,
+	redirects: legacyEnglishRedirects,
 	integrations: [
+		sitemap({
+			filter: (page) => {
+				const { pathname } = new URL(page);
+				return pathname !== BASE && pathname !== `${BASE}/`;
+			},
+			i18n: {
+				defaultLocale: 'en',
+				locales: { en: 'en', zh: 'zh-CN', ja: 'ja' },
+			},
+		}),
 		starlight({
 			disable404Route: true,
 			title: 'Slipway',
@@ -32,6 +60,7 @@ export default defineConfig({
 					items: [
 						{ label: 'GitHub Issues', translations: { 'zh-CN': 'GitHub Issues', ja: 'GitHub Issues' }, slug: 'guides/github-issues' },
 						{ label: 'Runs, Recovery, Privacy', translations: { 'zh-CN': 'Run、恢复与隐私', ja: 'Run、復旧、プライバシー' }, slug: 'guides/runs-and-recovery' },
+						{ label: 'Protocol v2 Tutorial', translations: { 'zh-CN': '协议 v2 教程', ja: 'プロトコル v2 チュートリアル' }, slug: 'guides/machine-protocol-v2' },
 					],
 				},
 				{

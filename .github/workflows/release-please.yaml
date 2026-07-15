@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -14,9 +18,60 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     steps:
+      - name: Require release automation token
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_PAT" ]; then
+            printf '::error::GH_PAT is required so release tags trigger the Release workflow.\n'
+            exit 1
+          fi
       - name: Release Please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
+      - name: Check out triggering revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reconcile manifest, tag, and GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          manifest_version=$(jq -er '."." | strings' .release-please-manifest.json)
+          expected_tag="v${manifest_version}"
+
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${expected_tag}" >/dev/null; then
+            printf '::error::Manifest version %s has no matching Git tag %s.\n' \
+              "$manifest_version" "$expected_tag"
+            exit 1
+          fi
+
+          release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${expected_tag}")
+          release_tag=$(jq -er '.tag_name | strings' <<<"$release")
+          read_boolean() {
+            field=$1
+            jq -r --arg field "$field" '
+              .[$field] |
+              if type == "boolean" then tostring
+              else error("invalid " + $field + " field")
+              end
+            ' <<<"$release"
+          }
+          release_draft=$(read_boolean draft)
+          release_prerelease=$(read_boolean prerelease)
+          if [ "$release_tag" != "$expected_tag" ] || \
+             [ "$release_draft" != "false" ] || \
+             [ "$release_prerelease" != "false" ]; then
+            printf '::error::GitHub Release for %s is missing, draft, prerelease, or names another tag.\n' \
+              "$expected_tag"
+            exit 1
+          fi
+          printf 'Reconciled manifest %s, Git tag %s, and GitHub Release %s.\n' \
+            "$manifest_version" "$expected_tag" "$release_tag"

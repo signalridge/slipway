@@ -97,6 +97,17 @@ remain unreferenced and non-authoritative; do not silently delete or promote the
 Concurrent parent-revision drift requires a new preview instead of
 last-writer-wins reconciliation.
 
+## Current references
+
+This ADR records rationale; the following current artifacts define and verify the implemented contract:
+
+- [`docs/reference/v2/source-envelope.schema.json`](../docs/reference/v2/source-envelope.schema.json) and [`machine-protocol.schema.json`](../docs/reference/v2/machine-protocol.schema.json) are the canonical version 2 serialization schemas.
+- [`internal/autopilot/source.go`](../internal/autopilot/source.go) and [`source_bundle.go`](../internal/autopilot/source_bundle.go) implement parsing, identity, and validation; [`service.go`](../internal/autopilot/service.go) coordinates durable writes through [`internal/runstore/materials.go`](../internal/runstore/materials.go), and [`material.go`](../internal/autopilot/material.go) serves verified reads.
+- The [machine protocol reference](../docs/en/reference/machine-protocol.md) and [v2 tutorial](../docs/en/guides/machine-protocol-v2.md) describe the integration surface.
+- [`acceptance/machine-protocol.sh`](../acceptance/machine-protocol.sh) exercises issue-backed import, material reads, refresh, candidate choice, and idempotency.
+
+If these current artifacts and this historical record differ, the schemas, implementation, and executable acceptance evidence determine current behavior; update or supersede the ADR rather than silently treating its prose as runtime specification.
+
 ## Consequences
 
 Positive consequences are independently addressable chapters, deterministic

@@ -4,8 +4,10 @@ This page is for adapter and integration authors. Regular users should invoke a 
 
 The current JSON contract version is **2**:
 
-- [machine-protocol.schema.json](../../reference/machine-protocol.schema.json) defines public command, Action, Outcome, status, error, and recovery shapes.
-- [source-envelope.schema.json](../../reference/source-envelope.schema.json) defines the GitHub source transport shape.
+- [machine-protocol.schema.json](../../reference/v2/machine-protocol.schema.json) defines public command, Action, Outcome, status, error, and recovery shapes.
+- [source-envelope.schema.json](../../reference/v2/source-envelope.schema.json) defines the GitHub source transport shape.
+
+Use the [machine protocol v2 tutorial](../guides/machine-protocol-v2.md) for a runnable start-to-end host exchange.
 
 The schemas define serialization shape. Runtime validation also enforces rules that JSON Schema cannot express completely: embedded manifest syntax, ordering, hashes, cross-field identity, idempotency, workspace state, and filesystem safety. Validate against the schema and preserve CLI errors rather than reimplementing the Go validator from prose.
 

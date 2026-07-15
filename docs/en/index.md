@@ -14,6 +14,7 @@ Slipway adds a small, user-controlled workflow around an AI coding host. Start w
 
 - [GitHub Issues](guides/github-issues.md) — when to use an Objective or Change and how issue-backed Runs work.
 - [Runs, recovery, and privacy](guides/runs-and-recovery.md) — inspect, stop, resume, retain, or remove a Run.
+- [Machine protocol v2 tutorial](guides/machine-protocol-v2.md) — run a complete host integration lifecycle with strict Outcomes.
 
 ## Reference
 

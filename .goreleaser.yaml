@@ -96,7 +96,7 @@ release:
 
     Container image: `ghcr.io/signalridge/slipway:{{ .Version }}`
 
-    Installation: https://signalridge.github.io/slipway/installation/
+    Installation: https://signalridge.github.io/slipway/en/installation/
 
     Optional community-managed taps (published only when release secrets are
     configured; otherwise use the Installation guide above):

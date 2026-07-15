@@ -112,7 +112,7 @@ func TestSourceBundleReferenceIncludedOnlyWhereConstructed(t *testing.T) {
 		"cross-Issue/repository result",
 		"snake_case fields",
 		"private temporary file for immediate CLI consumption",
-		"docs/reference/source-envelope.schema.json",
+		"docs/reference/v2/source-envelope.schema.json",
 	}
 	for _, test := range []struct {
 		path    string

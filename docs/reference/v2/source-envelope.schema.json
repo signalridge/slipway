@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://signalridge.github.io/slipway/reference/source-envelope.schema.json",
+  "$id": "https://signalridge.github.io/slipway/reference/v2/source-envelope.schema.json",
   "title": "Slipway Source Bundle v2 envelope",
   "description": "Strict trusted-host observation containing an Issue body and, when its manifest is valid, exactly the referenced comments; an invalid head uses an empty comments array.",
   "$ref": "#/$defs/rawSourceEnvelope",

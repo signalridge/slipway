@@ -11,7 +11,7 @@
   <a href="https://github.com/signalridge/slipway/releases"><img alt="Release" src="https://img.shields.io/github/v/release/signalridge/slipway?style=for-the-badge&logo=github"></a>
 </p>
 
-[Documentation](https://signalridge.github.io/slipway/) ·
+[Documentation](https://signalridge.github.io/slipway/en/) ·
 [Start here](docs/en/start-here.md) ·
 [Installation](docs/en/installation.md) ·
 [Release notes](CHANGELOG.md)

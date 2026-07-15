@@ -73,6 +73,8 @@ For issue-backed work, the trusted host fetches the Issue and manifest-reference
 
 Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
 
+The design rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md); the versioned schemas and runtime tests remain authoritative for current behavior.
+
 ## Security boundary
 
 Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:

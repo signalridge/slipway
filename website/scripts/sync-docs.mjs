@@ -15,10 +15,14 @@
 // pages are hand-authored `en/index.mdx`, `zh/index.mdx`, and `ja/index.mdx`.
 
 import { promises as fs } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '../..');
+const execFileAsync = promisify(execFile);
 const DOCS_DIR = path.resolve(SCRIPT_DIR, '../../docs');
 const OUT_DIR = path.resolve(SCRIPT_DIR, '../src/content/docs');
 const PUBLIC_ASSETS = path.resolve(SCRIPT_DIR, '../public/assets');
@@ -80,8 +84,8 @@ function rewriteTarget(target, currentDir) {
 
   const resolved = path.posix.normalize(path.posix.join(currentDir, pathPart));
   if (
-    resolved === 'reference/machine-protocol.schema.json' ||
-    resolved === 'reference/source-envelope.schema.json'
+    resolved === 'reference/v2/machine-protocol.schema.json' ||
+    resolved === 'reference/v2/source-envelope.schema.json'
   ) {
     return `${BASE}/${resolved}${suffix}`;
   }
@@ -116,7 +120,26 @@ function yamlQuote(value) {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-function transform(raw, rel) {
+async function sourceLastUpdated(rel) {
+  try {
+    const { stdout } = await execFileAsync(
+      'git',
+      ['-C', REPOSITORY_ROOT, 'log', '-1', '--format=%cI', '--', path.posix.join('docs', rel)],
+      { encoding: 'utf8' },
+    );
+    const value = stdout.trim();
+    if (!value) return undefined;
+    if (Number.isNaN(Date.parse(value))) {
+      throw new Error(`git returned an invalid commit timestamp for docs/${rel}: ${value}`);
+    }
+    return value;
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 128) return undefined;
+    throw error;
+  }
+}
+
+function transform(raw, rel, lastUpdated) {
   const currentDir = path.posix.dirname(rel); // '.' for top-level
   let body = raw.replace(/\r\n/g, '\n');
 
@@ -144,6 +167,7 @@ function transform(raw, rel) {
 
   const fm = ['---', `title: ${yamlQuote(title)}`];
   if (description) fm.push(`description: ${yamlQuote(description)}`);
+  if (lastUpdated) fm.push(`lastUpdated: ${lastUpdated}`);
   fm.push(`editUrl: ${yamlQuote(`${REPOSITORY_EDIT}/${rel}`)}`, '---', '');
   return `${fm.join('\n')}\n${body.replace(/\n*$/, '\n')}`;
 }
@@ -178,9 +202,10 @@ async function main() {
   const files = (await walk(DOCS_DIR)).filter((rel) => path.posix.basename(rel) !== 'index.md');
   for (const rel of files) {
     const raw = await fs.readFile(path.join(DOCS_DIR, rel), 'utf8');
+    const lastUpdated = await sourceLastUpdated(rel);
     const outPath = path.join(OUT_DIR, rel);
     await fs.mkdir(path.dirname(outPath), { recursive: true });
-    await fs.writeFile(outPath, transform(raw, rel));
+    await fs.writeFile(outPath, transform(raw, rel, lastUpdated));
   }
 
   // Copy docs/assets wholesale -> public/assets (served at `${BASE}/assets/**`).
@@ -189,9 +214,13 @@ async function main() {
     await fs.cp(assetsSrc, PUBLIC_ASSETS, { recursive: true });
   }
 
-  await fs.mkdir(PUBLIC_REFERENCE, { recursive: true });
-  for (const name of ['machine-protocol.schema.json', 'source-envelope.schema.json']) {
-    const schemaSrc = path.join(DOCS_DIR, 'reference', name);
+  const schemaNames = ['machine-protocol.schema.json', 'source-envelope.schema.json'];
+  const publicV2 = path.join(PUBLIC_REFERENCE, 'v2');
+  await fs.mkdir(publicV2, { recursive: true });
+  for (const name of schemaNames) {
+    const schemaSrc = path.join(DOCS_DIR, 'reference', 'v2', name);
+    await fs.copyFile(schemaSrc, path.join(publicV2, name));
+    // Keep the original unversioned URL as a byte-identical compatibility alias.
     await fs.copyFile(schemaSrc, path.join(PUBLIC_REFERENCE, name));
   }
 

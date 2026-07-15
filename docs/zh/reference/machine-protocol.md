@@ -4,8 +4,10 @@
 
 当前 JSON contract version 为 **2**：
 
-- [machine-protocol.schema.json](../../reference/machine-protocol.schema.json) 定义公开命令、Action、Outcome、status、error 与 recovery 的形状。
-- [source-envelope.schema.json](../../reference/source-envelope.schema.json) 定义 GitHub source transport 形状。
+- [machine-protocol.schema.json](../../reference/v2/machine-protocol.schema.json) 定义公开命令、Action、Outcome、status、error 与 recovery 的形状。
+- [source-envelope.schema.json](../../reference/v2/source-envelope.schema.json) 定义 GitHub source transport 形状。
+
+可运行的完整宿主交互见[机器协议 v2 教程](../guides/machine-protocol-v2.md)。
 
 Schema 定义 serialization shape。Runtime 还会验证 JSON Schema 无法完整表达的规则：embedded manifest syntax、ordering、hash、cross-field identity、idempotency、workspace state 与 filesystem safety。集成应验证 schema 并保留 CLI error，不要根据本文重新实现 Go validator。
 
