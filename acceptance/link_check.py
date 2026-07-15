@@ -14,6 +14,10 @@ import tempfile
 from urllib.parse import unquote, urljoin, urlsplit
 
 SITE_BASE = "/slipway"
+REPOSITORY_SOURCE_PATH_PREFIXES = (
+    "/signalridge/slipway/blob/main/",
+    "/signalridge/slipway/edit/main/",
+)
 EXTERNAL_SCHEMES = {"http", "https", "mailto", "tel", "data"}
 SOURCE_NAMES = {
     "AGENTS.md",
@@ -283,11 +287,11 @@ def exact_case_exists(path: Path, root: Path) -> bool:
 
 def source_files(root: Path) -> list[Path]:
     files = [root / name for name in sorted(SOURCE_NAMES) if (root / name).is_file()]
-    for base in (root / "docs", root / "acceptance"):
+    for base in (root / "docs", root / "adr", root / "acceptance"):
         if base.is_dir():
             files.extend(path for path in base.rglob("*.md") if path.is_file())
     content = root / "website" / "src" / "content" / "docs"
-    for relative in ("index.mdx", "zh/index.mdx", "ja/index.mdx", "404.md"):
+    for relative in ("en/index.mdx", "zh/index.mdx", "ja/index.mdx", "404.md"):
         path = content / relative
         if path.is_file():
             files.append(path)
@@ -310,7 +314,7 @@ def website_routes(root: Path) -> dict[str, Path]:
             routes[route] = path
     content = root / "website" / "src" / "content" / "docs"
     for relative, route in (
-        ("index.mdx", f"{SITE_BASE}/"),
+        ("en/index.mdx", f"{SITE_BASE}/en/"),
         ("zh/index.mdx", f"{SITE_BASE}/zh/"),
         ("ja/index.mdx", f"{SITE_BASE}/ja/"),
         ("404.md", f"{SITE_BASE}/404/"),
@@ -418,6 +422,21 @@ class BuiltHTMLParser(HTMLParser):
                     self.links.append(value)
 
 
+def repository_source_target(root: Path, target: str) -> Path | None:
+    parsed = urlsplit(target)
+    if parsed.scheme.lower() != "https" or parsed.netloc.lower() != "github.com":
+        return None
+    for prefix in REPOSITORY_SOURCE_PATH_PREFIXES:
+        if not parsed.path.startswith(prefix):
+            continue
+        relative = unquote(parsed.path.removeprefix(prefix))
+        parts = relative.split("/")
+        if not relative or any(part in {"", ".", ".."} for part in parts):
+            raise ValueError(f"repository source link has an unsafe path: {target}")
+        return root.joinpath(*parts)
+    return None
+
+
 def built_target(site_dir: Path, current: Path, target: str) -> tuple[Path | None, str]:
     parsed = urlsplit(target)
     if parsed.scheme.lower() in EXTERNAL_SCHEMES or target.startswith("//"):
@@ -461,6 +480,21 @@ def check_built_site(root: Path, site_dir: Path) -> tuple[int, list[Problem]]:
         parsed_pages[page.resolve()] = parser
         for target in parser.links:
             checked += 1
+            try:
+                repository_candidate = repository_source_target(root, target)
+            except ValueError as error:
+                problems.append(Problem(str(page.relative_to(root)), 1, str(error)))
+                continue
+            if repository_candidate is not None:
+                if not exact_case_exists(repository_candidate, root):
+                    problems.append(
+                        Problem(
+                            str(page.relative_to(root)),
+                            1,
+                            f"repository source target does not exist: {target}",
+                        )
+                    )
+                continue
             try:
                 candidate, fragment = built_target(site_dir, page, target)
             except ValueError as error:
@@ -535,19 +569,22 @@ def self_test() -> None:
     with tempfile.TemporaryDirectory(prefix="slipway-link-check-") as directory:
         root = Path(directory)
         (root / "docs").mkdir()
+        (root / "adr").mkdir()
         (root / "acceptance").mkdir(parents=True)
         (root / "website" / "src" / "content" / "docs").mkdir(parents=True)
         (root / "docs" / "index.md").write_text("# Docs\n\n[Guide](guide.md#hello-world)\n")
         (root / "docs" / "guide.md").write_text("# Hello, world!\n")
+        (root / "adr" / "README.md").write_text("[Docs](../docs/index.md)\n")
         (root / "README.md").write_text(
             "[root](/docs/guide.md#hello-world) [site](/slipway/guide/#hello-world) "
             "[external](https://example.invalid/x)\n"
         )
-        (root / "website" / "src" / "content" / "docs" / "index.mdx").write_text(
+        (root / "website" / "src" / "content" / "docs" / "en").mkdir(parents=True)
+        (root / "website" / "src" / "content" / "docs" / "en" / "index.mdx").write_text(
             "---\ntitle: Home\n---\n\n[Guide](/slipway/guide/)\n"
         )
         files, links, _, problems = check_repository(root, require_site=False)
-        assert files == 4 and links == 5 and not problems, problems
+        assert files == 5 and links == 6 and not problems, problems
 
         (root / "README.md").write_text("[bad](docs/guide.md#missing)\n")
         _, _, _, problems = check_repository(root, require_site=False)
@@ -556,6 +593,23 @@ def self_test() -> None:
         (root / "README.md").write_text("[broken](docs/guide.md\n")
         _, _, _, problems = check_repository(root, require_site=False)
         assert any("unterminated Markdown" in problem.message for problem in problems), problems
+
+        site_dir = root / "website" / "dist"
+        site_dir.mkdir(parents=True)
+        built_page = site_dir / "index.html"
+        built_page.write_text(
+            '<a href="https://github.com/signalridge/slipway/edit/main/docs/guide.md">Edit</a>\n'
+        )
+        checked, problems = check_built_site(root, site_dir)
+        assert checked == 1 and not problems, problems
+
+        built_page.write_text(
+            '<a href="https://github.com/signalridge/slipway/edit/main/docs/src/content/docs/guide.md">Edit</a>\n'
+        )
+        _, problems = check_built_site(root, site_dir)
+        assert any(
+            "repository source target does not exist" in problem.message for problem in problems
+        ), problems
     print("link-check self-test: ok")
 
 

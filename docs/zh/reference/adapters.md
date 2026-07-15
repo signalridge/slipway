@@ -1,25 +1,79 @@
 # 宿主适配器
 
-每个宿主只生成六个显式能力：`slipway-run`、`slipway-clarify`、`slipway-propose`、`slipway-decompose`、`slipway-implement`、`slipway-review`。Clarify 保持无状态。
+`slipway install` 为六个显式能力生成 host-native 入口：
 
-原生表面与调用方式如下：Claude、Cursor、Qwen 使用各自 `skills` 目录并显式调用 `slipway-<name>` skill；Codex 使用 `.codex/skills` 和 `$slipway-<name>`；Pi 使用 `.pi/skills` 和 `/skill:slipway-<name>`；Copilot 在 `.github/copilot/agents` 生成 custom agent，由 agent picker 选择；Kilo、OpenCode、Windsurf 分别在 `.kilo/commands`、`.opencode/commands`、`.windsurf/workflows` 生成 `/slipway-<name>`；Kiro IDE 在 `.kiro/steering` 生成手动 `#slipway-<name>` steering，Kiro CLI 在 `.kiro/agents` 生成可由 `kiro-cli chat --agent slipway-<name>` 调用的 agent。
+```text
+slipway-run  slipway-clarify  slipway-propose
+slipway-decompose  slipway-implement  slipway-review
+```
 
-命令、workflow、steering 与 agent 表面都引用各宿主 `slipway/capabilities` 下的 canonical body。Copilot 自动探测仍接受 `.github/copilot`、`.github/prompts`、`.github/skills` 中任一现有宿主表面。Kiro 首次安装必须用 `--surface ide|cli` 选择一种表面；选择记录在 ownership manifest，refresh 和 uninstall 沿用该选择。
+`run` 驱动可恢复 Run；`clarify` 是独立、无状态的决策对话；`propose` 与 `decompose` 准备 GitHub work item；`implement` 执行技术工作；`review` 只读。
 
-不会生成 ambient session hook、prompt-submit hook、launcher、总 router 或独立技术检查能力。宿主 settings 不属于 adapter ownership，install、refresh 与 uninstall 永不修改它们。每个生成 skill 都携带相同的 untrusted Issue、trusted attester、确认 publication 与精确 destructive authorization 边界；只有 Clarify 含一份 decision interview reference，它派生自 Matt Pocock 的 MIT `grill-me` 并保留 attribution。
+## 生成目标
 
-Clarify 保留 Matt Pocock `grill-me`/`grilling` 的事实先查、依赖顺序、一次一问+推荐、shared-understanding confirmation、stateless 与 wrap-up 立即停止；不提供隐式澄清文档化能力。
-Codex 的每个能力还包含受管的 `agents/openai.yaml`，并设置 `allow_implicit_invocation: false`；Codex 不读取通用 frontmatter 中的同类开关，因此该策略确保只有用户显式调用时 Slipway 能力才可用。
+下表描述生成文件和预期调用方式。外部宿主的实际行为取决于其版本；仓库测试验证生成结果和协议文本，不等于对每个宿主 UI 进行 E2E 验证。
 
-只有 version 2 ownership manifest 可以授权 mutation；其他任何版本都视为不可读，使 install、refresh 与 uninstall 在修改文件前失败。只读 `list` 只把该宿主降级为未安装 advisory，并继续报告其他宿主。Version 2 记录路径与 SHA-256。Refresh/uninstall 只处理哈希匹配的文件；用户修改文件会被保留并停止认领。
-首次安装只认领新创建的文件；current manifest 已存在后，必须显式运行 `slipway install --refresh` 才会更新。只有 marker 而缺少 current manifest 时不建立任何 ownership：install、refresh 与 uninstall 保持 adapter surface 原样，只中性提示 current ownership 缺失，不迁移也不推断。
+| ID | 生成目标 | 预期调用 |
+| --- | --- | --- |
+| `claude` | `.claude/skills/slipway-*/SKILL.md` | 调用 `slipway-<name>` skill。 |
+| `codex` | `.codex/skills/slipway-*/SKILL.md`，每个 skill 带 `agents/openai.yaml` | `$slipway-<name>` |
+| `copilot` | `.github/copilot/agents/slipway-<name>.agent.md` | 选择 custom agent。 |
+| `cursor` | `.cursor/skills/slipway-*/SKILL.md` | 调用 `slipway-<name>` skill。 |
+| `kilo` | `.kilo/commands/slipway-<name>.md` 与 `.kilocode/slipway/capabilities/` | `/slipway-<name>` |
+| `kiro` IDE | `.kiro/steering/slipway-<name>.md` 与 `.kiro/slipway/capabilities/` | 手工加入 `#slipway-<name>`。 |
+| `kiro` CLI | `.kiro/agents/slipway-<name>.json` 与 `.kiro/slipway/capabilities/` | `kiro-cli chat --agent slipway-<name>` |
+| `opencode` | `.opencode/commands/slipway-<name>.md` 与 `.opencode/slipway/capabilities/` | `/slipway-<name>` |
+| `pi` | `.pi/skills/slipway-*/SKILL.md` | `/skill:slipway-<name>` |
+| `qwen` | `.qwen/skills/slipway-*/SKILL.md` | 调用 `slipway-<name>` skill。 |
+| `windsurf` | `.windsurf/workflows/slipway-<name>.md` 与 `.windsurf/slipway/capabilities/` | `/slipway-<name>` |
 
-Install/uninstall report 把普通 ownership preservation 与事务恢复分开：`transaction_outcome` 为 `committed|rolled_back|not_committed|ambiguous`，只有 committed 才保留计划中的 `written`/`removed`；并发对象或 quarantine 路径只进入 `recovery_artifacts`，不与 `preserved` 混合。错误返回同一 report 且不给 blind-retry command。
+Copilot agent 是 self-contained 文件。Kilo、Kiro、OpenCode 和 Windsurf 使用 thin native entry 指向 generated capability body；skill-native host 则将 capability body 放在 `SKILL.md` 中。
 
-`.adapter-generated` sentinel 是 health evidence，不是 ownership authority。缺失时 `install --refresh` 可重建；修改后视为用户内容，refresh/uninstall 都保留。Doctor 会建议检查并在确实需要重建时先手工删除，不会声称 refresh 能覆盖用户修改。
+Kiro 首次安装需要 `--surface ide` 或 `--surface cli`。该选择会被记录，普通 refresh 不会静默切换。
 
-## Publication 与隐私边界
+## 显式调用
 
-Propose/decompose 探测 `gh`，2.94.0+ 用一等关系操作，否则用官方 REST API 或 `environment_unavailable`。它们要求精确 Level/Kind labels、同 `github.com` transfer identity refetch、100/50 限制、approved operation/item UUID markers、body files、expected revisions、readback，以及零/一/多匹配的 `created|matched|failed|ambiguous` 对账；不盲重试。
+Adapter 不安装 session-start hook、prompt-submit hook、launcher 或 global router，host settings 也不属于 adapter ownership。用户显式调用能力；在已显式启动的 `slipway-run` 中，宿主可继续有界 Action loop，无需在每个普通步骤前重复询问授权。
 
-所有能力警告 accepted Requirements、goal、answers 与 command summaries 可能敏感；公开 Issue 无 private switch。识别到 credential 时保留命令身份并脱敏 value；不收 token、raw comments、env dump、transcript 或 hidden reasoning。见 [Issue 工作流](issue-workflow.md)和[隐私](../explanation/runs-and-privacy.md)。
+Codex policy file 为每个能力禁用 implicit model invocation。其他目标使用各自 native explicit-entry surface 和共享指令。
+
+## CLI 与宿主职责
+
+CLI 负责：
+
+- 验证并记录 Run；
+- 选择下一个 Action；
+- 观察 Git 与 workspace identity；
+- 验证 source envelope 与 Outcome；
+- 返回结构化恢复。
+
+宿主负责：
+
+- 读取仓库并执行技术工作；
+- 调用模型；
+- 在用户要求 issue-backed 工作时使用 GitHub 凭据；
+- 构造临时 source envelope；
+- 遵循 publication preview、confirmation 与 reconciliation 指令。
+
+因此 `propose` 与 `decompose` 描述宿主应如何使用 GitHub API；Go CLI 并不提供 GitHub publication transaction。详见 [GitHub Issue 工作流](../guides/github-issues.md)。
+
+## 安装与刷新
+
+```bash
+slipway install --tool claude
+slipway install --tool kiro --surface ide
+slipway list
+slipway doctor
+slipway install --tool claude --refresh
+slipway uninstall --tool claude
+```
+
+首次 Kiro 与 `--tool all` 限制见[安装](../installation.md)。
+
+## Ownership 安全
+
+每个 host root 下都有 Slipway ownership manifest，记录 repository-relative path 与 SHA-256。Refresh 和 uninstall 只修改仍与记录 hash 匹配的文件。
+
+被用户修改的 capability、未知文件、modified sentinel、malformed manifest、path escape、duplicate claim 或 unsafe symlink 不会被静默纳入 managed content；操作会保留或拒绝并报告原因。Transaction recovery artifact 与普通 preserved user file 分开报告。
+
+Generated sentinel 只表示 installation health，不代表 ownership。只有 manifest 可以授权后续 managed-file change；不支持的 manifest version 会在 mutation 前失败。

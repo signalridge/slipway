@@ -1,35 +1,32 @@
 # Slipway documentation
 
-Slipway is an explicitly invoked, issue-first but never issue-gated soft autopilot for AI coding. The English pages are non-normative summaries: the complete [Chinese product contract](../zh/reference/product-contract.md) and versioned [machine protocol schema](../reference/machine-protocol.schema.json) are implementation authorities.
+Slipway adds a small, user-controlled workflow around an AI coding host. Start with the task you want to accomplish; use the protocol and architecture pages only when you are integrating or maintaining Slipway.
 
-```text
-Objective Issue (optional planning parent; never executable)
-  └─ self-contained Change Issue (the only issue-backed source)
-       └─ Run (one revision-pinned, interruptible attempt)
-            orient → clarify if needed → implement → review on observed diff → summarize
-```
+[简体中文](../zh/index.md) · [日本語](../ja/index.md)
 
 ## Get started
 
-- [Start here](start-here.md) — shortest path from install to one Run.
-- [Installation](installation.md) — platform paths and adapter commands.
-- [Product authority](reference/product-overview.md) — the four-axis model, six capabilities, seven commands.
+- [Start here](start-here.md) — build or install Slipway, add one host adapter, and run one task.
+- [Installation](installation.md) — release compatibility, packages, source builds, upgrades, and removal.
+- [Core concepts](explanation/concepts.md) — Run, Action, source, Objective, Change, and completion semantics.
+
+## Guides
+
+- [GitHub Issues](guides/github-issues.md) — when to use an Objective or Change and how issue-backed Runs work.
+- [Runs, recovery, and privacy](guides/runs-and-recovery.md) — inspect, stop, resume, retain, or remove a Run.
 
 ## Reference
 
-- [Issue workflow](reference/issue-workflow.md) — Objective/Change markers, labels, self-containment, GitHub limits, publication.
-- [Commands](reference/commands.md) — public command and JSON surface.
-- [Machine protocol](reference/machine-protocol.md) — versioned Action / Outcome contract and hidden operations.
-- [Host adapters](reference/adapters.md) — ten hosts, six capabilities, ownership safety.
-- [Windows rendering and durability](reference/windows-rendering-and-durability.md) — argv rendering and crash durability.
-- [Acceptance and evidence](reference/acceptance-evidence.md) — evidence types and the scenario matrix.
+- [Commands](reference/commands.md) — the seven public CLI commands and their flags.
+- [Host adapters](reference/adapters.md) — generated targets, invocation styles, and ownership safety.
+- [Machine protocol](reference/machine-protocol.md) — versioned JSON for host integrations.
 
-## Explanation
+## Maintainers
 
-- [Architecture](explanation/architecture.md) — package layout and dependency direction.
-- [Runs and privacy](explanation/runs-and-privacy.md) — journal contents, retention, and the privacy promise.
+- [Architecture](explanation/architecture.md) — process boundaries, packages, storage, and trust boundaries.
+- [Development reference](contributing.md) — repository layout and verification.
+- [Contributing](../../CONTRIBUTING.md) — pull-request workflow.
+- [Acceptance suite](../../acceptance/README.md) — executable and manual behavior checks.
+- [Architecture decisions](../../adr/README.md) — historical rationale, kept outside user documentation.
 
-## Decisions and scenarios
-
-- [Architecture decisions](../decisions/0001-source-bundle-v2.md) — manifest-addressed source bundles.
-- [Prompt scenarios](../../acceptance/README.md) — host-behavior evaluations.
+The three language trees describe the same product. Exact machine field shapes live in the language-neutral JSON schemas; no translation is treated as a separate product contract.

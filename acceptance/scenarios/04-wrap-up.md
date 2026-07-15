@@ -2,7 +2,7 @@
 
 ## Setup
 
-Start Scenario 03 and answer the first decision.
+Use a disposable repository whose code leaves two dependent product choices unresolved. Explicitly invoke `slipway-clarify`, allow it to ask and receive an answer to the first decision, then send the prompt below before it asks the second decision.
 
 ## Prompt
 

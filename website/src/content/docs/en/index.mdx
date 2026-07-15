@@ -1,9 +1,10 @@
 ---
 title: Slipway
-description: An explicitly invoked, issue-first but never issue-gated soft autopilot for AI coding.
+description: An explicitly invoked soft autopilot for AI coding.
 template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/en/index.mdx
 hero:
-  tagline: Objective to self-contained Change to interruptible Run—investigate facts, clarify real decisions, implement, review read-only, and recover while the user stays in control.
+  tagline: One Action at a time—investigate facts, clarify real decisions, implement, review read-only, and recover while the user stays in control.
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
@@ -11,8 +12,8 @@ hero:
       link: /slipway/en/start-here/
       icon: right-arrow
       variant: primary
-    - text: Product Authority
-      link: /slipway/en/reference/product-overview/
+    - text: Core Concepts
+      link: /slipway/en/explanation/concepts/
       icon: document
       variant: minimal
     - text: View on GitHub
@@ -23,24 +24,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-English is a non-normative summary. The complete Chinese product contract and versioned machine schema are implementation authorities. Slipway starts only when explicitly asked, is issue-first without making GitHub a gate, and preserves an ad-hoc escape hatch. A self-contained Change is the only issue-backed source; an Objective is optional planning input and never executable.
+Slipway is a user-invoked soft autopilot for AI coding. A host writes the code; Slipway records each Run, chooses the next Action, observes Git independently, and stores recoverable state. The Run engine calls no model and does not access GitHub; the separate `doctor` command may invoke local `gh` for read-only diagnostics. Slipway does not store model or GitHub credentials.
 
-One Run returns one versioned Action at a time: `orient → clarify when needed → implement → review on observed diff → summarize`. Every Action can be skipped, a Run can stop/resume, Review never repairs, and `ended` means only that the automatic queue is empty.
+One Run advances one versioned Action at a time: `orient → clarify when needed → implement → review when enabled and code changed → summarize`. Every Action can be skipped, a Run can stop and resume, Review never edits code, and `ended` means only that the automatic queue is empty.
 
 <CardGrid stagger>
-	<Card title="Issue-first, not issue-gated" icon="rocket">
-		Use exact Objective/Change markers and labels, or start an ad-hoc Run when GitHub is unavailable, sensitive, tiny, or unwanted.
+  <Card title="Use it" icon="rocket">
+    Start from the task you want to accomplish; start ad hoc or from a self-contained GitHub Change Issue.
 
-		[Start here](/slipway/en/start-here/) · [Issue workflow](/slipway/en/reference/issue-workflow/)
-	</Card>
-	<Card title="Six capabilities, seven commands" icon="puzzle">
-		Ten adapters generate run, clarify, propose, decompose, implement, and read-only review. The machine protocol is versioned.
+    [Start here](/slipway/en/start-here/) · [GitHub Issues](/slipway/en/guides/github-issues/) · [Runs, recovery, privacy](/slipway/en/guides/runs-and-recovery/)
+  </Card>
+  <Card title="Look up exact surfaces" icon="puzzle">
+    The seven public commands, ten host adapters, and the versioned machine protocol for integrators.
 
-		[Commands](/slipway/en/reference/commands/) · [Machine protocol](/slipway/en/reference/machine-protocol/) · [Adapters](/slipway/en/reference/adapters/)
-	</Card>
-	<Card title="Recovery, privacy, and evidence" icon="setting">
-		Journals may contain accepted Requirements, goals, answers, and command summaries. Understand retention, Windows limits, and honest evidence gaps.
+    [Commands](/slipway/en/reference/commands/) · [Machine protocol](/slipway/en/reference/machine-protocol/) · [Adapters](/slipway/en/reference/adapters/)
+  </Card>
+  <Card title="Understand and contribute" icon="setting">
+    Concepts, architecture, and contributor checks.
 
-		[Privacy](/slipway/en/explanation/runs-and-privacy/) · [Windows](/slipway/en/reference/windows-rendering-and-durability/) · [Evidence](/slipway/en/reference/acceptance-evidence/)
-	</Card>
+    [Concepts](/slipway/en/explanation/concepts/) · [Architecture](/slipway/en/explanation/architecture/) · [Contributing](/slipway/en/contributing/)
+  </Card>
 </CardGrid>

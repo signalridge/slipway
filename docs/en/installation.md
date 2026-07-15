@@ -1,38 +1,31 @@
 # Installation
 
-Primary installation paths are Go, GitHub Release archives and Linux packages, the GHCR container image, and the repository Nix flake. Homebrew, Scoop, and AUR are optional channels described below.
+The current repository interface and the latest package in every channel may not be the same. Before following the rest of the documentation, verify that `slipway --help` lists the seven commands `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`.
 
-## Go
+## Build the current checkout
 
-```bash
-go install github.com/signalridge/slipway@latest
-```
-
-## Direct archive
-
-Download the archive for your OS and architecture from [GitHub Releases](https://github.com/signalridge/slipway/releases), download `checksums.txt`, verify the archive, extract it, and place `slipway` on `PATH`. Linux and macOS archives use `.tar.gz`; Windows archives use `.zip`.
-
-For example, the following installs the latest Linux `amd64` archive:
+Use the Go version declared in [`go.mod`](https://github.com/signalridge/slipway/blob/main/go.mod) (currently Go 1.26.5 or newer):
 
 ```bash
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/signalridge/slipway/releases/latest)"
-tag="${release_url##*/}"
-version="${tag#v}"
-archive="slipway_${version}_linux_amd64.tar.gz"
-base_url="https://github.com/signalridge/slipway/releases/download/${tag}"
-
-curl -fLO "${base_url}/${archive}"
-curl -fLO "${base_url}/checksums.txt"
-grep -F " ${archive}" checksums.txt | sha256sum --check -
-tar -xzf "${archive}"
-sudo install -m 0755 slipway /usr/local/bin/slipway
+go build -o ./slipway .
+./slipway --help
 ```
 
-Use `darwin` and the appropriate architecture for macOS (with `shasum -a 256 --check -` in place of `sha256sum`), or verify the Windows `.zip` hash from `checksums.txt` with `Get-FileHash` before using `Expand-Archive` and moving `slipway.exe` to a directory on `PATH`.
+This is the reliable way to evaluate an unreleased repository revision.
 
-## Linux packages
+## Tagged releases
 
-Download the package for your architecture from [GitHub Releases](https://github.com/signalridge/slipway/releases), then run the command for your distribution from the download directory:
+Choose a tag whose release notes include the seven-command soft-autopilot interface. Core release artifacts are published on [GitHub Releases](https://github.com/signalridge/slipway/releases):
+
+- `.tar.gz` archives for Linux and macOS;
+- `.zip` archives for Windows;
+- `.deb`, `.rpm`, and `.apk` Linux packages;
+- `checksums.txt`, SBOMs, and provenance;
+- versioned images at `ghcr.io/signalridge/slipway`.
+
+Download the archive and `checksums.txt`, verify the archive before extracting it, then place `slipway` (or `slipway.exe`) on `PATH`.
+
+Linux packages can be installed from the download directory:
 
 ```bash
 # Debian or Ubuntu
@@ -45,40 +38,59 @@ sudo dnf install ./slipway*.rpm
 sudo apk add --allow-untrusted ./slipway*.apk
 ```
 
-## Container
-
-Versioned container images are published to [GitHub Container Registry](https://github.com/signalridge/slipway/pkgs/container/slipway):
+Verify the installed interface:
 
 ```bash
-docker pull ghcr.io/signalridge/slipway:<version>
-docker run --rm ghcr.io/signalridge/slipway:<version> --version
+slipway --version
+slipway --help
 ```
 
-The image includes Git because repository discovery and run observation depend on it. On Linux, run with your host UID/GID when the command must write capabilities or journals into a mounted worktree:
+## Go installation from a tag
+
+Do not use `@latest` until the latest release contains this interface. Pin a compatible tag:
+
+```bash
+go install github.com/signalridge/slipway@vX.Y.Z
+```
+
+A binary built with `go install` may show development version metadata because release linker flags are not present; use the pinned module version and command tree to establish compatibility.
+
+## Container
+
+```bash
+docker pull ghcr.io/signalridge/slipway:vX.Y.Z
+docker run --rm ghcr.io/signalridge/slipway:vX.Y.Z --help
+```
+
+The image includes Git. To install capabilities or create Run data in a mounted Linux worktree, use the host UID/GID:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" \
   -v "$PWD:/workspace" -w /workspace \
-  ghcr.io/signalridge/slipway:<version> install --tool claude
+  ghcr.io/signalridge/slipway:vX.Y.Z install --tool claude
 ```
 
 ## Nix
 
-The repository flake supports one-off runs and profile installation:
+Pin the flake to a compatible tag. An unqualified GitHub flake follows the repository's mutable default branch.
 
 ```bash
-nix run github:signalridge/slipway
-nix profile install github:signalridge/slipway
+nix run github:signalridge/slipway/vX.Y.Z -- --help
+nix profile install github:signalridge/slipway/vX.Y.Z
 ```
 
 ## Optional package-manager channels
 
-Homebrew, Scoop, and AUR are optional release outputs. The core release explicitly skips all three and publishes archives, Linux packages, checksums, SBOMs, provenance, and the container independently. Separate best-effort jobs run only when `GH_PAT` (Homebrew/Scoop) or an AUR SSH key is available; before updating a channel, each job requires its reproducibly rebuilt archive checksums to match the already-published core release. Publisher, checksum-verification, or channel-verification failure cannot block or invalidate the core release, so an optional channel may be absent or lag behind. Confirm its displayed version before relying on it.
+Homebrew, Scoop, and AUR are secondary publishers and may lag the core GitHub release. Check the displayed version and run `slipway --help` after installation.
 
 ### Homebrew cask
 
+The release workflow tests an explicit tap and trust sequence:
+
 ```bash
-brew install --cask signalridge/tap/slipway
+brew tap signalridge/tap
+brew trust signalridge/tap
+brew install --cask slipway
 ```
 
 ### Scoop
@@ -90,41 +102,39 @@ scoop install signalridge/slipway
 
 ### AUR
 
-Install the optional `slipway-bin` package with an AUR helper:
-
 ```bash
 yay -S slipway-bin
 ```
 
 ## Install host capabilities
 
-Run from any directory inside a Git worktree:
+Run from inside the target Git worktree:
 
 ```bash
 slipway install --tool claude
-slipway install --tool kiro --surface ide  # or: --surface cli
-```
-
-Use repeated `--tool`, a comma-separated value, or `--tool all`. Without `--tool`, Slipway installs adapters whose host directories it detects. `--refresh` updates only files whose ownership hash still matches. Kiro's first install requires `--surface ide|cli`; its ownership manifest records the choice, so later refresh and uninstall infer the same surface. `--surface` is invalid for non-Kiro hosts and cannot silently switch an installed Kiro adapter.
-
-Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Skill-native hosts invoke `slipway-<name>` through their skill UI (Codex uses `$slipway-<name>` and Pi uses `/skill:slipway-<name>`). Copilot selects the generated custom agent. Kilo, OpenCode, and Windsurf invoke `/slipway-<name>`. Kiro IDE manually includes `#slipway-<name>`; Kiro CLI uses `kiro-cli chat --agent slipway-<name>`.
-
-Copilot auto-detection recognizes any of `.github/copilot`, `.github/prompts`, or `.github/skills`; generated custom agents are installed under `.github/copilot/agents`.
-
-```bash
 slipway list
 slipway doctor
 ```
 
-## Safe refresh and removal
+Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several non-Kiro hosts.
 
-Generated files are recorded in a per-host ownership manifest. Refresh and uninstall preserve user-modified or unknown files and report them. Paths that escape the host area, duplicate claims, malformed hashes, and symlink traversal fail safely.
+Kiro must be installed separately the first time so its surface is unambiguous:
+
+```bash
+slipway install --tool kiro --surface ide   # or: --surface cli
+```
+
+Do not combine `--surface` with non-Kiro selections. Once the Kiro surface is recorded, later refresh and uninstall infer it. A first-time `--tool all` selection also needs Kiro to have a recorded surface, so explicit per-host setup is clearer.
+
+Without `--tool`, Slipway uses detected host directories. Detection is only a convenience; inspect `slipway list` before installing into a repository with several host configurations.
+
+## Refresh and uninstall
 
 ```bash
 slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-The only accepted manifest format is version 2. Any other version fails closed before install, refresh, or uninstall can mutate files. Read-only `list` remains available: it reports that host as uninstalled with an advisory and continues listing every other host without changing the filesystem. A marker without a current manifest establishes no ownership and leaves the adapter surface unchanged. Host settings are outside adapter ownership and are never modified.
+Slipway records generated paths and hashes in a per-host ownership manifest. Refresh and uninstall mutate only matching managed files. Modified, unknown, malformed, out-of-host, or symlinked paths are preserved or rejected and reported; host settings remain outside adapter ownership.
 
-No SessionStart or prompt-submission activation is installed.
+Removing an adapter does not remove Run journals. See [Runs, recovery, and privacy](guides/runs-and-recovery.md) for Run retention.

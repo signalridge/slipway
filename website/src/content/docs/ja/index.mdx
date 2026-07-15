@@ -1,9 +1,10 @@
 ---
 title: Slipway
-description: ユーザーが明示的に起動する、issue-first かつ issue-gated ではない AI coding 用 soft autopilot。
+description: ユーザーが明示的に起動する AI coding 用の soft autopilot。
 template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/ja/index.mdx
 hero:
-  tagline: Objective → self-contained Change → interruptible Run。Fact investigation、one-by-one clarification、implementation、read-only Review、recovery を user control の下で行います。
+  tagline: Action を1つずつ進める。事実確認、one-by-one の澄清、実装、read-only Review、復旧を、ユーザー制御の下で行います。
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
@@ -11,8 +12,8 @@ hero:
       link: /slipway/ja/start-here/
       icon: right-arrow
       variant: primary
-    - text: 製品 authority
-      link: /slipway/ja/reference/product-overview/
+    - text: コア概念
+      link: /slipway/ja/explanation/concepts/
       icon: document
       variant: minimal
     - text: GitHub
@@ -23,24 +24,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-日本語は non-normative summary です。完全な中国語製品契約と versioned machine schema が実装 authority です。Slipway は explicit invocation のみで開始し、issue-first ですが GitHub を gate にせず、ad-hoc escape hatch を残します。Self-contained Change だけが issue-backed source で、Objective は任意 planning input、実行不可です。
+Slipway は、ユーザーが明示的に起動する AI coding 用の soft autopilot です。Host が code を書き、Slipway は Run を記録し、次の Action を選び、Git を独立観測し、recoverable な state を保存します。Run engine は model や GitHub を呼び出しません。独立した `doctor` command は read-only diagnosis のために local `gh` を呼び出す場合があります。Slipway は model/GitHub credential を保存しません。
 
-Run は1つずつ versioned Action を返します：`orient → 必要なら clarify → implement → observed diff なら review → summarize`。Action は skip、Run は stop/resume、Review は repair せず、`ended` は automatic queue が空であることだけを示します。
+1回の Run は versioned Action を1つずつ進めます：`orient → 必要なら clarify → implement → code change があり有効な場合は review → summarize`。Action は skip 可能、Run は stop/resume 可能、Review は code を編集せず、`ended` は automatic queue が空であることだけを示します。
 
 <CardGrid stagger>
-	<Card title="Issue-first、not issue-gated" icon="rocket">
-		Exact Objective/Change marker と labels を使い、GitHub unavailable、機微、微小、または Issue 不要なら ad-hoc Run を使います。
+  <Card title="Slipway を使う" icon="rocket">
+    達成したい task から始めます。Ad-hoc または self-contained GitHub Change Issue から起動します。
 
-		[はじめに](/slipway/ja/start-here/) · [Issue workflow](/slipway/ja/reference/issue-workflow/)
-	</Card>
-	<Card title="6 capabilities、7 commands" icon="puzzle">
-		10 adapter は run、clarify、propose、decompose、implement、read-only review だけを生成し、machine protocol は versioned です。
+    [はじめに](/slipway/ja/start-here/) · [GitHub Issues](/slipway/ja/guides/github-issues/) · [Run、復旧、プライバシー](/slipway/ja/guides/runs-and-recovery/)
+  </Card>
+  <Card title="Exact surface を調べる" icon="puzzle">
+    7つの public command、10種類の host adapter、integration 向け versioned machine protocol。
 
-		[Commands](/slipway/ja/reference/commands/) · [Machine protocol](/slipway/ja/reference/machine-protocol/) · [Adapters](/slipway/ja/reference/adapters/)
-	</Card>
-	<Card title="Recovery、privacy、evidence" icon="setting">
-		Journal は accepted Requirements、goal、answer、command summary を含み得ます。Retention、Windows limitation、honest evidence gap を確認してください。
+    [コマンド](/slipway/ja/reference/commands/) · [マシンプロトコル](/slipway/ja/reference/machine-protocol/) · [ホストアダプター](/slipway/ja/reference/adapters/)
+  </Card>
+  <Card title="理解と貢献" icon="setting">
+    コア概念、アーキテクチャ、contributor 向け check。
 
-		[Privacy](/slipway/ja/explanation/runs-and-privacy/) · [Windows](/slipway/ja/reference/windows-rendering-and-durability/) · [Evidence](/slipway/ja/reference/acceptance-evidence/)
-	</Card>
+    [コア概念](/slipway/ja/explanation/concepts/) · [アーキテクチャ](/slipway/ja/explanation/architecture/) · [コントリビュート](/slipway/ja/contributing/)
+  </Card>
 </CardGrid>

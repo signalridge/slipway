@@ -1,94 +1,140 @@
 # インストール
 
-主要なインストール経路は Go、[GitHub Releases](https://github.com/signalridge/slipway/releases) の直接アーカイブと Linux package、GHCR のコンテナ、および repository の Nix flake です。Homebrew、Scoop、AUR は任意チャネルです。
+Current repository interface と各 channel の最新 package は一致しない場合があります。他の documentation を読む前に、`slipway --help` が `install`、`uninstall`、`list`、`doctor`、`run`、`status`、`stop` の7 command を表示することを確認してください。
 
-## Go
+## Current checkout を build する
+
+[`go.mod`](https://github.com/signalridge/slipway/blob/main/go.mod) に指定された Go version（現在は Go 1.26.5 以上）を使います。
 
 ```bash
-go install github.com/signalridge/slipway@latest
+go build -o ./slipway .
+./slipway --help
 ```
 
-## 直接アーカイブ
+Unreleased repository revision を評価する最も確実な方法です。
 
-OS/architecture に合う archive と `checksums.txt` を GitHub Releases から取得し、checksum を検証して展開後、binary を `PATH` 上に配置します。Linux `amd64` の例:
+## Tagged release
 
-```bash
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/signalridge/slipway/releases/latest)"
-tag="${release_url##*/}"
-version="${tag#v}"
-archive="slipway_${version}_linux_amd64.tar.gz"
-base_url="https://github.com/signalridge/slipway/releases/download/${tag}"
-curl -fLO "${base_url}/${archive}"
-curl -fLO "${base_url}/checksums.txt"
-grep -F " ${archive}" checksums.txt | sha256sum --check -
-tar -xzf "${archive}"
-sudo install -m 0755 slipway /usr/local/bin/slipway
-```
+Release notes に7-command soft-autopilot interface が含まれる tag を選びます。Core artifact は [GitHub Releases](https://github.com/signalridge/slipway/releases) に公開されます。
 
-macOS は `darwin` 用 `.tar.gz`、Windows は `.zip` を選び、Windows では `Get-FileHash` で `checksums.txt` と照合してから `Expand-Archive` を使用します。
+- Linux/macOS: `.tar.gz`
+- Windows: `.zip`
+- Linux packages: `.deb`、`.rpm`、`.apk`
+- `checksums.txt`、SBOM、provenance
+- `ghcr.io/signalridge/slipway` の versioned image
 
-## Linux package
+Archive と `checksums.txt` を download し、verify してから展開します。`slipway`（Windows は `slipway.exe`）を `PATH` に置きます。
 
-対応する package をダウンロードした directory で、distribution に合うコマンドを実行します。
+Linux package は download directory で install できます。
 
 ```bash
+# Debian または Ubuntu
 sudo apt install ./slipway*.deb
+
+# Fedora、RHEL、その他 RPM-based distribution
 sudo dnf install ./slipway*.rpm
+
+# Alpine
 sudo apk add --allow-untrusted ./slipway*.apk
 ```
 
-## コンテナ
-
-Versioned image は [GHCR](https://github.com/signalridge/slipway/pkgs/container/slipway) に公開されます。
+Install 後に interface を確認します。
 
 ```bash
-docker pull ghcr.io/signalridge/slipway:<version>
-docker run --rm ghcr.io/signalridge/slipway:<version> --version
+slipway --version
+slipway --help
 ```
 
-コンテナイメージには Git が含まれます。Linux で mount した worktree に capability や journal を書く場合は、ホストの UID/GID を渡します。
+## Go で tag から install する
+
+Latest release がこの interface を含むまでは `@latest` を使わず、compatible tag を pin します。
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/workspace" -w /workspace ghcr.io/signalridge/slipway:<version> install --tool claude
+go install github.com/signalridge/slipway@vX.Y.Z
+```
+
+`go install` build は release linker flag がないため development version metadata を表示する場合があります。Compatibility は pin した module version と command tree で確認してください。
+
+## Container
+
+```bash
+docker pull ghcr.io/signalridge/slipway:vX.Y.Z
+docker run --rm ghcr.io/signalridge/slipway:vX.Y.Z --help
+```
+
+Image は Git を含みます。Linux で mounted worktree に capability や Run data を書く場合は host UID/GID を使います。
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD:/workspace" -w /workspace \
+  ghcr.io/signalridge/slipway:vX.Y.Z install --tool claude
 ```
 
 ## Nix
 
-```bash
-nix run github:signalridge/slipway
-nix profile install github:signalridge/slipway
-```
-
-## 任意の package-manager チャネル
-
-Homebrew、Scoop、AUR は独立した best-effort channel です。Core release は三つを明示的に skip し、archive、Linux package、checksum、SBOM、provenance、container を先に独立して公開します。`GH_PAT`（Homebrew/Scoop）または AUR SSH key がある場合だけ、失敗可能な別 publish/verify job を実行し、reproducible rebuild の archive checksum が公開済み core release と完全一致した場合だけ channel を更新します。Publisher、checksum verification、channel verification の失敗は core release を block も無効化もしないため、欠落・遅延する場合があります。利用前に表示 version を確認してください。
+Flake を compatible tag に pin します。Tag なし GitHub flake は mutable default branch を追跡します。
 
 ```bash
-brew install --cask signalridge/tap/slipway
-yay -S slipway-bin
+nix run github:signalridge/slipway/vX.Y.Z -- --help
+nix profile install github:signalridge/slipway/vX.Y.Z
 ```
+
+## Optional package-manager channel
+
+Homebrew、Scoop、AUR は secondary publisher であり、core GitHub release より遅れる場合があります。表示 version と `slipway --help` を確認してください。
+
+### Homebrew cask
+
+Release workflow が検証する explicit tap/trust sequence：
+
+```bash
+brew tap signalridge/tap
+brew trust signalridge/tap
+brew install --cask slipway
+```
+
+### Scoop
 
 ```powershell
 scoop bucket add signalridge https://github.com/signalridge/scoop-bucket
 scoop install signalridge/slipway
 ```
 
-## ホスト capability のインストール
+### AUR
+
+```bash
+yay -S slipway-bin
+```
+
+## Host capability を install する
+
+Target Git worktree 内で実行します。
 
 ```bash
 slipway install --tool claude
-slipway install --tool kiro --surface ide  # または --surface cli
-```
-
-`claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` をサポートします。`--tool` は複数指定でき、`--tool all` も使えます。省略時は検出したホストだけを対象にします。Kiro の初回 install は `--surface ide|cli` が必須で、manifest が選択を記録し、後続の refresh/uninstall は同じ surface を自動的に使います。他ホストでの `--surface` と、既存 Kiro surface の暗黙切替は拒否されます。
-
-Skill host はネイティブ skill UI から `slipway-<name>` を呼び出します（Codex は `$slipway-<name>`、Pi は `/skill:slipway-<name>`）。Copilot は agent picker から custom agent を選び、Kilo、OpenCode、Windsurf は `/slipway-<name>`、Kiro IDE は手動 include の `#slipway-<name>`、Kiro CLI は `kiro-cli chat --agent slipway-<name>` を使います。Copilot auto-detection は `.github/copilot`、`.github/prompts`、`.github/skills` のいずれかを認識し、custom agent は `.github/copilot/agents` に配置します。
-
-```bash
 slipway list
 slipway doctor
+```
+
+Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の non-Kiro host は `--tool` を繰り返します。
+
+Kiro は surface を明確にするため、初回は単独で install します。
+
+```bash
+slipway install --tool kiro --surface ide   # または: --surface cli
+```
+
+`--surface` を non-Kiro selection と組み合わせないでください。Kiro surface を記録した後、refresh/uninstall は同じ value を推論します。初回 `--tool all` にも Kiro surface の記録が必要なので、explicit per-host setup が明確です。
+
+`--tool` を省略すると detected host directory を選びます。Detection は convenience です。複数 host 設定を持つ repository では install 前に `slipway list` を確認してください。
+
+## Refresh と uninstall
+
+```bash
 slipway install --tool claude --refresh
 slipway uninstall --tool claude
 ```
 
-Refresh と uninstall は current version 2 ownership manifest のハッシュが一致するファイルだけを変更します。他の manifest version はすべて、install、refresh、uninstall がファイルを変更する前に fail closed となります。Read-only の `list` は引き続き実行でき、そのホストを advisory 付きの未インストールとして報告し、filesystem を変更せずに他の全ホストも列挙します。ユーザー変更、未知、範囲外 path、symlink は保持または安全に拒否され、marker-only は ownership を確立せず migration や推論も行いません。ホスト settings は一切変更しません。SessionStart や prompt-submit の自動入口は導入しません。
+Slipway は host ごとの ownership manifest に generated path と hash を記録します。Refresh/uninstall は記録と一致する managed file だけを変更します。Modified、unknown、malformed、out-of-host、symlinked path は preserve または reject して報告します。Host settings は adapter ownership の外です。
+
+Adapter removal は Run journal を削除しません。Retention は [Run、復旧、プライバシー](guides/runs-and-recovery.md)を参照してください。

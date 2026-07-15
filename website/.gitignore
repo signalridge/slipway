@@ -8,8 +8,9 @@ node_modules/
 
 # synced docs content (generated from ../docs by scripts/sync-docs.mjs)
 src/content/docs/**
-!src/content/docs/index.mdx
-# hand-authored per-locale splash pages (parent dir must be re-included first)
+# hand-authored per-locale splash pages (parent dirs must be re-included first)
+!src/content/docs/en/
+!src/content/docs/en/index.mdx
 !src/content/docs/zh/
 !src/content/docs/zh/index.mdx
 !src/content/docs/ja/

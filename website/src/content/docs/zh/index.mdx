@@ -1,9 +1,10 @@
 ---
 title: Slipway
-description: 由用户显式启动、Issue 驱动但不被 GitHub 阻塞的 AI 编程软自动驾驶。
+description: 用户显式启动的 AI 编程软自动驾驶。
 template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/zh/index.mdx
 hero:
-  tagline: Objective → 自包含 Change → 可中断 Run；先查事实、逐个澄清、实施、只读 Review、恢复，同时始终由用户掌控。
+  tagline: 每次推进一个 Action——先查事实、逐个澄清、实施、只读 Review、可恢复，同时始终由用户掌控。
   image:
     file: ../../../assets/slipway-wordmark.svg
   actions:
@@ -11,8 +12,8 @@ hero:
       link: /slipway/zh/start-here/
       icon: right-arrow
       variant: primary
-    - text: 产品权威
-      link: /slipway/zh/reference/product-overview/
+    - text: 核心概念
+      link: /slipway/zh/explanation/concepts/
       icon: document
       variant: minimal
     - text: GitHub
@@ -23,24 +24,24 @@ hero:
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-完整中文产品契约与版本化 machine schema 是实现权威。Slipway 只在显式要求后启动，issue-first 但不把 GitHub 变成 gate，并保留 ad-hoc escape hatch。自包含 Change 是唯一 issue-backed source；Objective 只是可选 planning input，不能执行。
+Slipway 是一款由用户显式调用的 AI 编程软自动驾驶。宿主写代码；Slipway 记录每次 Run、选择下一个 Action、独立观察 Git，并保存可恢复状态。Run engine 不调用模型或访问 GitHub；独立的 `doctor` 命令可能调用本机 `gh` 做只读诊断。Slipway 不保存模型或 GitHub 凭据。
 
-Run 每次返回一个版本化 Action：`orient → 必要时 clarify → implement → 观察到 diff 时 review → summarize`。每项可 skip，Run 可 stop/resume，Review 不修复，`ended` 只表示自动 queue 为空。
+一次 Run 每次推进一个版本化 Action：`orient → 必要时 clarify → implement → 代码已变化且启用时 review → summarize`。每项 Action 可以 skip，Run 可以 stop/resume，Review 不改代码，`ended` 只表示自动队列为空。
 
 <CardGrid stagger>
-	<Card title="Issue-first，不是 issue-gated" icon="rocket">
-		使用精确 Objective/Change marker 与 labels；GitHub 不可用、敏感、微小或用户不想建 Issue 时使用 ad-hoc Run。
+  <Card title="使用 Slipway" icon="rocket">
+    从你要完成的任务开始：ad hoc 或从一个自包含 GitHub Change Issue 启动。
 
-		[从这里开始](/slipway/zh/start-here/) · [Issue 工作流](/slipway/zh/reference/issue-workflow/) · [中文契约](/slipway/zh/reference/product-contract/)
-	</Card>
-	<Card title="六能力、七命令" icon="puzzle">
-		十个 adapter 精确生成 run、clarify、propose、decompose、implement、只读 review，机器协议全程版本化。
+    [从这里开始](/slipway/zh/start-here/) · [GitHub Issues](/slipway/zh/guides/github-issues/) · [Run、恢复与隐私](/slipway/zh/guides/runs-and-recovery/)
+  </Card>
+  <Card title="查询精确接口" icon="puzzle">
+    七个公开命令、十个宿主适配器，以及面向集成方的版本化机器协议。
 
-		[命令](/slipway/zh/reference/commands/) · [机器协议](/slipway/zh/reference/machine-protocol/) · [适配器](/slipway/zh/reference/adapters/)
-	</Card>
-	<Card title="恢复、隐私与证据" icon="setting">
-		Journal 可能含 accepted Requirements、goal、answers 与 command summaries；了解 retention、Windows 限制与真实证据缺口。
+    [命令](/slipway/zh/reference/commands/) · [机器协议](/slipway/zh/reference/machine-protocol/) · [宿主适配器](/slipway/zh/reference/adapters/)
+  </Card>
+  <Card title="理解与贡献" icon="setting">
+    核心概念、架构与贡献者检查。
 
-		[隐私](/slipway/zh/explanation/runs-and-privacy/) · [Windows](/slipway/zh/reference/windows-rendering-and-durability/) · [证据](/slipway/zh/reference/acceptance-evidence/)
-	</Card>
+    [核心概念](/slipway/zh/explanation/concepts/) · [架构](/slipway/zh/explanation/architecture/) · [贡献](/slipway/zh/contributing/)
+  </Card>
 </CardGrid>

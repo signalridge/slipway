@@ -1,16 +1,18 @@
-// Sync + transform the repo's `docs/**/*.md` (the source of truth, kept
-// GitHub-faithful and contract-anchored) into the Starlight content collection
-// at `src/content/docs/`. Generated output is gitignored; never edit it by hand.
+// Sync + transform the repo's localized `docs/**/*.md` user documentation into
+// the Starlight content collection at `src/content/docs/`. Maintainer ADRs live
+// outside `docs/` and are intentionally not published. Generated output is
+// gitignored; never edit it by hand.
 //
 // Transforms applied per page:
 //   - inject Starlight frontmatter (title from the first H1, description from
 //     the first paragraph), stripping the now-duplicate H1 from the body;
 //   - rewrite relative `*.md` links to base-aware Starlight routes;
 //   - rewrite `assets/**` image references to the copied public asset URLs;
+//   - map each edit link back to its repository source instead of generated output;
 //   - drop mkdocs-only `markdown` HTML attributes.
 //
-// `index.md` is intentionally skipped: the landing page is the hand-authored
-// splash at `src/content/docs/index.mdx`.
+// Each locale's root `index.md` is intentionally skipped: the published landing
+// pages are hand-authored `en/index.mdx`, `zh/index.mdx`, and `ja/index.mdx`.
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -25,6 +27,7 @@ const PUBLIC_REFERENCE = path.resolve(SCRIPT_DIR, '../public/reference');
 // Must match `base` in astro.config.mjs (project Pages path).
 const BASE = '/slipway';
 const REPOSITORY_BLOB = 'https://github.com/signalridge/slipway/blob/main';
+const REPOSITORY_EDIT = 'https://github.com/signalridge/slipway/edit/main/docs';
 
 // Hand-authored pages preserved across regeneration (the splash landing pages,
 // one per locale). Everything else under OUT_DIR is generated and wiped.
@@ -141,7 +144,7 @@ function transform(raw, rel) {
 
   const fm = ['---', `title: ${yamlQuote(title)}`];
   if (description) fm.push(`description: ${yamlQuote(description)}`);
-  fm.push('---', '');
+  fm.push(`editUrl: ${yamlQuote(`${REPOSITORY_EDIT}/${rel}`)}`, '---', '');
   return `${fm.join('\n')}\n${body.replace(/\n*$/, '\n')}`;
 }
 

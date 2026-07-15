@@ -1,35 +1,32 @@
 # Slipway 中文文档
 
-Slipway 是一个由用户显式调用、Issue 驱动但不被 GitHub 阻塞的 AI coding 软自动驾驶。中文页面是面向读者的导航与说明；完整的[中文产品契约](reference/product-contract.md)与版本化 [machine protocol schema](../reference/machine-protocol.schema.json) 才是实现权威。
+Slipway 为 AI 编程宿主增加一套小而由用户控制的工作流。先从你要完成的任务开始；只有在集成或维护 Slipway 时，才需要阅读机器协议和架构页面。
 
-```text
-Objective Issue (optional planning parent; never executable)
-  └─ self-contained Change Issue (the only issue-backed source)
-       └─ Run (one revision-pinned, interruptible attempt)
-            orient → clarify if needed → implement → review on observed diff → summarize
-```
+[English](../en/index.md) · [日本語](../ja/index.md)
 
 ## 开始使用
 
-- [从这里开始](start-here.md) — 从安装到完成一次 Run 的最短路径。
-- [安装](installation.md) — 各平台安装方式与适配器命令。
-- [产品权威](reference/product-overview.md) — 四轴模型、六项能力、七个命令。
+- [从这里开始](start-here.md)——构建或安装 Slipway、添加一个宿主适配器并执行一个任务。
+- [安装](installation.md)——版本兼容、软件包、源码构建、升级与卸载。
+- [核心概念](explanation/concepts.md)——Run、Action、来源、Objective、Change 与结束语义。
+
+## 指南
+
+- [GitHub Issues](guides/github-issues.md)——何时使用 Objective 或 Change，以及 issue-backed Run 如何工作。
+- [Run、恢复与隐私](guides/runs-and-recovery.md)——检查、停止、恢复、保留或删除 Run。
 
 ## 参考
 
-- [Issue 工作流](reference/issue-workflow.md) — Objective/Change Marker、label、自包含、GitHub 限制与发布流程。
-- [命令参考](reference/commands.md) — 公开命令与 JSON 表面。
-- [机器协议](reference/machine-protocol.md) — 版本化 Action / Outcome 契约与隐藏操作。
-- [宿主适配器](reference/adapters.md) — 十个宿主、六项能力与 ownership safety。
-- [Windows rendering 与 durability](reference/windows-rendering-and-durability.md) — argv rendering 与 crash durability。
-- [验收与证据](reference/acceptance-evidence.md) — 证据类型与场景矩阵。
+- [命令](reference/commands.md)——七个公开 CLI 命令及其 flags。
+- [宿主适配器](reference/adapters.md)——生成目标、调用方式与 ownership 安全。
+- [机器协议](reference/machine-protocol.md)——宿主集成使用的版本化 JSON。
 
-## 解释
+## 维护者
 
-- [架构](explanation/architecture.md) — package 布局与依赖方向。
-- [运行日志与隐私](explanation/runs-and-privacy.md) — journal 内容、保留方式与隐私承诺。
+- [架构](explanation/architecture.md)——进程边界、代码包、存储与信任边界。
+- [开发参考](contributing.md)——仓库布局和验证命令。
+- [贡献指南](../../CONTRIBUTING.md)——Pull Request 工作流。
+- [验收套件](../../acceptance/README.md)——可执行与人工行为验证。
+- [架构决策记录](../../adr/README.md)——历史技术理由，与用户文档分开保存。
 
-## 决策与场景
-
-- [架构决策](../decisions/0001-source-bundle-v2.md) — manifest-addressed source bundle。
-- [Prompt 场景](../../acceptance/README.md) — 宿主行为评估。
+英文、中文、日文三套页面描述同一产品。精确的机器字段形状位于与语言无关的 JSON Schema 中；任何一种翻译都不再充当独立产品契约。

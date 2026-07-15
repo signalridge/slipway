@@ -4,17 +4,31 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "adr/**"
+      - "acceptance/*.md"
+      - "acceptance/**/*.md"
       - "website/**"
       - "acceptance/link_check.py"
-      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
+      - "README*.md"
+      - "SECURITY.md"
       - ".github/workflows/docs.yml"
   pull_request:
     branches: [main]
     paths:
       - "docs/**"
+      - "adr/**"
+      - "acceptance/*.md"
+      - "acceptance/**/*.md"
       - "website/**"
       - "acceptance/link_check.py"
-      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
+      - "README*.md"
+      - "SECURITY.md"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 permissions:

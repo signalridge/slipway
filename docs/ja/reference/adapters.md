@@ -1,25 +1,79 @@
 # ホストアダプター
 
-各ホストには `slipway-run`、`slipway-clarify`、`slipway-propose`、`slipway-decompose`、`slipway-implement`、`slipway-review` の六 capability だけを生成します。Clarify は stateless です。
+`slipway install` は6つの explicit capability 向けに host-native entry point を生成します。
 
-ネイティブ surface と呼び出し方は次の通りです。Claude、Cursor、Qwen は各 `skills` directory から `slipway-<name>` skill を明示的に呼び出し、Codex は `.codex/skills` の `$slipway-<name>`、Pi は `.pi/skills` の `/skill:slipway-<name>` を使います。Copilot は `.github/copilot/agents` の custom agent を agent picker で選択します。Kilo、OpenCode、Windsurf はそれぞれ `.kilo/commands`、`.opencode/commands`、`.windsurf/workflows` の `/slipway-<name>` を使います。Kiro IDE は `.kiro/steering` の `#slipway-<name>` を手動 include し、Kiro CLI は `kiro-cli chat --agent slipway-<name>` で `.kiro/agents` の agent を選択します。
+```text
+slipway-run  slipway-clarify  slipway-propose
+slipway-decompose  slipway-implement  slipway-review
+```
 
-Command、workflow、steering、agent surface は各ホストの `slipway/capabilities` にある canonical body を参照します。Copilot auto-detection は引き続き `.github/copilot`、`.github/prompts`、`.github/skills` のいずれかを認識します。Kiro の初回 install では `--surface ide|cli` が必須で、選択は ownership manifest に記録され refresh/uninstall でも維持されます。
+`run` は recoverable Run を駆動します。`clarify` は standalone/stateless な decision 会話です。`propose` と `decompose` は GitHub work item を準備します。`implement` は technical work を行います。`review` は read-only です。
 
-ambient session hook、prompt-submit hook、launcher、global router、独立した技術検査 capability は生成しません。ホスト settings は adapter ownership の対象外であり、install、refresh、uninstall は一切変更しません。すべての生成 skill は共通の untrusted Issue、trusted attester、confirmed publication、exact destructive authorization boundary を持ちます。Clarify だけが一つの decision interview reference を含み、Matt Pocock の MIT `grill-me` 由来の attribution を保持します。
+## Generated target
 
-Clarify は Matt Pocock `grill-me`/`grilling` の fact investigation、dependency order、one question+recommendation、changed shared-understanding confirmation、stateless、immediate wrap-up を保ちます。暗黙の clarification-document capability はありません。
-Codex の各 capability には管理対象の `agents/openai.yaml` も配置し、`allow_implicit_invocation: false` を設定します。Codex は汎用 frontmatter の同等設定を解釈しないため、このポリシーによりユーザーが明示的に呼び出すまで Slipway capability は暗黙選択されません。
+下表は generated file と意図される invocation を示します。外部 host の実際の動作はその host version に依存し、repository test は generation と protocol text を検証するもので、すべての host UI の E2E 検証ではありません。
 
-Mutation を認可できるのは version 2 ownership manifest だけです。他の version はすべて unreadable とし、install、refresh、uninstall はファイルを変更する前に失敗します。Read-only の `list` はそのホストだけを未インストール advisory に降格し、他のホストの報告を続けます。Version 2 は path と SHA-256 を記録します。Refresh/uninstall はハッシュ一致ファイルだけを扱い、ユーザー変更ファイルは保持して管理対象から外します。
-初回導入は新規作成ファイルだけを管理対象にします。current manifest が存在した後の更新には `slipway install --refresh` が必要です。marker だけで current manifest がない状態は ownership を確立しません。install、refresh、uninstall は surface を変更せず、migration や推論をせずに current ownership の欠落を中立的に報告します。
+| ID | Generated target | 意図される invocation |
+| --- | --- | --- |
+| `claude` | `.claude/skills/slipway-*/SKILL.md` | `slipway-<name>` skill を呼び出す。 |
+| `codex` | `.codex/skills/slipway-*/SKILL.md` と各 skill の `agents/openai.yaml` | `$slipway-<name>` |
+| `copilot` | `.github/copilot/agents/slipway-<name>.agent.md` | custom agent を選択する。 |
+| `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `slipway-<name>` skill を呼び出す。 |
+| `kilo` | `.kilo/commands/slipway-<name>.md` と `.kilocode/slipway/capabilities/` | `/slipway-<name>` |
+| `kiro` IDE | `.kiro/steering/slipway-<name>.md` と `.kiro/slipway/capabilities/` | 手動で `#slipway-<name>` を含める。 |
+| `kiro` CLI | `.kiro/agents/slipway-<name>.json` と `.kiro/slipway/capabilities/` | `kiro-cli chat --agent slipway-<name>` |
+| `opencode` | `.opencode/commands/slipway-<name>.md` と `.opencode/slipway/capabilities/` | `/slipway-<name>` |
+| `pi` | `.pi/skills/slipway-*/SKILL.md` | `/skill:slipway-<name>` |
+| `qwen` | `.qwen/skills/slipway-*/SKILL.md` | `slipway-<name>` skill を呼び出す。 |
+| `windsurf` | `.windsurf/workflows/slipway-<name>.md` と `.windsurf/slipway/capabilities/` | `/slipway-<name>` |
 
-Install/uninstall report は通常の ownership preservation と transaction recovery を分離します。`transaction_outcome` は `committed|rolled_back|not_committed|ambiguous` で、planned `written`/`removed` を残すのは committed の場合だけです。Concurrent object や quarantine path は `recovery_artifacts` にだけ入り、`preserved` と混同しません。Error も同じ report を返し、blind-retry command は提示しません。
+Copilot agent は self-contained です。Kilo、Kiro、OpenCode、Windsurf は generated capability body を指す thin native entry を使います。Skill-native host は capability body を `SKILL.md` に持ちます。
 
-`.adapter-generated` sentinel は health evidence であって ownership authority ではありません。Missing なら `install --refresh` で再作成できます。Modified sentinel は user content として refresh/uninstall が保持し、doctor は必要なら確認後に手動削除してから refresh するよう案内します。Refresh が user edit を上書きできるとは説明しません。
+Kiro は初回 install で `--surface ide` または `--surface cli` が必要です。選択は記録され、通常の refresh では切り替わりません。
 
-## Publication と privacy boundary
+## 明示的な invocation
 
-Propose/decompose は `gh` を検出し、2.94.0+ は first-class relation、それ以外は official REST API または `environment_unavailable` を使います。Exact Level/Kind labels、same-`github.com` transfer identity refetch、100/50 limits、approved operation/item UUID markers、body files、expected revisions、readback、0/1/multiple match の `created|matched|failed|ambiguous` reconciliation を要求し、blind retry しません。
+Adapter は session-start hook、prompt-submit hook、launcher、global router を install しません。Host settings は adapter ownership の外です。ユーザーが明示的に capability を呼び出します。明示的に開始した `slipway-run` 内では、host は各通常 step のたびに authorization を求めずに bounded Action loop を進められます。
 
-全 capability は accepted Requirements、goal、answer、command summary が機微であり得ると警告します。Public Issue に private switch はありません。認識した credential value は command identity を残して redact し、token、raw comments、env dump、transcript、hidden reasoning を収集しません。[Issue workflow](issue-workflow.md)と[privacy](../explanation/runs-and-privacy.md)を参照してください。
+Codex policy file は各 generated capability で implicit model invocation を無効化します。他の target は各々の native explicit-entry surface と共通 instruction を使います。
+
+## CLI と host の責務
+
+CLI：
+
+- Run を validate して記録する。
+- 次の Action を選ぶ。
+- Git と workspace identity を観測する。
+- Source envelope と Outcome を validate する。
+- Structured recovery を返す。
+
+Host：
+
+- Repository を読み、technical work を行う。
+- Model を呼び出す。
+- Issue-backed work をユーザーが要求したときに GitHub credential を使う。
+- Temporary source envelope を構築する。
+- Publication preview、confirmation、reconciliation instruction に従う。
+
+したがって `propose` と `decompose` は host が GitHub API をどう使うかを記述し、Go CLI は GitHub publication transaction を提供しません。[GitHub Issues を使う](../guides/github-issues.md)を参照してください。
+
+## Install と refresh
+
+```bash
+slipway install --tool claude
+slipway install --tool kiro --surface ide
+slipway list
+slipway doctor
+slipway install --tool claude --refresh
+slipway uninstall --tool claude
+```
+
+初回 Kiro と `--tool all` の注意点は[インストール](../installation.md)を参照してください。
+
+## Ownership safety
+
+各 host root には repository-relative path と SHA-256 を記録した Slipway ownership manifest があります。Refresh と uninstall は記録 hash と一致する file だけを変更します。
+
+User-modified capability、unknown file、modified sentinel、malformed manifest、path escape、duplicate claim、unsafe symlink は決して静かに managed content になりません。操作は preserve または reject し理由を報告します。Transaction recovery artifact は通常の preserved user file とは別に報告されます。
+
+Generated sentinel は installation health を示すだけで、ownership ではありません。Managed-file 変更を authorize できるのは manifest だけで、unsupported manifest version は mutation 前に失敗します。

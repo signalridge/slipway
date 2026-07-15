@@ -1,13 +1,14 @@
 # Contributing to Slipway
 
-Thanks for improving Slipway. Use a focused fork-and-pull-request workflow and keep implementation, tests, generated capability contracts, and documentation aligned.
+Thanks for improving Slipway. Keep pull requests focused, use a fork when you do not have write access, and keep implementation, tests, generated capability contracts, and documentation aligned.
 
 ## Development setup
 
 Slipway requires the Go version declared in `go.mod`. Optional release and documentation tooling includes `golangci-lint`, GoReleaser, Node.js, and npm.
 
 ```bash
-git clone https://github.com/<you>/slipway.git
+# Replace the URL with your fork when you do not have upstream write access.
+git clone https://github.com/signalridge/slipway.git
 cd slipway
 go mod download
 go test ./... -count=1

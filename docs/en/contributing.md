@@ -1,63 +1,86 @@
 # Development reference
 
-See the top-level [contribution guide](../../CONTRIBUTING.md) for the collaboration flow.
+This page supplements the root [Contributing guide](../../CONTRIBUTING.md) with repository-specific layout and documentation checks.
 
 ## Repository layout
 
-```text
-cmd/                    seven public commands, hidden machine protocol, rendering
-internal/autopilot/     Action/Outcome unions, source envelopes/revisions, routing
-internal/runstore/      Git-common-dir append-only journals
-internal/adapter/       host generation and ownership-safe transactions
-internal/tmpl/          six embedded explicit capabilities
-internal/fsutil/        atomic/rooted transaction, Git discovery, symlink defense
-internal/recoverycmd/   POSIX/cmd/PowerShell display rendering from argv
-internal/jsonstrict/    shared strict-JSON structural scanner
-internal/testlint/      repository test analyzer
-docs/                   authoritative documentation (website syncs from here)
-acceptance/             black-box E2E, fixtures, and host acceptance assets
-```
+| Path | Purpose |
+| --- | --- |
+| `cmd/` | Public CLI commands and JSON/human presentation. |
+| `internal/autopilot/` | Run routing, protocol validation, source handling, and recovery choices. |
+| `internal/runstore/` | Journals, projections, locking, materials, and Git observation. |
+| `internal/adapter/` | Host generation and ownership-aware filesystem changes. |
+| `internal/tmpl/` | Embedded capability instructions shared across hosts. |
+| `internal/fsutil/` | Filesystem safety and transactions. |
+| `docs/{en,zh,ja}/` | Equivalent user, guide, reference, and explanation pages. |
+| `docs/reference/` | Language-neutral JSON schemas. |
+| `adr/` | Maintainer decision history; not user documentation. |
+| `acceptance/` | Black-box scripts, prompt scenarios, and manual evidence procedures. |
+| `website/` | Starlight site generated from `docs/`. |
 
-Dependency direction is fixed and enforced: `cmd → autopilot → runstore`, `cmd → adapter → tmpl`, `cmd → recoverycmd`, and the lower packages depend only on `fsutil` primitives as needed. See [Architecture](explanation/architecture.md).
+The enforced package direction is documented in [Architecture](explanation/architecture.md).
 
 ## Local checks
+
+For a normal Go change:
 
 ```bash
 gofmt -w .
 go vet ./...
 go run ./internal/testlint/cmd/testlint ./...
 go test -timeout=20m ./... -count=1
-go test -timeout=20m ./... -race -count=1
 go build ./...
 git diff --check
 ```
 
-When available:
+Run the race suite for concurrency, locking, journal, or filesystem changes:
+
+```bash
+go test -timeout=20m ./... -race -count=1
+```
+
+When available, also run:
 
 ```bash
 golangci-lint run --timeout 5m
-(cd website && npm ci && npm run build)
-just acceptance
+goreleaser check
 ```
 
-Also exercise built-binary help and JSON behavior after public-surface changes.
+## Documentation checks
+
+Repository Markdown is the source for the website. Generated files below `website/src/content/docs/` must not be edited, except the three locale splash pages.
+
+```bash
+python3 -I acceptance/link_check.py --self-test
+npm --prefix website ci
+npm --prefix website run build
+python3 -I acceptance/link_check.py --require-site
+git diff --check
+```
+
+Documentation rules:
+
+- describe current behavior, not PR instructions or a mutable planning Issue;
+- separate user guidance, integration reference, maintainer architecture, ADR rationale, and acceptance evidence;
+- keep English, Chinese, and Japanese pages equivalent in scope;
+- do not make one language the implementation contract;
+- use JSON schemas for exact machine shape and state runtime-only semantic checks explicitly;
+- qualify host-side instructions as host behavior rather than Go CLI guarantees;
+- keep run-specific evidence and release history out of stable user pages;
+- update source links, website splash links, and sidebar slugs together when moving a page.
 
 ## Test focus by change type
 
-| Change type | What to cover |
+| Change | Focus |
 | --- | --- |
-| Adapter | Every host path, current-only manifest rejection, marker-only no-op, modified-file and settings preservation, traversal, symlinks, and rollback. |
-| Run / autopilot | Transition tables, idempotency, stale Actions, budget exhaustion, stop/resume, linked worktrees, journal crashes, and concurrent submissions. |
-| Source / journal | Strict parser, duplicate keys, oversize, bad UTF-8, symlink/reparse source files, and byte-identical replay. |
-| Public surface | Built-binary help, JSON envelopes, and generated capability fixtures. |
+| CLI flags or output | Cobra help, JSON schema tests, human rendering, and command docs. |
+| Action/Outcome routing | Autopilot contract/service tests, machine shell acceptance, and protocol docs. |
+| Journals or locking | Replay/adversarial tests, race suite, durability diagnostics, and recovery docs. |
+| Source handling | Strict parser, hash/size/identity tests, source schema, Issue guide, and privacy docs. |
+| Adapters/templates | Generator tests, ownership tests, `acceptance/adapters.sh`, and adapter docs. |
+| Release channels | GoReleaser checks, artifact validation, and installation compatibility wording. |
+| Documentation | Link checker, markdown lint, website build, and locale parity review. |
 
-## Design constraints
+## Product constraints
 
-- The user explicitly starts the soft autopilot and retains control throughout.
-- Repository facts are investigated before any human decision is requested.
-- Technical activities remain part of implementation reporting; Review is read-only.
-- Run journals exist only for recovery and may contain sensitive text.
-- Generated files are deterministic, transactional, symlink-safe, and ownership-aware.
-- Do not add aliases, readers, or compatibility modes for the retired runtime.
-
-See [architecture](explanation/architecture.md), [machine protocol](reference/machine-protocol.md), and [acceptance scenarios](../../acceptance/README.md).
+Changes must preserve explicit invocation, user control, facts-before-questions, truthful activity reporting, read-only Review, recoverable journals, ownership-aware generated files, and a network/credential-free core. If a public surface changes, update code, schemas, generated capabilities, tests, and all three documentation locales together.

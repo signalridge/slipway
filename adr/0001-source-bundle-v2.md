@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-07-13. Adopted by the live v2 body of Issue #434, which supersedes that Issue's earlier v1 source/protocol sections. This ADR records the technical decision and rationale; it does not compete with the live product definition or the versioned machine schema.
+Accepted — 2026-07-13. This record captures the rationale for source bundle version 2. The JSON schemas and runtime validation define the current machine surface; this ADR explains why that design was selected.
 
 ## Context
 
@@ -106,9 +106,9 @@ network- and credential-free.
 
 Negative consequences are an intentionally breaking v2 wire/storage contract,
 additional host publication steps, and local material blob lifecycle management.
-The rewrite is not yet released, so no ambient v1 compatibility reader is kept.
-Any later migration must be an explicit, previewed operation rather than a
-runtime alias.
+No released CLI consumed v1, so no ambient v1 compatibility reader is kept. Any
+later migration must be an explicit, previewed operation rather than a runtime
+alias.
 
 ## Rejected alternatives
 
@@ -121,31 +121,3 @@ runtime alias.
   ref a hard source dependency and weakens the Issue-first product boundary.
 - A second manifest comment adds another mutable object and fetch without removing
   the need for an Issue-body HEAD.
-
-## Publication note
-
-This rewrite is an intentionally breaking v2 wire/storage/machine-protocol change
-(see Consequences). When merging the accompanying PR via squash merge, the commit
-MUST carry the Conventional Commits breaking marker so release-please classifies
-the release notes correctly and bumps the version accordingly.
-
-Squash commit title:
-
-```text
-feat!: complete issue #434 source bundle v2 rewrite
-```
-
-Squash commit body footer:
-
-```text
-BREAKING CHANGE: replaces the v1 source protocol, machine protocol
-contract_version 1, and prior run storage format with the manifest-addressed
-source bundle v2, contract_version 2, and the new runstore layout. Existing
-v1 issue-bound Runs and journals are not migrated; start a new Run after
-upgrading. The hidden `_machine` protocol surface, public CLI command set, and
-adapter ownership manifest version 2 are unchanged in shape but versioned
-independently.
-```
-
-This note records the merge-time metadata decision only; it does not add a
-runtime gate, migration step, or compatibility alias.

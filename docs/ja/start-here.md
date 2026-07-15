@@ -1,119 +1,92 @@
 # はじめに
 
-このページは、「リポジトリがある」状態から「自分の管理下で、Slipway が範囲を限定した1件の変更を実行している」状態までの最短経路です。
+Current Slipway build を使い、空の checkout から1回の user-controlled Run を開始します。
 
-Slipway は明示的に起動され、Issue 駆動でありながら Issue の有無に制約されず、「完了」を認定することもありません。作業は、少数の安定したサーフェスを介して進みます。
+## 1. CLI generation を確認する
 
-| Slipway のサーフェス | 役割 |
-| --- | --- |
-| Objective Issue | 複数の独立した delivery を計画するための任意の親です。実行対象にはなりません。 |
-| Change Issue | Issue に紐づく Run の唯一の source です。自己完結しており、有効な Requirements をすべて保持します。 |
-| Run | `.git/slipway/runs/<run-id>/` 配下に置かれる、revision が固定された中断可能な1回の実行試行です。 |
-| Host capabilities | 正確に6つです：`run`、`clarify`、`propose`、`decompose`、`implement`、`review`。 |
-| Pinned source | manifest で参照され、digest で固定された chapter catalog です。生の本文は一切永続化されません。 |
-
-CLI が authority です。Host が Action を実行し、Slipway は Action をスケジュールして Git を独立に観測し、復旧履歴を保存します。Host は Issue draft を作成して技術作業を実行できますが、lifecycle state を創作したり、evidence を手作業で編集したり、Issue の文章を命令として扱ったりしてはなりません。
-
-> 日本語版は非規範のガイドです。完全な[中国語製品契約](../zh/reference/product-contract.md)と [machine schema](../reference/machine-protocol.schema.json) が実装上の正本です。
-
-## 進み方を選ぶ
-
-| 状況 | 最初に読むもの |
-| --- | --- |
-| Slipway を初めて使い、小規模な一連の Run を試したい。 | [Issue workflow](reference/issue-workflow.md)を読み、その後で下記の `slipway run` を実行します。 |
-| プラットフォーム別の導入方法と adapter command を知りたい。 | [インストール](installation.md)と[ホストアダプター](reference/adapters.md)。 |
-| Run が一時停止・停止した、または状態が分かりにくい。 | [コマンド](reference/commands.md)の `status`、`stop`、resume と、[Run とプライバシー](explanation/runs-and-privacy.md)。 |
-| 設計を評価したい。 | [製品概要](reference/product-overview.md)と[アーキテクチャ](explanation/architecture.md)。 |
-| machine contract が必要。 | [マシンプロトコル](reference/machine-protocol.md)。 |
-
-## インストールして確認する
-
-利用するプラットフォームに対応した、公式 release に基づく方法を選びます。
-
-| プラットフォーム | 推奨方法 |
-| --- | --- |
-| macOS | `brew install --cask signalridge/tap/slipway` |
-| Windows | `scoop bucket add signalridge https://github.com/signalridge/scoop-bucket`<br>`scoop install slipway` |
-| Linux | [インストール](installation.md#linux-package)に記載された `.deb`、`.rpm`、`.apk`、`tar.gz`、AUR、または container image を使用します。 |
-| Go の代替手段 | `go install github.com/signalridge/slipway@latest` |
-
-続いて、binary を実行できることを確認します。
+この documentation が対象とする interface には7つの public command があります。
 
 ```bash
-slipway --version
-slipway doctor
+slipway --help
 ```
 
-プラットフォームの全対応表、release archive の取得方法、checksum の検証方法、source build の手順については、[インストール](installation.md)を参照してください。
+Output に `install`、`uninstall`、`list`、`doctor`、`run`、`status`、`stop` が必要です。表示されない場合は旧 release です。Current checkout を build するか、より新しい compatible tag を選んでください。詳細は[インストール](installation.md)を参照してください。
 
-## Host capability を生成する
+## 2. Host adapter を1つ install する
 
-使用する host 向けの6 capability をインストールするには、Git worktree 内の任意のディレクトリで実行します。
+AI host が作業する Git worktree 内で実行します。
 
 ```bash
 slipway install --tool claude
-slipway install --tool codex,cursor,pi
-slipway install --tool all
-slipway install --tool kiro --surface ide   # or: --surface cli
+slipway doctor
 ```
 
-`--tool` を指定しない場合、Slipway は検出した host directory に対応する adapter をインストールします。`--refresh` は、ownership hash が一致しているファイルだけを更新します。Kiro の初回インストールでは `--surface ide|cli` が必須です。以後の refresh と uninstall では、記録済みの surface が推定されます。
-
-## 1つの Run を開始する
-
-作業は Issue 駆動ですが、Issue の有無には制約されません。複数の独立した delivery を計画する場合に限って Objective を使います。Change は Issue に紐づく唯一の source であり、有効な Requirements をすべて保持していなければなりません。
-
-### Ad-hoc
-
-小規模、機微、緊急、offline の作業、または単に Issue を作りたくない場合は、次のように実行します。
+`claude` は `codex`、`copilot`、`cursor`、`kilo`、`opencode`、`pi`、`qwen`、`windsurf` に置き換えられます。Kiro は初回に surface が必要です。
 
 ```bash
-slipway run --budget 8 --json --root "$PWD" -- "add a CSV export to reports"
+slipway install --tool kiro --surface ide   # または: --surface cli
 ```
 
-### Issue-bound
+`install` は host-local capability file だけを書き、hash を記録します。Global host settings や ambient hook は変更しません。Generated path は[ホストアダプター](reference/adapters.md)を参照してください。
 
-trusted host が厳密な GitHub Change envelope を一度だけ取得し、一時的な raw envelope を CLI に渡します。
+## 3. Run を明示的に開始する
+
+AI coding host で、生成された `slipway-run` capability を明示的に呼び出して1つの task を与えます。
+
+> reports command に CSV export を追加し、test を追加する。
+
+Host は CLI に Action を要求し、その Action を実行して structured Outcome を報告します。Run が pause または summary に達するまで繰り返します。Hidden machine command を手動で操作する必要はありません。
+
+CLI を直接 integration する host は、同じ ad-hoc Run を次のように開始できます。
 
 ```bash
-slipway run --budget 8 --json --root "$PWD" \
-  --source-file /safe/temp/change-envelope.json -- "implement the bounded Change"
+slipway run --json -- "reports command に CSV export を追加する"
 ```
 
-marker が有効な本文が Level authority です。title や label の drift は警告されますが、実行を妨げません。CLI は Issue 本文の manifest と、そこから厳密に参照された comment だけを検証し、各 chapter を digest で固定して、範囲を限定した catalog のみを保存します。一時ファイルも GitHub も、ローカルで material を読み出したり resume したりする際には不要です。
+この command は最初の `orient` Action を返します。CLI 自体は code を変更しません。
 
-公開前に [Issue workflow](reference/issue-workflow.md)を確認してください。Public Issue を private に切り替える機能はありません。機微な作業では、private repository、適切な security channel、または ad-hoc Run が必要になる場合があります。
+## 4. Source を選ぶ
 
-## ユーザーによる制御
-
-Slipway は、ユーザーが明示的に起動した場合にのみ開始します。Run の実行が許可されると、versioned Action を1つずつ進め、実際の意思決定、source amendment、environment failure、または destructive confirmation が必要な場合にだけ一時停止します。操作に理由は必要ありません。
-
-| 意図 | 動作 |
+| Source | 選ぶ場面 |
 | --- | --- |
-| **Skip this** | 未処理の Action に対する、その時点の正確な skip control を呼び出します。 |
-| **Stop** | `slipway stop` を実行します。journal は保持され、Run は resume できます。 |
-| **Take over** | 先に停止し、Run ID を保持して報告します。未処理の Action は実行しません。 |
-| **Reorder / do X first** | automatic loop を停止して制御をユーザーに戻します。queue を暗黙に変更せず、依頼を skip に読み替えることもありません。 |
+| Ad hoc | Task が小さい、機微、緊急、offline、または Issue が不要な場合。 |
+| GitHub Change Issue | Durable で review 可能な revision-pinned requirements source が必要な場合。 |
 
-作業は、明示的に resume されるまで再開しません。Host は質問する前に repository の事実を調査します。Clarify は [Matt Pocock の `grill-me`](https://github.com/mattpocock/skills) の原則に従います。依存関係のある human decision を、推奨案と trade-off とともに一度に1つだけ尋ねます。request が完全なら質問はせず、grilling によって実行内容の理解が変わった場合にのみ確認を求め、wrap-up を求められたら状態を残さず直ちに停止します。
+Issue-backed Run では、生成された `slipway-run` capability に GitHub Change Issue を渡します。Host が Issue を fetch し、temporary source envelope を作成して CLI に渡します。Host integration を実装している場合を除き、envelope を手書きしないでください。
 
-Review は read-only で Intent/Quality の finding を報告し、repair loop を開始しません。`ended` が意味するのは automatic queue が空になったことだけであり、正しさ、delivery、release readiness を保証するものではありません。
+Objective は複数の Change をまとめられますが、Run は開始できません。Managed Issue を publish する前に [GitHub Issue workflow](guides/github-issues.md)を読んでください。
 
-## 一時停止した場合
+## 5. 制御を保つ
 
-一時停止は機能の一部です。Slipway が、ユーザーまたは実行環境による対応を必要とする地点に到達したことを示します。すべての一時停止と error は、型付けされ解決可能な variant を持つ構造化された `next` object を返します。組み立て直す必要のある shell string を返すことはありません。
+Run は次の場合に pause します。
+
+- 人間が決める必要のある decision；
+- Issue source の変更または unavailable；
+- Environment dependency の unavailable；
+- Action budget の exhaustion；
+- Exact destructive scope の confirmation。
+
+Generated host が選べる response を示します。ユーザーは理由を説明せず skip、stop、reorder、take over できます。通常の implementation で繰り返し authorization を求めません。
+
+Inspection command：
 
 ```bash
-slipway status --json          # current state and the fresh derived next
+slipway status
 slipway status <run-id> --json
+slipway stop <run-id>
 ```
 
-その後、名前が示す recovery variant に従います。Issue-bound Run の resume では、source mode を正確に1つ選ぶ必要があります。新しい envelope を import する、固定済み snapshot を使って続行すると明示する、または現在の candidate を正確な ID で解決する、のいずれかです。詳しくは[マシンプロトコル](reference/machine-protocol.md)を参照してください。
+`stop` は recovery data を保存します。Ended は Slipway に自動 Action が残っていないことだけを示します。Test、Review finding、repository policy、merge approval、release decision は独立しています。
+
+## 6. 保存内容を理解する
+
+Run data は `<git-common-dir>/slipway/runs/` にあり、goal、accepted requirements、user answer、Outcome、command summary を含む場合があります。Slipway は token、environment dump、unrelated file、full conversation、hidden reasoning を意図的には収集しませんが、journal に secret がないとは保証できません。
+
+機微な content を扱う前に [Run、復旧、プライバシー](guides/runs-and-recovery.md)を読んでください。
 
 ## 次に読む
 
-- [製品概要](reference/product-overview.md) — 4軸モデル。
-- [Issue workflow](reference/issue-workflow.md) — marker、label、公開手順。
-- [コマンド](reference/commands.md) — 7つの public command。
-- [ホストアダプター](reference/adapters.md) — 10種類の host。
-- [Run とプライバシー](explanation/runs-and-privacy.md) — journal に保存される内容。
+- [コア概念](explanation/concepts.md)
+- [コマンドリファレンス](reference/commands.md)
+- [ホストアダプター](reference/adapters.md)
+- [マシンプロトコル](reference/machine-protocol.md)

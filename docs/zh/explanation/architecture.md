@@ -1,51 +1,103 @@
 # 架构
 
-> 本页为非规范性说明；规范语义见[中文产品契约](../reference/product-contract.md)。
+Slipway 将控制循环放在本地 CLI，将模型相关工作放在生成的宿主 adapter 中。这样 CLI 可以验证状态，而无需持有模型或 GitHub 凭据。
 
-Slipway 是一个面向有边界、可恢复的 AI 辅助工作的精简控制平面。它不取代 AI coding 工具、项目跟踪器或 Git。工作由宿主执行；Slipway 每次调度一个版本化 Action，独立观察 Git，按 digest 固定 source，并保存恢复历史。
-
-## 依赖方向
+## 进程边界
 
 ```text
-cmd → autopilot → runstore
-cmd → adapter → tmpl
-cmd → recoverycmd
-runstore / adapter / autopilot → fsutil (only required low-level primitives)
+用户
+  └─ 显式调用生成的能力
+       └─ AI 编程宿主
+            ├─ 读取并修改仓库
+            ├─ 调用模型与开发工具
+            ├─ 经授权后获取或发布 GitHub 数据
+            └─ 与 Slipway 交换版本化 JSON
+                 └─ 本地 CLI 与 Run store
 ```
 
-依赖方向固定，并由架构守卫测试强制执行。`autopilot` 只产生结构化 `next` 值，绝不依赖 `recoverycmd`；`recoverycmd` 既不读取 journal，也不决定路由。
+Run 状态引擎不调用模型或 GitHub API。它验证宿主提供的 source envelope、每次调度一个 Action、独立观察 Git 并保存恢复状态。公开 `doctor` 命令是 command layer 的诊断例外：它可能调用用户本机的 `gh` 检查认证与仓库权限。Generated host instructions 定义宿主如何调查、发布、实现和报告，但不是另一套状态引擎。
 
-## 代码包
+## 代码包方向
+
+Architecture test 会约束 production dependency：
+
+```text
+cmd ───────────────→ adapter
+ │                   ├─→ tmpl
+ │                   ├─→ fsutil
+ │                   └─→ jsonstrict
+ ├─────────────────→ autopilot
+ │                   ├─→ runstore
+ │                   │    ├─→ fsutil
+ │                   │    └─→ jsonstrict
+ │                   └─→ jsonstrict
+ └─────────────────→ recoverycmd
+```
 
 | Package | 职责 |
 | --- | --- |
-| `cmd` | 七个公开命令、隐藏的版本化 machine commands，以及 text/JSON rendering。 |
-| `internal/autopilot` | 严格的 Action/Outcome union、source envelope/revision/candidate、budget、routing、destructive authorization 和结构化 `next` 值。 |
-| `internal/runstore` | 发现规范 Git identity，并维护 anchored append-only journal 与可替换 projection。 |
-| `internal/adapter` | 为十个宿主规划 ownership-safe capability generation。 |
-| `internal/tmpl` | 嵌入精确六项显式能力，以及带 attribution 的 `grill-me` reference。 |
-| `internal/fsutil` | Rooted atomic transaction、Git discovery、symlink/reparse 防御和 rollback post-state validation。 |
-| `internal/recoverycmd` | 只消费完整 argv，并渲染 POSIX/cmd/PowerShell display command。绝不读取 journal 或决定路由。 |
-| `internal/jsonstrict` | 共享 structural scanner，用于拒绝重复 key、无效 JSON 和 trailing data。 |
-| `internal/testlint` | 仓库测试策略分析器。 |
+| `cmd` | Cobra 命令、human/JSON output、root discovery 与 exit behavior。 |
+| `internal/autopilot` | Action/Outcome validation、routing、source candidate、budget 与 structured recovery。 |
+| `internal/runstore` | Journal replay、projection、locking、material storage 与 Git observation。 |
+| `internal/adapter` | Host registry、generated file、ownership manifest 与 transactional install/remove。 |
+| `internal/tmpl` | 跨宿主共享的 embedded capability instruction。 |
+| `internal/fsutil` | Anchored path、no-follow operation、transaction、sync 与平台安全。 |
+| `internal/jsonstrict` | Protocol、source、store 与 adapter 边界共享的 strict JSON decoding。 |
+| `internal/recoverycmd` | 将已结构化 argv 渲染为人类命令。 |
 
-## Run 启动与 Git 观察
+底层 package 不反向 import command 或 host-policy layer。GitHub publication 保留在 generated host instructions 中，不成为 core 内的 network provider。
 
-Run 启动时，CLI 会保存 immutable workspace identity 和 Git fingerprint：精确的 index 与 porcelain-v2 bytes，以及每个预先存在的 dirty/untracked path 排序后的 metadata/digest。恢复过程会在加载和 mutation 前重新验证 identity。若 root 被复用、换成另一个 linked worktree，或 Git metadata 被移动或重定向，系统会在任何 journal mutation 发生前以 `workspace_identity_mismatch` 失败。
+## Run 启动与仓库观察
 
-从 Run 启动至今观察到的差异会驱动安全侧 Review 路由，但绝不证明该差异由 Run 造成。并发的用户编辑、另一个 Run 或其他工具都可能产生贡献。Slipway 记录事实性的 `observed_since_start` observation 与 `attribution_uncertainty`，绝不会把差异归因于某个宿主或 Run。
+新 Run 会发现三个 canonical path：worktree root、per-worktree Git directory 与 Git common directory。它们组成的 ID 将 Run 绑定到该 worktree。Slipway 不创建、切换或删除 worktree，但会拒绝从其他 worktree identity 修改 Run。
 
-## 宿主与 GitHub
+Initial Git observation 保存 exact index/porcelain-v2 output 的 fingerprint，以及 dirty path 的有界 metadata 与 fingerprint；它不保存 raw Git stream 或文件内容。后续 observation 用于 diff-first routing 和中性的“since start changed”报告，不声称是谁造成变化。
 
-Go binary 不持有 provider token。它严格验证经宿主 attestation 的 raw Change envelope，并把规范化后的固定 snapshot 写入 journal。GitHub 的读取和写入发生在宿主侧，使用用户自己的已认证工具；发布过程使用经批准的 operation/item UUID Marker 与 reconciliation，不会因此恢复 repository Change runtime。
-
-架构中不存在 model provider、old-state reader、compatibility alias、dual runtime、ambient activation、required-command registry、Spec/artifact lifecycle、worktree binding 或 automatic review-repair loop。历史数据与 legacy namespace 保持原样，并被运行时忽略。
-
-## 未引入的内容
+## Run 存储
 
 ```text
-internal/change   internal/spec   internal/plan
-internal/lifecycle   internal/gate   internal/tracker runtime
+<git-common-dir>/slipway/runs/<run-id>/
+├── journal.jsonl   追加式状态转换记录
+├── run.json        可替换 projection
+├── run.lock        经过验证的协调文件
+└── materials/      按内容 digest 保存的 accepted source section
 ```
 
-继续阅读[产品权威](../reference/product-overview.md)、[机器协议](../reference/machine-protocol.md)，以及[采用 manifest-addressed source bundle 的决策](../../decisions/0001-source-bundle-v2.md)。
+Unix 使用 opened Run directory 上的 OS lock 串行化 writer；Windows 使用 named mutex。可见的 `run.lock` 用于验证和诊断，但不是唯一 writer guard。
+
+Mutation 会先写入被引用 material，再允许 journal event 引用它。Journal sync 后才替换 projection。如果 journal 已 commit 但 projection refresh 失败，error 会报告 committed mutation 与 stale projection，不会声称 rollback。
+
+## Source 边界
+
+Issue-backed 工作中，trusted host 获取 Issue 和 manifest 引用 comments，再传入临时 strict envelope。CLI 能验证内部一致性和稳定 ID，但无法以密码学方式证明宿主确实从 GitHub 获取了数据。
+
+Accepted section 按内容寻址，并通过本地 material reader 提供。Action 只带 revision 和有界 catalog，使大型 requirements 不进入 Action context，也支持离线恢复。
+
+## 安全边界
+
+Slipway 假设同账号进程、root、malware 或 compromised host 可以越过其保护。在该边界内，它会：
+
+- anchor filesystem operation 并拒绝 unsafe symlink traversal；
+- 验证 strict JSON、size、identity 与 digest；
+- 不在 Slipway storage 中保存凭据，并让 GitHub 获取/发布留在 Run core 之外；
+- 将一次性 destructive grant 与自然语言 answer 分离；
+- 保留用户修改过的 generated file；
+- 报告平台 durability limitation。
+
+Issue content 是数据，不是宿主指令。Generated capability 不能把 Issue 中的命令、链接或 credential request 当作授权。
+
+## 明确不负责的内容
+
+Slipway 不会：
+
+- 运行 hosted service 或 project tracker；
+- 管理 model-provider 或 GitHub credential；
+- 创建或管理 worktree；
+- 认证 merge、deployment 或 release readiness；
+- 把 test、finding、label 或 Issue state 变成通用 repository policy；
+- 自动修复 Review finding；
+- 覆盖用户修改过的 adapter file。
+
+外部 branch protection、CI、组织策略和人工 Review 保持独立。
+
+继续阅读[核心概念](concepts.md)、[机器协议](../reference/machine-protocol.md)与 [Run、恢复与隐私](../guides/runs-and-recovery.md)。

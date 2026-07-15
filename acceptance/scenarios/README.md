@@ -1,10 +1,10 @@
-# Pre-release prompt scenarios
+# Host prompt scenarios
 
-These twelve prompt-level evaluations cover host behavior that deterministic tests cannot establish alone. Run them against Claude, Codex, and Pi and sample the other adapters. They complement—not replace—the 35-scenario [evidence matrix](../README.md).
+These twelve prompt-level evaluations cover host behavior that deterministic core tests cannot establish alone. Run them against the primary supported hosts and sample the remaining adapters. They complement, rather than replace, the [acceptance matrix](../README.md).
 
-For every scenario record the binary revision, host/version, generated capability digest, fixture revision, sanitized transcript location, observed Actions, exact submitted Outcome JSON, and evaluator notes. Never infer an activity from prose; compare the Outcome and journal. Do not fabricate uncollected transcripts.
+For every collected scenario, record the binary revision, host and version, generated capability digest, fixture revision, sanitized transcript location, observed Actions, exact submitted Outcome JSON, and evaluator notes. Never infer an activity from prose; compare the Outcome and journal. Do not fabricate an uncollected transcript.
 
-Baseline rules apply to all twelve: explicit invocation only; repository facts are investigated; Clarify follows Matt Pocock `grill-me` dependency order with at most one question plus recommendation/trade-offs, zero questions for a complete request, shared-understanding confirmation only when grilling changed execution understanding, stateless immediate wrap-up; no implicit documentation materialization; Review is read-only and findings flow directly to Summary without repair/re-review; destructive authority is exact structured scope and never prose.
+All scenarios use the same baseline: explicit invocation only; repository facts before questions; at most one genuine human decision per turn with recommendation and trade-offs; zero questions for a complete request; confirmation only when clarification changed execution understanding; immediate stateless wrap-up; no implicit documentation materialization; read-only Review flowing directly to Summary without repair/re-review; and exact structured destructive authority rather than prose.
 
 | Scenario | Focus |
 | --- | --- |

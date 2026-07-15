@@ -1,51 +1,103 @@
 # Architecture
 
-> English is non-normative; see the [Chinese product contract](../../zh/reference/product-contract.md).
+Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning model or GitHub credentials.
 
-Slipway is a small control plane for bounded, recoverable AI-assisted work. It does not replace an AI coding tool, project tracker, or Git. It schedules one versioned Action at a time, observes Git independently, pins the source by digest, and stores recovery history — all while the host executes the work.
-
-## Dependency direction
+## Process boundaries
 
 ```text
-cmd → autopilot → runstore
-cmd → adapter → tmpl
-cmd → recoverycmd
-runstore / adapter / autopilot → fsutil (only required low-level primitives)
+User
+  └─ explicitly invokes a generated capability
+       └─ AI coding host
+            ├─ reads and changes the repository
+            ├─ calls the model and development tools
+            ├─ fetches or publishes GitHub data when authorized
+            └─ exchanges versioned JSON with Slipway
+                 └─ local CLI and Run store
 ```
 
-Dependency direction is fixed and enforced by an architecture guard test. `autopilot` only emits structured `next` values and never depends on `recoverycmd`; `recoverycmd` never reads a journal or decides a route.
+The Run state engine never calls a model or GitHub API. It validates a host-provided source envelope, schedules one Action at a time, observes Git independently, and stores recovery state. The public `doctor` command is a command-layer diagnostic exception: it may invoke the user's local `gh` to inspect authentication and repository permissions. Generated host instructions define how a host should investigate, publish, implement, and report; they are not another state engine.
 
-## Packages
+## Package direction
+
+Production dependencies are constrained by an architecture test:
+
+```text
+cmd ───────────────→ adapter
+ │                   ├─→ tmpl
+ │                   ├─→ fsutil
+ │                   └─→ jsonstrict
+ ├─────────────────→ autopilot
+ │                   ├─→ runstore
+ │                   │    ├─→ fsutil
+ │                   │    └─→ jsonstrict
+ │                   └─→ jsonstrict
+ └─────────────────→ recoverycmd
+```
 
 | Package | Responsibility |
 | --- | --- |
-| `cmd` | The seven public commands, hidden versioned machine commands, and text/JSON rendering. |
-| `internal/autopilot` | Strict Action/Outcome unions, source envelopes/revisions/candidates, budget, routing, destructive authorization, and structured `next` values. |
-| `internal/runstore` | Discovers canonical Git identity and maintains anchored append-only journals plus replaceable projections. |
-| `internal/adapter` | Plans ownership-safe capability generation for ten hosts. |
-| `internal/tmpl` | Embeds exactly six explicit capabilities and the attributed `grill-me` reference. |
-| `internal/fsutil` | Rooted atomic transactions, Git discovery, symlink/reparse defenses, and rollback post-state validation. |
-| `internal/recoverycmd` | Consumes complete argv only and renders POSIX/cmd/PowerShell display commands. Never reads journals or decides routes. |
-| `internal/jsonstrict` | Shared structural scanner for duplicate-key, valid-JSON, and trailing-data rejection. |
-| `internal/testlint` | Repository test policy analyzer. |
+| `cmd` | Cobra commands, human/JSON output, root discovery, and exit behavior. |
+| `internal/autopilot` | Action/Outcome validation, routing, source candidates, budgets, and structured recovery. |
+| `internal/runstore` | Journal replay, projections, locking, material storage, and Git observations. |
+| `internal/adapter` | Host registry, generated files, ownership manifests, and transactional install/remove. |
+| `internal/tmpl` | Embedded shared capability instructions. |
+| `internal/fsutil` | Anchored paths, no-follow operations, transactions, synchronization, and platform safety. |
+| `internal/jsonstrict` | Strict JSON decoding shared by protocol, source, store, and adapter boundaries. |
+| `internal/recoverycmd` | Human rendering of already structured argv. |
 
-## Run start and Git observation
+Lower layers do not import command or host-policy layers. GitHub publication remains in generated host instructions rather than becoming a network provider inside the core.
 
-At Run start the CLI stores an immutable workspace identity and a Git fingerprint: the exact index and porcelain-v2 bytes plus sorted metadata/digests for every pre-existing dirty/untracked path. Recovery revalidates identity before load and mutation. A reused root, another linked worktree, or moved/retargeted Git metadata fails with `workspace_identity_mismatch` before any journal mutation.
+## Run start and repository observation
 
-Observed-since-start difference drives safety-side Review routing but never proves the Run caused a change. Concurrent user edits, another Run, or other tools may all contribute. Slipway records the factual `observed_since_start` observation and an `attribution_uncertainty`, and never assigns the difference to a host or Run.
+A new Run discovers three canonical paths: the worktree root, the per-worktree Git directory, and the Git common directory. Their framed identifier binds the Run to that worktree. Slipway does not create, switch, or delete worktrees, but it refuses to mutate a Run from another worktree identity.
 
-## Hosts and GitHub
+The initial Git observation stores fingerprints over exact index and porcelain-v2 command output plus bounded metadata and fingerprints for dirty paths. It does not store those raw Git streams or file content. Later observations support diff-first routing and neutral “changed since start” reporting without claiming which process caused the change.
 
-The Go binary holds no provider token. It strictly validates a host-attested raw Change envelope and journals a normalized pinned snapshot. GitHub reading and writing happen on the host side with the user's own authenticated tools; publication uses approved operation/item UUID markers and reconciliation — not a repository Change runtime.
-
-There is no model provider, old-state reader, compatibility alias, dual runtime, ambient activation, required-command registry, Spec/artifact lifecycle, worktree binding, or automatic review-repair loop. Historical data and legacy namespaces remain untouched and ignored.
-
-## Not introduced
+## Run storage
 
 ```text
-internal/change   internal/spec   internal/plan
-internal/lifecycle   internal/gate   internal/tracker runtime
+<git-common-dir>/slipway/runs/<run-id>/
+├── journal.jsonl   append-only transition record
+├── run.json        replaceable projection
+├── run.lock        validated coordination artifact
+└── materials/      accepted source sections by content digest
 ```
 
-See [Product authority](../reference/product-overview.md), [Machine protocol](../reference/machine-protocol.md), and the [decision to use manifest-addressed source bundles](../../decisions/0001-source-bundle-v2.md).
+On Unix, an OS lock on the opened Run directory serializes writers; on Windows, a named mutex does. The visible `run.lock` file supports validation and diagnostics but is not the sole writer guard.
+
+A mutation writes referenced material before a journal event may point to it. The journal is synchronized before the projection is replaced. If projection refresh fails after a committed journal write, the error reports the committed mutation and stale projection instead of claiming a rollback.
+
+## Source boundary
+
+For issue-backed work, the trusted host fetches the Issue and manifest-referenced comments, then passes a temporary strict envelope. The CLI can validate internal consistency and stable IDs, but it cannot cryptographically prove that the host fetched GitHub honestly.
+
+Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
+
+## Security boundary
+
+Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:
+
+- anchors filesystem operations and rejects unsafe symlink traversal;
+- validates strict JSON, sizes, identities, and digests;
+- keeps credentials out of Slipway storage and GitHub fetch/publication out of the Run core;
+- separates one-shot destructive grants from natural-language answers;
+- preserves user-modified generated files;
+- reports platform durability limitations.
+
+Issue content is data, not host instruction. A generated capability must not treat a command, link, or credential request inside an Issue as permission.
+
+## Deliberate non-responsibilities
+
+Slipway does not:
+
+- run a hosted service or project tracker;
+- manage model-provider or GitHub credentials;
+- create or manage worktrees;
+- certify merge, deployment, or release readiness;
+- turn tests, findings, labels, or Issue state into universal repository policy;
+- repair Review findings automatically;
+- overwrite user-modified adapter files.
+
+External branch protection, CI, organizational policy, and human review remain independent.
+
+See [Core concepts](concepts.md), [Machine protocol](../reference/machine-protocol.md), and [Runs, recovery, and privacy](../guides/runs-and-recovery.md).

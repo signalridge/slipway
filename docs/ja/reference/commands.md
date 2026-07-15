@@ -1,39 +1,98 @@
 # コマンドリファレンス
 
-公開コマンドは七つだけです。
+Slipway には7つの public command があります。使用中の binary で `slipway <command> --help` を確認してください。Package channel には古い command generation が含まれる場合があります。
 
-> このページは non-normative です。[中国語製品契約](../../zh/reference/product-contract.md)と [machine schema](../../reference/machine-protocol.schema.json) が authority です。Workflow は issue-first で issue-gated ではありません。[Issue workflow](issue-workflow.md)を参照してください。
+| Command | 目的 |
+| --- | --- |
+| `install` | 選択した AI coding host 向けに capability を生成する。 |
+| `uninstall` | Pristine な Slipway-managed host file を削除する。 |
+| `list` | Adapter detection と install 状態を表示する。 |
+| `doctor` | Repository、adapter、GitHub tooling、Run storage の状況を診断する。 |
+| `run` | Ad-hoc または issue-backed Run を開始し、最初の Action を返す。 |
+| `status` | Run を一覧、または1件を inspect する。 |
+| `stop` | Recovery data を削除せずに Run を停止する。 |
 
-- `install`: 六つのホスト capability を導入。
-  初回は `--refresh` 不要です。current ownership manifest が既にある場合、通常の `install` は管理ファイルを変更せず、修復・更新には `--refresh` を明示します。marker だけで current manifest がない場合は no-op safety warning を返し、non-current manifest は mutation 前に失敗します。
-- `uninstall`: 未変更の管理ファイルだけを削除。
-- `list`: ホストの検出・導入・`needs_refresh`・capability 状態を表示。non-current manifest は該当ホストだけを `installed:false` と optional `warning` に degrade し、read-only の一覧は filesystem を変更せず他の全ホストも報告し続けます。`needs_refresh` は drift を示すだけで user edit の上書きを許可しません。Missing pristine content は refresh で再作成できますが、modified file/sentinel はユーザーが明示的に扱うまで保持されます。
-- `doctor`: アダプターと実行環境を診断し、コード変更は検査しません。non-current manifest は `adapter_manifest_unreadable`、不完全な current surface は `needs_refresh`/warning になります。
-- `run "<goal>" [--root ROOT] [--source-file FILE] [--budget N] [--no-review] --json`: run を開始。Action budget のデフォルトは `8`、明示値は `1..1000` です。Host-generated/machine `start` は常に canonical safe variant `slipway run --budget N --json --root ABSOLUTE_ROOT [--no-review] [--source-file FILE] -- GOAL` を使い、全 flag を唯一の `--` より前に置きます。Public Cobra command は人が入力する同等の合法な配置も受け付けます。Source 付きでは strict Source Bundle v2 envelope を一度だけ読み、accepted normalized materials と catalog/provenance だけを保存します。
-- `status [run-id] [--root ROOT] [--json]`: Run を一覧・表示。ID なしでは current repository の全 Run を列挙します。Current canonical workspace の Run は full replay し、別 linked worktree の Run は `FirstEvent` header stub としてだけ表示し、JSON は `workspace_foreign:true`、human output は `foreign=true` と owning workspace を示します。Foreign stub は discovery 専用で、Load・resume・mutation は引き続き元の workspace からだけ実行できます。
-- `stop [run-id] [--root ROOT] [--json]`: journal を残して停止。
+全 command は `--help` を受け付けます。JSON 生成 command は `contract_version` を含み、machine consumer は documented version を検証し、human prose を parse してはなりません。
+
+## `slipway install`
+
+```text
+slipway install [--root PATH] [--tool ID]... [--surface ide|cli] [--refresh] [--json]
+```
+
+`--tool` 省略時は detected host を選びます。複数 host は `--tool` を繰り返します。Kiro の初回 install では `--surface` が1つ必須で、non-Kiro selection とは組み合わせられません。初回 `--tool all` の前に Kiro を単独 install してください。
+
+新規 install は作成した file だけを claim します。`--refresh` は一致する Slipway-owned file を更新し、欠落した pristine file を再作成します。Modified や unknown content は上書きされず、報告されます。
+
+JSON は selected host、transaction outcome、written/removed path、preserved content、recovery artifact、warning を報告します。Non-committed transaction は計画した write/removal を完了とは報告しません。
+
+## `slipway uninstall`
+
+```text
+slipway uninstall [--root PATH] [--tool ID]... [--json]
+```
+
+Hash が一致する managed file だけを削除します。Modified file と host settings は残ります。Run journal は削除されません。
+`--tool` 省略時は ownership manifest を持つすべての host を選び、1つも install されていなければ失敗します。`--tool` を繰り返すと removal を指定 host に限定できます。
+
+## `slipway list`
+
+```text
+slipway list [--root PATH] [--json]
+```
+
+10個の adapter target の detection、installation、refresh、capability 情報を一覧します。Malformed または unsupported ownership manifest は該当 host の read-only 結果だけを degrade し、file を変更せず、他 host も非表示にしません。
+
+## `slipway doctor`
+
+```text
+slipway doctor [--root PATH] [--json]
+```
+
+Repository discovery、host adapter、generated file、Run-storage durability、GitHub CLI/auth/repository permission、retired-state residue を検査します。GitHub や residue の advisory finding は Run を変更しません。認証 response と token は report に書き込まれません。
+
+`doctor` は観察結果を説明するだけで、project test を実行したり、code が ready か判定したりしません。
+
+## `slipway run`
+
+```text
+slipway run <goal> [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
+```
+
+Run を作成し、最初の `orient` Action を返します。Action budget はデフォルト 8、範囲は 1–1000 です。`--no-review` は advisory Review を無効にします。それ以外でも、Slipway が Action 後に code change を観測した場合だけ Review を issue します。
+
+`--source-file` 省略時は ad-hoc Run です。指定時、CLI は1つの bounded GitHub Change source envelope を開いて検証し、accepted section を pin して file を閉じます。CLI 自体は GitHub を fetch せず、host publication warning を表示しません。これらは generated host instruction が行います。
+
+Canonical machine invocation はすべての flag を `--` の前に置き、goal をその後に置きます。
 
 ```bash
 slipway run --budget 8 --json --root /absolute/repository -- "small private fix"
-slipway run --budget 8 --json --root /absolute/repository --source-file /safe/temp/change-envelope.json -- "bounded Change を実装"
+slipway run --budget 8 --json --root /absolute/repository \
+  --source-file /private/temp/change-envelope.json -- "implement the Change"
 ```
 
-Source import 前に accepted Requirements、goal、later answers、command summaries が機微であり得ると警告します。Host は exact Issue body と manifest 参照 raw comment fields だけを一時取得し、raw envelope は CLI consume にだけ渡して temporary file を削除します。Journal は accepted normalized materials と bounded catalog/provenance だけを保存し、raw body/comments/token/env は保存しません。[Privacy](../explanation/runs-and-privacy.md)を参照してください。
+この command は Action を返すだけで、code 変更を実行しません。
 
-ホストは非表示のプロトコルコマンドを使います。
+## `slipway status`
 
 ```text
-slipway _machine submit --run ID --action ID (--outcome-file FILE | --outcome-stdin)
-slipway _machine answer --run ID --action ID --text TEXT
-slipway _machine answer --run ID --action ID --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
-slipway _machine skip --run ID --action ID
-slipway _machine resume ID [--budget N]
-slipway _machine resume ID (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
-slipway _machine material --run ID --action ID --section KEY
+slipway status [run-id] [--root ROOT] [--json]
 ```
 
-最初の resume 形式は ad-hoc Run 専用です。Issue-bound resume は fresh `--source-file`、明示的な `--use-pinned-source`、または current candidate ID に対する `pinned|adopt` のどれか一つを必須とします。Skip に理由は不要です。pause・error・status JSON は元の absolute `--root` を持つ構造化 `next` を含み、未解決の必須 input がない argv だけを human command として render します。
+ID 省略時は Git common directory 内の Run を一覧します。Current worktree の Run は replay され、別 linked worktree の Run は `workspace_foreign` マーク付き read-only header として表示されます。完全な inspect と mutation は owning worktree が必要です。
 
-`install/uninstall --json` は常に `{contract_version,hosts,transaction_outcome,written,removed,preserved,recovery_artifacts,warnings}` を返し、空の配列も省略しません。`transaction_outcome` は `committed|rolled_back|not_committed|ambiguous`、`preserved` は通常の user-modified ownership content だけです。Transaction/quarantine recovery path は `recovery_artifacts` に分離し、committed でない結果は planned `written`/`removed` を主張しません。`list --json` は `{contract_version,hosts:[...]}`、ID なしの `status --json` は `{contract_version,runs:[...]}` で、空リストも versioned object です。ID あり status は flat Run projection のまま、必須の top-level `contract_version` と fresh `next` を持ちます。すべての error に `contract_version` が必須です。
+ID 指定時は現在の Run projection と fresh 派生の structured `next` を返します。空リストは有効な出力です。
 
-`doctor --json` は `{contract_version,checks:[{code,status,host_id,name,detail}]}` を返し、status は `ok|warning|error` のみです。Repository/adapter の stable code は `repository_ok`、`adapter_manifest_unreadable`、`adapter_not_detected`、`adapter_not_installed`、`adapter_refresh_required`、`adapter_modified`、`adapter_healthy` です。GitHub の stable code は `github_cli_unavailable|github_cli_version_unknown|github_cli_rest_fallback_required|github_cli_compatible`、`github_auth_unavailable|github_auth_available`、`github_issue_permissions_ok|github_issue_permissions_limited|github_issue_permissions_unknown` で、`gh <2.94.0` では公式 REST fallback が必要です。Legacy code は `legacy_runtime_residue`、`legacy_cache_residue`、`legacy_scope_root_residue`、`legacy_scopes_residue`、`legacy_locks_residue`、`legacy_processes_residue`、`legacy_repair_backups_residue`、`legacy_unknown_residue` です。Doctor は top-level metadata だけを調べ、内容を読まず migration/delete もしません。GitHub/legacy warning は ad-hoc Run を block せず、それだけなら doctor は成功終了します。
+## `slipway stop`
+
+```text
+slipway stop [run-id] [--root ROOT] [--json]
+```
+
+Run を停止し、journal を保存します。ID 省略時は list にある active/paused entry をすべて数え、1つだけの場合に進みます。Active/paused `workspace_foreign` stub があると selection が ambiguous になるか workspace-mismatch error になるため、linked-worktree repository では owning worktree から ID を指定してください。Stopped Run は resume できます。Ended Run はできません。
+
+## Hidden host 操作
+
+Generated adapter は versioned `_machine` 操作で Outcome 提出、Action の answer/skip、Run resume、pinned material 読み取りを行います。これらは top-level help に意図的に表示されず、第2の user workflow でもありません。
+
+Prose から hidden command を組み立てず、CLI が返す structured `next` variant を使ってください。詳細は[マシンプロトコル](machine-protocol.md)を参照してください。
