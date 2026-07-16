@@ -24,6 +24,21 @@ const (
 	maxManagedFileBytes       = 1 << 20
 )
 
+type ownershipFilesystem interface {
+	Lstat(path string) (os.FileInfo, error)
+	ReadFileNoSymlink(path string, maxBytes int64) ([]byte, error)
+}
+
+type pathOwnershipFilesystem struct{}
+
+func (pathOwnershipFilesystem) Lstat(path string) (os.FileInfo, error) {
+	return os.Lstat(path)
+}
+
+func (pathOwnershipFilesystem) ReadFileNoSymlink(path string, maxBytes int64) ([]byte, error) {
+	return fsutil.ReadFileNoSymlink(path, maxBytes)
+}
+
 type manifestFile struct {
 	Path   string `json:"path"`
 	SHA256 string `json:"sha256"`
@@ -165,7 +180,7 @@ func Install(options InstallOptions) (ChangeReport, error) {
 		return report, err
 	}
 	defer func() { _ = pinnedRoot.Close() }()
-	selected, err := resolveHosts(root, options.Tools, true)
+	selected, err := resolveHostsWithFilesystem(pinnedRoot, root, options.Tools, true)
 	if err != nil {
 		return report, err
 	}
@@ -202,14 +217,15 @@ func Install(options InstallOptions) (ChangeReport, error) {
 		if host.ID == "kiro" && kiroSurfaceKind != "" {
 			host.SurfaceKind = kiroSurfaceKind
 		}
-		plan, err := planInstall(root, host, options.Refresh)
+		plan, err := planInstallWithFilesystem(pinnedRoot, root, host, options.Refresh)
 		if err != nil {
 			var surfaceErr *SurfaceSelectionError
-			if len(options.Tools) == 0 && options.Surface == "" && errors.As(err, &surfaceErr) && surfaceErr.HostID == "kiro" {
+			if len(selected) > 1 && len(options.Tools) == 0 && options.Surface == "" && errors.As(err, &surfaceErr) && surfaceErr.HostID == "kiro" {
 				report.Warnings = append(report.Warnings, "adapter kiro was not installed: first install needs --surface ide or --surface cli; other detected adapters were still planned")
 				continue
 			}
-			return transactionFailureReport(root, report, err), err
+			wrapped := fmt.Errorf("plan adapter %s install: %w", host.ID, err)
+			return transactionFailureReport(root, report, wrapped), wrapped
 		}
 		report.Hosts = append(report.Hosts, host.ID)
 		report.Written = append(report.Written, plan.written...)
@@ -236,15 +252,16 @@ func Uninstall(options UninstallOptions) (ChangeReport, error) {
 		return report, err
 	}
 	defer func() { _ = pinnedRoot.Close() }()
-	selected, err := uninstallHosts(root, options.Tools)
+	selected, err := uninstallHostsWithFilesystem(pinnedRoot, root, options.Tools)
 	if err != nil {
 		return report, err
 	}
 	var operations []fsutil.FileTransactionOp
 	for _, host := range selected {
-		plan, err := planUninstall(root, host)
+		plan, err := planUninstallWithFilesystem(pinnedRoot, root, host)
 		if err != nil {
-			return transactionFailureReport(root, report, err), err
+			wrapped := fmt.Errorf("plan adapter %s uninstall: %w", host.ID, err)
+			return transactionFailureReport(root, report, wrapped), wrapped
 		}
 		report.Hosts = append(report.Hosts, host.ID)
 		report.Removed = append(report.Removed, plan.removed...)
@@ -457,8 +474,12 @@ func doctorWithInspector(
 }
 
 func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
+	return planInstallWithFilesystem(pathOwnershipFilesystem{}, root, host, refresh)
+}
+
+func planInstallWithFilesystem(filesystem ownershipFilesystem, root string, host Host, refresh bool) (hostPlan, error) {
 	var plan hostPlan
-	manifest, found, err := loadManifest(root, host)
+	manifest, found, err := loadManifestWithFilesystem(filesystem, root, host)
 	if err != nil {
 		return plan, err
 	}
@@ -493,7 +514,7 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	if err != nil {
 		return plan, err
 	}
-	sentinelClassification, err := classifyFile(sentinelPath, hashBytes([]byte(generatedSentinelContent)))
+	sentinelClassification, err := classifyFileWithFilesystem(filesystem, sentinelPath, hashBytes([]byte(generatedSentinelContent)))
 	if err != nil {
 		return plan, err
 	}
@@ -527,7 +548,7 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 		var writeExpectation plannedFileExpectation
 		if found {
 			if record, managed := previous[file.Relative]; managed {
-				classification, err := classifyFile(absolute, record.SHA256)
+				classification, err := classifyFileWithFilesystem(filesystem, absolute, record.SHA256)
 				if err != nil {
 					return plan, err
 				}
@@ -540,7 +561,7 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 			}
 		}
 		if !allowWrite {
-			info, err := os.Lstat(absolute)
+			info, err := filesystem.Lstat(absolute)
 			if errors.Is(err, os.ErrNotExist) {
 				allowWrite = true
 				writeExpectation = plannedFileExpectation{missing: true}
@@ -587,8 +608,12 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 }
 
 func planUninstall(root string, host Host) (hostPlan, error) {
+	return planUninstallWithFilesystem(pathOwnershipFilesystem{}, root, host)
+}
+
+func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, host Host) (hostPlan, error) {
 	var plan hostPlan
-	manifest, found, err := loadManifest(root, host)
+	manifest, found, err := loadManifestWithFilesystem(filesystem, root, host)
 	if err != nil {
 		return plan, err
 	}
@@ -602,7 +627,7 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 			if err != nil {
 				return plan, err
 			}
-			classification, err := classifyFile(absolute, record.SHA256)
+			classification, err := classifyFileWithFilesystem(filesystem, absolute, record.SHA256)
 			if err != nil {
 				return plan, err
 			}
@@ -620,7 +645,7 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 		}
 		plan.ops = append(plan.ops, fsutil.RemoveFileTransactionOp(manifestPath).WithExpectedSHA256(manifest.sourceSHA256))
 		plan.removed = append(plan.removed, relativeToRoot(root, manifestPath))
-		sentinelClassification, err := classifyFile(sentinelPath, hashBytes([]byte(generatedSentinelContent)))
+		sentinelClassification, err := classifyFileWithFilesystem(filesystem, sentinelPath, hashBytes([]byte(generatedSentinelContent)))
 		if err != nil {
 			return plan, err
 		}
@@ -636,22 +661,22 @@ func planUninstall(root string, host Host) (hostPlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		if _, err := os.Lstat(sentinelPath); err == nil {
+		if _, err := filesystem.Lstat(sentinelPath); err == nil {
 			plan.warnings = append(plan.warnings, currentOwnershipMissingWarning(host))
 		}
 	}
 	return plan, nil
 }
 
-func uninstallHosts(root string, requested []string) ([]Host, error) {
+func uninstallHostsWithFilesystem(filesystem ownershipFilesystem, root string, requested []string) ([]Host, error) {
 	if len(requested) > 0 {
-		return resolveHosts(root, requested, false)
+		return resolveHostsWithFilesystem(filesystem, root, requested, false)
 	}
 	var selected []Host
 	for _, host := range hosts {
-		_, found, err := loadManifest(root, host)
+		_, found, err := loadManifestWithFilesystem(filesystem, root, host)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("inspect adapter %s for uninstall: %w", host.ID, err)
 		}
 		if found {
 			selected = append(selected, host)
@@ -664,11 +689,15 @@ func uninstallHosts(root string, requested []string) ([]Host, error) {
 }
 
 func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
+	return loadManifestWithFilesystem(pathOwnershipFilesystem{}, root, host)
+}
+
+func loadManifestWithFilesystem(filesystem ownershipFilesystem, root string, host Host) (ownershipManifest, bool, error) {
 	manifestPath, _, err := ownershipPaths(root, host)
 	if err != nil {
 		return ownershipManifest{}, false, err
 	}
-	info, err := os.Lstat(manifestPath)
+	info, err := filesystem.Lstat(manifestPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return ownershipManifest{}, false, nil
 	}
@@ -681,7 +710,7 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	if info.Size() > maxOwnershipManifestBytes {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s exceeds %d bytes", host.ID, maxOwnershipManifestBytes)
 	}
-	raw, err := fsutil.ReadFileNoSymlink(manifestPath, maxOwnershipManifestBytes)
+	raw, err := filesystem.ReadFileNoSymlink(manifestPath, maxOwnershipManifestBytes)
 	if err != nil {
 		return ownershipManifest{}, false, err
 	}
@@ -857,7 +886,11 @@ func normalizeRelative(name string) (string, error) {
 }
 
 func classifyFile(path, expectedHash string) (string, error) {
-	info, err := os.Lstat(path)
+	return classifyFileWithFilesystem(pathOwnershipFilesystem{}, path, expectedHash)
+}
+
+func classifyFileWithFilesystem(filesystem ownershipFilesystem, path, expectedHash string) (string, error) {
+	info, err := filesystem.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return "missing", nil
 	}
@@ -870,7 +903,7 @@ func classifyFile(path, expectedHash string) (string, error) {
 	if info.Size() > maxManagedFileBytes {
 		return "modified", nil
 	}
-	hash, err := hashRegularFile(path)
+	hash, err := hashRegularFileWithFilesystem(filesystem, path)
 	if err != nil {
 		return "", err
 	}
@@ -881,14 +914,18 @@ func classifyFile(path, expectedHash string) (string, error) {
 }
 
 func hashRegularFile(path string) (string, error) {
-	info, err := os.Lstat(path)
+	return hashRegularFileWithFilesystem(pathOwnershipFilesystem{}, path)
+}
+
+func hashRegularFileWithFilesystem(filesystem ownershipFilesystem, path string) (string, error) {
+	info, err := filesystem.Lstat(path)
 	if err != nil {
 		return "", err
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("%s is not a regular file", path)
 	}
-	data, err := fsutil.ReadFileNoSymlink(path, maxManagedFileBytes)
+	data, err := filesystem.ReadFileNoSymlink(path, maxManagedFileBytes)
 	if err != nil {
 		return "", err
 	}

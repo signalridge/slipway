@@ -446,9 +446,12 @@ func (store *Store) ListIDs() ([]string, error) {
 	}
 	ids := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() || validateRunID(entry.Name()) != nil {
+		if validateRunID(entry.Name()) != nil {
 			continue
 		}
+		// Keep every valid run-ID entry visible. openRunRootMode classifies files,
+		// symlinks, and malformed directories so recovery can report them instead
+		// of making an on-disk Run disappear from status.
 		ids = append(ids, entry.Name())
 	}
 	sort.Strings(ids)

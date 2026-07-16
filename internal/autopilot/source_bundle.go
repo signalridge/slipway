@@ -677,7 +677,7 @@ func sourceRevisionFromIdentity(host, repositoryID, issueID, title, manifestSHA2
 	)
 }
 
-func observedSourceRevision(envelope RawSourceEnvelope, normalizedIssueBody string) string {
+func sourceObservationSHA256(envelope RawSourceEnvelope, normalizedIssueBody string) string {
 	comments := append([]RawSourceComment(nil), envelope.Comments...)
 	sort.Slice(comments, func(i, j int) bool {
 		return comments[i].NodeID < comments[j].NodeID

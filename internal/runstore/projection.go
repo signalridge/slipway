@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 type Snapshot struct {
@@ -25,12 +29,14 @@ func encodeSnapshot(revision int, value any) ([]byte, error) {
 }
 
 type preparedSnapshot struct {
-	transaction *runTransaction
-	destination string
-	previous    leafIdentity
-	temporary   string
-	temporaryID leafIdentity
-	renamed     bool
+	transaction  *runTransaction
+	destination  string
+	previous     leafIdentity
+	temporary    string
+	temporaryID  leafIdentity
+	quarantine   string
+	quarantineID leafIdentity
+	renamed      bool
 }
 
 func (prepared *preparedSnapshot) discard() {
@@ -124,22 +130,123 @@ func prepareSnapshot(transaction *runTransaction, name string, content []byte) (
 	return prepared, nil
 }
 
+func relocatePreviousProjection(root *os.Root, prepared *preparedSnapshot) error {
+	if !prepared.previous.exists {
+		return nil
+	}
+	for attempt := 0; attempt < rootRenameAttempts; attempt++ {
+		quarantine, err := randomRunLeaf(".quarantine-", prepared.destination)
+		if err != nil {
+			return err
+		}
+		if err := fsutil.RenameNoReplace(root, prepared.destination, quarantine); err != nil {
+			if errors.Is(err, fs.ErrExist) {
+				continue
+			}
+			return err
+		}
+		relocated, inspectErr := inspectRegularFileOrMissingInRoot(root, quarantine)
+		if inspectErr != nil {
+			return fmt.Errorf("relocated projection could not be validated and was preserved at %q: %w", quarantine, inspectErr)
+		}
+		if !relocated.exists || !os.SameFile(relocated.info, prepared.previous.info) {
+			restoreErr := restoreRelocatedProjection(root, quarantine, prepared.destination, relocated)
+			if restoreErr != nil {
+				return errors.Join(
+					fmt.Errorf("run projection changed during no-replace relocation; competing entry was preserved at %q", quarantine),
+					restoreErr,
+				)
+			}
+			return fmt.Errorf("run projection changed during no-replace relocation; competing entry was restored")
+		}
+		prepared.quarantine = quarantine
+		prepared.quarantineID = relocated
+		return nil
+	}
+	return errors.New("could not allocate projection quarantine name")
+}
+
+func restoreRelocatedProjection(root *os.Root, quarantine, destination string, expected leafIdentity) error {
+	if !expected.exists {
+		return fmt.Errorf("relocated projection %q has no validated identity", quarantine)
+	}
+	if err := verifyLeafIdentity(root, quarantine, expected); err != nil {
+		return fmt.Errorf("relocated projection %q changed before restore: %w", quarantine, err)
+	}
+	current, err := inspectRegularFileOrMissingInRoot(root, destination)
+	if err != nil {
+		return err
+	}
+	if current.exists {
+		return fmt.Errorf("projection destination is occupied; relocated entry remains at %q", quarantine)
+	}
+	if err := fsutil.RenameNoReplace(root, quarantine, destination); err != nil {
+		return fmt.Errorf("restore relocated projection without replacement: %w", err)
+	}
+	if err := verifyLeafIdentity(root, destination, expected); err != nil {
+		return fmt.Errorf("verify restored projection: %w", err)
+	}
+	return nil
+}
+
+func restorePreviousProjection(root *os.Root, prepared *preparedSnapshot) error {
+	if prepared.quarantine == "" {
+		return nil
+	}
+	if err := restoreRelocatedProjection(root, prepared.quarantine, prepared.destination, prepared.quarantineID); err != nil {
+		return err
+	}
+	prepared.quarantine = ""
+	prepared.quarantineID = leafIdentity{}
+	return nil
+}
+
+func cleanupPreviousProjection(root *os.Root, prepared *preparedSnapshot) error {
+	if prepared.quarantine == "" {
+		return nil
+	}
+	if err := verifyLeafIdentity(root, prepared.quarantine, prepared.quarantineID); err != nil {
+		return fmt.Errorf("old projection was preserved at %q after its identity changed: %w", prepared.quarantine, err)
+	}
+	if err := root.Remove(prepared.quarantine); err != nil {
+		return fmt.Errorf("remove old projection %q: %w", prepared.quarantine, err)
+	}
+	current, err := inspectRegularFileOrMissingInRoot(root, prepared.quarantine)
+	if err != nil {
+		return fmt.Errorf("inspect removed old projection %q: %w", prepared.quarantine, err)
+	}
+	if current.exists {
+		return fmt.Errorf("old projection path %q reappeared during cleanup", prepared.quarantine)
+	}
+	prepared.quarantine = ""
+	prepared.quarantineID = leafIdentity{}
+	return nil
+}
+
 func commitSnapshot(transaction *runTransaction, prepared *preparedSnapshot) error {
 	if prepared == nil || prepared.transaction != transaction {
 		return transaction.tracker.fail(PhaseProjectionRename, false, errors.New("invalid prepared projection"))
 	}
 	root := transaction.run.root
-	if err := transaction.validate(PhaseProjectionRename, faultProjectionPreRename); err != nil {
-		return err
-	}
 	if err := verifyLeafIdentity(root, prepared.destination, prepared.previous); err != nil {
 		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("run projection changed before rename: %w", err))
 	}
 	if err := verifyLeafIdentity(root, prepared.temporary, prepared.temporaryID); err != nil {
 		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("run projection temp changed before rename: %w", err))
 	}
-	if err := renameInRootWithRetry(root, prepared.temporary, prepared.destination); err != nil {
-		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("rename run projection: %w", err))
+	if err := transaction.validate(PhaseProjectionRename, faultProjectionPreRename); err != nil {
+		return err
+	}
+	if err := relocatePreviousProjection(root, prepared); err != nil {
+		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("relocate old run projection without replacement: %w", err))
+	}
+	if err := fsutil.RenameNoReplace(root, prepared.temporary, prepared.destination); err != nil {
+		restoreErr := restorePreviousProjection(root, prepared)
+		return transaction.tracker.fail(
+			PhaseProjectionRename,
+			false,
+			errors.Join(fmt.Errorf("install run projection without replacement: %w", err), restoreErr),
+		)
 	}
 	prepared.renamed = true
 	if err := transaction.run.store.hooks.at(faultProjectionPostRename); err != nil {
@@ -158,5 +265,16 @@ func commitSnapshot(transaction *runTransaction, prepared *preparedSnapshot) err
 		return err
 	}
 	transaction.tracker.markProjectionCurrent()
+	if prepared.quarantine != "" {
+		if err := cleanupPreviousProjection(root, prepared); err != nil {
+			return transaction.tracker.fail(PhaseProjectionRename, false, err)
+		}
+		if err := syncAnchoredDirectory(root, transaction.run.identity, transaction.run.store.hooks, faultProjectionDirSync); err != nil {
+			return transaction.tracker.fail(PhaseProjectionDirectorySync, false, fmt.Errorf("sync old projection cleanup: %w", err))
+		}
+		if err := transaction.validate(PhaseProjectionDirectorySync, faultValidateRun); err != nil {
+			return err
+		}
+	}
 	return nil
 }

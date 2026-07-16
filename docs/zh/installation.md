@@ -118,15 +118,15 @@ yay -S slipway-bin
 ./slipway doctor
 ```
 
-支持的 ID 为 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`。可重复 `--tool` 选择多个非 Kiro 宿主。
+支持的 ID 为 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`。可重复 `--tool` 选择多个宿主。
 
-Kiro 首次必须单独安装，以明确 surface：
+Kiro 首次安装需要显式指定 surface：
 
 ```bash
 ./slipway install --tool kiro --surface ide   # 或：--surface cli
 ```
 
-不要将 `--surface` 与非 Kiro 选择组合。Kiro surface 记录后，后续 refresh 和 uninstall 会自动沿用。首次 `--tool all` 同样要求已有 Kiro surface，因此逐个显式安装更清晰。
+Kiro 位于混合选择中时，`--surface` 只作用于 Kiro；例如 `--tool claude --tool kiro --surface ide` 和 `--tool all --surface ide` 都合法。Refresh 和 uninstall 会自动沿用已记录的 Kiro surface。
 
 省略 `--tool` 时，Slipway 根据宿主目录进行检测。检测只是一项便利功能；在配置多个宿主的仓库中，安装前先检查 `./slipway list`。
 

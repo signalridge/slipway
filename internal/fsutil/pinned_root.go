@@ -1,6 +1,7 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -83,6 +84,56 @@ func (root *PinnedRoot) ValidateNamespace() error {
 		return fmt.Errorf("root namespace no longer names the pinned directory")
 	}
 	return nil
+}
+
+// Lstat inspects path through the repository handle pinned before planning.
+// Parent components must be real directories, not symbolic links.
+func (root *PinnedRoot) Lstat(path string) (os.FileInfo, error) {
+	if root == nil || root.root == nil {
+		return nil, fmt.Errorf("pinned transaction root is closed")
+	}
+	if err := root.ValidateNamespace(); err != nil {
+		return nil, &RootNamespaceIdentityError{Root: root.path}
+	}
+	filesystem := &transactionFilesystem{rootPath: root.path, root: root.root}
+	parent, name, err := filesystem.openStableParent(path, false)
+	if err != nil {
+		if namespaceErr := root.ValidateNamespace(); namespaceErr != nil {
+			return nil, &RootNamespaceIdentityError{Root: root.path}
+		}
+		return nil, err
+	}
+	info, statErr := parent.Lstat(name)
+	closeErr := parent.Close()
+	if namespaceErr := root.ValidateNamespace(); namespaceErr != nil {
+		return nil, &RootNamespaceIdentityError{Root: root.path}
+	}
+	return info, errors.Join(statErr, closeErr)
+}
+
+// ReadFileNoSymlink reads a bounded regular file through the repository handle
+// pinned before planning and verifies that the root namespace remains attached.
+func (root *PinnedRoot) ReadFileNoSymlink(path string, maxBytes int64) ([]byte, error) {
+	if root == nil || root.root == nil {
+		return nil, fmt.Errorf("pinned transaction root is closed")
+	}
+	if err := root.ValidateNamespace(); err != nil {
+		return nil, &RootNamespaceIdentityError{Root: root.path}
+	}
+	filesystem := &transactionFilesystem{rootPath: root.path, root: root.root}
+	parent, name, err := filesystem.openStableParent(path, false)
+	if err != nil {
+		if namespaceErr := root.ValidateNamespace(); namespaceErr != nil {
+			return nil, &RootNamespaceIdentityError{Root: root.path}
+		}
+		return nil, err
+	}
+	data, readErr := readFileNoSymlinkInRoot(parent, name, path, maxBytes)
+	closeErr := parent.Close()
+	if namespaceErr := root.ValidateNamespace(); namespaceErr != nil {
+		return nil, &RootNamespaceIdentityError{Root: root.path}
+	}
+	return data, errors.Join(readErr, closeErr)
 }
 
 // Apply validates the namespace, applies ops through the same os.Root used to

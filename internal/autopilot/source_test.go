@@ -370,6 +370,8 @@ func TestParseSourceCandidateAllowsEmptyCommentsForInvalidHead(t *testing.T) {
 			require.Error(t, bodyErr)
 			assert.False(t, candidate.Valid)
 			assert.Equal(t, test.classificationCode, candidate.ClassificationCode)
+			assert.Empty(t, candidate.SourceRevision)
+			assert.True(t, validSHA256(candidate.ObservationSHA256))
 			assert.Nil(t, candidate.Snapshot)
 		})
 	}

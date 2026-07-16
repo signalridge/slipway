@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,6 +13,58 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMachineProtocolDocumentationExamplesMatchSchema(t *testing.T) {
+	t.Parallel()
+	actionSchema := compileMachineSchemaDefinition(t, "action")
+	outcomeSchema := compileMachineSchemaDefinition(t, "outcome")
+	locales := []string{"en", "zh", "ja"}
+	var commandExamples []string
+	var referenceExamples []string
+	var tutorialExamples []string
+	for _, locale := range locales {
+		referencePath := filepath.Join("..", "..", "docs", locale, "reference", "machine-protocol.md")
+		referenceRaw, err := os.ReadFile(referencePath)
+		require.NoError(t, err)
+		currentCommands := fencedDocumentationBlocks(string(referenceRaw), "text")
+		require.Len(t, currentCommands, 2)
+		if commandExamples == nil {
+			commandExamples = currentCommands
+		} else {
+			assert.Equal(t, commandExamples, currentCommands, "machine command syntax drifted in locale %s", locale)
+		}
+		currentReference := fencedDocumentationBlocks(string(referenceRaw), "json")
+		require.Len(t, currentReference, 2)
+		if referenceExamples == nil {
+			referenceExamples = currentReference
+		} else {
+			assert.Equal(t, referenceExamples, currentReference, "machine examples drifted in locale %s", locale)
+		}
+
+		tutorialPath := filepath.Join("..", "..", "docs", locale, "guides", "machine-protocol-v2.md")
+		tutorialRaw, err := os.ReadFile(tutorialPath)
+		require.NoError(t, err)
+		currentTutorial := tutorialOutcomeExamples(t, string(tutorialRaw))
+		require.Len(t, currentTutorial, 3)
+		if tutorialExamples == nil {
+			tutorialExamples = currentTutorial
+		} else {
+			assert.Equal(t, tutorialExamples, currentTutorial, "tutorial outcomes drifted in locale %s", locale)
+		}
+	}
+
+	var action any
+	require.NoError(t, json.Unmarshal([]byte(referenceExamples[0]), &action))
+	require.NoError(t, actionSchema.Validate(action))
+	var outcome any
+	require.NoError(t, json.Unmarshal([]byte(referenceExamples[1]), &outcome))
+	require.NoError(t, outcomeSchema.Validate(outcome))
+	for index, example := range tutorialExamples {
+		var value any
+		require.NoError(t, json.Unmarshal([]byte(example), &value), "tutorial outcome %d", index)
+		require.NoError(t, outcomeSchema.Validate(value), "tutorial outcome %d", index)
+	}
+}
 
 func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	t.Parallel()
@@ -174,6 +227,10 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "action"), adHocJSON)
 	actionSchema := compileMachineSchemaDefinition(t, "action")
 	require.NoError(t, actionSchema.Validate(machineSchemaValue(t, adHoc)))
+	whitespaceAction := adHoc
+	whitespaceAction.Goal = " \t "
+	require.Error(t, whitespaceAction.Validate())
+	require.Error(t, actionSchema.Validate(machineSchemaValue(t, whitespaceAction)))
 	var adHocObject map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(adHocJSON, &adHocObject))
 	assert.NotContains(t, adHocObject, "source")
@@ -243,6 +300,9 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	}
 	materialSchema := compileMachineSchemaDefinition(t, "actionMaterial")
 	require.NoError(t, materialSchema.Validate(machineSchemaValue(t, material)))
+	whitespaceMaterial := machineSchemaValue(t, material).(map[string]any)
+	whitespaceMaterial["section"].(map[string]any)["markdown"] = " \n\t"
+	require.Error(t, materialSchema.Validate(whitespaceMaterial))
 
 	implementation := implementedTestOutcome(OutcomeCompleted, ImplementationApplied)
 	implementation.ActionKind = ActionImplement
@@ -251,6 +311,10 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, decoded.Validate(ActionImplement, "action-1"))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "outcome"), implementationJSON)
+	whitespaceOutcome := implementation
+	whitespaceOutcome.Summary = " \n\t"
+	require.Error(t, whitespaceOutcome.Validate(ActionImplement, "action-1"))
+	require.Error(t, compileMachineOutcomeSchema(t).Validate(machineSchemaValue(t, whitespaceOutcome)))
 
 	review := reviewedTestOutcome(OutcomeCompleted, ReviewFindings, []Finding{{Location: "a.go:1", Summary: "bug", Detail: "detail"}})
 	review.ActionKind = ActionReview
@@ -452,6 +516,12 @@ func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 	controlBody := validSourceEnvelope()
 	controlBody.Body += "\u0085"
 	require.Error(t, schema.Validate(machineSchemaValue(t, controlBody)))
+	whitespaceTitle := validSourceEnvelope()
+	whitespaceTitle.Title = "   "
+	require.Error(t, schema.Validate(machineSchemaValue(t, whitespaceTitle)))
+	whitespaceLabel := validSourceEnvelope()
+	whitespaceLabel.Labels = []string{"   "}
+	require.Error(t, schema.Validate(machineSchemaValue(t, whitespaceLabel)))
 
 	tooManyLabels := validSourceEnvelope()
 	tooManyLabels.Labels = make([]string, maxSourceLabels+1)
@@ -465,6 +535,14 @@ func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 	manifestSchema, err := compiler.Compile(schemaURL + "#/$defs/sourceManifest")
 	require.NoError(t, err)
 	require.NoError(t, manifestSchema.Validate(machineSchemaValue(t, manifest)))
+	whitespaceManifest := machineSchemaValue(t, manifest).(map[string]any)
+	whitespaceSections := whitespaceManifest["sections"].([]any)
+	whitespaceSections[0].(map[string]any)["title"] = "   "
+	require.Error(t, manifestSchema.Validate(whitespaceManifest))
+	whitespaceCommentID := machineSchemaValue(t, manifest).(map[string]any)
+	whitespaceCommentSections := whitespaceCommentID["sections"].([]any)
+	whitespaceCommentSections[0].(map[string]any)["comment_node_id"] = "   "
+	require.Error(t, manifestSchema.Validate(whitespaceCommentID))
 	incompleteManifest := machineSchemaValue(t, manifest).(map[string]any)
 	manifestSections := incompleteManifest["sections"].([]any)
 	incompleteManifest["sections"] = manifestSections[:len(manifestSections)-1]
@@ -516,6 +594,8 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 
 	schema := compileMachineSchemaDefinition(t, "sourceCandidate")
 	valid := newSourceCandidate(sourceCandidateForTest(t, validSourceEnvelope()))
+	assert.Empty(t, valid.ObservationSHA256)
+	assert.True(t, validSHA256(valid.SourceRevision))
 	require.NoError(t, schema.Validate(machineSchemaValue(t, valid)))
 
 	invalidEnvelope := validSourceEnvelope()
@@ -540,8 +620,16 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 	validWithError["classification_error"] = "must be absent"
 	invalidWithValidCode := machineSchemaValue(t, invalid).(map[string]any)
 	invalidWithValidCode["classification_code"] = SourceClassificationValidChange
+	invalidWithSourceRevision := machineSchemaValue(t, invalid).(map[string]any)
+	invalidWithSourceRevision["source_revision"] = valid.SourceRevision
+	invalidWithWhitespaceError := machineSchemaValue(t, invalid).(map[string]any)
+	invalidWithWhitespaceError["classification_error"] = "   "
+	validWithObservation := machineSchemaValue(t, valid).(map[string]any)
+	validWithObservation["observation_sha256"] = invalid.ObservationSHA256
 	missingSourceRevision := machineSchemaValue(t, valid).(map[string]any)
 	delete(missingSourceRevision, "source_revision")
+	missingObservation := machineSchemaValue(t, invalid).(map[string]any)
+	delete(missingObservation, "observation_sha256")
 
 	illegal := []struct {
 		name  string
@@ -552,7 +640,11 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 		{name: "invalid with valid snapshot", value: invalidWithSnapshot},
 		{name: "valid with classification error", value: validWithError},
 		{name: "invalid with valid classification code", value: invalidWithValidCode},
+		{name: "invalid with source revision", value: invalidWithSourceRevision},
+		{name: "invalid with whitespace classification error", value: invalidWithWhitespaceError},
+		{name: "valid with observation digest", value: validWithObservation},
 		{name: "missing source revision", value: missingSourceRevision},
+		{name: "missing observation digest", value: missingObservation},
 	}
 	for _, test := range illegal {
 		t.Run(test.name, func(t *testing.T) {
@@ -831,6 +923,66 @@ func assertSchemaObjectFixture(t *testing.T, objectSchema map[string]any, raw []
 	for _, required := range schemaStrings(t, objectSchema, "required") {
 		assert.Contains(t, object, required, "fixture omits a required field")
 	}
+}
+
+func fencedDocumentationBlocks(content, language string) []string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	opening := "```" + language
+	var blocks []string
+	for index := 0; index < len(lines); index++ {
+		if strings.TrimSpace(lines[index]) != opening {
+			continue
+		}
+		start := index + 1
+		index = start
+		for index < len(lines) && strings.TrimSpace(lines[index]) != "```" {
+			index++
+		}
+		if index >= len(lines) {
+			break
+		}
+		blocks = append(blocks, strings.Join(lines[start:index], "\n"))
+	}
+	return blocks
+}
+
+func tutorialOutcomeExamples(t *testing.T, content string) []string {
+	t.Helper()
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	var examples []string
+	for index := 0; index < len(lines); index++ {
+		if !strings.Contains(lines[index], "jq -n") {
+			continue
+		}
+		var object []string
+		for ; index < len(lines); index++ {
+			line := lines[index]
+			if len(object) == 0 {
+				marker := strings.Index(line, "'{")
+				if marker < 0 {
+					continue
+				}
+				object = append(object, line[marker+1:])
+				continue
+			}
+			if marker := strings.Index(line, "}' >"); marker >= 0 {
+				object = append(object, line[:marker+1])
+				break
+			}
+			object = append(object, line)
+		}
+		require.NotEmpty(t, object, "jq outcome example has no object")
+		examples = append(examples, normalizeTutorialOutcome(strings.Join(object, "\n")))
+	}
+	return examples
+}
+
+var tutorialObjectKey = regexp.MustCompile(`(?m)^(\s*)([a-z_][a-z0-9_]*):`)
+
+func normalizeTutorialOutcome(example string) string {
+	example = strings.ReplaceAll(example, "$action", `"action-id"`)
+	example = strings.ReplaceAll(example, "$check_command", `"git diff --check"`)
+	return tutorialObjectKey.ReplaceAllString(example, `$1"$2":`)
 }
 
 func schemaMap(t *testing.T, object map[string]any, key string) map[string]any {

@@ -118,15 +118,15 @@ Target Git worktree 内で実行します。
 ./slipway doctor
 ```
 
-Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の non-Kiro host は `--tool` を繰り返します。
+Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の host は `--tool` を繰り返して選択します。
 
-Kiro は surface を明確にするため、初回は単独で install します。
+Kiro の初回 install では surface を明示します。
 
 ```bash
 ./slipway install --tool kiro --surface ide   # または: --surface cli
 ```
 
-`--surface` を non-Kiro selection と組み合わせないでください。Kiro surface を記録した後、refresh/uninstall は同じ value を推論します。初回 `--tool all` にも Kiro surface の記録が必要なので、explicit per-host setup が明確です。
+Kiro を mixed selection に含める場合、`--surface` は Kiro だけに適用されます。たとえば `--tool claude --tool kiro --surface ide` と `--tool all --surface ide` は有効です。Refresh と uninstall は記録済みの Kiro surface を推論します。
 
 `--tool` を省略すると detected host directory を選びます。Detection は convenience です。複数 host 設定を持つ repository では install 前に `./slipway list` を確認してください。
 

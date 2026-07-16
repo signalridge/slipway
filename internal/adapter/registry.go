@@ -2,6 +2,7 @@
 package adapter
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,10 +65,18 @@ func lookupHost(id string) (Host, bool) {
 }
 
 func resolveHosts(root string, requested []string, defaultDetected bool) ([]Host, error) {
+	return resolveHostsWithFilesystem(pathOwnershipFilesystem{}, root, requested, defaultDetected)
+}
+
+func resolveHostsWithFilesystem(filesystem ownershipFilesystem, root string, requested []string, defaultDetected bool) ([]Host, error) {
 	selected := map[string]Host{}
 	if len(requested) == 0 && defaultDetected {
 		for _, host := range hosts {
-			if hostDetected(root, host) {
+			detected, err := hostDetectedWithFilesystem(filesystem, root, host)
+			if err != nil {
+				return nil, fmt.Errorf("detect adapter %s: %w", host.ID, err)
+			}
+			if detected {
 				selected[host.ID] = host
 			}
 		}
@@ -105,11 +114,19 @@ func resolveHosts(root string, requested []string, defaultDetected bool) ([]Host
 }
 
 func hostDetected(root string, host Host) bool {
+	detected, _ := hostDetectedWithFilesystem(pathOwnershipFilesystem{}, root, host)
+	return detected
+}
+
+func hostDetectedWithFilesystem(filesystem ownershipFilesystem, root string, host Host) (bool, error) {
 	for _, relative := range host.DetectPaths {
-		info, err := os.Stat(filepath.Join(root, filepath.FromSlash(relative)))
+		info, err := filesystem.Lstat(filepath.Join(root, filepath.FromSlash(relative)))
 		if err == nil && info.IsDir() {
-			return true
+			return true, nil
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }

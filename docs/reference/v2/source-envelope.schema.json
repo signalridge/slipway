@@ -8,12 +8,18 @@
     "nonEmptyPlainText": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$"
+      "allOf": [
+        { "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
     },
     "nonEmptyMarkdownText": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$"
+      "allOf": [
+        { "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
     },
     "githubNodeID": {
       "allOf": [
@@ -91,8 +97,8 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
-        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
-        "comment_node_id": { "type": "string", "minLength": 1 },
+        "title": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }, { "maxLength": 512 }] },
+        "comment_node_id": { "$ref": "#/$defs/githubNodeID" },
         "comment_database_id": { "type": "integer", "minimum": 1 },
         "body_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }

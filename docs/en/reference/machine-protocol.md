@@ -18,12 +18,14 @@ The host calls the model, reads the repository, runs tools, and—when requested
 A host normally uses JSON on every step:
 
 ```text
-slipway run <goal> --budget N --json --root ROOT [--no-review] [--source-file FILE]
-slipway _machine submit ...
-slipway _machine answer ...
-slipway _machine skip ...
-slipway _machine resume ...
-slipway _machine material ...
+slipway run --budget N --json --root ROOT [--no-review] [--source-file FILE] -- GOAL
+slipway _machine submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
+slipway _machine answer --run RUN --action ACTION --root ROOT --text TEXT
+slipway _machine answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway _machine skip --run RUN --action ACTION --root ROOT
+slipway _machine resume RUN --root ROOT [--budget N]
+slipway _machine resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway _machine material --run RUN --action ACTION --root ROOT --section KEY
 ```
 
 The hidden operations are versioned host interfaces. Do not expose them as an alternative end-user command sequence.

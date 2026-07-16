@@ -306,17 +306,29 @@ func TestServiceListShowsForeignHeadersAndReportsCorruptRuns(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, foreignBefore, foreignAfterLoad, "foreign status must not repair another worktree's journal")
 
-	corruptDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "corrupt-list-test")
+	runsDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs")
+	corruptDirectory := filepath.Join(runsDirectory, "corrupt-list-test")
 	require.NoError(t, os.MkdirAll(corruptDirectory, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(corruptDirectory, "journal.jsonl"), []byte("not-json\n"), 0o600))
-	incompleteDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "incomplete-list-test")
+	incompleteDirectory := filepath.Join(runsDirectory, "incomplete-list-test")
 	require.NoError(t, os.MkdirAll(incompleteDirectory, 0o700))
+	fileEntry := filepath.Join(runsDirectory, "file-list-test")
+	require.NoError(t, os.WriteFile(fileEntry, []byte("not-a-run-directory\n"), 0o600))
+	expectedUnavailable := []string{"corrupt-list-test", "file-list-test", "incomplete-list-test"}
+	symlinkEntry := filepath.Join(runsDirectory, "symlink-list-test")
+	if err := os.Symlink(t.TempDir(), symlinkEntry); err == nil {
+		expectedUnavailable = append(expectedUnavailable, "symlink-list-test")
+	}
 
 	runs, unavailable, err := service.ListRecovery()
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
-	require.Len(t, unavailable, 2)
-	assert.Equal(t, []string{"corrupt-list-test", "incomplete-list-test"}, []string{unavailable[0].ID, unavailable[1].ID})
+	require.Len(t, unavailable, len(expectedUnavailable))
+	unavailableIDs := make([]string, 0, len(unavailable))
+	for _, item := range unavailable {
+		unavailableIDs = append(unavailableIDs, item.ID)
+	}
+	assert.Equal(t, expectedUnavailable, unavailableIDs)
 	_, err = service.List()
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "corrupt-list-test")
@@ -827,6 +839,32 @@ func TestServiceBudgetPauseAndResumeReplenishment(t *testing.T) {
 	require.NotNil(t, resumed.CurrentAction)
 	assert.Equal(t, ActionImplement, resumed.CurrentAction.Kind)
 	assert.Equal(t, 1, resumed.RemainingBudget)
+}
+
+func TestServiceDecisionAnswerReplayRemainsIdempotentWhenBudgetIsExhausted(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 1, true)
+	actionID := run.CurrentAction.ActionID
+	run = submitCurrent(t, service, run, Outcome{
+		Status:  OutcomeNeedsInput,
+		Summary: "one decision is required",
+		Pause:   pauseReport(PauseDecisionRequired, "Choose the bounded option.", nil),
+	})
+
+	answered, err := service.Answer(run.ID, actionID, AnswerOptions{Text: "Use the bounded option."})
+	require.NoError(t, err)
+	assert.Equal(t, RunPaused, answered.State)
+	assert.Equal(t, PauseBudgetExhausted, answered.PauseReason)
+	assert.Nil(t, answered.CurrentAction)
+
+	replayed, err := service.Answer(run.ID, actionID, AnswerOptions{Text: "Use the bounded option."})
+	require.NoError(t, err)
+	assert.Equal(t, answered.State, replayed.State)
+	assert.Equal(t, answered.PauseReason, replayed.PauseReason)
+	assert.Equal(t, answered.RemainingBudget, replayed.RemainingBudget)
+	assert.Equal(t, answered.Answers, replayed.Answers)
 }
 
 func TestServiceEnvironmentPauseProvidesResumeCommand(t *testing.T) {

@@ -20,12 +20,18 @@
     "nonEmptyPlainText": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$"
+      "allOf": [
+        { "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
     },
     "nonEmptyMarkdownText": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$"
+      "allOf": [
+        { "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
     },
     "githubNodeID": {
       "allOf": [
@@ -188,10 +194,10 @@
       "additionalProperties": false,
       "required": ["comment_node_id", "comment_database_id", "url", "author_id", "observed_updated_at"],
       "properties": {
-        "comment_node_id": { "type": "string", "minLength": 1 },
+        "comment_node_id": { "$ref": "#/$defs/githubNodeID" },
         "comment_database_id": { "type": "integer", "minimum": 1 },
         "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/" },
-        "author_id": { "type": "string", "minLength": 1 },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
         "observed_updated_at": { "type": "string", "format": "date-time" }
       }
     },
@@ -205,7 +211,7 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
-        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "title": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }, { "maxLength": 512 }] },
         "body_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "material_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
@@ -228,8 +234,8 @@
         "profile": { "const": "change/v2" },
         "provider": { "const": "github" },
         "host": { "const": "github.com" },
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
         "issue_number": { "type": "integer", "minimum": 1 },
         "canonical_url": { "type": "string", "format": "uri" },
         "url_aliases": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "format": "uri" } },
@@ -237,7 +243,7 @@
         "manifest_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "parent_requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "title": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "sections": {
           "type": "array",
@@ -260,7 +266,7 @@
       "required": [
         "candidate_id", "valid", "classification", "classification_code", "source_version", "parser_version",
         "provider", "host", "repository_id", "issue_id", "issue_number", "canonical_url", "url_aliases",
-        "source_revision", "title", "created_at"
+        "title", "created_at"
       ],
       "properties": {
         "candidate_id": { "type": "string", "minLength": 1 },
@@ -274,35 +280,41 @@
             "source_section_too_large", "source_bundle_too_large", "invalid_change_body"
           ]
         },
-        "classification_error": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "classification_error": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }, { "maxLength": 1024 }] },
         "source_version": { "const": 2 },
         "parser_version": { "const": 2 },
         "provider": { "const": "github" },
         "host": { "const": "github.com" },
-        "repository_id": { "type": "string", "minLength": 1 },
-        "issue_id": { "type": "string", "minLength": 1 },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
         "issue_number": { "type": "integer", "minimum": 1 },
         "canonical_url": { "type": "string", "format": "uri" },
         "url_aliases": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "format": "uri" } },
+        "observation_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "title": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "snapshot": { "$ref": "#/$defs/pinnedSource" },
         "created_at": { "type": "string", "format": "date-time" }
       },
       "oneOf": [
         {
-          "required": ["requirements_revision", "snapshot"],
+          "required": ["source_revision", "requirements_revision", "snapshot"],
           "properties": {
             "valid": { "const": true },
             "classification": { "const": "valid" },
             "classification_code": { "const": "valid_change" }
           },
-          "not": { "required": ["classification_error"] }
+          "not": {
+            "anyOf": [
+              { "required": ["classification_error"] },
+              { "required": ["observation_sha256"] }
+            ]
+          }
         },
         {
-          "required": ["classification_error"],
+          "required": ["classification_error", "observation_sha256"],
           "properties": {
             "valid": { "const": false },
             "classification": { "const": "invalid" },
@@ -317,6 +329,7 @@
           },
           "not": {
             "anyOf": [
+              { "required": ["source_revision"] },
               { "required": ["requirements_revision"] },
               { "required": ["snapshot"] }
             ]
@@ -1174,7 +1187,7 @@
       "properties": {
         "kind": { "const": "change_issue" },
         "canonical_url": { "type": "string", "format": "uri" },
-        "issue_id": { "type": "string", "minLength": 1 },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
         "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "manifest_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
@@ -1187,7 +1200,7 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
-        "title": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
         "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "material_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "bytes": { "type": "integer", "minimum": 1, "maximum": 262144 }
@@ -1226,11 +1239,11 @@
             { "const": "_machine" },
             { "const": "material" },
             { "const": "--root" },
-            { "type": "string", "minLength": 1 },
+            { "$ref": "#/$defs/nonEmptyPlainText" },
             { "const": "--run" },
-            { "type": "string", "minLength": 1 },
+            { "$ref": "#/$defs/nonEmptyPlainText" },
             { "const": "--action" },
-            { "type": "string", "minLength": 1 }
+            { "$ref": "#/$defs/nonEmptyPlainText" }
           ],
           "items": false
         },
@@ -1265,7 +1278,7 @@
       "required": ["kind", "value"],
       "properties": {
         "kind": { "enum": ["path", "git_ref", "external_resource", "data_domain"] },
-        "value": { "type": "string", "minLength": 1 }
+        "value": { "$ref": "#/$defs/nonEmptyPlainText" }
       }
     },
     "destructiveRequest": {
@@ -1280,7 +1293,7 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/destructiveTarget" }
         },
-        "impact": { "type": "string", "minLength": 1 },
+        "impact": { "$ref": "#/$defs/nonEmptyMarkdownText" },
         "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
@@ -1298,7 +1311,7 @@
       ],
       "properties": {
         "request_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
-        "originating_action_id": { "type": "string", "minLength": 1 },
+        "originating_action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
         "scope_version": { "const": 1 },
         "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "targets": {
@@ -1307,7 +1320,7 @@
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/destructiveTarget" }
         },
-        "impact": { "type": "string", "minLength": 1 },
+        "impact": { "$ref": "#/$defs/nonEmptyMarkdownText" },
         "confirmed_at": { "type": "string", "format": "date-time", "pattern": "Z$" }
       }
     },
@@ -1326,12 +1339,12 @@
       ],
       "properties": {
         "contract_version": { "const": 2 },
-        "run_id": { "type": "string", "minLength": 1 },
-        "action_id": { "type": "string", "minLength": 1 },
+        "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
         "kind": { "enum": ["orient", "clarify", "implement", "review", "summarize"] },
-        "goal": { "type": "string", "minLength": 1 },
-        "brief": { "type": "string", "minLength": 1, "maxLength": 8192 },
-        "context": { "type": "string", "minLength": 1, "maxLength": 131072 },
+        "goal": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "brief": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }, { "maxLength": 8192 }] },
+        "context": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }, { "maxLength": 131072 }] },
         "source": { "$ref": "#/$defs/actionSource" },
         "requirements": { "$ref": "#/$defs/actionRequirements" },
         "destructive_authorization": { "$ref": "#/$defs/destructiveAuthorization" },
@@ -1397,9 +1410,9 @@
       "properties": {
         "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
         "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
-        "title": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
         "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "markdown": { "type": "string", "minLength": 1, "maxLength": 262144 }
+        "markdown": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }, { "maxLength": 262144 }] }
       }
     },
     "actionMaterial": {
@@ -1412,8 +1425,8 @@
       "properties": {
         "contract_version": { "const": 2 },
         "message_type": { "const": "action_material" },
-        "run_id": { "type": "string", "minLength": 1 },
-        "action_id": { "type": "string", "minLength": 1 },
+        "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
         "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "section": { "$ref": "#/$defs/actionMaterialSection" }
       }
@@ -1424,7 +1437,7 @@
       "required": ["kind", "brief"],
       "properties": {
         "kind": { "enum": ["clarify", "implement", "summarize"] },
-        "brief": { "type": "string", "minLength": 1, "maxLength": 8192 }
+        "brief": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }, { "maxLength": 8192 }] }
       }
     },
     "activity": {
@@ -1433,9 +1446,9 @@
       "required": ["kind", "command", "exit_code", "summary"],
       "properties": {
         "kind": { "enum": ["test", "typecheck", "build", "lint"] },
-        "command": { "type": "string", "minLength": 1 },
+        "command": { "$ref": "#/$defs/nonEmptyMarkdownText" },
         "exit_code": { "type": "integer" },
-        "summary": { "type": "string", "minLength": 1 }
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" }
       }
     },
     "finding": {
@@ -1443,9 +1456,9 @@
       "additionalProperties": false,
       "required": ["location", "summary", "detail"],
       "properties": {
-        "location": { "type": "string", "minLength": 1 },
-        "summary": { "type": "string", "minLength": 1 },
-        "detail": { "type": "string", "minLength": 1 }
+        "location": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "detail": { "$ref": "#/$defs/nonEmptyMarkdownText" }
       }
     },
     "pause": {
@@ -1454,14 +1467,14 @@
       "required": ["reason", "question", "destructive_request"],
       "properties": {
         "reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable"] },
-        "question": { "type": "string", "minLength": 1 },
+        "question": { "$ref": "#/$defs/nonEmptyMarkdownText" },
         "destructive_request": {
           "oneOf": [
             { "$ref": "#/$defs/destructiveRequest" },
             { "type": "null" }
           ]
         },
-        "supersedes_answer_action_id": { "type": "string", "minLength": 1 }
+        "supersedes_answer_action_id": { "$ref": "#/$defs/nonEmptyPlainText" }
       },
       "allOf": [
         {
@@ -1532,10 +1545,10 @@
       ],
       "properties": {
         "contract_version": { "const": 2 },
-        "action_id": { "type": "string", "minLength": 1 },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
         "action_kind": { "enum": ["orient", "clarify", "implement", "review", "summarize"] },
         "status": { "enum": ["completed", "needs_input", "partial", "error"] },
-        "summary": { "type": "string", "minLength": 1 },
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" },
         "observations": { "type": "array", "items": { "type": "string" } },
         "known_issues": { "type": "array", "items": { "type": "string" } },
         "suggested_actions": {

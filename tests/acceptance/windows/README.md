@@ -5,8 +5,8 @@ These scripts are the native Windows entry points used by the `windows-latest` C
 Build `slipway.exe`, then run both commands from the repository root:
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File acceptance\windows\native-powershell.ps1 -SlipwayExe .\slipway.exe
-cmd.exe /d /v:on /c acceptance\windows\native-cmd.cmd .\slipway.exe
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\native-powershell.ps1 -SlipwayExe .\slipway.exe
+cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd .\slipway.exe
 ```
 
 Both modes create a disposable Git repository whose path contains spaces, Unicode, `%`, `!`, `&`, and `^`. They exercise:

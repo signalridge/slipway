@@ -1,19 +1,19 @@
-name: PR Title Check
+name: PR Title Advisory
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
 permissions:
-  pull-requests: write
-  statuses: write
+  pull-requests: read
 
 jobs:
   validate:
-    name: Validate PR Title
+    name: Observe PR Title
     runs-on: ubuntu-latest
     steps:
       - name: Check Conventional Commit format
+        continue-on-error: true
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,3 +43,6 @@ jobs:
               fix(api): resolve timeout issue
               feat!: breaking change
           wip: true
+      - name: Record advisory semantics
+        if: always()
+        run: echo 'PR title format is an advisory observation, not a merge or release gate.' >> "$GITHUB_STEP_SUMMARY"

@@ -201,6 +201,7 @@ type SourceCandidateInput struct {
 	IssueNumber          int                  `json:"issue_number"`
 	CanonicalURL         string               `json:"canonical_url"`
 	URLAliases           []string             `json:"url_aliases"`
+	ObservationSHA256    string               `json:"observation_sha256,omitempty"`
 	SourceRevision       string               `json:"source_revision,omitempty"`
 	RequirementsRevision string               `json:"requirements_revision,omitempty"`
 	Title                string               `json:"title"`
@@ -294,6 +295,7 @@ func parseSourceCandidate(raw []byte) (SourceCandidateInput, error, error) {
 		Sections:                   sections,
 		materials:                  cloneSourceMaterials(materials),
 	}
+	candidate.ObservationSHA256 = ""
 	candidate.SourceRevision = snapshot.SourceRevision
 	candidate.Valid = true
 	candidate.Classification = SourceClassificationValid
@@ -305,19 +307,19 @@ func parseSourceCandidate(raw []byte) (SourceCandidateInput, error, error) {
 
 func sourceCandidateIdentity(envelope RawSourceEnvelope, normalizedBody string) SourceCandidateInput {
 	return SourceCandidateInput{
-		Valid:          false,
-		SourceVersion:  SourceVersion,
-		ParserVersion:  ParserVersion,
-		Provider:       envelope.Provider,
-		Host:           envelope.Host,
-		RepositoryID:   envelope.RepositoryID,
-		IssueID:        envelope.IssueID,
-		IssueNumber:    envelope.IssueNumber,
-		CanonicalURL:   envelope.CanonicalURL,
-		URLAliases:     make([]string, 0),
-		SourceRevision: observedSourceRevision(envelope, normalizedBody),
-		Title:          envelope.Title,
-		Parent:         cloneSourceParent(envelope.Parent),
+		Valid:             false,
+		SourceVersion:     SourceVersion,
+		ParserVersion:     ParserVersion,
+		Provider:          envelope.Provider,
+		Host:              envelope.Host,
+		RepositoryID:      envelope.RepositoryID,
+		IssueID:           envelope.IssueID,
+		IssueNumber:       envelope.IssueNumber,
+		CanonicalURL:      envelope.CanonicalURL,
+		URLAliases:        make([]string, 0),
+		ObservationSHA256: sourceObservationSHA256(envelope, normalizedBody),
+		Title:             envelope.Title,
+		Parent:            cloneSourceParent(envelope.Parent),
 	}
 }
 
@@ -488,6 +490,23 @@ func validatePinnedCommentURL(field, value, canonicalURL string, aliases []strin
 }
 
 func validateSourceCandidateInput(input SourceCandidateInput) error {
+	projectionDigest := input.SourceRevision
+	if input.Valid {
+		if input.ObservationSHA256 != "" {
+			return errors.New("valid source candidate must omit observation_sha256")
+		}
+		if !validSHA256(input.SourceRevision) {
+			return errors.New("valid source candidate requires source_revision in lowercase sha256:<64 hex> format")
+		}
+	} else {
+		if input.SourceRevision != "" {
+			return errors.New("invalid source candidate must omit source_revision")
+		}
+		if !validSHA256(input.ObservationSHA256) {
+			return errors.New("invalid source candidate requires observation_sha256 in lowercase sha256:<64 hex> format")
+		}
+		projectionDigest = input.ObservationSHA256
+	}
 	if err := validatePersistedSourceProjection(
 		input.SourceVersion,
 		input.ParserVersion,
@@ -498,7 +517,7 @@ func validateSourceCandidateInput(input SourceCandidateInput) error {
 		input.IssueNumber,
 		input.CanonicalURL,
 		input.URLAliases,
-		input.SourceRevision,
+		projectionDigest,
 		input.Title,
 		input.Parent,
 	); err != nil {

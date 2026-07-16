@@ -142,7 +142,8 @@ func TestKiroCLIRequiresAndPersistsItsSurface(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, report.Written, ".kiro/agents/slipway-run.json")
 	assert.Contains(t, report.Written, ".kiro/slipway/capabilities/slipway-run.md")
-	agent, err := os.ReadFile(filepath.Join(root, ".kiro", "agents", "slipway-run.json"))
+	agentPath := filepath.Join(root, ".kiro", "agents", "slipway-run.json")
+	agent, err := os.ReadFile(agentPath)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{
 		"name":"slipway-run",
@@ -162,6 +163,15 @@ func TestKiroCLIRequiresAndPersistsItsSurface(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "cli", manifest.Surface["kiro"])
+
+	report, err = Uninstall(UninstallOptions{Root: root, Tools: []string{"kiro"}})
+	require.NoError(t, err)
+	assert.Contains(t, report.Removed, ".kiro/agents/slipway-run.json")
+	_, err = os.Stat(agentPath)
+	assert.ErrorIs(t, err, os.ErrNotExist)
+	_, found, err = loadManifest(root, host)
+	require.NoError(t, err)
+	assert.False(t, found)
 }
 
 func TestCopilotDetectionRecognizesItsSupportedProjectSurfaces(t *testing.T) {
@@ -221,6 +231,21 @@ func TestDetectedFirstKiroInstallWarnsWithoutBlockingOtherHosts(t *testing.T) {
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(root, ".kiro", "steering", "slipway-run.md"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestDetectedFirstKiroInstallRequiresSurfaceWhenItIsTheOnlyHost(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".kiro"), 0o700))
+
+	report, err := Install(InstallOptions{Root: root, Refresh: true})
+	var surfaceErr *SurfaceSelectionError
+	require.ErrorAs(t, err, &surfaceErr)
+	assert.Equal(t, "kiro", surfaceErr.HostID)
+	assert.Equal(t, TransactionOutcomeNotCommitted, report.TransactionOutcome)
+	assert.Empty(t, report.Hosts)
+	assert.Empty(t, report.Written)
+	assert.Empty(t, report.Removed)
+	assert.Empty(t, report.Warnings)
 }
 
 func TestOwnershipInspectionBoundsRepositoryControlledFiles(t *testing.T) {
@@ -876,6 +901,31 @@ func TestRootConfinedTransactionRejectsParentSwapAfterAdapterPlanning(t *testing
 	err = fsutil.ApplyFileTransactionWithin(root, plan.ops)
 	require.Error(t, err)
 	entries, readErr := os.ReadDir(outside)
+	require.NoError(t, readErr)
+	assert.Empty(t, entries)
+}
+
+func TestAdapterPlanningRejectsRepositoryRootReplacement(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("renaming an opened directory is not portable on Windows")
+	}
+	root := t.TempDir()
+	original := root + "-original"
+	t.Cleanup(func() { _ = os.RemoveAll(original) })
+	pinnedRoot, err := fsutil.OpenPinnedRoot(root)
+	require.NoError(t, err)
+	defer pinnedRoot.Close()
+
+	require.NoError(t, os.Rename(root, original))
+	require.NoError(t, os.Mkdir(root, 0o700))
+	host, ok := lookupHost("claude")
+	require.True(t, ok)
+
+	plan, err := planInstallWithFilesystem(pinnedRoot, root, host, true)
+	var identityErr *fsutil.RootNamespaceIdentityError
+	require.ErrorAs(t, err, &identityErr)
+	assert.Empty(t, plan.ops)
+	entries, readErr := os.ReadDir(root)
 	require.NoError(t, readErr)
 	assert.Empty(t, entries)
 }

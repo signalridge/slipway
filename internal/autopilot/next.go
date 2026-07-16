@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -425,18 +426,10 @@ func validateNextOperationOptions(
 }
 
 func nextInputsExactly(inputs []NextInput, expected ...NextInput) bool {
-	if len(inputs) != len(expected) {
-		return false
-	}
-	for index := range inputs {
-		actual := inputs[index]
-		want := expected[index]
-		if actual.Name != want.Name || actual.Type != want.Type || actual.Flag != want.Flag ||
-			actual.Required != want.Required || len(actual.Choices) != 0 {
-			return false
-		}
-	}
-	return true
+	return slices.EqualFunc(inputs, expected, func(actual, want NextInput) bool {
+		return actual.Name == want.Name && actual.Type == want.Type && actual.Flag == want.Flag &&
+			actual.Required == want.Required && len(actual.Choices) == 0
+	})
 }
 
 func nextSourceChoiceInputIsBounded(input NextInput) bool {

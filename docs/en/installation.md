@@ -118,15 +118,15 @@ The commands below use `./slipway`, the binary built from this checkout. If you 
 ./slipway doctor
 ```
 
-Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several non-Kiro hosts.
+Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several hosts.
 
-Kiro must be installed separately the first time so its surface is unambiguous:
+Kiro needs an explicit surface on its first install:
 
 ```bash
 ./slipway install --tool kiro --surface ide   # or: --surface cli
 ```
 
-Do not combine `--surface` with non-Kiro selections. Once the Kiro surface is recorded, later refresh and uninstall infer it. A first-time `--tool all` selection also needs Kiro to have a recorded surface, so explicit per-host setup is clearer.
+When Kiro is part of a mixed selection, `--surface` applies only to Kiro; for example, `--tool claude --tool kiro --surface ide` and `--tool all --surface ide` are valid. Refresh and uninstall infer the recorded Kiro surface.
 
 Without `--tool`, Slipway uses detected host directories. Detection is only a convenience; inspect `./slipway list` before installing into a repository with several host configurations.
 

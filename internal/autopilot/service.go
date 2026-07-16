@@ -641,7 +641,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 		if receipt := findAnswerRecord(run, actionID); receipt != nil {
 			if answerReceiptMatches(*receipt, options, payloadSHA256) {
 				result = run
-				if run.State == RunPaused && run.PauseReason == PauseBudgetExhausted && run.RemainingBudget == 0 {
+				if receipt.ConfirmDestructive && run.State == RunPaused && run.PauseReason == PauseBudgetExhausted && run.RemainingBudget == 0 {
 					responseErr = resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
 				}
 				return nil, run, nil

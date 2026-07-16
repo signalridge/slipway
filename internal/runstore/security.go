@@ -8,16 +8,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
-	"syscall"
-	"time"
 
 	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 const (
 	rootRenameAttempts = 10
-	rootRenameDelay    = 5 * time.Millisecond
 )
 
 type leafIdentity struct {
@@ -135,13 +131,20 @@ func verifyLeafIdentity(root *os.Root, name string, expected leafIdentity) error
 	return nil
 }
 
+func randomRunLeaf(prefix, destination string) (string, error) {
+	var random [8]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", err
+	}
+	return prefix + destination + "-" + hex.EncodeToString(random[:]), nil
+}
+
 func createTemporaryFileInRoot(root *os.Root, destination string, perm os.FileMode) (string, *os.File, error) {
 	for attempt := 0; attempt < rootRenameAttempts; attempt++ {
-		var random [8]byte
-		if _, err := rand.Read(random[:]); err != nil {
+		name, err := randomRunLeaf(".tmp-", destination)
+		if err != nil {
 			return "", nil, err
 		}
-		name := ".tmp-" + destination + "-" + hex.EncodeToString(random[:])
 		file, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_RDWR, perm)
 		if errors.Is(err, fs.ErrExist) {
 			continue
@@ -161,24 +164,4 @@ func createTemporaryFileInRoot(root *os.Root, destination string, perm os.FileMo
 		return name, file, nil
 	}
 	return "", nil, errors.New("could not allocate journal temp file")
-}
-
-func renameInRootWithRetry(root *os.Root, oldName, newName string) error {
-	err := root.Rename(oldName, newName)
-	if err == nil || runtime.GOOS != "windows" {
-		return err
-	}
-	for attempt := 0; attempt < rootRenameAttempts && windowsRenameRetryable(err); attempt++ {
-		time.Sleep(rootRenameDelay)
-		err = root.Rename(oldName, newName)
-		if err == nil {
-			return nil
-		}
-	}
-	return err
-}
-
-func windowsRenameRetryable(err error) bool {
-	var errno syscall.Errno
-	return errors.As(err, &errno) && (errno == 5 || errno == 32)
 }

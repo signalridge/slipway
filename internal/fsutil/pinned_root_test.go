@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -25,7 +26,19 @@ func TestPinnedRootRejectsRepositoryReplacementBeforeMutation(t *testing.T) {
 
 	originalPath := filepath.Join(parent, "repository-original")
 	if err := os.Rename(rootPath, originalPath); err != nil {
-		t.Fatal(err)
+		if runtime.GOOS != "windows" {
+			t.Fatal(err)
+		}
+		// Windows may deny renaming an opened directory. That is a stronger
+		// namespace pin than the replacement scenario below, and it must be
+		// asserted rather than skipped so native CI still exercises the policy.
+		if validateErr := pinned.ValidateNamespace(); validateErr != nil {
+			t.Fatalf("ValidateNamespace() after denied replacement = %v", validateErr)
+		}
+		if _, statErr := os.Stat(originalPath); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("denied replacement unexpectedly created %q: %v", originalPath, statErr)
+		}
+		return
 	}
 	if err := os.Mkdir(rootPath, 0o700); err != nil {
 		t.Fatal(err)

@@ -325,6 +325,9 @@ func TestProjectionReplacementAfterJournalCommitReportsStale(t *testing.T) {
 	assert.True(t, mutationErr.ProjectionStale)
 	assert.False(t, mutationErr.NamespaceDetached)
 	assert.Equal(t, PhaseProjectionRename, mutationErr.Phase)
+	replacement, readErr := os.ReadFile(paths.RunFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, []byte("replacement projection"), replacement, "the competing projection must survive the failed commit")
 	assertReplayContainsOneUpdate(t, store, runID)
 }
 
