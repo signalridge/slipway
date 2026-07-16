@@ -52,6 +52,8 @@ Change body 还包含一个 `slipway-manifest` block，列出已接受的 sectio
 4. 使用可对账的 operation/item marker 发布；
 5. 回读并报告 created、matched、failed 或 ambiguous。
 
+由于 provider comment ID 只有在 Issue 和 chapter comment 创建后才存在，Change publication 可以短暂创建正文仅包含 operation/item receipt marker 的 Issue。这个 receipt-only body 只是非权威 reconciliation resource，不是有效 Change source、Run state 或新的 lifecycle stage。一次确认的完整 operation plan 必须已经包含精确 chapter body/digest，以及把 provider 返回 ID 插入最终 manifest 的确定性规则。这些 ID 是 reconciliation fact，不是第二个人类决定；只有出现 remote drift、receipt 丢失、歧义，或已批准内容/构造规则发生实质变化时，才需要重新 preview 和确认。
+
 这些是宿主侧指令，不是 Go CLI 实现的 GitHub transaction。GitHub 不提供多 Issue transaction 或通用 exactly-once create。响应含糊或部分成功时，宿主应报告观察结果，不得声称已回滚或盲目重试。
 
 现有无 marker Issue 不会被静默转换成 managed Change。宿主应提供明确选择：用户手工更新、创建一个链接原 Issue 的独立 managed Change，或使用有界 ad-hoc Run。

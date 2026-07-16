@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -112,4 +113,20 @@ func TestStatusDistinguishesMissingAndCorruptRuns(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stdout), &healthyStatus))
 	assert.Equal(t, autopilot.RunActive, healthyStatus.State)
 	assert.NotEmpty(t, listed.UnavailableRuns[0].Detail)
+}
+
+func TestTargetedStatusDistinguishesBusyRunFromInvalidJournal(t *testing.T) {
+	t.Parallel()
+	repository := t.TempDir()
+	const runID = "00000000-0000-4000-8000-000000000001"
+
+	err := targetedStatusLoadError(repository, runID, fmt.Errorf("acquire commit boundary: %w", autopilot.ErrRunBusy))
+	var cliErr *CLIError
+	require.ErrorAs(t, err, &cliErr)
+	assert.Equal(t, "run_busy", cliErr.Code)
+	assert.Equal(t, exitCodeRuntime, cliErr.ExitCode)
+	assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, "inspect-run", cliErr.Next.Variants[0].ID)
+	assert.Equal(t, []string{"slipway", "status", runID, "--root", repository}, cliErr.Next.Variants[0].BaseArgv)
 }

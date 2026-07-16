@@ -2,12 +2,16 @@ package fsutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+const gitDiscoveryTimeout = 30 * time.Second
 
 // GitRepository identifies the active worktree and its Git metadata locations.
 // CommonDir is shared by linked worktrees; GitDir belongs to this worktree.
@@ -46,9 +50,11 @@ func DiscoverGit(start string) (GitRepository, error) {
 		{"rev-parse", "--path-format=absolute", "--git-dir"},
 		{"rev-parse", "--path-format=absolute", "--git-common-dir"},
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), gitDiscoveryTimeout)
+	defer cancel()
 	paths := make([]string, len(queries))
 	for i, query := range queries {
-		output, runErr := runGit(abs, query...)
+		output, runErr := runGit(ctx, abs, query...)
 		if runErr != nil {
 			return GitRepository{}, runErr
 		}
@@ -83,12 +89,15 @@ func trimGitOutputTerminator(output string) string {
 	return output
 }
 
-func runGit(root string, args ...string) (string, error) {
-	cmd := exec.Command("git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal rev-parse arguments; no shell interpretation.
+func runGit(ctx context.Context, root string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal rev-parse arguments; no shell interpretation.
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", fmt.Errorf("git %s timed out after %s: %w", strings.Join(args, " "), gitDiscoveryTimeout, ctxErr)
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = err.Error()

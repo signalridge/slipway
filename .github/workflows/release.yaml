@@ -514,11 +514,29 @@ jobs:
           VERSION: ${{ needs.release.outputs.tag_name }}
         run: |
           TAG="${VERSION#v}"
-          docker pull "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
-          docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --version
-          docker run --rm "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" --help
-          docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" doctor --json
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          docker pull "$IMAGE"
+          docker run --rm "$IMAGE" --version
+          docker run --rm "$IMAGE" --help
+
+          SMOKE_VOLUME="slipway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+          trap 'docker volume rm -f "$SMOKE_VOLUME" >/dev/null 2>&1 || true' EXIT
+          docker volume create "$SMOKE_VOLUME" >/dev/null
+
+          docker run --rm --user 0 -v "$SMOKE_VOLUME:/workspace" \
+            --entrypoint sh "$IMAGE" -c \
+            'git init --quiet /workspace && chown -R 65532:65532 /workspace'
+
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" -w /workspace \
+            "$IMAGE" doctor --root /workspace --json
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" -w /workspace \
+            "$IMAGE" run --budget 1 --json --root /workspace --no-review -- \
+            "container ad-hoc smoke"
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" \
+            -v "$PWD/tests/acceptance/fixtures/container-source-envelope.json:/source-envelope.json:ro" \
+            -w /workspace \
+            "$IMAGE" run --budget 1 --json --root /workspace --no-review \
+            --source-file /source-envelope.json -- "container source smoke"
       - name: Run Trivy vulnerability scan
         id: image-ref
         env:

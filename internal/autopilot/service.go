@@ -537,7 +537,7 @@ func (service *Service) ListRecovery() ([]Run, []UnavailableRun, error) {
 			return replayRunProjectionEvent(&run, event)
 		})
 		if loadErr != nil {
-			unavailable = append(unavailable, UnavailableRun{ID: id, Code: "run_journal_invalid", Detail: loadErr.Error()})
+			unavailable = append(unavailable, UnavailableRun{ID: id, Code: unavailableRunCode(loadErr), Detail: loadErr.Error()})
 			continue
 		}
 		if run.ID != id {
@@ -559,6 +559,17 @@ func (service *Service) ListRecovery() ([]Run, []UnavailableRun, error) {
 	sort.Slice(unavailable, func(i, j int) bool { return unavailable[i].ID < unavailable[j].ID })
 	return runs, unavailable, nil
 }
+
+func unavailableRunCode(err error) string {
+	if errors.Is(err, ErrRunBusy) {
+		return "run_busy"
+	}
+	return "run_journal_invalid"
+}
+
+// ErrRunBusy identifies a bounded timeout while acquiring a Run's
+// commit-boundary lock, without exposing the storage package to CLI callers.
+var ErrRunBusy = runstore.ErrRunLockTimeout
 
 func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, error) {
 	if _, err := service.validateOpenWorkspace(); err != nil {

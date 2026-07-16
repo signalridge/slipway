@@ -158,6 +158,23 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	}, argv)
 }
 
+func TestUnavailableWorkspaceCommandNextDoesNotRequireGitMetadata(t *testing.T) {
+	t.Parallel()
+	workspace := filepath.Join(t.TempDir(), "missing workspace")
+	next, err := NewUnavailableWorkspaceCommandNext(
+		workspace,
+		"retry-doctor",
+		[]string{"slipway", "doctor", "--root", workspace, "--json"},
+		[]NextInput{},
+	)
+	require.NoError(t, err)
+	require.NoError(t, next.Validate())
+	assert.Equal(t, NextOperationCommand, next.Operation)
+	assert.Equal(t, workspace, next.WorkspaceRoot())
+	require.Len(t, next.Variants, 1)
+	assert.Equal(t, "retry-doctor", next.Variants[0].ID)
+}
+
 func TestResolveStartNextInsertsInputsBeforeGoalSeparator(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()

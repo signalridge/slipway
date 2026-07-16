@@ -57,7 +57,7 @@ func makeStopCmd() *cobra.Command {
 			}
 			run, err := service.Stop(runID)
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			if jsonOutput {
 				return writeProtocolResult(command, run)

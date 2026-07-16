@@ -7,18 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"syscall"
-	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
-
-//go:cgo_import_dynamic libc_freadlink freadlink "/usr/lib/libSystem.B.dylib"
-
-var libcFreadlinkTrampolineAddr uintptr
-
-//go:linkname syscallSyscall syscall.syscall
-func syscallSyscall(fn, a1, a2, a3 uintptr) (r1, r2 uintptr, err syscall.Errno)
 
 func openSymlinkIdentity(root *os.Root, name string) (*os.File, error) {
 	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
@@ -63,26 +54,21 @@ func validateOpenedSymlinkIdentity(root *os.Root, name string, identity *os.File
 	return nil
 }
 
-func readSymlinkIdentity(identity *os.File) (string, error) {
-	target, err := readSymlinkIdentityFD(identity.Fd())
-	runtime.KeepAlive(identity)
-	return target, err
-}
-
-func readSymlinkIdentityFD(fd uintptr) (string, error) {
-	for size := 256; size <= 1<<20; size *= 2 {
-		buffer := make([]byte, size)
-		// #nosec G103 -- freadlink requires a native pointer; buffer bounds and
-		// lifetime are fixed by len(buffer) and the synchronous syscall below.
-		count, _, errno := syscallSyscall(libcFreadlinkTrampolineAddr, fd, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
-		if errno != 0 {
-			return "", fmt.Errorf("read pinned symlink: %w", errno)
-		}
-		if int(count) < len(buffer) {
-			return string(buffer[:count]), nil
-		}
+func readSymlinkIdentity(root *os.Root, name string, identity *os.File) (string, error) {
+	// freadlink is unavailable before macOS 13. Keep the leaf handle pinned,
+	// read through the anchored parent, and reject any identity change visible
+	// before or after readlinkat.
+	if err := validateOpenedSymlinkIdentity(root, name, identity); err != nil {
+		return "", fmt.Errorf("read pinned symlink: %w", err)
 	}
-	return "", fmt.Errorf("read pinned symlink: target exceeds 1 MiB")
+	target, err := root.Readlink(name)
+	if err != nil {
+		return "", fmt.Errorf("read pinned symlink: %w", err)
+	}
+	if err := validateOpenedSymlinkIdentity(root, name, identity); err != nil {
+		return "", fmt.Errorf("read pinned symlink: %w", err)
+	}
+	return target, nil
 }
 
 func validateSymlinkTransactionIdentity(_ os.FileInfo) error {

@@ -27,7 +27,7 @@ func executeRootCommand(root *cobra.Command, args ...string) error {
 	root.SetArgs(args)
 	errorRoot := rootForEarlyError(args)
 	if err := root.Execute(); err != nil {
-		cliErr := asCLIError(err)
+		cliErr := asCLIErrorWithContext(err, cliErrorContext{WorkspaceRoot: errorRoot})
 		if errorRoot != "" && cliErr.Next.Operation == autopilot.NextOperationNone {
 			cliErr.Next = autopilot.NoneNext(errorRoot)
 		}
@@ -44,11 +44,7 @@ func rootForEarlyError(args []string) string {
 	if !found {
 		return ""
 	}
-	resolved, err := resolveRoot(explicit)
-	if err != nil {
-		return ""
-	}
-	return resolved
+	return unresolvedRootHint(explicit)
 }
 
 func rawRootArgument(args []string) (string, bool) {

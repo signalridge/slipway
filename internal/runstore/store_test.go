@@ -263,24 +263,38 @@ func TestReadOnlyVisitSerializesAgainstWriterCommitBoundary(t *testing.T) {
 	}()
 	<-writerEntered
 
+	visitorRun, err := readOnly.openRunRoot("serialized-run")
+	require.NoError(t, err)
+	defer visitorRun.Close()
+	visitorWaiting := make(chan struct{})
+	var waitOnce sync.Once
+	visitorRun.writerWait = func() { waitOnce.Do(func() { close(visitorWaiting) }) }
 	visitorEntered := make(chan struct{})
 	visitorResult := make(chan error, 1)
 	var enterOnce sync.Once
 	go func() {
-		visitorResult <- readOnly.Visit("serialized-run", func(Event) error {
-			enterOnce.Do(func() { close(visitorEntered) })
-			return nil
+		visitorResult <- withRunCommitBoundary(visitorRun, func() error {
+			_, visitErr := visitJournalReadOnly(visitorRun.readOnlyJournalContext(), journalFileName, func(Event) error {
+				enterOnce.Do(func() { close(visitorEntered) })
+				return nil
+			})
+			return visitErr
 		})
 	}()
+	<-visitorWaiting
+	crossedCommitBoundary := false
 	select {
 	case <-visitorEntered:
-		t.Fatal("read-only replay crossed an in-progress writer commit boundary")
-	case <-time.After(100 * time.Millisecond):
+		crossedCommitBoundary = true
+	default:
 	}
 
 	close(releaseWriter)
 	require.NoError(t, <-writerResult)
 	require.NoError(t, <-visitorResult)
+	if crossedCommitBoundary {
+		t.Fatal("read-only replay crossed an in-progress writer commit boundary")
+	}
 	select {
 	case <-visitorEntered:
 	default:

@@ -10,6 +10,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/signalridge/slipway/internal/autopilot"
+	"github.com/signalridge/slipway/internal/runstore"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,6 +147,88 @@ func TestMachineErrorsHaveExactVersionedShape(t *testing.T) {
 	assertJSONString(t, machineError, "message")
 	exactRawJSONObject(t, machineError["next"], "operation", "workspace_identity", "variants")
 	assertMachineSchemaOutput(t, "cliError", stderr)
+}
+
+func TestStorageErrorEmitterUsesExplicitRunRecoveryAndMatchesSchema(t *testing.T) {
+	repository := newCLIRepository(t)
+	canonicalRepository, err := resolveRoot(repository)
+	require.NoError(t, err)
+	const runID = "00000000-0000-4000-8000-000000000001"
+	tests := []struct {
+		name       string
+		code       string
+		detailKeys []string
+		err        error
+	}{
+		{
+			name:       "journal record limit",
+			code:       "journal_record_too_large",
+			detailKeys: []string{"context", "size", "limit"},
+			err: &runstore.JournalRecordLimitError{
+				Context: "encoded journal event",
+				Size:    5 << 20,
+				Limit:   4 << 20,
+			},
+		},
+		{
+			name:       "committed mutation verification",
+			code:       "mutation_committed_verification_failed",
+			detailKeys: []string{"phase", "committed", "projection_stale", "namespace_detached", "ambiguous"},
+			err: &runstore.MutationError{
+				Phase:     runstore.PhaseJournalVerify,
+				Committed: true,
+				Err:       errors.New("verification fault"),
+			},
+		},
+		{
+			name:       "ambiguous mutation",
+			code:       "mutation_outcome_ambiguous",
+			detailKeys: []string{"phase", "committed", "projection_stale", "namespace_detached", "ambiguous"},
+			err: &runstore.MutationError{
+				Phase:     runstore.PhaseJournalSync,
+				Ambiguous: true,
+				Err:       errors.New("sync outcome is unknown"),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var rootFlag, runFlag string
+			root := &cobra.Command{
+				Use:           "slipway",
+				SilenceUsage:  true,
+				SilenceErrors: true,
+				Args:          cobra.NoArgs,
+				RunE: func(*cobra.Command, []string) error {
+					resolved, resolveErr := resolveRoot(rootFlag)
+					if resolveErr != nil {
+						return resolveErr
+					}
+					return withCLIErrorContext(test.err, resolved, runFlag)
+				},
+			}
+			root.Flags().StringVar(&rootFlag, "root", "", "workspace root")
+			root.Flags().StringVar(&runFlag, "run", "", "run id")
+			var stdout, stderr bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stderr)
+
+			err := executeRootCommand(root, "--root", repository, "--run", runID)
+			require.Error(t, err)
+			assert.Empty(t, stdout.String())
+			assertMachineSchemaOutput(t, "cliError", stderr.String())
+			emittedObject := exactJSONObject(t, stderr.String(), "contract_version", "code", "message", "next", "exit_code", "details")
+			exactRawJSONObject(t, emittedObject["details"], test.detailKeys...)
+
+			var emitted CLIError
+			require.NoError(t, json.Unmarshal(stderr.Bytes(), &emitted))
+			assert.Equal(t, test.code, emitted.Code)
+			assert.Equal(t, autopilot.NextOperationCommand, emitted.Next.Operation)
+			require.Len(t, emitted.Next.Variants, 1)
+			assert.Equal(t, "inspect-run", emitted.Next.Variants[0].ID)
+			assert.Equal(t, []string{"slipway", "status", runID, "--root", canonicalRepository}, emitted.Next.Variants[0].BaseArgv)
+		})
+	}
 }
 
 func TestUnknownHostAdapterMachineErrorHasExactUsageShape(t *testing.T) {

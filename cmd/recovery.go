@@ -20,6 +20,14 @@ func inputlessCommandNext(workspace, variantID string, argv ...string) autopilot
 	return commandNext(workspace, autopilot.NextOperationCommand, variantID, argv, []autopilot.NextInput{})
 }
 
+func unavailableWorkspaceCommandNext(workspace, variantID string, argv ...string) autopilot.Next {
+	next, err := autopilot.NewUnavailableWorkspaceCommandNext(workspace, variantID, argv, []autopilot.NextInput{})
+	if err != nil {
+		return autopilot.NoneNext(workspace)
+	}
+	return next
+}
+
 func writeHumanNext(writer io.Writer, next autopilot.Next) error {
 	if err := next.Validate(); err != nil {
 		return fmt.Errorf("render next: %w", err)

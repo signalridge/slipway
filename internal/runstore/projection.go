@@ -256,6 +256,14 @@ func commitSnapshot(transaction *runTransaction, prepared *preparedSnapshot) err
 	if err := relocatePreviousProjection(root, prepared); err != nil {
 		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("relocate old run projection without replacement: %w", err))
 	}
+	if err := transaction.run.store.hooks.at(faultProjectionRelocated); err != nil {
+		restoreErr := restorePreviousProjection(root, prepared)
+		return transaction.tracker.fail(
+			PhaseProjectionRename,
+			false,
+			errors.Join(fmt.Errorf("install run projection after relocation: %w", err), restoreErr),
+		)
+	}
 	if err := fsutil.RenameNoReplace(root, prepared.temporary, prepared.destination); err != nil {
 		restoreErr := restorePreviousProjection(root, prepared)
 		return transaction.tracker.fail(

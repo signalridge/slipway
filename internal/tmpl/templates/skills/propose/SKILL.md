@@ -45,16 +45,20 @@ An Objective is a single-stage publication. Show one preview containing the exac
 
 After one current external-write confirmation for that exact preview, refetch every mutable relation/label target and stop for a new preview if any approved revision drifted. Create every Issue or comment body with a private temporary body file or an equivalent cross-platform safe input path (for example, `gh issue create --body-file FILE`), never a POSIX heredoc. On timeout-after-success or another ambiguous response, reconcile the exact operation/item marker pair through a paginated non-search Issue API before any retry. Then perform a complete readback of identity, URL, exact title/full body and digest, both markers, labels, and relations, reporting each write as `created`, `matched`, `failed`, or `ambiguous`. Objective publication creates no chapter comments or manifest, asks for no second commit confirmation, and never starts Implement.
 
-## Change publication: two confirmed phases
+## Change publication: one confirmed operation
 
-A Change retains two confirmed phases because remote comment IDs do not exist before creation. First show every complete chapter draft and a draft-resource plan containing one operation UUID, one stable item UUID, target repository, exact comment body digests, intended section order/roles, exact labels, parent/dependencies, every pre-existing mutable target's provider identity and observed revision, the expected parent Requirements revision, and any missing-label creation with exact attributes. Confirm all non-authoritative draft and label-creation writes. A new Change draft body contains only these receipt markers and no `change/v2` level marker:
+Before any write, show every complete chapter draft and one approved operation plan containing one operation UUID, one stable item UUID, target repository, exact comment bodies and digests, intended section keys/order/roles/titles, the deterministic rule that inserts provider-returned comment IDs into the final manifest, exact labels, parent/dependencies, every pre-existing mutable target's provider identity and observed revision, the expected parent Requirements revision, any missing-label creation with exact attributes, every relation mutation, and the exact receipt-only intermediate body. Obtain one current external-write confirmation for that complete operation.
+
+Remote comment IDs do not exist before their Issue. A new Change may temporarily use a receipt-only body with no `change/v2` level marker:
 
 ```html
 <!-- slipway-publication-operation: UUID -->
 <!-- slipway-publication-item: UUID -->
 ```
 
-For an amendment, leave the accepted body unchanged. Create every body/comment through a private body file or equivalent cross-platform safe input, never a POSIX heredoc. Refetch and verify IDs/bodies/visibility, then build and show the exact final manifest. Every amendment manifest, including a content-identical replacement, must set `parent_requirements_revision` to the exact expected pinned revision; an initial manifest omits it. Obtain a second current confirmation for the commit, immediately refetch every pre-existing mutable target and reject any approved revision drift, then update the body last. The final body starts with the `change/v2` marker and manifest fence and retains the same receipt markers after that fence:
+The receipt-only Issue is a short-lived, non-authoritative reconciliation resource, not a Change source or a new lifecycle state, and not a second authorization boundary. For an amendment, leave the accepted body unchanged while creating approved replacement chapters. Create every body/comment through a private body file or equivalent cross-platform safe input, never a POSIX heredoc. Refetch and verify IDs, exact bodies, digests, and visibility, then deterministically build the final manifest from the approved keys/order/roles/titles, exact body digests, and returned IDs. The provider-assigned IDs are reconciliation facts and must not trigger a second confirmation. Every amendment manifest, including a content-identical replacement, sets `parent_requirements_revision` to the exact expected pinned revision; an initial manifest omits it.
+
+Immediately before the final body PATCH or any mutation of a pre-existing label/relationship target, refetch every mutable target and reject approved revision drift. Remote drift, a missing receipt, ambiguity, or any material chapter/construction-rule change requires a fresh preview and current confirmation; otherwise finish the operation under the original approval and update the body last. The final body starts with the `change/v2` marker and manifest fence and retains the same receipt markers after that fence:
 
 ````markdown
 <!-- slipway-level: change/v2 -->

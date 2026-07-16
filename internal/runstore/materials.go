@@ -37,6 +37,14 @@ type materialGuard struct {
 	run      *runHandle
 	root     *os.Root
 	identity os.FileInfo
+	leaves   []materialLeafGuard
+}
+
+type materialLeafGuard struct {
+	filename string
+	digest   string
+	identity leafIdentity
+	file     *os.File
 }
 
 func openMaterialGuard(run *runHandle, create bool) (*materialGuard, bool, error) {
@@ -70,6 +78,18 @@ func (guard *materialGuard) validate() error {
 	if guard == nil {
 		return nil
 	}
+	if err := guard.validateNamespace(); err != nil {
+		return err
+	}
+	for index := range guard.leaves {
+		if err := guard.leaves[index].validate(guard.root); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (guard *materialGuard) validateNamespace() error {
 	if err := guard.run.validate(); err != nil {
 		return err
 	}
@@ -83,12 +103,76 @@ func (guard *materialGuard) validate() error {
 }
 
 func (guard *materialGuard) close() error {
-	if guard == nil || guard.root == nil {
+	if guard == nil {
 		return nil
 	}
-	err := guard.root.Close()
-	guard.root = nil
-	return err
+	var result error
+	for index := range guard.leaves {
+		if guard.leaves[index].file != nil {
+			result = errors.Join(result, guard.leaves[index].file.Close())
+			guard.leaves[index].file = nil
+		}
+	}
+	guard.leaves = nil
+	if guard.root != nil {
+		result = errors.Join(result, guard.root.Close())
+		guard.root = nil
+	}
+	return result
+}
+
+func (guard *materialGuard) pinMaterial(filename, digest string) error {
+	identity, file, err := pinRegularFileOrMissingInRoot(guard.root, filename)
+	if err != nil {
+		return fmt.Errorf("pin material %s: %w", digest, err)
+	}
+	if file == nil {
+		return fmt.Errorf("pin material %s: material is missing", digest)
+	}
+	if !identity.exists {
+		return errors.Join(fmt.Errorf("pin material %s: material is missing", digest), file.Close())
+	}
+	leaf := materialLeafGuard{filename: filename, digest: digest, identity: identity, file: file}
+	if err := leaf.validate(guard.root); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	guard.leaves = append(guard.leaves, leaf)
+	return nil
+}
+
+func (leaf *materialLeafGuard) validate(root *os.Root) error {
+	if leaf == nil || leaf.file == nil || !leaf.identity.exists || leaf.identity.info == nil {
+		return errors.New("material leaf guard is incomplete")
+	}
+	if err := verifyPinnedLeafIdentity(root, leaf.filename, leaf.identity, leaf.file); err != nil {
+		return fmt.Errorf("material %s identity changed after validation: %w", leaf.digest, err)
+	}
+	before, err := leaf.file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat pinned material %s: %w", leaf.digest, err)
+	}
+	data, err := io.ReadAll(io.NewSectionReader(leaf.file, 0, maxMaterialBytes+1))
+	if err != nil {
+		return fmt.Errorf("read pinned material %s: %w", leaf.digest, err)
+	}
+	after, err := leaf.file.Stat()
+	if err != nil {
+		return fmt.Errorf("restat pinned material %s: %w", leaf.digest, err)
+	}
+	if err := verifyPinnedLeafIdentity(root, leaf.filename, leaf.identity, leaf.file); err != nil {
+		return fmt.Errorf("material %s identity changed during validation: %w", leaf.digest, err)
+	}
+	if len(data) == 0 || len(data) > maxMaterialBytes ||
+		before.Size() != int64(len(data)) || after.Size() != int64(len(data)) {
+		return fmt.Errorf("material %s has invalid or changing size", leaf.digest)
+	}
+	if before.Size() != leaf.identity.info.Size() || !after.ModTime().Equal(before.ModTime()) {
+		return fmt.Errorf("material %s changed after validation", leaf.digest)
+	}
+	if materialDigest(data) != leaf.digest {
+		return fmt.Errorf("material %s is corrupt", leaf.digest)
+	}
+	return nil
 }
 
 // PutMaterials makes all supplied materials durable before returning. Existing
@@ -166,6 +250,9 @@ func (store *Store) putMaterials(run *runHandle, materials []Material) (*materia
 		if err := putMaterial(guard, filename, material); err != nil {
 			return fail(err)
 		}
+		if err := guard.pinMaterial(filename, material.Digest); err != nil {
+			return fail(err)
+		}
 	}
 	if err := syncAnchoredDirectory(guard.root, guard.identity, store.hooks, faultSyncRunDirectory); err != nil {
 		return fail(fmt.Errorf("sync run materials: %w", err))
@@ -177,7 +264,7 @@ func (store *Store) putMaterials(run *runHandle, materials []Material) (*materia
 }
 
 func putMaterial(guard *materialGuard, filename string, material Material) error {
-	if err := guard.validate(); err != nil {
+	if err := guard.validateNamespace(); err != nil {
 		return err
 	}
 	root := guard.root
@@ -193,7 +280,7 @@ func putMaterial(guard *materialGuard, filename string, material Material) error
 		if !bytes.Equal(data, material.Data) {
 			return fmt.Errorf("material %s content conflicts with existing blob", material.Digest)
 		}
-		return guard.validate()
+		return guard.validateNamespace()
 	}
 
 	temporary, file, err := createTemporaryFileInRoot(root, filename, 0o600)
@@ -234,7 +321,7 @@ func putMaterial(guard *materialGuard, filename string, material Material) error
 	}
 	closed = true
 
-	if err := guard.validate(); err != nil {
+	if err := guard.validateNamespace(); err != nil {
 		return err
 	}
 	if err := fsutil.RenameNoReplace(root, temporary, filename); err != nil {
@@ -242,7 +329,7 @@ func putMaterial(guard *materialGuard, filename string, material Material) error
 		if inspectErr == nil && current.exists {
 			data, readErr := readMaterialFile(root, filename, material.Digest)
 			if readErr == nil && bytes.Equal(data, material.Data) {
-				return guard.validate()
+				return guard.validateNamespace()
 			}
 			if readErr != nil {
 				return readErr
@@ -251,7 +338,7 @@ func putMaterial(guard *materialGuard, filename string, material Material) error
 		}
 		return errors.Join(fmt.Errorf("commit material %s without replacement: %w", material.Digest, err), inspectErr)
 	}
-	if err := guard.validate(); err != nil {
+	if err := guard.validateNamespace(); err != nil {
 		return err
 	}
 	_, err = readMaterialFile(root, filename, material.Digest)

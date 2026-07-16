@@ -88,6 +88,8 @@ Slipway は unsafe symbolic-link や reparse-point mutation path を拒否しま
 
 ## Retention と removal
 
+Run data は自動的に期限切れになりません。ユーザーが削除するまで Git common directory に保持されます。Unix では Slipway は Run directory を `0700`、file を `0600` で作成し、Windows では同等の owner-only ACL を適用します。これらの permission は他の local account からの access を制限しますが、同一 account、administrator、malware、backup、または複製済み data からは保護しません。
+
 `<git-common-dir>/slipway/runs/<run-id>/` の削除は、その Run の Slipway local recovery data を削除します。GitHub content、Git history、backup、filesystem snapshot、log、すでに他へ複製されたデータは消えず、secure erase でもありません。
 
 Adapter removal は別物です。
@@ -97,6 +99,12 @@ slipway uninstall --tool claude
 ```
 
 これは pristine generated file だけを削除し、Run data は変更しません。
+
+## Retired namespace residue
+
+`doctor` は Git common directory の `slipway/` namespace に残る旧 `runtime`、`cache`、`scope-root`、`scopes`、`locks`、`processes`、`repair-backups` を報告することがあります。現在の Run engine はこれらを無視し、adapter の install、refresh、uninstall は migration、削除、blocking を行いません。
+
+これは advisory warning です。Cleanup が必要なら、まず古い Slipway process をすべて停止し、Git common directory を backup し、報告された path を確認したうえで、不要と確認できたものだけを手動で削除してください。Slipway はこの residue の ownership を推論せず、自動削除もしません。
 
 ## トラブルシューティング
 

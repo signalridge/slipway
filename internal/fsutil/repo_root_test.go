@@ -1,12 +1,28 @@
 package fsutil
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
 )
+
+func TestRunGitHonorsCanceledDiscoveryContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := runGit(ctx, t.TempDir(), "rev-parse", "--show-toplevel")
+	if err == nil {
+		t.Fatal("runGit() unexpectedly succeeded with a canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("runGit() error = %v, want context.Canceled", err)
+	}
+}
 
 func TestDiscoverGitPreservesTrailingWhitespaceInRepositoryPath(t *testing.T) {
 	if runtime.GOOS == "windows" {

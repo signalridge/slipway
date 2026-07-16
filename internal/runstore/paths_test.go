@@ -97,6 +97,36 @@ func TestObserveGitUsesExactPorcelainV2AndIndexFingerprints(t *testing.T) {
 	assert.True(t, unstaged.ChangedFrom(staged))
 }
 
+func TestGitObservationChangedFromDoesNotTreatIncompleteContentAsChange(t *testing.T) {
+	repository := createRepository(t)
+	unobserved := filepath.Join(repository, "unobserved.txt")
+	require.NoError(t, os.WriteFile(unobserved, []byte("first"), 0o600))
+
+	initial, err := observeGitWithContentBudget(repository, 1, time.Minute)
+	require.NoError(t, err)
+	require.False(t, initial.ContentObservationComplete)
+	require.True(t, initial.ContentByteLimitExceeded)
+
+	unchanged, err := observeGitWithContentBudget(repository, 1, time.Minute)
+	require.NoError(t, err)
+	assert.Equal(t, initial.SnapshotHash, unchanged.SnapshotHash)
+	assert.False(t, unchanged.ChangedFrom(initial), "observation uncertainty alone must not report a code change")
+
+	require.NoError(t, os.WriteFile(unobserved, []byte("other"), 0o600))
+	incomparable, err := observeGitWithContentBudget(repository, 1, time.Minute)
+	require.NoError(t, err)
+	require.False(t, incomparable.ContentObservationComplete)
+	assert.False(t, incomparable.ChangedFrom(initial), "same-size content outside the observation budget is uncertain, not known changed")
+
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "README.md"), []byte("new head\n"), 0o600))
+	runGitCommand(t, repository, "add", "README.md")
+	runGitCommand(t, repository, "commit", "-q", "-m", "advance head")
+	definitelyChanged, err := observeGitWithContentBudget(repository, 1, time.Minute)
+	require.NoError(t, err)
+	require.False(t, definitelyChanged.ContentObservationComplete)
+	assert.True(t, definitelyChanged.ChangedFrom(incomparable), "a comparable HEAD change must remain observable")
+}
+
 func TestGitBytesContextHonorsCancellationAndDeadline(t *testing.T) {
 	repository := createRepository(t)
 

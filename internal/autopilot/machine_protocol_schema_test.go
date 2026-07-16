@@ -550,6 +550,20 @@ func TestSourceEnvelopeSchemaValidatesRealEnvelope(t *testing.T) {
 	invalidHead.Comments = []RawSourceComment{}
 	require.NoError(t, schema.Validate(machineSchemaValue(t, invalidHead)))
 
+	emptyBody := validSourceEnvelope()
+	emptyBody.Body = ""
+	emptyBody.Comments = []RawSourceComment{}
+	require.NoError(t, schema.Validate(machineSchemaValue(t, emptyBody)))
+
+	whitespaceBody := validSourceEnvelope()
+	whitespaceBody.Body = " \n\t"
+	whitespaceBody.Comments = []RawSourceComment{}
+	require.NoError(t, schema.Validate(machineSchemaValue(t, whitespaceBody)))
+
+	emptyComment := validSourceEnvelope()
+	emptyComment.Comments[0].Body = ""
+	require.NoError(t, schema.Validate(machineSchemaValue(t, emptyComment)))
+
 	defaultPort := validSourceEnvelope()
 	defaultPort.CanonicalURL = strings.Replace(defaultPort.CanonicalURL, "github.com/", "github.com:443/", 1)
 	require.Error(t, schema.Validate(machineSchemaValue(t, defaultPort)))

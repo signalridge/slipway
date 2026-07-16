@@ -95,7 +95,7 @@ type identitySymlinkReparseBuffer struct {
 	PathBuffer           [1]uint16
 }
 
-func readSymlinkIdentity(identity *os.File) (string, error) {
+func readSymlinkIdentity(_ *os.Root, _ string, identity *os.File) (string, error) {
 	buffer := make([]byte, windows.MAXIMUM_REPARSE_DATA_BUFFER_SIZE)
 	var bytesReturned uint32
 	err := windows.DeviceIoControl(

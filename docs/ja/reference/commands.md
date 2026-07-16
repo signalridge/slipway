@@ -56,7 +56,7 @@ Repository discovery、host adapter、generated file、Run-storage durability、
 ## `slipway run`
 
 ```text
-slipway run <goal> [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
+slipway run [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json] -- <goal>
 ```
 
 Run を作成し、最初の `orient` Action を返します。Action budget はデフォルト 8、範囲は 1–1000 です。`--no-review` は advisory Review を無効にします。それ以外でも、Slipway が Action 後に code change を観測した場合だけ Review を issue します。
@@ -81,7 +81,7 @@ slipway status [run-id] [--root ROOT] [--json]
 
 ID 省略時は Git common directory 内の Run を一覧します。Current worktree の Run は replay され、別 linked worktree の Run は `workspace_foreign` マーク付き read-only header として表示されます。完全な inspect と mutation は owning worktree が必要です。
 
-`status` は filesystem に対して read-only です。Run namespace や lock file の作成、permission の変更、中断した journal tail の修復は行いません。Replay できない local recovery directory も JSON の `unavailable_runs` に残り、その ID を指定すると `run_journal_invalid`、存在しない ID なら `run_not_found` を返します。
+`status` は filesystem に対して read-only です。Run namespace や lock file の作成、permission の変更、中断した journal tail の修復は行いません。Replay できない local recovery directory も JSON の `unavailable_runs` に残り、その ID を指定すると `run_journal_invalid`、存在しない ID なら `run_not_found` を返します。Writer が bounded inspection timeout を超えて commit boundary を保持した場合、targeted/list output は journal を invalid と誤分類せず `run_busy` を報告します。
 
 ID 指定時は現在の Run projection と fresh 派生の structured `next` を返します。空リストは有効な出力です。
 

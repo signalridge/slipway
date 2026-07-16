@@ -15,6 +15,7 @@ import (
 
 func TestAdapterMutationErrorPreservesReportAndDisablesBlindRetry(t *testing.T) {
 	t.Parallel()
+	workspace := t.TempDir()
 	report := adapter.ChangeReport{
 		Hosts:              []string{"claude"},
 		TransactionOutcome: adapter.TransactionOutcomeAmbiguous,
@@ -22,11 +23,11 @@ func TestAdapterMutationErrorPreservesReportAndDisablesBlindRetry(t *testing.T) 
 		Warnings:           []string{"rollback preserved a concurrent edit"},
 	}
 
-	cliErr := adapterMutationError("install_failed", errors.New("transaction failed"), "/workspace", report)
+	cliErr := adapterMutationError("install_failed", errors.New("transaction failed"), workspace, report)
 	assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
 	require.Len(t, cliErr.Next.Variants, 1)
 	assert.Equal(t, "inspect-host-adapters", cliErr.Next.Variants[0].ID)
-	assert.Equal(t, []string{"slipway", "list", "--root", "/workspace"}, cliErr.Next.Variants[0].BaseArgv)
+	assert.Equal(t, []string{"slipway", "list", "--root", workspace}, cliErr.Next.Variants[0].BaseArgv)
 	require.NotNil(t, cliErr.Details)
 	encodedReport, ok := cliErr.Details["report"].(changeReportOutput)
 	require.True(t, ok)

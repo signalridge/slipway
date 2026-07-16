@@ -88,6 +88,8 @@ Slipway rejects unsafe symbolic-link or reparse-point mutation paths. These cont
 
 ## Retention and removal
 
+Run data does not expire automatically. It remains in the Git common directory until the user removes it. On Unix, Slipway creates Run directories with mode `0700` and files with mode `0600`; on Windows it applies the owner-only ACL equivalent. These permissions limit access by other local accounts but do not protect against the same account, administrators, malware, backups, or copied data.
+
 Deleting `<git-common-dir>/slipway/runs/<run-id>/` removes Slipway's local recovery data for that Run. It does not erase GitHub content, Git history, backups, filesystem snapshots, logs, or data already copied elsewhere, and it is not secure erasure.
 
 Adapter removal is separate:
@@ -97,6 +99,12 @@ slipway uninstall --tool claude
 ```
 
 It removes only pristine generated adapter files and leaves Run data unchanged.
+
+## Retired namespace residue
+
+`doctor` may report old `runtime`, `cache`, `scope-root`, `scopes`, `locks`, `processes`, or `repair-backups` entries below the Git common directory's `slipway/` namespace. The current Run engine ignores those entries, and adapter install, refresh, and uninstall do not migrate, delete, or block on them.
+
+The warning is advisory. If cleanup is desired, stop every older Slipway process first, back up the Git common directory, inspect the reported paths, and remove them manually only after confirming they are no longer needed. Slipway does not infer ownership or delete this residue automatically.
 
 ## Troubleshooting
 

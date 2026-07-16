@@ -220,6 +220,37 @@ func TestMachineUsageValidationPrecedesRunstoreOpen(t *testing.T) {
 	}
 }
 
+func TestMachineMissingActionOffersRunStatusRecovery(t *testing.T) {
+	repository := newCLIRepository(t)
+	canonicalRepository, err := resolveRoot(repository)
+	require.NoError(t, err)
+	const runID = "00000000-0000-4000-8000-000000000001"
+	for _, operation := range []string{"submit", "answer", "skip", "material"} {
+		t.Run(operation, func(t *testing.T) {
+			stdout, stderr, err := executeForTest(
+				t,
+				"_machine", operation, "--root", repository, "--run", runID,
+			)
+			require.Error(t, err)
+			assert.Empty(t, stdout)
+
+			var cliErr CLIError
+			require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+			assert.Equal(t, "action_id_required", cliErr.Code)
+			assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+			require.Len(t, cliErr.Next.Variants, 1)
+			assert.Equal(t, "inspect-run", cliErr.Next.Variants[0].ID)
+			assert.Equal(
+				t,
+				[]string{"slipway", "status", runID, "--root", canonicalRepository},
+				cliErr.Next.Variants[0].BaseArgv,
+			)
+			_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+			require.ErrorIs(t, statErr, os.ErrNotExist)
+		})
+	}
+}
+
 func TestRunStartRecoveryPreservesOptionsAndDashLeadingGoal(t *testing.T) {
 	repository := newCLIRepository(t)
 	canonicalRepository, err := resolveRoot(repository)

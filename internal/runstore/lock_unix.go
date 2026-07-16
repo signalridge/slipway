@@ -28,7 +28,15 @@ func openRunWriterLock(run *runHandle) (runWriterLock, error) {
 }
 
 func (lock *directoryWriterLock) tryLock() (bool, error) {
-	err := unix.Flock(int(lock.file.Fd()), unix.LOCK_EX|unix.LOCK_NB)
+	return lock.tryFlock(unix.LOCK_EX)
+}
+
+func (lock *directoryWriterLock) tryReadLock() (bool, error) {
+	return lock.tryFlock(unix.LOCK_SH)
+}
+
+func (lock *directoryWriterLock) tryFlock(mode int) (bool, error) {
+	err := unix.Flock(int(lock.file.Fd()), mode|unix.LOCK_NB)
 	if err == nil {
 		return true, nil
 	}

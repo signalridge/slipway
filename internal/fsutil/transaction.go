@@ -109,6 +109,7 @@ type fileTransactionHook func(originalPath, recoveryPath string) error
 // fileTransactionHooks exposes exact transaction windows for adversarial tests.
 // Hooks belong to one transaction; no package-global mutation is involved.
 type fileTransactionHooks struct {
+	AfterPreflight                            fileTransactionHook
 	BeforeMutation                            fileTransactionHook
 	AfterMutation                             fileTransactionHook
 	AfterGuardBeforeQuarantine                fileTransactionHook
@@ -261,6 +262,9 @@ func preflightFileTransaction(ops []FileTransactionOp, filesystem *transactionFi
 		err = errors.Join(err, guardLease.close())
 		if err != nil {
 			return err
+		}
+		if err := callFileTransactionHook(filesystem.hooks.AfterPreflight, op.path, ""); err != nil {
+			return fmt.Errorf("after preflight %s: %w", op.path, err)
 		}
 	}
 	return nil

@@ -5,6 +5,10 @@
   "description": "Strict trusted-host observation containing an Issue body and, when its manifest is valid, exactly the referenced comments; an invalid head uses an empty comments array.",
   "$ref": "#/$defs/rawSourceEnvelope",
   "$defs": {
+    "markdownText": {
+      "type": "string",
+      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]*$"
+    },
     "nonEmptyPlainText": {
       "type": "string",
       "minLength": 1,
@@ -58,7 +62,7 @@
         "updated_at": { "type": "string", "format": "date-time" },
         "author_id": { "$ref": "#/$defs/githubNodeID" },
         "is_minimized": { "type": "boolean" },
-        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" }
+        "body": { "$ref": "#/$defs/markdownText" }
       }
     },
     "rawSourceEnvelope": {
@@ -79,7 +83,7 @@
         "updated_at": { "type": "string", "format": "date-time" },
         "fetched_at": { "type": "string", "format": "date-time" },
         "title": { "$ref": "#/$defs/nonEmptyPlainText" },
-        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "body": { "$ref": "#/$defs/markdownText" },
         "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "comments": {

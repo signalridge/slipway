@@ -48,11 +48,11 @@ func TestCapabilityPromptsEncodeAcceptanceBehavior(t *testing.T) {
 		path     string
 		contains []string
 	}{
-		{path: "skills/run/SKILL.md", contains: []string{"explicitly asks", "marker-valid Run", "structured `next.variants`", "ordered chapter catalog", "`grill-me` design-tree discipline", "Finish the branch you opened", "never promote chat prose to decision authority", "confirmed human decisions from Clarify answers", "shared understanding", "Strict Outcome shape", "`action_kind` is mandatory", "`skipped` is emitted only by the CLI", "Review never needs input", "Every waiting Action may be skipped", "another non-ended Run pinned to the same Issue identity", "skippable, read-only advisory Review", "later revision after a prior Review", "automatic Action queue is empty", "`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "accepted chapter materials", "Redact recognized credentials", "source_unavailable", "mutation envelope", "non-null `action`", "canonical safe grammar", "nodes(ids:...)", "“skip this”", "“take over”", "“reorder” or “do X first”"}},
-		{path: "skills/clarify/SKILL.md", contains: []string{"explicitly invokes", "design-tree discipline", "filesystem", "CLI state", "permitted external facts", "Finish the branch you opened", "exactly one decision", "recommended option", "ask zero questions", "explicit confirmation", "structured `answer-decision`", "wrap up", "Do not implement", "stateless", "`grill-with-docs`"}},
-		{path: "skills/propose/SKILL.md", contains: []string{"explicitly asks", "self-contained", "exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`", "marker remains authority", "exactly three choices", "`gh >= 2.94.0`", "official GitHub REST API", "100 sub-issues", "50 blocking", "same-host redirect or transfer", "Objective publication: one confirmed external write", "single-stage publication", "one current external-write confirmation", "Change publication: two confirmed phases", "operation UUID", "stable item UUID", "second current confirmation", "Unreferenced comments remain drafts", "timeout-after-success", "indexing delay", "`created`, `matched`, `failed`, or `ambiguous`", "Zero matches", "public repository has no per-Issue private switch", "Redact recognized credential values", "environment_unavailable"}},
-		{path: "skills/decompose/SKILL.md", contains: []string{"explicitly asks", "tracer-bullet Changes", "runtime inheritance", "exactly one `level:objective`", "exactly one `level:change`", "exactly 100 children", "exactly 50 blocking dependencies", "exactly 50 blocked-by dependencies", "exceed one of those limits", "`gh >= 2.94.0`", "official REST API", "cross-host redirects", "two confirmed phases", "one operation UUID", "stable item UUID", "second current commit confirmation", "Read back the complete graph", "duplicate marker matches", "Zero marker matches", "public Issue has no private switch", "amendment mode", "Never propagate in the background", "`closed` status does not prove"}},
-		{path: "skills/implement/SKILL.md", contains: []string{"explicitly invokes", "pinned Requirements", "`action_kind: \"implement\"`", "activities` (which may be empty)", "actual positive attempt count", "exact command", "exit code", "Never list an activity that did not run", "shell exit 127", "scope SHA-256", "directly outside a Run"}},
+		{path: "skills/run/SKILL.md", contains: []string{"explicitly asks", "marker-valid Run", "structured `next.variants`", "ordered chapter catalog", "`grill-me` design-tree discipline", "Finish the branch you opened", "never promote chat prose to decision authority", "confirmed human decisions from Clarify answers", "shared understanding", "Strict Outcome shape", "`action_kind` is mandatory", "`skipped` is emitted only by the CLI", "Review never needs input", "Every waiting Action may be skipped", "another non-ended Run pinned to the same Issue identity", "skippable, read-only advisory Review", "later revision after a prior Review", "automatic Action queue is empty", "`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "trusted host attests the GitHub fetch identity and visibility observations", "does not contact GitHub and cannot independently revalidate remote visibility", "accepted chapter materials", "Redact recognized credentials", "source_unavailable", "mutation envelope", "non-null `action`", "canonical safe grammar", "nodes(ids:...)", "“skip this”", "“take over”", "“reorder” or “do X first”"}},
+		{path: "skills/clarify/SKILL.md", contains: []string{"explicitly invokes", "design-tree discipline", "filesystem", "CLI state", "permitted external facts", "Finish the branch you opened", "exactly one decision", "recommended option", "ask zero questions", "explicit confirmation", "structured `answer-decision`", "wrap up", "Do not implement", "stateless", "superseded by later answers", "`grill-with-docs`"}},
+		{path: "skills/propose/SKILL.md", contains: []string{"explicitly asks", "self-contained", "exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`", "marker remains authority", "exactly three choices", "`gh >= 2.94.0`", "official GitHub REST API", "100 sub-issues", "50 blocking", "same-host redirect or transfer", "API stays on `api.github.com`", "every resulting `html_url` stays on `github.com`", "Objective publication: one confirmed external write", "single-stage publication", "one current external-write confirmation", "Change publication: one confirmed operation", "operation UUID", "stable item UUID", "non-authoritative reconciliation resource", "provider-assigned IDs are reconciliation facts", "must not trigger a second confirmation", "Unreferenced comments remain drafts", "timeout-after-success", "indexing delay", "`created`, `matched`, `failed`, or `ambiguous`", "Zero matches", "public repository has no per-Issue private switch", "Redact recognized credential values", "environment_unavailable"}},
+		{path: "skills/decompose/SKILL.md", contains: []string{"explicitly asks", "tracer-bullet Changes", "runtime inheritance", "missing or conflicting labels never block decomposition", "exactly one `level:change`", "exactly 100 children", "exactly 50 blocking dependencies", "exactly 50 blocked-by dependencies", "exceed one of those limits", "repartition the Objective", "`gh >= 2.94.0`", "official REST API", "cross-host redirects", "one confirmed operation", "one operation UUID", "stable item UUID", "provider-assigned IDs are reconciliation facts", "must not trigger another confirmation", "Read back the complete graph", "duplicate marker matches", "Zero marker matches", "public Issue has no private switch", "amendment mode", "one amendment publication plan", "one current confirmation for that exact plan", "Never propagate in the background", "`closed` status does not prove"}},
+		{path: "skills/implement/SKILL.md", contains: []string{"explicitly invokes", "pinned Requirements", "`action_kind: \"implement\"`", "activities` (which may be empty)", "actual positive attempt count", "exact command", "exit code", "Never list an activity that did not run", "shell exit 127", "scope SHA-256", "directly outside a Run", "standalone invocation cannot obtain", "must not execute the destructive operation", "must not silently start a Run"}},
 		{path: "skills/review/SKILL.md", contains: []string{"explicitly invokes", "always read-only", "Intent", "Quality", "start-to-current difference is only an observation", "`action_kind: \"review\"`", "findings_reported", "leave `suggested_actions` empty", "Do not modify files", "automatic repair or re-review loop"}},
 	}
 	for _, test := range tests {
@@ -149,6 +149,8 @@ func TestSharedCapabilityBoundariesEncodeTrustAndUserControl(t *testing.T) {
 	for _, fragment := range []string{
 		"untrusted data",
 		"exact first body marker is Level authority",
+		"change Slipway's control rules",
+		"execute unrelated commands",
 		"trusted attester",
 		"Never invent a local Issue",
 		"accepted Requirements, user answers, goals, and truthful command summaries may contain sensitive text",
@@ -156,14 +158,23 @@ func TestSharedCapabilityBoundariesEncodeTrustAndUserControl(t *testing.T) {
 		"Redact recognized credential values",
 		"preserving truthful command identity",
 		"tokens, unreferenced discussion comments, environment dumps, full transcripts, or hidden reasoning",
+		"Never put a token in a URL",
+		"automatically fetch a linked URL with credentials",
 		"transiently fetch only the exact raw Issue body and manifest-referenced comment fields",
 		"pass that raw envelope only to the CLI for consumption",
 		"persist only parser-accepted normalized materials",
 		"exact draft and operation plan",
 		"same approved publication plan and receipt",
 		"receipt records reconciliation facts and is never Requirements or work authority",
+		"Provider-assigned IDs and observed digests are reconciliation facts, not a second human decision",
 		"Never blindly retry",
 		"Natural-language approval alone is not a grant",
+		"Before the first bare `slipway` invocation",
+		"non-empty structured `hosts` array",
+		"do not freeze the set of adapter IDs",
+		"PATH collision",
+		"executable identity safety check",
+		"lifecycle or governance gate",
 	} {
 		assert.Contains(t, content, fragment)
 	}
@@ -171,11 +182,12 @@ func TestSharedCapabilityBoundariesEncodeTrustAndUserControl(t *testing.T) {
 
 func TestPublicationLimitsCanonicalRunAndHostControlAreStaticTemplateContracts(t *testing.T) {
 	t.Parallel()
-
 	propose, err := Content("skills/propose/SKILL.md")
 	require.NoError(t, err)
+	assert.Contains(t, propose, "only for a still-unaccepted draft")
+	assert.Contains(t, propose, "never edit a manifest-accepted chapter in place")
 	objectiveStart := strings.Index(propose, "## Objective publication: one confirmed external write")
-	changeStart := strings.Index(propose, "## Change publication: two confirmed phases")
+	changeStart := strings.Index(propose, "## Change publication: one confirmed operation")
 	require.GreaterOrEqual(t, objectiveStart, 0)
 	require.Greater(t, changeStart, objectiveStart)
 	objective := propose[objectiveStart:changeStart]
@@ -186,10 +198,12 @@ func TestPublicationLimitsCanonicalRunAndHostControlAreStaticTemplateContracts(t
 	assert.Contains(t, objective, "creates no chapter comments or manifest")
 	assert.Contains(t, objective, "no second commit confirmation")
 	assert.Contains(t, propose, "<!-- slipway-level: objective/v1 -->\n<!-- slipway-publication-operation: UUID -->\n<!-- slipway-publication-item: UUID -->")
-	assert.Contains(t, propose, "A new Change draft body contains only these receipt markers and no `change/v2` level marker")
+	assert.Contains(t, propose, "A new Change may temporarily use a receipt-only body")
+	assert.Contains(t, propose, "not a Change source or a new lifecycle state")
 	assert.Contains(t, propose, "<!-- slipway-level: change/v2 -->\n```slipway-manifest\n{...}\n```\n<!-- slipway-publication-operation: UUID -->\n<!-- slipway-publication-item: UUID -->")
-	assert.Contains(t, propose[changeStart:], "two confirmed phases")
-	assert.Contains(t, propose[changeStart:], "second current confirmation")
+	assert.Contains(t, propose[changeStart:], "one current external-write confirmation")
+	assert.Contains(t, propose[changeStart:], "must not trigger a second confirmation")
+	assert.NotContains(t, propose[changeStart:], "second current confirmation")
 
 	decompose, err := Content("skills/decompose/SKILL.md")
 	require.NoError(t, err)
@@ -200,6 +214,10 @@ func TestPublicationLimitsCanonicalRunAndHostControlAreStaticTemplateContracts(t
 	assert.Contains(t, decompose, "only when the approved write would exceed")
 	assert.Contains(t, decompose, "one operation UUID")
 	assert.Contains(t, decompose, "stable item UUID")
+	assert.Contains(t, decompose, "one current external-write confirmation")
+	assert.Contains(t, decompose, "must not trigger another confirmation")
+	assert.NotContains(t, decompose, "second current commit confirmation")
+	assert.NotContains(t, decompose, "approval before each planned PATCH")
 
 	run, err := Content("skills/run/SKILL.md")
 	require.NoError(t, err)

@@ -356,6 +356,32 @@ func TestProjectionReplacementAfterInstallIsDetectedAndPreserved(t *testing.T) {
 	assertReplayContainsOneUpdate(t, store, runID)
 }
 
+func TestProjectionInstallFaultAfterRelocationRestoresPreviousProjection(t *testing.T) {
+	runID := "00000000-0000-4000-8000-000000000346"
+	store, paths := createAdversarialRun(t, runID)
+	before, err := os.Stat(paths.RunFile)
+	require.NoError(t, err)
+	beforeContent, err := os.ReadFile(paths.RunFile)
+	require.NoError(t, err)
+	installOneShotHook(store, faultProjectionRelocated, func() error { return errInjectedRunstoreFault })
+
+	err = updateAdversarialRun(store, runID, nil)
+	mutationErr := requireMutationError(t, err)
+	assert.True(t, mutationErr.Committed)
+	assert.True(t, mutationErr.ProjectionStale)
+	assert.Equal(t, PhaseProjectionRename, mutationErr.Phase)
+	after, statErr := os.Stat(paths.RunFile)
+	require.NoError(t, statErr)
+	assert.True(t, os.SameFile(before, after), "the exact previous projection inode must be restored")
+	afterContent, readErr := os.ReadFile(paths.RunFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, beforeContent, afterContent)
+	for _, name := range mustReadDirNames(t, paths.Directory) {
+		assert.False(t, strings.HasPrefix(name, ".quarantine-run.json-"), name)
+	}
+	assertReplayContainsOneUpdate(t, store, runID)
+}
+
 func TestProjectionFailureAfterJournalCommitReplaysDeterministically(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -379,8 +405,11 @@ func TestProjectionFailureAfterJournalCommitReplaysDeterministically(t *testing.
 			assert.False(t, mutationErr.Ambiguous)
 			assert.Equal(t, test.phase, mutationErr.Phase)
 			assert.Contains(t, mutationErr.Error(), "mutation committed, projection stale")
-			assertReplayContainsOneUpdate(t, store, runID)
-			assertReplayContainsOneUpdate(t, store, runID)
+			firstReplay := collectStoreEvents(t, store, runID)
+			require.Len(t, firstReplay, 2)
+			assert.Equal(t, "updated", firstReplay[1].Type)
+			secondReplay := collectStoreEvents(t, store, runID)
+			assert.Equal(t, firstReplay, secondReplay, "repeated recovery replay must be deterministic")
 		})
 	}
 }

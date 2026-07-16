@@ -84,7 +84,7 @@ func makeRunCmd() *cobra.Command {
 				PinnedSource:  pinnedSource,
 			})
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, workspace, "")
 			}
 			if jsonOutput {
 				return writeProtocolResult(command, run)
@@ -141,8 +141,9 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
 				return validationErr
 			}
+			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
 			if actionID == "" {
-				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
+				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
 			}
 			if fileSet == stdinSet {
 				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", defaultErrorNext())
@@ -184,7 +185,7 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 			defer func() { _ = service.Close() }()
 			run, err := service.Submit(runID, actionID, outcome)
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, workspace, runID)
 			}
 			return writeProtocolResult(command, run)
 		},
@@ -194,7 +195,6 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 	command.Flags().StringVar(&outcomeFile, "outcome-file", "", "Outcome JSON file")
 	command.Flags().BoolVar(&outcomeStdin, "outcome-stdin", false, "read one Outcome JSON value from stdin")
 	_ = command.MarkFlagRequired("run")
-	_ = command.MarkFlagRequired("action")
 	return command
 }
 
@@ -212,10 +212,10 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
 				return validationErr
 			}
-			if actionID == "" {
-				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
-			}
 			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
+			if actionID == "" {
+				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
+			}
 			if confirmDestructive != (strings.TrimSpace(scopeSHA256) != "") {
 				return newUsageError(
 					"destructive_confirmation_pair_required",
@@ -234,7 +234,7 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 				ScopeSHA256:        scopeSHA256,
 			})
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			return writeProtocolResult(command, run)
 		},
@@ -245,7 +245,6 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 	command.Flags().BoolVar(&confirmDestructive, "confirm-destructive", false, "attest current user confirmation of the exact destructive scope")
 	command.Flags().StringVar(&scopeSHA256, "scope-sha256", "", "exact current destructive scope digest")
 	_ = command.MarkFlagRequired("run")
-	_ = command.MarkFlagRequired("action")
 	return command
 }
 
@@ -262,8 +261,9 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
 				return validationErr
 			}
+			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
 			if actionID == "" {
-				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
+				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
 			}
 			service, err := openAutopilot(*root)
 			if err != nil {
@@ -272,7 +272,7 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 			defer func() { _ = service.Close() }()
 			run, err := service.Skip(runID, actionID)
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			return writeProtocolResult(command, run)
 		},
@@ -280,7 +280,6 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 	command.Flags().StringVar(&runID, "run", "", "run id")
 	command.Flags().StringVar(&actionID, "action", "", "current action id")
 	_ = command.MarkFlagRequired("run")
-	_ = command.MarkFlagRequired("action")
 	return command
 }
 
@@ -369,7 +368,7 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 				CandidateID:     candidateID,
 			})
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, workspace, args[0])
 			}
 			return writeProtocolResult(command, run)
 		},

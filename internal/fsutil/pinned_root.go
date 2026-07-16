@@ -139,6 +139,10 @@ func (root *PinnedRoot) ReadFileNoSymlink(path string, maxBytes int64) ([]byte, 
 // Apply validates the namespace, applies ops through the same os.Root used to
 // pin the repository, and checks that the namespace stayed attached afterward.
 func (root *PinnedRoot) Apply(ops []FileTransactionOp) error {
+	return root.apply(ops, fileTransactionHooks{})
+}
+
+func (root *PinnedRoot) apply(ops []FileTransactionOp, hooks fileTransactionHooks) error {
 	if root == nil || root.root == nil {
 		return fmt.Errorf("pinned transaction root is closed")
 	}
@@ -159,11 +163,11 @@ func (root *PinnedRoot) Apply(ops []FileTransactionOp) error {
 	if err := root.ValidateNamespace(); err != nil {
 		return &RootNamespaceIdentityError{Root: root.path}
 	}
-	filesystem := &transactionFilesystem{rootPath: root.path, root: root.root}
+	filesystem := &transactionFilesystem{rootPath: root.path, root: root.root, hooks: hooks}
 	operationErr := applyFileTransactionWithFilesystem(normalized, filesystem)
 	var namespaceErr error
 	if err := root.ValidateNamespace(); err != nil {
-		namespaceErr = &RootNamespaceIdentityError{Root: root.path, Committed: len(normalized) > 0}
+		namespaceErr = &RootNamespaceIdentityError{Root: root.path, Committed: filesystem.wroteFilesystem}
 	}
 	return errors.Join(operationErr, namespaceErr)
 }

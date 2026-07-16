@@ -60,19 +60,7 @@ func makeStatusCmd() *cobra.Command {
 			if len(args) == 1 {
 				run, err := service.Load(args[0])
 				if err != nil {
-					var protocolErr *autopilot.ProtocolError
-					if errors.As(err, &protocolErr) {
-						if protocolErr.Code == "invalid_run_id" {
-							return newUsageError(protocolErr.Code, protocolErr.Message, protocolErr.Next)
-						}
-						return err
-					}
-					return newRuntimeError(
-						"run_journal_invalid",
-						err.Error(),
-						inputlessCommandNext(service.RepositoryRoot(), "list-runs", "slipway", "status", "--root", service.RepositoryRoot()),
-						nil,
-					)
+					return targetedStatusLoadError(service.RepositoryRoot(), args[0], err)
 				}
 				if jsonOutput {
 					output, err := makeRunStatusOutput(run)
@@ -128,6 +116,30 @@ func makeStatusCmd() *cobra.Command {
 	command.Flags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "emit JSON")
 	return command
+}
+
+func targetedStatusLoadError(repositoryRoot, runID string, err error) error {
+	var protocolErr *autopilot.ProtocolError
+	if errors.As(err, &protocolErr) {
+		if protocolErr.Code == "invalid_run_id" {
+			return newUsageError(protocolErr.Code, protocolErr.Message, protocolErr.Next)
+		}
+		return err
+	}
+	if errors.Is(err, autopilot.ErrRunBusy) {
+		return newRuntimeError(
+			"run_busy",
+			err.Error(),
+			statusInspectionNext(repositoryRoot, runID),
+			nil,
+		)
+	}
+	return newRuntimeError(
+		"run_journal_invalid",
+		err.Error(),
+		inputlessCommandNext(repositoryRoot, "list-runs", "slipway", "status", "--root", repositoryRoot),
+		nil,
+	)
 }
 
 func makeRunStatusOutput(run autopilot.Run) (runStatusOutput, error) {

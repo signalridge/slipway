@@ -56,7 +56,7 @@ slipway doctor [--root PATH] [--json]
 ## `slipway run`
 
 ```text
-slipway run <goal> [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
+slipway run [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json] -- <goal>
 ```
 
 创建 Run 并返回初始 `orient` Action。Action budget 默认 8，合法范围为 1–1000。`--no-review` 禁用 advisory Review；否则只有 Slipway 在某项 Action 后观察到代码变化时才签发 Review。
@@ -81,7 +81,7 @@ slipway status [run-id] [--root ROOT] [--json]
 
 省略 ID 时列出 Git common directory 中的 Run。当前 worktree 的 Run 会 replay；其他 linked worktree 的 Run 只显示标记为 `workspace_foreign` 的只读 header。完整检查和 mutation 必须在 owning worktree 中执行。
 
-`status` 对文件系统是只读的：不会创建 Run namespace 或 lock file，不会修改权限，也不会修复中断的 journal tail。无法 replay 的本地 recovery directory 仍会在 JSON 的 `unavailable_runs` 中可见；指定该 ID 会返回 `run_journal_invalid`，真正不存在的 ID 则返回 `run_not_found`。
+`status` 对文件系统是只读的：不会创建 Run namespace 或 lock file，不会修改权限，也不会修复中断的 journal tail。无法 replay 的本地 recovery directory 仍会在 JSON 的 `unavailable_runs` 中可见；指定该 ID 会返回 `run_journal_invalid`，真正不存在的 ID 则返回 `run_not_found`。如果 writer 持有 commit boundary 超过有界检查时限，指定读取和列表输出都会报告 `run_busy`，不会把 journal 误报为损坏。
 
 指定 ID 时返回当前 Run projection 和实时派生的结构化 `next`。空列表是合法输出。
 

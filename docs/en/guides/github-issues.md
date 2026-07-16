@@ -52,6 +52,8 @@ The generated `slipway-propose` and `slipway-decompose` instructions direct the 
 4. publish with recoverable operation/item markers;
 5. read back results and report created, matched, failed, or ambiguous items.
 
+A Change publication may briefly create an Issue whose body contains only its operation/item receipt markers because provider comment IDs do not exist until the Issue and chapter comments have been created. That receipt-only body is a non-authoritative reconciliation resource, not a valid Change source, Run state, or new lifecycle stage. The one confirmed operation plan must already contain the exact chapter bodies and digests plus the deterministic rule for inserting provider-returned IDs into the final manifest. Those IDs are reconciliation facts, not a second decision; another preview and confirmation is needed only after remote drift, a missing receipt, ambiguity, or a material change to the approved content or construction rule.
+
 These are host-side instructions, not a GitHub transaction implemented by the Go CLI. GitHub does not provide a multi-Issue transaction or a general exactly-once create operation. If a response is ambiguous or publication is partial, the host reports what it observed instead of claiming rollback or retrying blindly.
 
 An existing unmarked Issue is not silently converted into a managed Change. The host should offer an explicit choice: update it manually, create a separate managed Change with a link, or use a bounded ad-hoc Run.

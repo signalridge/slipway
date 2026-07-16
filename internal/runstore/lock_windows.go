@@ -63,6 +63,12 @@ func (lock *namedMutexWriterLock) tryLock() (bool, error) {
 	}
 }
 
+// Windows named mutexes do not provide a shared mode. Read-only callers retain
+// the same cross-process commit-boundary exclusion as writers on this platform.
+func (lock *namedMutexWriterLock) tryReadLock() (bool, error) {
+	return lock.tryLock()
+}
+
 func (lock *namedMutexWriterLock) unlock() error {
 	if !lock.threadLocked {
 		return errors.New("run writer mutex is not owned")

@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 
-	"github.com/signalridge/slipway/internal/autopilot"
 	"github.com/spf13/cobra"
 )
 
@@ -39,18 +38,18 @@ func makeMachineMaterialCmd(root *string) *cobra.Command {
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
-			next := autopilot.NoneNext("")
 			if runID == "" {
-				return newUsageError("run_id_required", "run cannot be empty", next)
+				return newUsageError("run_id_required", "run cannot be empty", statusInspectionNextForRawRoot(*root, ""))
 			}
 			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
 				return validationErr
 			}
+			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
 			if actionID == "" {
-				return newUsageError("action_id_required", "action cannot be empty", next)
+				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
 			}
 			if section == "" {
-				return newUsageError("material_section_required", "section cannot be empty", next)
+				return newUsageError("material_section_required", "section cannot be empty", recoveryNext)
 			}
 			service, err := openAutopilotReadOnly(*root)
 			if err != nil {
@@ -59,7 +58,7 @@ func makeMachineMaterialCmd(root *string) *cobra.Command {
 			defer func() { _ = service.Close() }()
 			material, err := service.ReadActionMaterial(runID, actionID, section)
 			if err != nil {
-				return err
+				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			if err := writeJSON(command.OutOrStdout(), material); err != nil {
 				return errors.New("write action material: " + err.Error())

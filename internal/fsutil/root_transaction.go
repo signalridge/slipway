@@ -25,6 +25,10 @@ type transactionFilesystem struct {
 	root          *os.Root
 	hooks         fileTransactionHooks
 	identityLease *transactionIdentityLease
+	// wroteFilesystem is set only after a transaction syscall has successfully
+	// changed the pinned namespace. Preparation and failed mutation attempts do
+	// not make a later root-identity error look committed.
+	wroteFilesystem bool
 }
 
 type fileQuarantine struct {
@@ -205,7 +209,7 @@ func snapshotFileForTransactionInRoot(root *os.Root, name, displayPath string, l
 			return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: %w", displayPath, err)
 		}
 		lease.add(pinned)
-		target, readErr := readSymlinkIdentity(pinned)
+		target, readErr := readSymlinkIdentity(root, name, pinned)
 		if readErr != nil {
 			return fileSnapshot{}, fmt.Errorf("snapshot symlink %s: %w", displayPath, readErr)
 		}
@@ -319,6 +323,7 @@ func (filesystem *transactionFilesystem) openStableDirectory(name string, create
 				}
 				return nil, err
 			}
+			filesystem.wroteFilesystem = true
 			created = true
 			info, err = current.Lstat(part)
 		}
@@ -444,6 +449,7 @@ func (filesystem *transactionFilesystem) allocateQuarantine(parent *os.Root, ori
 		} else if err != nil {
 			return nil, err
 		}
+		filesystem.wroteFilesystem = true
 		directoryPath := filepath.Join(filepath.Dir(originalPath), name)
 		recoveryPath := filepath.Join(directoryPath, itemName)
 		info, err := parent.Lstat(name)
@@ -847,7 +853,7 @@ func (filesystem *transactionFilesystem) restoreSymlinkExclusive(path string, sn
 		return fileSnapshot{}, fmt.Errorf("pin restored symlink %s: %w", path, err)
 	}
 	info, statErr := pinned.Stat()
-	target, readErr := readSymlinkIdentity(pinned)
+	target, readErr := readSymlinkIdentity(parent, base, pinned)
 	current, lstatErr := parent.Lstat(base)
 	var kindErr error
 	if statErr == nil {

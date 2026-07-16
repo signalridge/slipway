@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/autopilot"
@@ -9,6 +11,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestResolveRootTimeoutReturnsActionableRepositoryRecovery(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "repository")
+	err := repositoryDiscoveryError(root, context.DeadlineExceeded)
+	cliErr := asCLIError(err)
+	require.NotNil(t, cliErr)
+	assert.Equal(t, "git_repository_unavailable", cliErr.Code)
+	assert.Equal(t, exitCodeRuntime, cliErr.ExitCode)
+	assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, []string{"slipway", "doctor", "--root", root, "--json"}, cliErr.Next.Variants[0].BaseArgv)
+}
 
 func TestAsCLIErrorReportsMutationCommitStateWithoutRetry(t *testing.T) {
 	tests := []struct {

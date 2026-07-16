@@ -1,11 +1,13 @@
 package runstore
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -137,25 +139,26 @@ func TestVisitWithMaterialReaderHoldsRunLockThroughRead(t *testing.T) {
 	}()
 	<-readerEntered
 
-	mutationStarted := make(chan struct{})
+	mutationRun, err := store.openRunRoot("run-material-lock")
+	require.NoError(t, err)
+	defer mutationRun.Close()
+	mutationWaiting := make(chan struct{})
+	var waitOnce sync.Once
+	mutationRun.writerWait = func() { waitOnce.Do(func() { close(mutationWaiting) }) }
 	mutationEntered := make(chan struct{})
 	mutationDone := make(chan error, 1)
 	go func() {
-		close(mutationStarted)
-		mutationDone <- store.UpdateStream(
-			"run-material-lock",
-			func(Event) error { return nil },
-			func() ([]Event, any, error) {
-				close(mutationEntered)
-				return nil, nil, nil
-			},
-		)
+		mutationDone <- withRunLock(mutationRun, nil, func(*runTransaction) error {
+			close(mutationEntered)
+			return nil
+		})
 	}()
-	<-mutationStarted
+	<-mutationWaiting
+	enteredEarly := false
 	select {
 	case <-mutationEntered:
-		t.Fatal("mutation entered while the authorized material read held the Run lock")
-	case <-time.After(100 * time.Millisecond):
+		enteredEarly = true
+	default:
 	}
 
 	close(releaseReader)
@@ -166,6 +169,9 @@ func TestVisitWithMaterialReaderHoldsRunLockThroughRead(t *testing.T) {
 		t.Fatal("mutation did not enter after the material read released the Run lock")
 	}
 	require.NoError(t, <-mutationDone)
+	if enteredEarly {
+		t.Fatal("mutation entered while the authorized material read held the Run lock")
+	}
 }
 
 func TestStoreRejectsInvalidMaterialInputsAndUnsafeLeaves(t *testing.T) {
@@ -280,4 +286,109 @@ func TestMaterialsReplacementBeforeJournalAppendKeepsJournalUnchanged(t *testing
 	filename, err := materialFilename(materialDigest(content))
 	require.NoError(t, err)
 	assert.FileExists(t, filepath.Join(detached, filename))
+}
+
+func TestMaterialMutationThroughPinnedInodeDuringJournalCommitIsReportedCommitted(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	defer store.Close()
+	const runID = "run-material-inode-mutation"
+	require.NoError(t, createOneRun(store, runID))
+
+	content := []byte("expected immutable material")
+	digest := materialDigest(content)
+	filename, err := materialFilename(digest)
+	require.NoError(t, err)
+	materialPath := filepath.Join(store.CommonDir(), "slipway", "runs", runID, materialsDirectoryName, filename)
+	corrupt := bytes.Repeat([]byte{'x'}, len(content))
+	mutated := false
+	store.hooks = storeHooks{fault: func(point faultPoint) error {
+		if point != faultJournalOpened || mutated {
+			return nil
+		}
+		before, statErr := os.Stat(materialPath)
+		if errors.Is(statErr, os.ErrNotExist) {
+			return nil // Replay opens the journal before callback-selected materials exist.
+		}
+		require.NoError(t, statErr)
+		require.NoError(t, os.WriteFile(materialPath, corrupt, 0o600))
+		after, statErr := os.Stat(materialPath)
+		require.NoError(t, statErr)
+		require.True(t, os.SameFile(before, after), "the adversary must mutate the validated inode in place")
+		mutated = true
+		return nil
+	}}
+
+	next, err := NewEvent("updated", map[string]bool{"material": true})
+	require.NoError(t, err)
+	err = store.UpdateStreamWithMaterials(runID, func(Event) error { return nil }, func() (UpdateResult, error) {
+		return UpdateResult{
+			Events:     []Event{next},
+			Projection: map[string]bool{"material": true},
+			Materials:  []Material{{Digest: digest, Data: content}},
+		}, nil
+	})
+	require.True(t, mutated)
+	mutationErr := requireMutationError(t, err)
+	assert.True(t, mutationErr.Committed)
+	assert.True(t, mutationErr.ProjectionStale)
+	assert.Contains(t, mutationErr.Error(), "material")
+	assertReplayContainsOneUpdate(t, store, runID)
+	_, err = store.ReadMaterial(runID, digest)
+	assert.Error(t, err)
+}
+
+func TestMaterialMutationThroughPinnedInodeBeforeJournalAppendKeepsJournalUnchanged(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	defer store.Close()
+	const runID = "run-material-precommit-mutation"
+	require.NoError(t, createOneRun(store, runID))
+
+	runDirectory := filepath.Join(store.CommonDir(), "slipway", "runs", runID)
+	journalPath := filepath.Join(runDirectory, journalFileName)
+	journalBefore, err := os.ReadFile(journalPath)
+	require.NoError(t, err)
+	content := []byte("precommit immutable material")
+	digest := materialDigest(content)
+	filename, err := materialFilename(digest)
+	require.NoError(t, err)
+	materialPath := filepath.Join(runDirectory, materialsDirectoryName, filename)
+	corrupt := bytes.Repeat([]byte{'z'}, len(content))
+	mutated := false
+	store.hooks = storeHooks{fault: func(point faultPoint) error {
+		if point != faultSyncRunDirectory || mutated {
+			return nil
+		}
+		before, statErr := os.Stat(materialPath)
+		if errors.Is(statErr, os.ErrNotExist) {
+			return nil
+		}
+		require.NoError(t, statErr)
+		require.NoError(t, os.WriteFile(materialPath, corrupt, 0o600))
+		after, statErr := os.Stat(materialPath)
+		require.NoError(t, statErr)
+		require.True(t, os.SameFile(before, after))
+		mutated = true
+		return nil
+	}}
+
+	next, err := NewEvent("updated", map[string]bool{"material": true})
+	require.NoError(t, err)
+	err = store.UpdateStreamWithMaterials(runID, func(Event) error { return nil }, func() (UpdateResult, error) {
+		return UpdateResult{
+			Events:     []Event{next},
+			Projection: map[string]bool{"material": true},
+			Materials:  []Material{{Digest: digest, Data: content}},
+		}, nil
+	})
+	require.True(t, mutated)
+	mutationErr := requireMutationError(t, err)
+	assert.False(t, mutationErr.Committed)
+	assert.False(t, mutationErr.Ambiguous)
+	journalAfter, readErr := os.ReadFile(journalPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, journalBefore, journalAfter)
 }

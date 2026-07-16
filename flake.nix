@@ -16,7 +16,7 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        version =
+        manifestVersion =
           let
             manifest = builtins.fromJSON (builtins.readFile ./.release-please-manifest.json);
             manifestVersion = manifest.".";
@@ -26,7 +26,12 @@
           in
           assert builtins.isString manifestVersion && builtins.match semverPattern manifestVersion != null;
           manifestVersion;
-        commit = self.shortRev or "unknown";
+        commit = self.shortRev or self.dirtyShortRev or "unknown";
+        version =
+          if self ? dirtyShortRev then
+            "${manifestVersion}-dev+${builtins.replaceStrings [ "-dirty" ] [ "" ] self.dirtyShortRev}"
+          else
+            manifestVersion;
         go_1_26_5 = pkgs.go_1_26.overrideAttrs (
           finalAttrs: previousAttrs: {
             version = "1.26.5";
@@ -46,7 +51,7 @@
             src = ./.;
 
             subPackages = [ "." ];
-            vendorHash = "sha256-OLi4HY+n3RaBFW5sHDp19G+QNg2t8eODP+Gj0uLAamg=";
+            vendorHash = "sha256-HDk3AQYVPvi6nh8khx06SO7XX5SgFlh5dpjKlgnSHoY=";
             doCheck = false;
 
             ldflags = [

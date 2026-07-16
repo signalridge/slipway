@@ -476,12 +476,58 @@ func (observation GitObservation) Validate() error {
 	return nil
 }
 
-// ChangedFrom compares the digest over all structured observation fields.
+// ChangedFrom reports only differences established by comparable evidence.
+// Bounded content observation can be incomplete without the workspace changing;
+// that uncertainty is recorded separately by the caller and must not itself
+// route the Run through Review.
 func (observation GitObservation) ChangedFrom(initial GitObservation) bool {
-	if !observation.ContentObservationComplete || !initial.ContentObservationComplete {
+	if observation.SnapshotHash == initial.SnapshotHash {
+		return false
+	}
+	if observation.ContentObservationComplete && initial.ContentObservationComplete {
 		return true
 	}
-	return observation.SnapshotHash != initial.SnapshotHash
+	if observation.Head != initial.Head ||
+		observation.IndexFingerprint != initial.IndexFingerprint ||
+		observation.StatusFingerprint != initial.StatusFingerprint {
+		return true
+	}
+	initialPaths := make(map[string]PathObservation, len(initial.PathObservations))
+	for _, item := range initial.PathObservations {
+		initialPaths[item.Path] = item
+	}
+	for _, item := range observation.PathObservations {
+		before, ok := initialPaths[item.Path]
+		if ok && comparablePathObservationChanged(item, before) {
+			return true
+		}
+	}
+	return false
+}
+
+func comparablePathObservationChanged(current, initial PathObservation) bool {
+	if current.Category != initial.Category || current.State != initial.State {
+		return true
+	}
+	if current.ContentSHA256 != "" && initial.ContentSHA256 != "" {
+		return current.ContentSHA256 != initial.ContentSHA256 ||
+			current.ContentFingerprintKind != initial.ContentFingerprintKind
+	}
+	if current.Size != nil && initial.Size != nil && *current.Size != *initial.Size {
+		return true
+	}
+	return concreteContentObservation(current.Observation) &&
+		concreteContentObservation(initial.Observation) &&
+		current.Observation != initial.Observation
+}
+
+func concreteContentObservation(observation string) bool {
+	switch observation {
+	case "regular", "symlink", "oversize_sampled", "missing", "non_regular":
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePorcelainV2(raw []byte) ([]statusPath, error) {

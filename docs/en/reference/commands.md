@@ -56,7 +56,7 @@ Checks repository discovery, host adapters, generated files, Run-storage durabil
 ## `slipway run`
 
 ```text
-slipway run <goal> [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
+slipway run [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json] -- <goal>
 ```
 
 Creates a Run and returns its initial `orient` Action. The Action budget defaults to 8 and must be between 1 and 1000. `--no-review` disables advisory Review; otherwise Review is issued only after an Action for which Slipway observes code changes.
@@ -81,7 +81,7 @@ slipway status [run-id] [--root ROOT] [--json]
 
 Without an ID, lists Runs in the repository's Git common directory. Current-worktree Runs are replayed; another linked worktree's Run appears only as a read-only header marked `workspace_foreign`. Full inspection and mutation require the owning worktree.
 
-`status` is filesystem-read-only: it does not create the run namespace or lock files, change permissions, or repair an interrupted journal tail. A local recovery directory that cannot be replayed remains visible in JSON under `unavailable_runs`; targeted inspection reports `run_journal_invalid`, while an absent ID reports `run_not_found`.
+`status` is filesystem-read-only: it does not create the run namespace or lock files, change permissions, or repair an interrupted journal tail. A local recovery directory that cannot be replayed remains visible in JSON under `unavailable_runs`; targeted inspection reports `run_journal_invalid`, while an absent ID reports `run_not_found`. If a writer holds the commit boundary through the bounded inspection timeout, targeted and list output report `run_busy` instead of misclassifying the journal as invalid.
 
 With an ID, returns the current Run projection and a freshly derived structured `next` operation. Empty list output is valid.
 

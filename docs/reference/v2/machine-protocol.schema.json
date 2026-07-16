@@ -153,7 +153,7 @@
         "updated_at": { "type": "string", "format": "date-time" },
         "author_id": { "$ref": "#/$defs/githubNodeID" },
         "is_minimized": { "type": "boolean" },
-        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" }
+        "body": { "$ref": "#/$defs/markdownText" }
       }
     },
     "rawSourceEnvelope": {
@@ -174,7 +174,7 @@
         "updated_at": { "type": "string", "format": "date-time" },
         "fetched_at": { "type": "string", "format": "date-time" },
         "title": { "$ref": "#/$defs/nonEmptyPlainText" },
-        "body": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "body": { "$ref": "#/$defs/markdownText" },
         "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
         "parent": { "$ref": "#/$defs/sourceParent" },
         "comments": {
@@ -721,13 +721,24 @@
         "report": { "$ref": "#/$defs/changeReport" }
       }
     },
+    "journalRecordLimitErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context", "size", "limit"],
+      "properties": {
+        "context": { "type": "string", "minLength": 1 },
+        "size": { "type": "integer", "minimum": 1 },
+        "limit": { "type": "integer", "minimum": 1 }
+      }
+    },
     "errorDetails": {
       "oneOf": [
         { "$ref": "#/$defs/mutationErrorDetails" },
         { "$ref": "#/$defs/runStateErrorDetails" },
         { "$ref": "#/$defs/workspaceIdentityErrorDetails" },
         { "$ref": "#/$defs/sourceIssueMismatchErrorDetails" },
-        { "$ref": "#/$defs/adapterMutationErrorDetails" }
+        { "$ref": "#/$defs/adapterMutationErrorDetails" },
+        { "$ref": "#/$defs/journalRecordLimitErrorDetails" }
       ]
     },
     "cliError": {

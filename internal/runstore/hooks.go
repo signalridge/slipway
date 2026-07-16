@@ -36,6 +36,7 @@ const (
 	faultProjectionBeforeSync faultPoint = "projection_before_sync"
 	faultProjectionAfterSync  faultPoint = "projection_after_sync"
 	faultProjectionPreRename  faultPoint = "projection_pre_rename"
+	faultProjectionRelocated  faultPoint = "projection_relocated"
 	faultProjectionPostRename faultPoint = "projection_post_rename"
 	faultProjectionDirSync    faultPoint = "projection_dir_sync"
 )

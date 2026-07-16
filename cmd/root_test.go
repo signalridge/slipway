@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -64,6 +65,12 @@ func TestRawRootArgumentStopsAtSeparator(t *testing.T) {
 	explicit, found = rawRootArgument([]string{"run", "--", "--root=/repo/b"})
 	assert.False(t, found)
 	assert.Empty(t, explicit)
+}
+
+func TestRootForEarlyErrorDoesNotRequireRepositoryDiscovery(t *testing.T) {
+	t.Parallel()
+	explicit := filepath.Join(t.TempDir(), "not-a-repository")
+	assert.Equal(t, explicit, rootForEarlyError([]string{"status", "--root", explicit}))
 }
 
 func executeForTest(t *testing.T, args ...string) (string, string, error) {

@@ -9,6 +9,11 @@ import (
 
 const lockTimeout = 5 * time.Second
 
+// ErrRunLockTimeout identifies a Run whose commit boundary stayed busy until
+// the bounded acquisition deadline. Callers may report it as busy rather than
+// misclassifying the authoritative journal as invalid.
+var ErrRunLockTimeout = errors.New("run lock acquisition timed out")
+
 type mutationTracker struct {
 	wroteJournal      bool
 	committed         bool
@@ -57,6 +62,7 @@ func (tracker *mutationTracker) fail(phase MutationPhase, detached bool, err err
 
 type runWriterLock interface {
 	tryLock() (bool, error)
+	tryReadLock() (bool, error)
 	unlock() error
 	close() error
 }
@@ -104,7 +110,7 @@ func withRunCommitBoundary(run *runHandle, callback func() error) (resultErr err
 
 	deadline := time.Now().Add(lockTimeout)
 	for {
-		locked, lockErr := writer.tryLock()
+		locked, lockErr := writer.tryReadLock()
 		if lockErr != nil {
 			return fmt.Errorf("acquire run commit-boundary lock: %w", lockErr)
 		}
@@ -116,7 +122,7 @@ func withRunCommitBoundary(run *runHandle, callback func() error) (resultErr err
 			run.writerWait()
 		}
 		if !time.Now().Before(deadline) {
-			return fmt.Errorf("acquire run commit-boundary lock: timed out after %s", lockTimeout)
+			return fmt.Errorf("acquire run commit-boundary lock: %w after %s", ErrRunLockTimeout, lockTimeout)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
@@ -166,7 +172,7 @@ func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTra
 			run.writerWait()
 		}
 		if !time.Now().Before(deadline) {
-			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run writer lock: timed out after %s", lockTimeout))
+			return tracker.fail(PhaseLockOpen, false, fmt.Errorf("acquire run writer lock: %w after %s", ErrRunLockTimeout, lockTimeout))
 		}
 		time.Sleep(25 * time.Millisecond)
 	}

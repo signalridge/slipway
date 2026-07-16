@@ -54,7 +54,7 @@ func validateOpenedSymlinkIdentity(root *os.Root, name string, identity *os.File
 	return nil
 }
 
-func readSymlinkIdentity(identity *os.File) (string, error) {
+func readSymlinkIdentity(_ *os.Root, _ string, identity *os.File) (string, error) {
 	for size := 256; size <= 1<<20; size *= 2 {
 		buffer := make([]byte, size)
 		count, err := unix.Readlinkat(int(identity.Fd()), "", buffer)

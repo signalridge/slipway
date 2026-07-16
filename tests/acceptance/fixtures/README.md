@@ -1,5 +1,7 @@
 # Acceptance fixtures
 
+`container-source-envelope.json` is a deterministic, synthetic, credential-free valid Change source used by the post-release container smoke.
+
 `github-publication-faults.json` is deterministic, credential-free input for `../github_publication_fault_harness.py`. UUIDs, repository names, URLs, Issue numbers, and text are fictional.
 
 The fixture covers:

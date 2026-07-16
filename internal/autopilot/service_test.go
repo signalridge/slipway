@@ -401,6 +401,12 @@ func TestServiceListShowsForeignHeadersAndReportsCorruptRuns(t *testing.T) {
 	}
 }
 
+func TestListRecoveryClassifiesLockTimeoutAsBusy(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "run_busy", unavailableRunCode(fmt.Errorf("replay current Run: %w", runstore.ErrRunLockTimeout)))
+	assert.Equal(t, "run_journal_invalid", unavailableRunCode(errors.New("malformed journal")))
+}
+
 func TestServiceLoadRecreatesMissingLockForValidatedLocalRun(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)

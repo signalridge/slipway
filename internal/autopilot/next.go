@@ -632,6 +632,10 @@ func workspaceIdentityForNext(workspaceRoot string) (string, string) {
 	if identity, err := runstore.DiscoverWorkspaceIdentity(workspaceRoot); err == nil {
 		return identity.ID, identity.WorktreeRoot
 	}
+	return unavailableWorkspaceIdentityForNext(workspaceRoot)
+}
+
+func unavailableWorkspaceIdentityForNext(workspaceRoot string) (string, string) {
 	absolute, err := filepath.Abs(workspaceRoot)
 	if err == nil {
 		workspaceRoot = filepath.Clean(absolute)
@@ -642,6 +646,17 @@ func workspaceIdentityForNext(workspaceRoot string) (string, string) {
 
 func NewCommandNext(operation NextOperation, workspaceRoot, variantID string, baseArgv []string, inputs []NextInput) (Next, error) {
 	workspaceIdentity, canonicalRoot := workspaceIdentityForNext(workspaceRoot)
+	return newCommandNext(operation, workspaceIdentity, canonicalRoot, variantID, baseArgv, inputs)
+}
+
+// NewUnavailableWorkspaceCommandNext constructs a recovery command without
+// querying Git metadata that the caller has already found unavailable.
+func NewUnavailableWorkspaceCommandNext(workspaceRoot, variantID string, baseArgv []string, inputs []NextInput) (Next, error) {
+	workspaceIdentity, canonicalRoot := unavailableWorkspaceIdentityForNext(workspaceRoot)
+	return newCommandNext(NextOperationCommand, workspaceIdentity, canonicalRoot, variantID, baseArgv, inputs)
+}
+
+func newCommandNext(operation NextOperation, workspaceIdentity, canonicalRoot, variantID string, baseArgv []string, inputs []NextInput) (Next, error) {
 	copiedArgv := make([]string, len(baseArgv))
 	copy(copiedArgv, baseArgv)
 	copiedInputs := make([]NextInput, len(inputs))

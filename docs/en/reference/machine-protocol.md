@@ -70,6 +70,8 @@ Issue-backed Actions additionally contain:
 
 They do not copy requirements Markdown into `context`. The material reader is valid only for the current non-void Action and verifies digest, byte count, and section revision before returning content.
 
+The versioned field for those keys is `requirements.required_for_action`. In protocol v2 it is the ordered list of every key in `requirements.sections`; hosts must preserve that exact equality rather than infer a smaller subset.
+
 `context` is a bounded projection of active answers and prior Outcome summaries. It is not the full journal, source, conversation, or hidden model reasoning.
 
 ## Outcome
@@ -143,6 +145,8 @@ Input types are `string`, `path`, `enum`, and `digest`. A consumer selects one v
 
 Only a fully resolved, inputless variant may be rendered for a human shell. POSIX, `cmd.exe`, and PowerShell rendering is presentation only; structured argv is the machine value.
 
+When a Windows display command contains expansion-sensitive `%` or `!` values that `cmd.exe` cannot preserve safely, the renderer uses a PowerShell UTF-16LE `EncodedCommand` trampoline. This changes only the copyable display form; the decoded process argv must remain byte-for-byte equivalent to the structured variant.
+
 Ended Runs use `operation: "none"` with an empty variant list.
 
 ## Source envelope
@@ -157,7 +161,7 @@ A source envelope is at most 16 MiB and identifies one `github.com` Issue by rep
 
 A normalized section is at most 256 KiB; the complete section payload is at most 4 MiB; the manifest is at most 256 KiB. Missing, extra, duplicate, minimized, edited, oversized, or hash-mismatched references are rejected.
 
-The top-level source schema intentionally permits an empty comments array for an invalid refreshed head so the CLI can classify drift without collecting unrelated discussion. The embedded manifest string and all semantic digest checks are validated by the runtime, not by the top-level schema alone.
+The top-level source schema intentionally permits empty or whitespace-only Issue/comment bodies and an empty comments array for an invalid refreshed head. This lets the CLI classify missing markers, empty referenced sections, and digest mismatches without the host rejecting the envelope or collecting unrelated discussion. The embedded manifest string and all semantic digest checks are validated by the runtime, not by the top-level schema alone.
 
 The CLI persists stable identity, provenance, byte counts, revisions, and content-addressed accepted material. It does not journal the raw envelope, title labels as requirements, source-file path, or unreferenced comments.
 
@@ -191,5 +195,7 @@ Git observations record hashes and bounded metadata for the index, porcelain sta
 ## Errors and compatibility
 
 Machine errors include `contract_version`, a stable `code`, human `message`, `exit_code`, and structured recovery where available. Preserve all fields and branch on code/version, not message text.
+
+`journal_record_too_large` carries the strict detail fields `context`, `size`, and `limit`, plus a read-only `status` recovery variant for the affected Run when its ID is known. Rejecting an oversized record does not end or invalidate the persistent Run.
 
 Unknown contract versions and fields are rejected. Version 2 does not promise compatibility with unreleased development formats that preceded it. A future incompatible contract must use a new explicit version rather than a silent alias.

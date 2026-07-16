@@ -144,6 +144,61 @@ func TestSourceRevisionSeparatesProjectionManifestAndRequirements(t *testing.T) 
 	assert.NotEqual(t, baseline.RequirementsRevision, amendedPinned.RequirementsRevision)
 }
 
+func TestSourceDigestGoldenVectors(t *testing.T) {
+	t.Parallel()
+	const bodyDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	const sectionDigest = "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+
+	manifest := SourceManifest{
+		ManifestVersion:            SourceManifestVersion,
+		Profile:                    SourceProfileChangeV2,
+		ParentRequirementsRevision: "sha256:parent",
+		Sections: []SourceManifestSection{{
+			Key:               "requirements",
+			Role:              SourceSectionRequirements,
+			Title:             "Requirements",
+			CommentNodeID:     "IC_requirements",
+			CommentDatabaseID: 42,
+			BodySHA256:        bodyDigest,
+		}},
+	}
+	sections := []PinnedSourceSection{{
+		Key:             "requirements",
+		Role:            SourceSectionRequirements,
+		Title:           "Requirements",
+		SectionRevision: sectionDigest,
+	}}
+	observation := RawSourceEnvelope{
+		Host:         "github.com",
+		RepositoryID: "R_example",
+		IssueID:      "I_example",
+		Title:        "[Change] Example\r\nTitle",
+		Comments: []RawSourceComment{
+			{NodeID: "IC_two", Body: "second\r\n"},
+			{NodeID: "IC_one", Body: "first\n"},
+		},
+	}
+
+	vectors := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "comment body", got: commentBodyRevision("hello\n"), want: "sha256:e3d8ed9910845a2586b220f77cbeeb12ccf5cbdb654301b6b84ea059fadd2f08"},
+		{name: "material", got: materialRevision("hello\n"), want: "sha256:b60997511c1ba1fa5441e3395a48951bfa247c8f0e838c8af36632b8e56e238e"},
+		{name: "section", got: sectionRevision("requirements", SourceSectionRequirements, "Requirements", "hello\n"), want: "sha256:c270635399a40865f1f8d3a62ad9f68ec6c2959336f5b7b6a309285ab763a257"},
+		{name: "manifest", got: manifestRevision(manifest), want: "sha256:d2af09b9003689494b769cb4c3e3ad437bba13bee6f5ed9a2a54164f566d2a88"},
+		{name: "requirements", got: requirementsRevision(SourceProfileChangeV2, sections), want: "sha256:63e981153a43384d9774ae98004edfaba804d62e3dac5dfb400c60331fb77f78"},
+		{name: "source", got: sourceRevisionFromIdentity("github.com", "R_example", "I_example", "[Change] Example\r\nTitle", bodyDigest), want: "sha256:ae2212cb7e93245b78eadbad656c99278ebaf1775d7736cfe376b03a253b851a"},
+		{name: "source observation", got: sourceObservationSHA256(observation, "normalized body\n"), want: "sha256:99d45298e580e54df9807742fe5a022efac243d7cfaba5f460ababeed9e2c252"},
+	}
+	for _, vector := range vectors {
+		t.Run(vector.name, func(t *testing.T) {
+			assert.Equal(t, vector.want, vector.got)
+		})
+	}
+}
+
 func TestParseSourceEnforcesSectionAndBundleLimits(t *testing.T) {
 	t.Parallel()
 	envelope := validSourceEnvelope()
@@ -457,6 +512,29 @@ func TestParseSourceCandidateAllowsEmptyCommentsForInvalidHead(t *testing.T) {
 				envelope.Comments = []RawSourceComment{}
 			},
 			classificationCode: SourceClassificationSectionMissing,
+		},
+		{
+			name: "empty body is a candidate pause",
+			mutate: func(envelope *RawSourceEnvelope) {
+				envelope.Body = ""
+				envelope.Comments = []RawSourceComment{}
+			},
+			classificationCode: SourceClassificationChangeMarkerRequired,
+		},
+		{
+			name: "whitespace body is a candidate pause",
+			mutate: func(envelope *RawSourceEnvelope) {
+				envelope.Body = " \n\t"
+				envelope.Comments = []RawSourceComment{}
+			},
+			classificationCode: SourceClassificationChangeMarkerRequired,
+		},
+		{
+			name: "empty referenced comment is a candidate pause",
+			mutate: func(envelope *RawSourceEnvelope) {
+				envelope.Comments[0].Body = ""
+			},
+			classificationCode: SourceClassificationSectionHashMismatch,
 		},
 	}
 	for _, test := range tests {

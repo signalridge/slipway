@@ -37,7 +37,7 @@ func testOpenSymlinkIdentityPinsSymlinkObject(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, opened.Mode()&os.ModeSymlink)
 	assert.True(t, os.SameFile(expected, opened))
-	heldTarget, err := readSymlinkIdentity(identity)
+	heldTarget, err := readSymlinkIdentity(root, "link", identity)
 	require.NoError(t, err)
 	assert.Equal(t, "first.txt", heldTarget)
 
@@ -47,7 +47,7 @@ func testOpenSymlinkIdentityPinsSymlinkObject(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotZero(t, recreated.Mode()&os.ModeSymlink)
 	assert.False(t, os.SameFile(opened, recreated))
-	heldTarget, err = readSymlinkIdentity(identity)
+	heldTarget, err = readSymlinkIdentity(root, "link", identity)
 	require.NoError(t, err)
 	assert.Equal(t, "first.txt", heldTarget)
 	target, err := root.Readlink("link")

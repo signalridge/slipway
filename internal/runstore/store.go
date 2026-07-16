@@ -279,6 +279,11 @@ func (store *Store) create(runID string, event Event, projection any, materials 
 		if PlatformDurability().DirectorySync {
 			tracker.markJournalCommitted()
 		}
+		if guard != nil {
+			if err := guard.validate(); err != nil {
+				return tracker.fail(PhaseJournalVerify, false, fmt.Errorf("validate run materials after journal commit: %w", err))
+			}
+		}
 		if err := transaction.validate(PhaseNamespaceVerify, faultValidateRun); err != nil {
 			return err
 		}
@@ -416,6 +421,11 @@ func (store *Store) UpdateStreamWithMaterials(
 		}
 		if err := appendEncodedJournal(transaction, journalFileName, journalContent); err != nil {
 			return err
+		}
+		if guard != nil {
+			if err := guard.validate(); err != nil {
+				return tracker.fail(PhaseJournalVerify, false, fmt.Errorf("validate run materials after journal commit: %w", err))
+			}
 		}
 		return commitSnapshot(transaction, prepared)
 	})

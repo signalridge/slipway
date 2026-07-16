@@ -41,6 +41,32 @@ type CLIError struct {
 	Details         map[string]any `json:"details,omitempty"`
 }
 
+type cliErrorContext struct {
+	WorkspaceRoot string
+	RunID         string
+}
+
+type cliErrorContextCarrier struct {
+	err     error
+	context cliErrorContext
+}
+
+func (carrier *cliErrorContextCarrier) Error() string { return carrier.err.Error() }
+func (carrier *cliErrorContextCarrier) Unwrap() error { return carrier.err }
+
+func withCLIErrorContext(err error, workspaceRoot, runID string) error {
+	if err == nil {
+		return nil
+	}
+	return &cliErrorContextCarrier{
+		err: err,
+		context: cliErrorContext{
+			WorkspaceRoot: workspaceRoot,
+			RunID:         runID,
+		},
+	}
+}
+
 func (err *CLIError) Error() string {
 	if err == nil {
 		return ""
@@ -70,8 +96,21 @@ func newRuntimeError(code, message string, next autopilot.Next, details map[stri
 }
 
 func asCLIError(err error) *CLIError {
+	return asCLIErrorWithContext(err, cliErrorContext{})
+}
+
+func asCLIErrorWithContext(err error, context cliErrorContext) *CLIError {
 	if err == nil {
 		return nil
+	}
+	var carrier *cliErrorContextCarrier
+	if errors.As(err, &carrier) {
+		if strings.TrimSpace(carrier.context.WorkspaceRoot) != "" {
+			context.WorkspaceRoot = carrier.context.WorkspaceRoot
+		}
+		if strings.TrimSpace(carrier.context.RunID) != "" {
+			context.RunID = carrier.context.RunID
+		}
 	}
 	var cliErr *CLIError
 	if errors.As(err, &cliErr) {
@@ -83,8 +122,7 @@ func asCLIError(err error) *CLIError {
 	}
 	var recordLimitErr journalRecordLimitError
 	if errors.As(err, &recordLimitErr) {
-		next := defaultErrorNext()
-		next = statusInspectionNext(next.WorkspaceRoot(), "")
+		next := storageRecoveryNext(context)
 		return newRuntimeError("journal_record_too_large", recordLimitErr.Error(), next, map[string]any{
 			"context": recordLimitErr.JournalRecordContext(),
 			"size":    recordLimitErr.JournalRecordSize(),
@@ -108,7 +146,7 @@ func asCLIError(err error) *CLIError {
 		}
 		next := defaultErrorNext()
 		if committed || projectionStale || namespaceDetached || ambiguous {
-			next = statusInspectionNext(next.WorkspaceRoot(), "")
+			next = storageRecoveryNext(context)
 		}
 		return newRuntimeError(code, mutationErr.Error(), next, map[string]any{
 			"phase":              mutationErr.StorageMutationPhase(),
@@ -129,6 +167,14 @@ func asCLIError(err error) *CLIError {
 		return newUsageError("invalid_usage", message, next)
 	}
 	return newRuntimeError("runtime_error", message, next, nil)
+}
+
+func storageRecoveryNext(context cliErrorContext) autopilot.Next {
+	workspaceRoot := context.WorkspaceRoot
+	if strings.TrimSpace(workspaceRoot) == "" {
+		workspaceRoot = defaultErrorNext().WorkspaceRoot()
+	}
+	return statusInspectionNext(workspaceRoot, context.RunID)
 }
 
 func normalizeErrorNext(next autopilot.Next) autopilot.Next {

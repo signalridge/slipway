@@ -800,6 +800,10 @@ with open(sys.argv[1], "w", encoding="utf-8") as stream:
     json.dump(data, stream, separators=(",", ":"), sort_keys=True)
     stream.write("\n")
 PY
+SOURCE_LINK="$TMP_ROOT/source-envelope-link.json"
+ln -s "$SOURCE_FILE" "$SOURCE_LINK"
+expect_error 2 invalid_source start-with-source \
+  "$BIN" run --root "$SOURCE_REPO" --source-file "$SOURCE_LINK" --budget 8 --json -- 'reject source symlink'
 SOURCE_START="$TMP_ROOT/source-start.json"
 "$BIN" run 'issue-bound acceptance' --root "$SOURCE_REPO" --source-file "$SOURCE_FILE" --budget 8 --json > "$SOURCE_START"
 assert_issue_action "$SOURCE_START" orient
