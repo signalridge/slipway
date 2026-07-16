@@ -75,7 +75,7 @@ func TestObserveGitSamplesOversizeUntrackedFileContent(t *testing.T) {
 	observation, err := ObserveGit(repository)
 	require.NoError(t, err)
 	require.Len(t, observation.PathObservations, 1)
-	assert.Equal(t, "oversize", observation.PathObservations[0].Observation)
+	assert.Equal(t, "oversize_sampled", observation.PathObservations[0].Observation)
 	assert.True(t, validSHA256(observation.PathObservations[0].ContentSHA256))
 	require.NotNil(t, observation.PathObservations[0].Size)
 	assert.Equal(t, MaxObservedFileBytes+1, *observation.PathObservations[0].Size)
@@ -236,6 +236,56 @@ func TestOpenReadOnlyRejectsMutationsAndDoesNotCreateLocks(t *testing.T) {
 	assert.ErrorIs(t, err, ErrReadOnly)
 	err = store.PutMaterials("run-one", nil)
 	assert.ErrorIs(t, err, ErrReadOnly)
+}
+
+func TestReadOnlyVisitSerializesAgainstWriterCommitBoundary(t *testing.T) {
+	repository := createRepository(t)
+	writable, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, writable.Close()) })
+	initial, err := NewEvent("created", map[string]int{"count": 1})
+	require.NoError(t, err)
+	require.NoError(t, writable.Create("serialized-run", initial, map[string]int{"count": 1}))
+	readOnly, err := OpenReadOnly(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, readOnly.Close()) })
+
+	writerEntered := make(chan struct{})
+	releaseWriter := make(chan struct{})
+	writerResult := make(chan error, 1)
+	go func() {
+		writerResult <- writable.UpdateStream("serialized-run", func(Event) error { return nil }, func() ([]Event, any, error) {
+			close(writerEntered)
+			<-releaseWriter
+			next, eventErr := NewEvent("updated", map[string]int{"count": 2})
+			return []Event{next}, map[string]int{"count": 2}, eventErr
+		})
+	}()
+	<-writerEntered
+
+	visitorEntered := make(chan struct{})
+	visitorResult := make(chan error, 1)
+	var enterOnce sync.Once
+	go func() {
+		visitorResult <- readOnly.Visit("serialized-run", func(Event) error {
+			enterOnce.Do(func() { close(visitorEntered) })
+			return nil
+		})
+	}()
+	select {
+	case <-visitorEntered:
+		t.Fatal("read-only replay crossed an in-progress writer commit boundary")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseWriter)
+	require.NoError(t, <-writerResult)
+	require.NoError(t, <-visitorResult)
+	select {
+	case <-visitorEntered:
+	default:
+		t.Fatal("read-only visitor did not run after writer release")
+	}
 }
 
 func TestJournalIgnoresOnlyAnInterruptedFinalRecord(t *testing.T) {

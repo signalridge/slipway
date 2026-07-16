@@ -157,6 +157,17 @@ jobs:
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - name: Observe module-file drift
+        continue-on-error: true
+        run: |
+          set +e
+          go mod tidy -diff
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '::warning::go mod tidy reports module-file drift'
+          fi
+          echo 'Module-file drift is an advisory observation, not a release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       - name: Run GoReleaser
         id: goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
@@ -168,24 +179,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COSIGN_EXPERIMENTAL: "1"
           OPTIONAL_PUBLISH_ONLY: "false"
-      - name: Check release artifacts
+      # Everything below observes or prepares independent downstream evidence.
+      # It must not turn an already-created core release into a channel gate.
+      - name: Observe release artifacts
+        continue-on-error: true
         env:
           TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
         run: >-
           python3 -I tests/acceptance/release_artifacts.py --dist dist
           --expected-version "${TAG_NAME}" --core-only
-      - name: Observe GoReleaser module-file drift
+      - name: Observe LICENSE inclusion in every archive
         continue-on-error: true
-        run: |
-          set +e
-          git diff --exit-code -- go.mod go.sum
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo '::warning::GoReleaser changed go.mod or go.sum'
-          fi
-          echo 'Module-file drift is an advisory observation, not a release gate.' >> "$GITHUB_STEP_SUMMARY"
-          exit "$status"
-      - name: Assert LICENSE is present in every archive
         run: |
           archive_count=0
           while IFS= read -r -d '' archive; do
@@ -201,12 +205,14 @@ jobs:
             exit 1
           fi
       - name: Extract version
+        continue-on-error: true
         id: version
         run: |
           metadata='${{ steps.goreleaser.outputs.metadata }}'
           VERSION=$(printf '%s\n' "$metadata" | jq -r '.version')
           printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
       - name: Generate release subjects
+        continue-on-error: true
         id: hash
         run: |
           cd dist
@@ -218,6 +224,7 @@ jobs:
           hashes=$(printf "%s\n" "$subjects" | base64 -w0)
           printf 'hashes=%s\n' "$hashes" >> "$GITHUB_OUTPUT"
       - name: Generate release smoke manifest
+        continue-on-error: true
         id: smoke
         run: |
           cd dist
@@ -257,6 +264,7 @@ jobs:
             printf 'apk_asset=%s\n' "$apk_asset"
           } >> "$GITHUB_OUTPUT"
       - name: Upload SBOM artifacts
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sbom

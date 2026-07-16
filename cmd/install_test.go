@@ -23,8 +23,10 @@ func TestAdapterMutationErrorPreservesReportAndDisablesBlindRetry(t *testing.T) 
 	}
 
 	cliErr := adapterMutationError("install_failed", errors.New("transaction failed"), "/workspace", report)
-	assert.Equal(t, autopilot.NextOperationNone, cliErr.Next.Operation)
-	assert.Empty(t, cliErr.Next.Variants)
+	assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, "inspect-host-adapters", cliErr.Next.Variants[0].ID)
+	assert.Equal(t, []string{"slipway", "list", "--root", "/workspace"}, cliErr.Next.Variants[0].BaseArgv)
 	require.NotNil(t, cliErr.Details)
 	encodedReport, ok := cliErr.Details["report"].(changeReportOutput)
 	require.True(t, ok)
@@ -70,6 +72,32 @@ func TestInstallAndUninstallUnknownHostAreUsageErrorsWithoutMutation(t *testing.
 			_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
 			require.ErrorIs(t, statErr, os.ErrNotExist)
 		})
+	}
+}
+
+func TestInstallAndUninstallRejectExplicitEmptyToolSelection(t *testing.T) {
+	selections := []struct {
+		name  string
+		value string
+	}{
+		{name: "empty", value: ""},
+		{name: "comma only", value: ","},
+	}
+	for _, command := range []string{"install", "uninstall"} {
+		for _, selection := range selections {
+			t.Run(command+"/"+selection.name, func(t *testing.T) {
+				repository := newCLIRepository(t)
+				before := snapshotCLIWorkspace(t, repository)
+				stdout, stderr, err := executeForTest(t, command, "--root", repository, "--tool", selection.value)
+				require.Error(t, err)
+				assert.Empty(t, stdout)
+				var cliErr CLIError
+				require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+				assert.Equal(t, "host_adapter_required", cliErr.Code)
+				assert.Equal(t, exitCodeUsage, cliErr.ExitCode)
+				assert.Equal(t, before, snapshotCLIWorkspace(t, repository))
+			})
+		}
 	}
 }
 

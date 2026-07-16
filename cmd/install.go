@@ -49,9 +49,12 @@ func makeInstallCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if cmd.Flags().Changed("tool") && len(tools) == 0 {
+				return hostSelectionCLIError(&adapter.EmptyHostSelectionError{}, resolved)
+			}
 			report, err := adapter.Install(adapter.InstallOptions{Root: resolved, Tools: tools, Surface: surface, Refresh: refresh})
 			if err != nil {
-				if selectionErr := unknownHostSelectionCLIError(err, resolved); selectionErr != nil {
+				if selectionErr := hostSelectionCLIError(err, resolved); selectionErr != nil {
 					return selectionErr
 				}
 				if surfaceErr := surfaceSelectionCLIError(err, resolved); surfaceErr != nil {
@@ -73,16 +76,24 @@ func makeInstallCmd() *cobra.Command {
 	return cmd
 }
 
-func unknownHostSelectionCLIError(err error, root string) *CLIError {
-	var selectionErr *adapter.UnknownHostSelectionError
-	if !errors.As(err, &selectionErr) {
-		return nil
+func hostSelectionCLIError(err error, root string) *CLIError {
+	var unknown *adapter.UnknownHostSelectionError
+	if errors.As(err, &unknown) {
+		return newUsageError(
+			"unknown_host_adapter",
+			unknown.Error(),
+			inputlessCommandNext(root, "list-host-adapters", "slipway", "list", "--root", root),
+		)
 	}
-	return newUsageError(
-		"unknown_host_adapter",
-		selectionErr.Error(),
-		inputlessCommandNext(root, "list-host-adapters", "slipway", "list", "--root", root),
-	)
+	var empty *adapter.EmptyHostSelectionError
+	if errors.As(err, &empty) {
+		return newUsageError(
+			"host_adapter_required",
+			empty.Error(),
+			inputlessCommandNext(root, "list-host-adapters", "slipway", "list", "--root", root),
+		)
+	}
+	return nil
 }
 
 func surfaceSelectionCLIError(err error, root string) *CLIError {
@@ -113,7 +124,7 @@ func adapterMutationError(code string, err error, root string, report adapter.Ch
 	return newRuntimeError(
 		code,
 		err.Error(),
-		autopilot.NoneNext(root),
+		inputlessCommandNext(root, "inspect-host-adapters", "slipway", "list", "--root", root),
 		map[string]any{
 			"transaction_outcome": string(report.TransactionOutcome),
 			"report":              makeChangeReportOutput(report),

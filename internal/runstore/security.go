@@ -117,6 +117,59 @@ func inspectRegularFileOrMissingInRoot(root *os.Root, name string) (leafIdentity
 	return leafIdentity{exists: true, info: info}, nil
 }
 
+func pinRegularFileOrMissingInRoot(root *os.Root, name string) (leafIdentity, *os.File, error) {
+	for attempt := 0; attempt < 3; attempt++ {
+		file, _, err := openRegularFileInRoot(root, name, os.O_RDONLY, 0, false)
+		if errors.Is(err, fs.ErrNotExist) {
+			current, inspectErr := inspectRegularFileOrMissingInRoot(root, name)
+			if inspectErr != nil {
+				return leafIdentity{}, nil, inspectErr
+			}
+			if !current.exists {
+				return leafIdentity{}, nil, nil
+			}
+			continue
+		}
+		if err != nil {
+			return leafIdentity{}, nil, err
+		}
+		info, statErr := file.Stat()
+		if statErr != nil {
+			_ = file.Close()
+			return leafIdentity{}, nil, statErr
+		}
+		return leafIdentity{exists: true, info: info}, file, nil
+	}
+	return leafIdentity{}, nil, fmt.Errorf("path %q changed while pinning", name)
+}
+
+func verifyPinnedLeafIdentity(root *os.Root, name string, expected leafIdentity, pinned *os.File) error {
+	if !expected.exists {
+		if pinned != nil {
+			return fmt.Errorf("path %q has a pinned handle but no expected identity", name)
+		}
+		return verifyLeafIdentity(root, name, expected)
+	}
+	if pinned == nil {
+		return fmt.Errorf("path %q expected identity has no pinned handle", name)
+	}
+	opened, err := pinned.Stat()
+	if err != nil {
+		return fmt.Errorf("stat pinned path %q: %w", name, err)
+	}
+	if !opened.Mode().IsRegular() || !os.SameFile(opened, expected.info) {
+		return fmt.Errorf("path %q no longer matches its pinned regular file", name)
+	}
+	current, err := inspectRegularFileOrMissingInRoot(root, name)
+	if err != nil {
+		return err
+	}
+	if !current.exists || !os.SameFile(opened, current.info) {
+		return fmt.Errorf("path %q identity changed", name)
+	}
+	return nil
+}
+
 func verifyLeafIdentity(root *os.Root, name string, expected leafIdentity) error {
 	current, err := inspectRegularFileOrMissingInRoot(root, name)
 	if err != nil {

@@ -2,6 +2,7 @@ package autopilot
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,6 +106,56 @@ func TestServiceFinalSummaryIncludesConfirmedDecision(t *testing.T) {
 	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "reported"})
 	require.Equal(t, RunEnded, run.State)
 	assert.Contains(t, run.Summary, "Confirmed decisions:\n- action "+clarifyActionID+": "+decision)
+}
+
+func TestFinalSummaryTruncationIsUTF8SafeAndIdentifiesCompleteContent(t *testing.T) {
+	t.Parallel()
+	complete := strings.Repeat("界", maxFinalSummaryBytes) + " complete tail"
+	builder := newBoundedSummaryBuilder(maxFinalSummaryBytes)
+	builder.WriteString(complete[:maxFinalSummaryBytes+1])
+	builder.WriteString(complete[maxFinalSummaryBytes+1:])
+
+	summary := builder.String()
+	require.LessOrEqual(t, len(summary), maxFinalSummaryBytes)
+	require.True(t, utf8.ValidString(summary))
+	markerStart := strings.LastIndex(summary, "\n\n...[summary truncated ")
+	require.GreaterOrEqual(t, markerStart, 0)
+	digest := sha256.Sum256([]byte(complete))
+	expectedMarker := fmt.Sprintf(
+		"\n\n...[summary truncated omitted_bytes=%d original_sha256=sha256:%x]\n",
+		len(complete)-markerStart,
+		digest,
+	)
+	assert.Equal(t, expectedMarker, summary[markerStart:])
+	assert.Equal(t, summary, builder.String(), "rendering must be deterministic")
+
+	run := Run{Actions: []ActionRecord{{
+		Action: Action{Kind: ActionOrient},
+		Outcome: &Outcome{
+			Summary:      strings.Repeat("界", maxFinalSummaryBytes),
+			Observations: []string{},
+		},
+	}}}
+	projected := finalSummary(run)
+	assert.LessOrEqual(t, len(projected), maxFinalSummaryBytes)
+	assert.True(t, utf8.ValidString(projected))
+	assert.Contains(t, projected, "[summary truncated omitted_bytes=")
+	assert.Contains(t, projected, " original_sha256=sha256:")
+}
+
+func TestFinalSummaryDistinguishesVoidedReviewFromNeverDispatched(t *testing.T) {
+	t.Parallel()
+	run := Run{
+		ReviewEnabled:    true,
+		FinalGitObserved: true,
+		Actions: []ActionRecord{{
+			Action: Action{Kind: ActionReview},
+			Voided: true,
+		}},
+	}
+	summary := finalSummary(run)
+	assert.Contains(t, summary, "A Review Action was dispatched but voided on resume before completion.")
+	assert.NotContains(t, summary, "no changed-code review Action was dispatched")
 }
 
 func TestServiceOrientAndClarifyChangesRequireReview(t *testing.T) {
@@ -415,6 +466,44 @@ func TestServiceGitObservationRecordsNeutralDiscrepancyAndRoutesDiffFirst(t *tes
 	assert.Contains(t, joinedUncertainties, attributionUncertainty)
 	assert.NotContains(t, joinedObservations+joinedUncertainties, "despite")
 	assert.NotContains(t, joinedObservations+joinedUncertainties, "contradict")
+}
+
+func TestServiceReviewsUnsampledOversizeMutationThroughMetadata(t *testing.T) {
+	t.Parallel()
+	repository := newTestRepository(t)
+	path := filepath.Join(repository, "large.bin")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(runstore.MaxObservedFileBytes+1))
+	require.NoError(t, file.Close())
+	before := time.Unix(1_700_000_000, 0)
+	require.NoError(t, os.Chtimes(path, before, before))
+
+	service := openTestService(t, repository)
+	run := startTestRun(t, service, 8, true)
+	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts"})
+	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
+
+	file, err = os.OpenFile(path, os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = file.WriteAt([]byte{0x7f}, runstore.MaxObservedFileBytes/4)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	after := before.Add(time.Second)
+	require.NoError(t, os.Chtimes(path, after, after))
+
+	run = submitCurrent(t, service, run, Outcome{
+		Status:         OutcomeCompleted,
+		Summary:        "changed an unsampled region",
+		Implementation: implementationReport(ImplementationApplied, "large.bin"),
+	})
+	require.Equal(t, ActionReview, run.CurrentAction.Kind)
+	assert.Contains(t, strings.Join(run.Observations, "\n"), observedSinceStart)
+
+	require.Len(t, run.CurrentGit.PathObservations, 1)
+	assert.Equal(t, "oversize_sampled", run.CurrentGit.PathObservations[0].Observation)
+	require.NotNil(t, run.CurrentGit.PathObservations[0].ModifiedUnixNano)
+	assert.Equal(t, after.UnixNano(), *run.CurrentGit.PathObservations[0].ModifiedUnixNano)
 }
 
 func TestServiceReviewsCurrentSinceStartDifferenceAfterResume(t *testing.T) {

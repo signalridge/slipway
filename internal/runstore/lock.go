@@ -82,6 +82,52 @@ func (transaction *runTransaction) validate(phase MutationPhase, point faultPoin
 	return nil
 }
 
+func withRunCommitBoundary(run *runHandle, callback func() error) (resultErr error) {
+	if err := run.validate(); err != nil {
+		return err
+	}
+	writer, err := openRunWriterLock(run)
+	if err != nil {
+		return fmt.Errorf("open run commit-boundary lock: %w", err)
+	}
+	writerLocked := false
+	defer func() {
+		var releaseErr error
+		if writerLocked {
+			releaseErr = writer.unlock()
+		}
+		releaseErr = errors.Join(releaseErr, writer.close())
+		if releaseErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("release run commit-boundary lock: %w", releaseErr))
+		}
+	}()
+
+	deadline := time.Now().Add(lockTimeout)
+	for {
+		locked, lockErr := writer.tryLock()
+		if lockErr != nil {
+			return fmt.Errorf("acquire run commit-boundary lock: %w", lockErr)
+		}
+		if locked {
+			writerLocked = true
+			break
+		}
+		if run.writerWait != nil {
+			run.writerWait()
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("acquire run commit-boundary lock: timed out after %s", lockTimeout)
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if err := run.validate(); err != nil {
+		return err
+	}
+	callbackErr := callback()
+	validationErr := run.validate()
+	return errors.Join(callbackErr, validationErr)
+}
+
 func withRunLock(run *runHandle, tracker *mutationTracker, callback func(*runTransaction) error) (resultErr error) {
 	if err := run.validate(); err != nil {
 		return tracker.fail(PhaseNamespaceVerify, false, err)

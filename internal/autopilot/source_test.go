@@ -209,6 +209,108 @@ func TestParseSourceAllowsLevelMarkerExamplesInsideMarkdownFences(t *testing.T) 
 	require.NoError(t, err)
 }
 
+func TestParseSourceAllowsLevelMarkerExamplesInsideGFMContainers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		markdown string
+	}{
+		{
+			name:     "block quote",
+			markdown: "> ```markdown\n> <!-- slipway-level: objective/v1 -->\n> ```",
+		},
+		{
+			name:     "list item",
+			markdown: "- ~~~markdown\n  <!-- slipway-level: objective/v1 -->\n  ~~~",
+		},
+		{
+			name:     "quoted list item",
+			markdown: "> - ````markdown\n>   <!-- slipway-level: objective/v1 -->\n>   ````",
+		},
+		{
+			name:     "list continuation",
+			markdown: "- Example:\n\n    ```markdown\n    <!-- slipway-level: objective/v1 -->\n    ```",
+		},
+		{
+			name:     "two-space list continuation",
+			markdown: "- Example:\n  ```markdown\n  <!-- slipway-level: objective/v1 -->\n  ```",
+		},
+		{
+			name:     "quoted list continuation",
+			markdown: "> - Example:\n>\n>     ~~~markdown\n>     <!-- slipway-level: objective/v1 -->\n>     ~~~",
+		},
+		{
+			name:     "blockquote nested in list item",
+			markdown: "- > ```markdown\n  > <!-- slipway-level: objective/v1 -->\n  > ```",
+		},
+		{
+			name:     "deeply nested list continuation",
+			markdown: "- outer\n  - inner\n    - Example:\n        ```markdown\n      <!-- slipway-level: objective/v1 -->\n        ```",
+		},
+		{
+			name:     "sibling blockquote after blank line",
+			markdown: "> - old item\n\n>   ~~~markdown\n> <!-- slipway-level: objective/v1 -->\n> ~~~",
+		},
+		{
+			name:     "ordered list after blank line",
+			markdown: "2. ~~~markdown\n   <!-- slipway-level: objective/v1 -->\n   ~~~",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope := validSourceEnvelope()
+			envelope.Body += "\n\n" + test.markdown + "\n"
+			raw, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			_, err = ParseSource(raw)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestParseSourceRejectsMarkerDedentedOutOfContainerFence(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		markdown string
+	}{
+		{
+			name:     "list",
+			markdown: "- Example:\n  ```markdown\n<!-- slipway-level: objective/v1 -->\n  ```",
+		},
+		{
+			name:     "blockquote nested in list",
+			markdown: "- Example:\n\n  > ```markdown\n> <!-- slipway-level: objective/v1 -->\n  > ```",
+		},
+		{
+			name:     "fence dedented from nested to outer list",
+			markdown: "- outer\n  - inner\n\n  ```markdown\n  sample\n    ```\n<!-- slipway-level: objective/v1 -->",
+		},
+		{
+			name:     "stale quoted-list context",
+			markdown: "> - old item\n\n>   ~~~markdown\n>   sample\n> ~~~\n> <!-- slipway-level: objective/v1 -->\n> ~~~",
+		},
+		{
+			name:     "non-one ordered list cannot interrupt paragraph",
+			markdown: "paragraph\n2. ~~~markdown\n   <!-- slipway-level: objective/v1 -->\n   ~~~",
+		},
+		{
+			name:     "zero-start ordered list cannot interrupt paragraph",
+			markdown: "paragraph\n0. ~~~markdown\n   <!-- slipway-level: objective/v1 -->\n   ~~~",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			envelope := validSourceEnvelope()
+			envelope.Body += "\n\n" + test.markdown + "\n"
+			raw, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			_, err = ParseSource(raw)
+			require.ErrorContains(t, err, "additional slipway-level marker outside a code fence")
+		})
+	}
+}
+
 func TestValidateSourceManifestReportsFiveSectionMinimum(t *testing.T) {
 	t.Parallel()
 	envelope := validSourceEnvelope()
@@ -325,7 +427,7 @@ func TestImportSourceFileRejectsSymlink(t *testing.T) {
 
 	_, err = ImportSourceFile(link)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not a regular file")
+	assert.Contains(t, err.Error(), "symlink")
 }
 
 func TestParseSourceCandidateAllowsEmptyCommentsForInvalidHead(t *testing.T) {

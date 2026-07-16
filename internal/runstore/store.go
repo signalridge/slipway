@@ -305,8 +305,10 @@ func (store *Store) Visit(runID string, consume func(Event) error) error {
 	}
 	defer run.Close()
 	if store.readOnly {
-		_, err := visitJournalReadOnly(run.readOnlyJournalContext(), journalFileName, consume)
-		return err
+		return withRunCommitBoundary(run, func() error {
+			_, err := visitJournalReadOnly(run.readOnlyJournalContext(), journalFileName, consume)
+			return err
+		})
 	}
 	return withRunLock(run, nil, func(transaction *runTransaction) error {
 		_, err := visitJournal(transaction.journalContext(), journalFileName, consume)

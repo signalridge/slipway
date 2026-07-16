@@ -32,6 +32,7 @@ type preparedSnapshot struct {
 	transaction  *runTransaction
 	destination  string
 	previous     leafIdentity
+	previousFile *os.File
 	temporary    string
 	temporaryID  leafIdentity
 	quarantine   string
@@ -40,7 +41,14 @@ type preparedSnapshot struct {
 }
 
 func (prepared *preparedSnapshot) discard() {
-	if prepared == nil || prepared.renamed || prepared.temporary == "" {
+	if prepared == nil {
+		return
+	}
+	if prepared.previousFile != nil {
+		_ = prepared.previousFile.Close()
+		prepared.previousFile = nil
+	}
+	if prepared.renamed || prepared.temporary == "" {
 		return
 	}
 	root := prepared.transaction.run.root
@@ -57,10 +65,16 @@ func prepareSnapshot(transaction *runTransaction, name string, content []byte) (
 	if err := transaction.validate(PhaseProjectionPrepare, faultProjectionInspect); err != nil {
 		return nil, err
 	}
-	previous, err := inspectRegularFileOrMissingInRoot(transaction.run.root, name)
+	previous, previousFile, err := pinRegularFileOrMissingInRoot(transaction.run.root, name)
 	if err != nil {
-		return nil, transaction.tracker.fail(PhaseProjectionPrepare, false, fmt.Errorf("inspect run projection: %w", err))
+		return nil, transaction.tracker.fail(PhaseProjectionPrepare, false, fmt.Errorf("inspect and pin run projection: %w", err))
 	}
+	retainPrevious := false
+	defer func() {
+		if !retainPrevious && previousFile != nil {
+			_ = previousFile.Close()
+		}
+	}()
 	if err := transaction.validate(PhaseProjectionTemp, faultProjectionTemp); err != nil {
 		return nil, err
 	}
@@ -69,10 +83,11 @@ func prepareSnapshot(transaction *runTransaction, name string, content []byte) (
 		return nil, transaction.tracker.fail(PhaseProjectionTemp, false, fmt.Errorf("create run projection temp: %w", err))
 	}
 	prepared := &preparedSnapshot{
-		transaction: transaction,
-		destination: name,
-		previous:    previous,
-		temporary:   temporary,
+		transaction:  transaction,
+		destination:  name,
+		previous:     previous,
+		previousFile: previousFile,
+		temporary:    temporary,
 	}
 	closed := false
 	defer func() {
@@ -127,6 +142,7 @@ func prepareSnapshot(transaction *runTransaction, name string, content []byte) (
 		return nil, transaction.tracker.fail(PhaseProjectionFsync, false, fmt.Errorf("close run projection temp: %w", err))
 	}
 	closed = true
+	retainPrevious = true
 	return prepared, nil
 }
 
@@ -149,15 +165,15 @@ func relocatePreviousProjection(root *os.Root, prepared *preparedSnapshot) error
 		if inspectErr != nil {
 			return fmt.Errorf("relocated projection could not be validated and was preserved at %q: %w", quarantine, inspectErr)
 		}
-		if !relocated.exists || !os.SameFile(relocated.info, prepared.previous.info) {
+		if identityErr := verifyPinnedLeafIdentity(root, quarantine, prepared.previous, prepared.previousFile); identityErr != nil {
 			restoreErr := restoreRelocatedProjection(root, quarantine, prepared.destination, relocated)
 			if restoreErr != nil {
 				return errors.Join(
-					fmt.Errorf("run projection changed during no-replace relocation; competing entry was preserved at %q", quarantine),
+					fmt.Errorf("run projection changed during no-replace relocation; competing entry was preserved at %q: %w", quarantine, identityErr),
 					restoreErr,
 				)
 			}
-			return fmt.Errorf("run projection changed during no-replace relocation; competing entry was restored")
+			return fmt.Errorf("run projection changed during no-replace relocation; competing entry was restored: %w", identityErr)
 		}
 		prepared.quarantine = quarantine
 		prepared.quarantineID = relocated
@@ -205,7 +221,7 @@ func cleanupPreviousProjection(root *os.Root, prepared *preparedSnapshot) error 
 	if prepared.quarantine == "" {
 		return nil
 	}
-	if err := verifyLeafIdentity(root, prepared.quarantine, prepared.quarantineID); err != nil {
+	if err := verifyPinnedLeafIdentity(root, prepared.quarantine, prepared.quarantineID, prepared.previousFile); err != nil {
 		return fmt.Errorf("old projection was preserved at %q after its identity changed: %w", prepared.quarantine, err)
 	}
 	if err := root.Remove(prepared.quarantine); err != nil {
@@ -228,7 +244,7 @@ func commitSnapshot(transaction *runTransaction, prepared *preparedSnapshot) err
 		return transaction.tracker.fail(PhaseProjectionRename, false, errors.New("invalid prepared projection"))
 	}
 	root := transaction.run.root
-	if err := verifyLeafIdentity(root, prepared.destination, prepared.previous); err != nil {
+	if err := verifyPinnedLeafIdentity(root, prepared.destination, prepared.previous, prepared.previousFile); err != nil {
 		return transaction.tracker.fail(PhaseProjectionRename, false, fmt.Errorf("run projection changed before rename: %w", err))
 	}
 	if err := verifyLeafIdentity(root, prepared.temporary, prepared.temporaryID); err != nil {

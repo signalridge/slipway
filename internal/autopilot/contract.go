@@ -245,6 +245,35 @@ func (err *VersionError) Error() string {
 	return fmt.Sprintf("contract_version %d is unsupported; supported version is %d", err.Received, ContractVersion)
 }
 
+// ValidateGoal checks the literal user goal before repository or Run storage
+// setup. The byte bound follows the enclosing Action limit; smaller goals can
+// still be rejected later if immutable source metadata fills that envelope.
+type GoalLimitError struct {
+	EncodedBytes int
+	Limit        int
+}
+
+func (err *GoalLimitError) Error() string {
+	if err == nil {
+		return "encoded goal exceeds Action limit"
+	}
+	return fmt.Sprintf("encoded goal uses %d bytes and exceeds %d-byte Action limit", err.EncodedBytes, err.Limit)
+}
+
+func ValidateGoal(goal string) error {
+	if err := requireNonEmptyUTF8("goal", goal); err != nil {
+		return err
+	}
+	encodedSize, err := encodedJSONStringSize(goal)
+	if err != nil {
+		return fmt.Errorf("encode goal: %w", err)
+	}
+	if encodedSize > maxActionBytes {
+		return &GoalLimitError{EncodedBytes: encodedSize, Limit: maxActionBytes}
+	}
+	return nil
+}
+
 func ValidActionKind(kind ActionKind) bool {
 	switch kind {
 	case ActionOrient, ActionClarify, ActionImplement, ActionReview, ActionSummarize:
@@ -258,11 +287,25 @@ func (action Action) Validate() error {
 	if action.ContractVersion != ContractVersion {
 		return &VersionError{Received: action.ContractVersion}
 	}
-	for name, value := range map[string]string{
-		"run_id": action.RunID, "action_id": action.ActionID, "goal": action.Goal,
-		"brief": action.Brief, "context": action.Context,
-	} {
-		if err := requireNonEmptyUTF8(name, value); err != nil {
+	textFields := []struct {
+		name  string
+		value string
+		plain bool
+	}{
+		{name: "run_id", value: action.RunID, plain: true},
+		{name: "action_id", value: action.ActionID, plain: true},
+		{name: "goal", value: action.Goal},
+		{name: "brief", value: action.Brief},
+		{name: "context", value: action.Context},
+	}
+	for _, field := range textFields {
+		var err error
+		if field.plain {
+			err = requireNonEmptyPlainUTF8(field.name, field.value)
+		} else {
+			err = requireNonEmptyUTF8(field.name, field.value)
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -311,11 +354,14 @@ func validateActionSource(source ActionSource) error {
 	if source.Kind != ActionSourceChangeIssue {
 		return fmt.Errorf("source kind %q is unsupported", source.Kind)
 	}
-	for name, value := range map[string]string{
-		"source.canonical_url": source.CanonicalURL,
-		"source.issue_id":      source.IssueID,
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{name: "source.canonical_url", value: source.CanonicalURL},
+		{name: "source.issue_id", value: source.IssueID},
 	} {
-		if err := requireNonEmptyUTF8(name, value); err != nil {
+		if err := requireNonEmptyPlainUTF8(field.name, field.value); err != nil {
 			return err
 		}
 	}
@@ -488,7 +534,7 @@ func validateDestructiveAuthorization(authorization DestructiveAuthorization) er
 	if authorization.ScopeVersion != DestructiveScopeVersion {
 		return fmt.Errorf("destructive_authorization.scope_version must be %d", DestructiveScopeVersion)
 	}
-	if err := requireNonEmptyUTF8("destructive_authorization.originating_action_id", authorization.OriginatingActionID); err != nil {
+	if err := requireNonEmptyPlainUTF8("destructive_authorization.originating_action_id", authorization.OriginatingActionID); err != nil {
 		return err
 	}
 	if !validSHA256(authorization.ScopeSHA256) {
@@ -528,7 +574,7 @@ func validateDestructiveTargets(targets []DestructiveTarget) error {
 		default:
 			return fmt.Errorf("targets[%d] has unsupported kind %q", index, target.Kind)
 		}
-		if err := requireNonEmptyUTF8(fmt.Sprintf("targets[%d].value", index), target.Value); err != nil {
+		if err := requireNonEmptyPlainUTF8(fmt.Sprintf("targets[%d].value", index), target.Value); err != nil {
 			return err
 		}
 		if index == 0 {
@@ -627,6 +673,9 @@ func validateOutcomeJSONShape(raw []byte, outcome Outcome) error {
 		if err != nil {
 			return err
 		}
+		if value, exists := pause["supersedes_answer_action_id"]; exists && isJSONNull(value) {
+			return errors.New("$.pause.supersedes_answer_action_id must be a string when present, not null")
+		}
 		if outcome.Pause.DestructiveRequest != nil {
 			request, err := requiredJSONObject(pause["destructive_request"], "$.pause.destructive_request", []string{"request_id", "targets", "impact", "scope_sha256"})
 			if err != nil {
@@ -724,7 +773,7 @@ func (outcome Outcome) Validate(kind ActionKind, actionID string) error {
 	if outcome.ContractVersion != ContractVersion {
 		return &VersionError{Received: outcome.ContractVersion}
 	}
-	if err := requireNonEmptyUTF8("current action_id", actionID); err != nil {
+	if err := requireNonEmptyPlainUTF8("current action_id", actionID); err != nil {
 		return err
 	}
 	if !utf8.ValidString(outcome.ActionID) || outcome.ActionID != actionID {
@@ -747,10 +796,10 @@ func (outcome Outcome) Validate(kind ActionKind, actionID string) error {
 	if err := requireNonEmptyUTF8("outcome summary", outcome.Summary); err != nil {
 		return err
 	}
-	if err := validateTextArray("observations", outcome.Observations); err != nil {
+	if err := validateTextArray("observations", outcome.Observations, true); err != nil {
 		return err
 	}
-	if err := validateTextArray("known_issues", outcome.KnownIssues); err != nil {
+	if err := validateTextArray("known_issues", outcome.KnownIssues, true); err != nil {
 		return err
 	}
 	if outcome.SuggestedActions == nil {
@@ -820,7 +869,7 @@ func validatePause(kind ActionKind, pause Pause) error {
 			return errors.New("pause.destructive_request is only valid for destructive_confirmation_required")
 		}
 		if pause.SupersedesAnswerActionID != nil {
-			if err := requireNonEmptyUTF8("pause.supersedes_answer_action_id", *pause.SupersedesAnswerActionID); err != nil {
+			if err := requireNonEmptyPlainUTF8("pause.supersedes_answer_action_id", *pause.SupersedesAnswerActionID); err != nil {
 				return err
 			}
 		}
@@ -931,10 +980,10 @@ func validateImplementation(implementation Implementation) error {
 	if implementation.Attempts <= 0 {
 		return errors.New("implementation.attempts must be positive")
 	}
-	if err := validateTextArray("implementation.files_changed", implementation.FilesChanged); err != nil {
+	if err := validateTextArray("implementation.files_changed", implementation.FilesChanged, false); err != nil {
 		return err
 	}
-	if err := validateTextArray("implementation.uncertainties", implementation.Uncertainties); err != nil {
+	if err := validateTextArray("implementation.uncertainties", implementation.Uncertainties, true); err != nil {
 		return err
 	}
 	if implementation.Activities == nil {
@@ -999,11 +1048,11 @@ func validateReview(review Review) error {
 	if review.Findings == nil {
 		return errors.New("review.findings must be a non-null array")
 	}
-	if err := validateTextArray("review.uncertainties", review.Uncertainties); err != nil {
+	if err := validateTextArray("review.uncertainties", review.Uncertainties, true); err != nil {
 		return err
 	}
 	for index, finding := range review.Findings {
-		if err := requireNonEmptyUTF8(fmt.Sprintf("review.findings[%d].location", index), finding.Location); err != nil {
+		if err := requireNonEmptyPlainUTF8(fmt.Sprintf("review.findings[%d].location", index), finding.Location); err != nil {
 			return err
 		}
 		if err := requireNonEmptyUTF8(fmt.Sprintf("review.findings[%d].summary", index), finding.Summary); err != nil {
@@ -1035,13 +1084,17 @@ func validateSummarizeOutcome(outcome Outcome) error {
 	return nil
 }
 
-func validateTextArray(name string, values []string) error {
+func validateTextArray(name string, values []string, allowMarkdownWhitespace bool) error {
 	if values == nil {
 		return fmt.Errorf("%s must be a non-null array", name)
 	}
 	for index, value := range values {
+		field := fmt.Sprintf("%s[%d]", name, index)
 		if !utf8.ValidString(value) {
-			return fmt.Errorf("%s[%d] must be valid utf-8", name, index)
+			return fmt.Errorf("%s must be valid utf-8", field)
+		}
+		if err := validateTextControls(field, value, allowMarkdownWhitespace); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1054,7 +1107,14 @@ func requireNonEmptyUTF8(name, value string) error {
 	if strings.TrimSpace(value) == "" {
 		return fmt.Errorf("%s is required", name)
 	}
-	return nil
+	return validateTextControls(name, value, true)
+}
+
+func requireNonEmptyPlainUTF8(name, value string) error {
+	if err := requireNonEmptyUTF8(name, value); err != nil {
+		return err
+	}
+	return validateTextControls(name, value, false)
 }
 
 func validSHA256(value string) bool {

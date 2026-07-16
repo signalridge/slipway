@@ -43,13 +43,16 @@ func makeMachineMaterialCmd(root *string) *cobra.Command {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", next)
 			}
+			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
+				return validationErr
+			}
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", next)
 			}
 			if section == "" {
 				return newUsageError("material_section_required", "section cannot be empty", next)
 			}
-			service, err := openAutopilot(*root)
+			service, err := openAutopilotReadOnly(*root)
 			if err != nil {
 				return err
 			}

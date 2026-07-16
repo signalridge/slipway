@@ -28,6 +28,8 @@ Detect `gh --version`. For `gh >= 2.94.0`, use first-class parent, sub-issue, an
 
 Trust redirects and transfers only while every hop remains on `github.com`. After a same-host redirect or transfer, refetch the repository node ID, Issue node ID, canonical URL, labels, parent, dependencies, and current revision; preserve the old URL as an alias and still compare the marker and source/Requirements revisions. Reject cross-host redirect trust.
 
+{{ template "github-rest" . }}
+
 ## Objective publication: one confirmed external write
 
 An Objective is a single-stage publication. Show one preview containing the exact title, complete body, exact labels, every relation, one operation UUID, one item UUID, every pre-existing mutable target's provider identity and observed revision, and any missing-label creation with its exact name, color, and description. Its body layout is exactly:

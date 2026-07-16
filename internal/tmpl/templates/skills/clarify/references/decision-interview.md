@@ -1,6 +1,6 @@
 # Decision interview discipline
 
-Adapted from the `grill-me` wrapper and its `grilling` primitive in [`mattpocock/skills`](https://github.com/mattpocock/skills/tree/e9fcdf95b402d360f90f1db8d776d5dd450f9234/skills/productivity): walk a design tree in dependency order, ask one question at a time and wait, provide a recommended answer, investigate codebase facts instead of asking for them, and do not enact the plan until changed understanding is explicitly shared. Slipway adds the immediate wrap-up rule and keeps this interview stateless.
+Adapted from the `grill-me` wrapper and its `grilling` primitive in [`mattpocock/skills`](https://github.com/mattpocock/skills/tree/e9fcdf95b402d360f90f1db8d776d5dd450f9234/skills/productivity): walk a design tree in dependency order, finish an opened decision branch before starting an independent one, ask one question at a time and wait, provide a recommended answer, investigate all available environment facts instead of asking for them, and do not act on changed understanding until the user explicitly confirms the shared understanding. Slipway adds the immediate wrap-up rule and keeps this interview stateless.
 
 ## Attribution
 

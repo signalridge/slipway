@@ -20,7 +20,7 @@ All commands accept `--help`. JSON-producing commands include `contract_version`
 slipway install [--root PATH] [--tool ID]... [--surface ide|cli] [--refresh] [--json]
 ```
 
-Without `--tool`, selects detected hosts. Repeat `--tool` to select several hosts. A first Kiro installation requires exactly one `--surface`; that flag is invalid for non-Kiro selections. Install Kiro separately before using a first-time `--tool all` selection.
+Without `--tool`, selects detected hosts. Repeat `--tool` to select several hosts. A first Kiro installation requires exactly one `--surface`. In a mixed selection, `--surface` applies only to Kiro; it is invalid only when Kiro is not selected. `--tool all --surface ide` and `--tool all --surface cli` are valid.
 
 A new install claims only files it creates. `--refresh` updates matching Slipway-owned files and recreates missing pristine files. Modified or unknown content is preserved or reported rather than overwritten.
 

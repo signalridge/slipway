@@ -36,15 +36,23 @@ func makeRunCmd() *cobra.Command {
 	var noReview bool
 	var jsonOutput bool
 	command := &cobra.Command{
-		Use:   "run <goal>",
+		Use:   "run [flags] -- <goal>",
 		Short: "Start a user-controlled soft-autopilot run",
-		Example: "  slipway run \"<goal>\" --budget 8 --json\n" +
-			"  slipway run \"<bounded goal>\" --source-file FILE --budget 8 --json",
+		Example: "  slipway run --budget 8 --json -- \"<goal>\"\n" +
+			"  slipway run --source-file FILE --budget 8 --json -- \"<bounded goal>\"",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			goal := strings.TrimSpace(args[0])
-			if goal == "" {
+			goal := args[0]
+			if strings.TrimSpace(goal) == "" {
 				return newUsageError("goal_required", "goal cannot be empty", defaultErrorNext())
+			}
+			if err := autopilot.ValidateGoal(goal); err != nil {
+				code := "invalid_goal"
+				var limitErr *autopilot.GoalLimitError
+				if errors.As(err, &limitErr) {
+					code = "action_too_large"
+				}
+				return newUsageError(code, err.Error(), defaultErrorNext())
 			}
 			if err := autopilot.ValidateBudget(budget); err != nil {
 				return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
@@ -130,6 +138,9 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
 			}
+			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
+				return validationErr
+			}
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
 			}
@@ -198,6 +209,9 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
 			}
+			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
+				return validationErr
+			}
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
 			}
@@ -245,6 +259,9 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
 			}
+			if validationErr := validateRunIDArgument(*root, runID); validationErr != nil {
+				return validationErr
+			}
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
 			}
@@ -288,6 +305,9 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			candidateSet := command.Flags().Changed("candidate")
 			if args[0] == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
+			}
+			if validationErr := validateRunIDArgument(*root, args[0]); validationErr != nil {
+				return validationErr
 			}
 			recoveryNext := statusInspectionNextForRawRoot(*root, args[0])
 			if budgetSet {

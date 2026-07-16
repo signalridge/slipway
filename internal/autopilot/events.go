@@ -490,16 +490,6 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 		}
 		run.sourceChoiceHistory = append(run.sourceChoiceHistory, resolution)
 	}
-	if len(delta.SourceChoiceResolutionsAppend) == 0 && delta.LastSourceChoiceSet &&
-		delta.LastSourceChoice != nil && delta.LastResumeResultSet && delta.LastResumeResult != nil {
-		legacy := sourceChoiceResolution{Receipt: *delta.LastSourceChoice, Result: *delta.LastResumeResult}
-		if err := validateSourceChoiceResolution(legacy); err == nil {
-			if findSourceChoiceResolution(*run, legacy.Receipt.CandidateID) != nil {
-				return errors.New("source choice resolution candidate_id is duplicated")
-			}
-			run.sourceChoiceHistory = append(run.sourceChoiceHistory, legacy)
-		}
-	}
 	if delta.Summary != nil {
 		run.Summary = *delta.Summary
 	}
@@ -582,12 +572,6 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 	canonicalDelta, err := diffRun(event.Type, before, *run)
 	if err != nil {
 		return fmt.Errorf("reconstruct canonical %s event: %w", event.Type, err)
-	}
-	// Event version 1 journals written before append-only source-choice history
-	// carried only the two Last* projection fields. Replay reconstructs their
-	// single resolution while retaining that exact legacy delta as canonical.
-	if len(delta.SourceChoiceResolutionsAppend) == 0 && delta.LastSourceChoiceSet && delta.LastSourceChoice != nil {
-		canonicalDelta.SourceChoiceResolutionsAppend = nil
 	}
 	if !reflect.DeepEqual(delta, canonicalDelta) {
 		return fmt.Errorf("non-canonical delta for %s event", event.Type)

@@ -25,6 +25,13 @@ type storageMutationError interface {
 	StorageMutationAmbiguous() bool
 }
 
+type journalRecordLimitError interface {
+	error
+	JournalRecordContext() string
+	JournalRecordSize() int
+	JournalRecordLimit() int
+}
+
 type CLIError struct {
 	ContractVersion int            `json:"contract_version"`
 	Code            string         `json:"code"`
@@ -74,6 +81,16 @@ func asCLIError(err error) *CLIError {
 	if errors.As(err, &protocolErr) {
 		return newRuntimeError(protocolErr.Code, protocolErr.Message, protocolErr.Next, protocolErr.Details)
 	}
+	var recordLimitErr journalRecordLimitError
+	if errors.As(err, &recordLimitErr) {
+		next := defaultErrorNext()
+		next = statusInspectionNext(next.WorkspaceRoot(), "")
+		return newRuntimeError("journal_record_too_large", recordLimitErr.Error(), next, map[string]any{
+			"context": recordLimitErr.JournalRecordContext(),
+			"size":    recordLimitErr.JournalRecordSize(),
+			"limit":   recordLimitErr.JournalRecordLimit(),
+		})
+	}
 	var mutationErr storageMutationError
 	if errors.As(err, &mutationErr) {
 		committed := mutationErr.StorageMutationCommitted()
@@ -103,17 +120,7 @@ func asCLIError(err error) *CLIError {
 	}
 	message := strings.TrimSpace(err.Error())
 	next := defaultErrorNext()
-	workspaceRoot := next.WorkspaceRoot()
 	lower := strings.ToLower(message)
-	// A journal-record-limit failure on Submit (for example a legitimate large
-	// Outcome accumulation that overflows the 4 MiB single-record cap) does not
-	// kill the persistent Run: the Run is still recoverable via `slipway status`
-	// and a targeted skip. Report a read-only inspection command instead of a
-	// terminal `none` so the user has a concrete next step (issue #434 §1.3).
-	if strings.Contains(lower, "journal record limit") || strings.Contains(lower, "event exceeds") {
-		next = statusInspectionNext(workspaceRoot, "")
-		return newRuntimeError("journal_record_too_large", message, next, nil)
-	}
 	if strings.Contains(lower, "unknown command") ||
 		strings.Contains(lower, "unknown flag") ||
 		strings.Contains(lower, "requires") ||
@@ -141,6 +148,17 @@ func defaultErrorNext() autopilot.Next {
 		workspace = string(filepath.Separator)
 	}
 	return autopilot.NoneNext(workspace)
+}
+
+func validateRunIDArgument(rawRoot, runID string) *CLIError {
+	if err := autopilot.ValidateRunID(runID); err != nil {
+		return newUsageError(
+			"invalid_run_id",
+			err.Error(),
+			statusInspectionNextForRawRoot(rawRoot, ""),
+		)
+	}
+	return nil
 }
 
 func statusInspectionNext(workspaceRoot, runID string) autopilot.Next {

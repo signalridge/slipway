@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/signalridge/slipway/internal/fsutil"
 )
 
 const (
@@ -671,82 +671,11 @@ func readSourceFile(path string) ([]byte, error) {
 	if path == "" {
 		return nil, errors.New("read source file: path is empty")
 	}
-	absolute, err := filepath.Abs(path)
+	raw, err := fsutil.ReadFileNoSymlink(path, maxSourceFileBytes)
 	if err != nil {
-		return nil, fmt.Errorf("read source file: resolve path: %w", err)
-	}
-
-	root, err := os.OpenRoot(filepath.Dir(absolute))
-	if err != nil {
-		return nil, fmt.Errorf("read source file: open parent: %w", err)
-	}
-	raw, readErr := readSourceFileInRoot(root, filepath.Base(absolute))
-	rootCloseErr := root.Close()
-	if rootCloseErr != nil {
-		readErr = errors.Join(readErr, fmt.Errorf("close source parent: %w", rootCloseErr))
-	}
-	if readErr != nil {
-		return nil, fmt.Errorf("read source file: %w", readErr)
+		return nil, fmt.Errorf("read source file: %w", err)
 	}
 	return raw, nil
-}
-
-func readSourceFileInRoot(root *os.Root, name string) ([]byte, error) {
-	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
-		return nil, fmt.Errorf("source file requires one leaf name: %q", name)
-	}
-	before, err := root.Lstat(name)
-	if err != nil {
-		return nil, fmt.Errorf("inspect %q: %w", name, err)
-	}
-	if before.Mode()&os.ModeSymlink != 0 || !before.Mode().IsRegular() {
-		return nil, fmt.Errorf("path %q is not a regular file", name)
-	}
-
-	file, err := openSourceFileNoFollow(root, name)
-	if err != nil {
-		return nil, fmt.Errorf("open %q: %w", name, err)
-	}
-
-	opened, statErr := file.Stat()
-	current, lstatErr := root.Lstat(name)
-	operationErr := sourceFileIdentityError(name, before, opened, current, statErr, lstatErr)
-	var raw []byte
-	if operationErr == nil {
-		raw, operationErr = io.ReadAll(io.LimitReader(file, maxSourceFileBytes+1))
-		if operationErr != nil {
-			operationErr = fmt.Errorf("read %q: %w", name, operationErr)
-		}
-	}
-
-	afterOpened, afterStatErr := file.Stat()
-	afterCurrent, afterLstatErr := root.Lstat(name)
-	if identityErr := sourceFileIdentityError(name, before, afterOpened, afterCurrent, afterStatErr, afterLstatErr); identityErr != nil {
-		operationErr = errors.Join(operationErr, identityErr)
-	}
-	if closeErr := file.Close(); closeErr != nil {
-		operationErr = errors.Join(operationErr, fmt.Errorf("close %q: %w", name, closeErr))
-	}
-	if operationErr != nil {
-		return nil, operationErr
-	}
-	if len(raw) > maxSourceFileBytes {
-		return nil, fmt.Errorf("source file exceeds %d bytes", maxSourceFileBytes)
-	}
-	return raw, nil
-}
-
-func sourceFileIdentityError(name string, before, opened, current os.FileInfo, statErr, lstatErr error) error {
-	if statErr != nil {
-		return fmt.Errorf("inspect opened %q: %w", name, statErr)
-	}
-	if lstatErr != nil {
-		return fmt.Errorf("reinspect %q: %w", name, lstatErr)
-	}
-	if opened == nil || current == nil || !opened.Mode().IsRegular() || current.Mode()&os.ModeSymlink != 0 || !current.Mode().IsRegular() || !os.SameFile(before, opened) || !os.SameFile(opened, current) {
-		return fmt.Errorf("path %q changed or is not the opened regular file", name)
-	}
-	return nil
 }
 
 func validateRawSourceEnvelope(envelope RawSourceEnvelope) error {

@@ -35,12 +35,20 @@ func (err *UnknownHostSelectionError) Error() string {
 	return fmt.Sprintf("unknown host adapter %q", err.HostID)
 }
 
+// EmptyHostSelectionError reports an explicitly supplied --tool selection that
+// contains no adapter IDs after comma splitting and whitespace normalization.
+type EmptyHostSelectionError struct{}
+
+func (*EmptyHostSelectionError) Error() string {
+	return "host adapter selection must name at least one adapter"
+}
+
 var hosts = []Host{
 	{ID: "claude", SkillsDir: ".claude/skills", SurfaceKind: "skill", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
 	{ID: "codex", SkillsDir: ".codex/skills", SurfaceKind: "skill", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
 	{ID: "copilot", SkillsDir: ".github/agents", SurfaceKind: "copilot_agent", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/agents", ".github/copilot", ".github/prompts", ".github/skills"}},
 	{ID: "cursor", SkillsDir: ".cursor/skills", SurfaceKind: "skill", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
-	{ID: "kilo", SkillsDir: ".kilocode/skills", SurfaceKind: "kilo_command", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
+	{ID: "kilo", SkillsDir: ".kilocode/skills", SurfaceKind: "kilo_command", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilo", ".kilocode"}},
 	{ID: "kiro", SkillsDir: ".kiro/skills", SurfaceKind: "", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},
 	{ID: "opencode", SkillsDir: ".opencode/skills", SurfaceKind: "opencode_command", OwnershipRoot: ".opencode", DetectPaths: []string{".opencode"}},
 	{ID: "pi", SkillsDir: ".pi/skills", SurfaceKind: "skill", OwnershipRoot: ".pi", DetectPaths: []string{".pi"}},
@@ -103,6 +111,9 @@ func resolveHostsWithFilesystem(filesystem ownershipFilesystem, root string, req
 				selected[id] = host
 			}
 		}
+	}
+	if len(requested) > 0 && len(selected) == 0 {
+		return nil, &EmptyHostSelectionError{}
 	}
 	result := make([]Host, 0, len(selected))
 	for _, host := range hosts {

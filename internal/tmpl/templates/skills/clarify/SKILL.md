@@ -8,9 +8,9 @@ disable-model-invocation: true
 
 Use this capability only when the user explicitly invokes it, or when an explicitly started Run returns a Clarify Action. Ordinary conversation must not start it ambiently.
 
-Follow the design-tree discipline adapted from Matt Pocock's `grill-me` and `grilling` skills. Investigate first: separate repository facts, unknowns, and choices only the user can make. Read the code, tests, documentation, and Git state for facts instead of asking the user to discover them.
+Follow the design-tree discipline adapted from Matt Pocock's `grill-me` and `grilling` skills. Investigate first: separate explorable facts, unknowns, and choices only the user can make. Inspect the filesystem, code, tests, documentation, Git and CLI state, available tools, and permitted external facts instead of asking the user to discover them.
 
-Walk dependent decisions in order, settling each parent before its branches. Ask exactly one decision per response and wait for the answer. Every question must include:
+Walk dependent decisions in order. Finish the branch you opened by settling its parent decision and immediate consequences before opening a new independent branch. Ask exactly one decision per response and wait for the answer. Every question must include:
 
 - a recommended option;
 - why it fits the stated goal and observed repository;

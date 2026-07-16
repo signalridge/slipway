@@ -20,7 +20,7 @@ Slipway には7つの public command があります。使用中の binary で `
 slipway install [--root PATH] [--tool ID]... [--surface ide|cli] [--refresh] [--json]
 ```
 
-`--tool` 省略時は detected host を選びます。複数 host は `--tool` を繰り返します。Kiro の初回 install では `--surface` が1つ必須で、non-Kiro selection とは組み合わせられません。初回 `--tool all` の前に Kiro を単独 install してください。
+`--tool` 省略時は detected host を選びます。複数 host は `--tool` を繰り返します。Kiro の初回 install では `--surface` が1つ必須です。Mixed selection では `--surface` は Kiro のみに適用され、Kiro が選択されていない場合だけ無効です。`--tool all --surface ide` と `--tool all --surface cli` は有効です。
 
 新規 install は作成した file だけを claim します。`--refresh` は一致する Slipway-owned file を更新し、欠落した pristine file を再作成します。Modified や unknown content は上書きされず、報告されます。
 

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -215,10 +216,11 @@ func TestObservePathRecordsMissingUnreadableNonRegularAndOversize(t *testing.T) 
 	require.NoError(t, file.Truncate(MaxObservedFileBytes+1))
 	require.NoError(t, file.Close())
 	oversize := observePath(root, statusPath{path: "oversize.bin", category: "untracked", state: "??"})
-	assert.Equal(t, "oversize", oversize.Observation)
+	assert.Equal(t, "oversize_sampled", oversize.Observation)
 	require.NotNil(t, oversize.Size)
 	assert.Equal(t, MaxObservedFileBytes+1, *oversize.Size)
 	assert.True(t, validSHA256(oversize.ContentSHA256))
+	require.NotNil(t, oversize.ModifiedUnixNano)
 
 	if runtime.GOOS != "windows" {
 		unreadablePath := filepath.Join(repository, "unreadable.txt")
@@ -233,6 +235,67 @@ func TestObservePathRecordsMissingUnreadableNonRegularAndOversize(t *testing.T) 
 			assert.Empty(t, unreadable.ContentSHA256)
 		}
 	}
+}
+
+func TestObserveGitDetectsUnsampledOversizeMutationThroughMetadata(t *testing.T) {
+	repository := createRepository(t)
+	path := filepath.Join(repository, "oversize-unsampled.bin")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(MaxObservedFileBytes+1))
+	_, err = file.WriteAt([]byte("a"), 1<<20)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	firstTime := time.Unix(1_700_000_000, 0)
+	require.NoError(t, os.Chtimes(path, firstTime, firstTime))
+
+	first, err := ObserveGit(repository)
+	require.NoError(t, err)
+	firstPath := requirePathObservation(t, first, "oversize-unsampled.bin")
+	require.Equal(t, "oversize_sampled", firstPath.Observation)
+
+	file, err = os.OpenFile(path, os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = file.WriteAt([]byte("b"), 1<<20)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	require.NoError(t, os.Chtimes(path, firstTime.Add(time.Second), firstTime.Add(time.Second)))
+
+	second, err := ObserveGit(repository)
+	require.NoError(t, err)
+	secondPath := requirePathObservation(t, second, "oversize-unsampled.bin")
+	assert.Equal(t, firstPath.ContentSHA256, secondPath.ContentSHA256, "the mutation must remain outside bounded content samples")
+	require.NotNil(t, firstPath.ModifiedUnixNano)
+	require.NotNil(t, secondPath.ModifiedUnixNano)
+	assert.NotEqual(t, *firstPath.ModifiedUnixNano, *secondPath.ModifiedUnixNano)
+	assert.True(t, second.ChangedFrom(first))
+}
+
+func TestGitContentObservationBudgetIsAggregateAndReportsExhaustion(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "first.txt"), []byte("1234"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "second.txt"), []byte("5678"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, root.Close()) })
+
+	budget := newGitContentObservationBudget(7, time.Hour)
+	first := observePathWithBudget(root, statusPath{path: "first.txt", category: "untracked", state: "??"}, budget)
+	second := observePathWithBudget(root, statusPath{path: "second.txt", category: "untracked", state: "??"}, budget)
+	assert.Equal(t, "regular", first.Observation)
+	assert.Equal(t, "content_unobserved", second.Observation)
+	assert.Equal(t, int64(4), budget.bytesHashed)
+	assert.False(t, budget.complete)
+	assert.True(t, budget.byteLimitExceeded)
+	assert.False(t, budget.deadlineExceeded)
+
+	expired := newGitContentObservationBudget(7, -time.Nanosecond)
+	deadline := observePathWithBudget(root, statusPath{path: "first.txt", category: "untracked", state: "??"}, expired)
+	assert.Equal(t, "content_unobserved", deadline.Observation)
+	assert.Equal(t, int64(0), expired.bytesHashed)
+	assert.False(t, expired.complete)
+	assert.False(t, expired.byteLimitExceeded)
+	assert.True(t, expired.deadlineExceeded)
 }
 
 func TestObserveGitIsDeterministicAndNeverRetainsRawContent(t *testing.T) {

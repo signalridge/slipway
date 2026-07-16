@@ -331,6 +331,31 @@ func TestProjectionReplacementAfterJournalCommitReportsStale(t *testing.T) {
 	assertReplayContainsOneUpdate(t, store, runID)
 }
 
+func TestProjectionReplacementAfterInstallIsDetectedAndPreserved(t *testing.T) {
+	runID := "00000000-0000-4000-8000-000000000345"
+	store, paths := createAdversarialRun(t, runID)
+	competitor := []byte("competing projection after install")
+	installed := paths.RunFile + ".installed"
+	installOneShotHook(store, faultProjectionPostRename, func() error {
+		require.NoError(t, os.Rename(paths.RunFile, installed))
+		require.NoError(t, os.WriteFile(paths.RunFile, competitor, 0o600))
+		return nil
+	})
+
+	err := updateAdversarialRun(store, runID, nil)
+	mutationErr := requireMutationError(t, err)
+	assert.True(t, mutationErr.Committed)
+	assert.True(t, mutationErr.ProjectionStale)
+	assert.False(t, mutationErr.Ambiguous)
+	assert.Equal(t, PhaseProjectionRename, mutationErr.Phase)
+	actual, readErr := os.ReadFile(paths.RunFile)
+	require.NoError(t, readErr)
+	assert.Equal(t, competitor, actual, "cleanup must not unlink the competing projection")
+	_, statErr := os.Stat(installed)
+	require.NoError(t, statErr, "the displaced installed projection must be preserved for diagnosis")
+	assertReplayContainsOneUpdate(t, store, runID)
+}
+
 func TestProjectionFailureAfterJournalCommitReplaysDeterministically(t *testing.T) {
 	tests := []struct {
 		name  string

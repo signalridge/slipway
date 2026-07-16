@@ -10,7 +10,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).with_name("verify_optional_release_checksums.py")
+SCRIPT = Path(__file__).parents[2] / "scripts" / "verify_optional_release_checksums.py"
 TARGETS = (
     ("darwin", "amd64", "tar.gz"),
     ("darwin", "arm64", "tar.gz"),

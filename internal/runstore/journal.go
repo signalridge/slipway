@@ -16,6 +16,30 @@ const maxJournalRecordBytes = 4 << 20
 
 var errJournalRecordTooLarge = errors.New("journal record exceeds size limit")
 
+// JournalRecordLimitError reports a rejected pre-commit journal record without
+// collapsing it into a generic storage mutation failure.
+type JournalRecordLimitError struct {
+	Context string
+	Size    int
+	Limit   int
+}
+
+func (err *JournalRecordLimitError) Error() string {
+	if err == nil {
+		return "journal record exceeds size limit"
+	}
+	return fmt.Sprintf("%s exceeds journal record limit: %d bytes exceeds %d", err.Context, err.Size, err.Limit)
+}
+
+// JournalRecordContext returns the operation whose encoded record exceeded the limit.
+func (err *JournalRecordLimitError) JournalRecordContext() string { return err.Context }
+
+// JournalRecordSize returns the rejected encoded byte size.
+func (err *JournalRecordLimitError) JournalRecordSize() int { return err.Size }
+
+// JournalRecordLimit returns the maximum accepted encoded byte size.
+func (err *JournalRecordLimitError) JournalRecordLimit() int { return err.Limit }
+
 type Event struct {
 	Sequence int             `json:"sequence"`
 	Type     string          `json:"type"`
@@ -34,8 +58,8 @@ func NewEvent(eventType string, value any) (Event, error) {
 		return Event{}, fmt.Errorf("encode event data: %w", err)
 	}
 	data := bytes.TrimSuffix(buffer.Bytes(), []byte{'\n'})
-	if len(data) > maxJournalRecordBytes-(64<<10) {
-		return Event{}, errors.New("encode event data: payload exceeds journal record limit")
+	if limit := maxJournalRecordBytes - (64 << 10); len(data) > limit {
+		return Event{}, &JournalRecordLimitError{Context: "event payload", Size: len(data), Limit: limit}
 	}
 	return Event{Type: eventType, At: time.Now().UTC(), Data: append(json.RawMessage(nil), data...)}, nil
 }
@@ -334,7 +358,7 @@ func encodeJournalEvents(events []Event) ([]byte, error) {
 			return nil, fmt.Errorf("encode journal event: %w", err)
 		}
 		if record.Len() > maxJournalRecordBytes {
-			return nil, fmt.Errorf("append journal: event exceeds %d bytes", maxJournalRecordBytes)
+			return nil, &JournalRecordLimitError{Context: "encoded journal event", Size: record.Len(), Limit: maxJournalRecordBytes}
 		}
 		_, _ = encoded.Write(record.Bytes())
 	}

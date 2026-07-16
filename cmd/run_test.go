@@ -273,6 +273,15 @@ func TestRunStartRecoveryPreservesOptionsAndDashLeadingGoal(t *testing.T) {
 	assert.Equal(t, "--", action.Goal)
 }
 
+func TestRunPreservesLiteralGoalWhitespace(t *testing.T) {
+	repository := newCLIRepository(t)
+	goal := "  preserve this goal exactly  \n"
+	stdout, stderr, err := executeForTest(t, "run", goal, "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	action := decodeMutationAction(t, stdout)
+	assert.Equal(t, goal, action.Goal)
+}
+
 func TestResumeSourceRecoveryPreservesReplacementBudget(t *testing.T) {
 	repository := newCLIRepository(t)
 	canonicalRepository, err := resolveRoot(repository)
@@ -322,6 +331,27 @@ func TestFileAndFlagPreflightFailuresDoNotOpenRunstore(t *testing.T) {
 				return []string{"run", "   ", "--root", repository, "--json"}
 			},
 			code: "goal_required",
+		},
+		{
+			name: "invalid utf-8 goal",
+			args: func(repository, _ string) []string {
+				return []string{"run", string([]byte{'g', 0xff}), "--root", repository, "--json"}
+			},
+			code: "invalid_goal",
+		},
+		{
+			name: "oversize goal",
+			args: func(repository, _ string) []string {
+				return []string{"run", strings.Repeat("g", (256<<10)+1), "--root", repository, "--json"}
+			},
+			code: "action_too_large",
+		},
+		{
+			name: "invalid stop run id",
+			args: func(repository, _ string) []string {
+				return []string{"stop", "../outside", "--root", repository, "--json"}
+			},
+			code: "invalid_run_id",
 		},
 		{
 			name:    "invalid start source",
@@ -636,7 +666,7 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 	help, helpStderr, err := executeForTest(t, "run", "--help")
 	require.NoError(t, err, helpStderr)
 	assert.Contains(t, help, "--source-file string")
-	assert.Contains(t, help, `slipway run "<bounded goal>" --source-file FILE --budget 8 --json`)
+	assert.Contains(t, help, `slipway run --source-file FILE --budget 8 --json -- "<bounded goal>"`)
 
 	invalidRepository := newCLIRepository(t)
 	invalidEnvelope := cliSourceEnvelope()

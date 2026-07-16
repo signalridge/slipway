@@ -22,6 +22,8 @@ GitHub `closed` status does not prove that a blocker Change was actually deliver
 
 Detect `gh --version`. For `gh >= 2.94.0`, use first-class parent/sub-issue/dependency operations; otherwise use the official REST API with existing authentication or report `environment_unavailable`. Never make a local relationship graph authoritative. Follow redirects or transfers only within `github.com`; refetch repository/Issue node IDs, canonical URL, labels, parent, dependencies, and revisions, preserve the old URL alias, and still compare body marker and source/Requirements revisions. Do not trust cross-host redirects.
 
+{{ template "github-rest" . }}
+
 Use two confirmed phases because remote comment IDs are unknown before creation. The complete decomposition uses one operation UUID, and each child keeps one stable item UUID through preview, draft creation, reconciliation, relations, and final readback. First show full chapter drafts and the draft-resource plan with exact chapter digests, intended section order/roles, target repositories, every pre-existing mutable target's provider identity and observed revision, expected parent Requirements revisions, exact labels, any missing-label creation with exact attributes, parent, and dependencies. Confirm all non-authoritative draft and label-creation writes. Use private body files or equivalent cross-platform safe input for every Issue/comment create or PATCH; never use a POSIX heredoc. Each new child draft has no `change/v2` marker and contains only its receipt markers:
 
 ```html

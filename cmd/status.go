@@ -47,6 +47,11 @@ func makeStatusCmd() *cobra.Command {
 		Short: "Show soft-autopilot run journals",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				if validationErr := validateRunIDArgument(root, args[0]); validationErr != nil {
+					return validationErr
+				}
+			}
 			service, err := openAutopilotReadOnly(root)
 			if err != nil {
 				return err

@@ -98,6 +98,23 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	assert.ElementsMatch(t, []string{"operation", "workspace_identity", "variants"}, schemaStrings(t, next, "required"))
 	nextProperties := schemaMap(t, next, "properties")
 	assert.Equal(t, "^sha256:[0-9a-f]{64}$", schemaMap(t, nextProperties, "workspace_identity")["pattern"])
+	byteLimitedFields := []struct {
+		name     string
+		schema   map[string]any
+		expected int
+	}{
+		{name: "action brief", schema: schemaMap(t, schemaMap(t, action, "properties"), "brief"), expected: maxActionBriefBytes},
+		{name: "action context", schema: schemaMap(t, schemaMap(t, action, "properties"), "context"), expected: maxActionContextBytes},
+		{name: "suggested action brief", schema: schemaMap(t, schemaMap(t, schemaMap(t, definitions, "suggestedAction"), "properties"), "brief"), expected: maxSuggestedActionBriefBytes},
+		{name: "action material markdown", schema: schemaMap(t, schemaMap(t, schemaMap(t, definitions, "actionMaterialSection"), "properties"), "markdown"), expected: maxSourceSectionBytes},
+		{name: "pinned source section title", schema: schemaMap(t, schemaMap(t, schemaMap(t, definitions, "pinnedSourceSection"), "properties"), "title"), expected: maxSourceSectionTitleBytes},
+		{name: "source classification error", schema: schemaMap(t, schemaMap(t, schemaMap(t, definitions, "sourceCandidate"), "properties"), "classification_error"), expected: maxSourceClassificationErrBytes},
+	}
+	for _, field := range byteLimitedFields {
+		assert.Equal(t, float64(field.expected), field.schema["x-slipway-max-utf8-bytes"], field.name)
+		assert.NotContains(t, field.schema, "maxLength", field.name+" must not misstate a byte limit as a character limit")
+		assert.Contains(t, field.schema["description"], "UTF-8 bytes", field.name)
+	}
 	assert.ElementsMatch(t, []string{
 		"contract_version", "run_id", "action_id", "kind", "goal", "brief", "context", "remaining_budget",
 	}, schemaStrings(t, action, "required"))
@@ -129,6 +146,32 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	)
 
 	assertEveryObjectSchemaIsClosed(t, schema, "$")
+}
+
+func TestPathObservationSchemaRequiresRegularFileModificationMetadata(t *testing.T) {
+	t.Parallel()
+	schema := compileMachineSchemaDefinition(t, "pathObservation")
+	regular := map[string]any{
+		"path":                     "large.bin",
+		"category":                 "untracked",
+		"state":                    "??",
+		"observation":              "oversize_sampled",
+		"size":                     16<<20 + 1,
+		"modified_unix_nano":       int64(1_700_000_000_000_000_000),
+		"content_sha256":           "sha256:" + strings.Repeat("a", 64),
+		"content_fingerprint_kind": "oversize_samples_v1",
+	}
+	require.NoError(t, schema.Validate(regular))
+	delete(regular, "modified_unix_nano")
+	require.Error(t, schema.Validate(regular))
+
+	missing := map[string]any{
+		"path":        "missing.txt",
+		"category":    "ordinary",
+		"state":       ".D",
+		"observation": "missing",
+	}
+	require.NoError(t, schema.Validate(missing))
 }
 
 func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {

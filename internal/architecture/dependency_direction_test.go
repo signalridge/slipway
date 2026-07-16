@@ -19,7 +19,7 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 	root := repositoryRoot(t)
 	allowedInternal := map[string]map[string]bool{
 		"cmd":         {"adapter": true, "autopilot": true, "recoverycmd": true},
-		"autopilot":   {"runstore": true, "jsonstrict": true},
+		"autopilot":   {"runstore": true, "fsutil": true, "jsonstrict": true},
 		"runstore":    {"fsutil": true, "jsonstrict": true},
 		"adapter":     {"fsutil": true, "tmpl": true, "jsonstrict": true},
 		"recoverycmd": {},

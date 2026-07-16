@@ -68,6 +68,7 @@ go build -o "$acceptance_tmp/slipway-acceptance-bin" .
 SLIPWAY_BIN="$acceptance_tmp/slipway-acceptance-bin" sh tests/acceptance/machine-protocol.sh
 SLIPWAY_BIN="$acceptance_tmp/slipway-acceptance-bin" sh tests/acceptance/adapters.sh
 python3 -I tests/acceptance/github_publication_fault_harness.py
+python3 -I tests/acceptance/verify_optional_release_checksums_test.py
 python3 -I tests/acceptance/link_check.py --self-test
 # After `npm --prefix website ci && npm --prefix website run build`:
 python3 -I tests/acceptance/link_check.py --require-site

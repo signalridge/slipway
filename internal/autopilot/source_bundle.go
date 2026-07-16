@@ -161,34 +161,43 @@ func parseSourceManifest(body string) (SourceManifest, error) {
 			"source manifest fence is not closed",
 		)
 	}
-	var fenceByte byte
-	fenceLength := 0
+	var fence markdownFenceState
+	var listContainers []markdownContainerPrefix
+	var paragraph markdownParagraphState
 	for index := closingIndex + 1; index < len(lines); index++ {
-		trimmed := strings.TrimSpace(lines[index])
-		candidateByte, candidateLength, candidateFence := markdownFenceDelimiter(lines[index])
-		if fenceLength == 0 {
-			if trimmed == sourceManifestFence {
-				return SourceManifest{}, newSourceBundleError(
-					SourceClassificationManifestInvalid,
-					"source body contains multiple manifest fences",
-				)
-			}
-			if candidateFence {
-				fenceByte = candidateByte
-				fenceLength = candidateLength
+		line := lines[index]
+		if fence.active() {
+			content, belongs := markdownFenceContent(line, fence)
+			if belongs {
+				candidateByte, candidateLength, candidateFence := markdownFenceDelimiter(content)
+				if candidateFence && candidateByte == fence.marker && candidateLength >= fence.length && markdownFenceCloses(content, candidateByte, candidateLength) {
+					fence = markdownFenceState{}
+				}
 				continue
 			}
-			if strings.Contains(lines[index], "<!-- slipway-level:") {
-				return SourceManifest{}, newSourceBundleError(
-					SourceClassificationManifestInvalid,
-					"source body contains an additional slipway-level marker outside a code fence",
-				)
-			}
+			fence = markdownFenceState{}
+		}
+
+		if strings.TrimSpace(line) == sourceManifestFence {
+			return SourceManifest{}, newSourceBundleError(
+				SourceClassificationManifestInvalid,
+				"source body contains multiple manifest fences",
+			)
+		}
+		if opening, ok := markdownFenceOpening(line, listContainers, paragraph); ok {
+			fence = opening
+			listContainers = markdownListContextsFromPrefix(opening.containers)
+			paragraph = markdownParagraphState{}
 			continue
 		}
-		if candidateFence && candidateByte == fenceByte && candidateLength >= fenceLength && markdownFenceCloses(lines[index], candidateByte, candidateLength) {
-			fenceByte = 0
-			fenceLength = 0
+		nextParagraph := nextMarkdownParagraphState(line, listContainers, paragraph)
+		listContainers = nextMarkdownListContainers(line, listContainers, paragraph)
+		paragraph = nextParagraph
+		if strings.Contains(line, "<!-- slipway-level:") {
+			return SourceManifest{}, newSourceBundleError(
+				SourceClassificationManifestInvalid,
+				"source body contains an additional slipway-level marker outside a code fence",
+			)
 		}
 	}
 
@@ -219,6 +228,372 @@ func parseSourceManifest(body string) (SourceManifest, error) {
 		)
 	}
 	return manifest, nil
+}
+
+type markdownContainerKind byte
+
+const (
+	markdownContainerList markdownContainerKind = iota + 1
+	markdownContainerQuote
+)
+
+type markdownContainer struct {
+	kind         markdownContainerKind
+	indent       int
+	orderedStart int
+}
+
+type markdownContainerPrefix []markdownContainer
+
+type markdownParagraphState struct {
+	active     bool
+	containers markdownContainerPrefix
+}
+
+type markdownFenceState struct {
+	marker     byte
+	length     int
+	containers markdownContainerPrefix
+}
+
+func (state markdownFenceState) active() bool {
+	return state.marker != 0
+}
+
+func markdownFenceOpening(
+	line string,
+	listContainers []markdownContainerPrefix,
+	paragraph markdownParagraphState,
+) (markdownFenceState, bool) {
+	for count := len(listContainers); count >= 0; count-- {
+		var base markdownContainerPrefix
+		if count > 0 {
+			base = listContainers[count-1]
+		}
+		content, ok := stripMarkdownContainerPrefix(line, base)
+		if !ok {
+			continue
+		}
+		content, suffix := stripMarkdownContainerMarkers(content, base, paragraph)
+		marker, length, ok := markdownFenceDelimiter(content)
+		if !ok || !markdownFenceInfoValid(content, marker, length) {
+			return markdownFenceState{}, false
+		}
+		containers := cloneMarkdownContainerPrefix(base)
+		containers = append(containers, suffix...)
+		return markdownFenceState{
+			marker:     marker,
+			length:     length,
+			containers: containers,
+		}, true
+	}
+	return markdownFenceState{}, false
+}
+
+func markdownFenceContent(line string, state markdownFenceState) (string, bool) {
+	if markdownContainerBlank(line) {
+		return "", true
+	}
+	return stripMarkdownContainerPrefix(line, state.containers)
+}
+
+func nextMarkdownListContainers(
+	line string,
+	current []markdownContainerPrefix,
+	paragraph markdownParagraphState,
+) []markdownContainerPrefix {
+	if markdownContainerBlank(line) {
+		if strings.TrimSpace(line) != "" {
+			return current
+		}
+		count := 0
+		for _, context := range current {
+			if markdownContainerPrefixHasQuote(context) {
+				break
+			}
+			count++
+		}
+		return cloneMarkdownListContexts(current[:count])
+	}
+	for count := len(current); count >= 0; count-- {
+		var base markdownContainerPrefix
+		if count > 0 {
+			base = current[count-1]
+		}
+		content, ok := stripMarkdownContainerPrefix(line, base)
+		if !ok {
+			continue
+		}
+		_, suffix := stripMarkdownContainerMarkers(content, base, paragraph)
+		next := cloneMarkdownListContexts(current[:count])
+		prefix := cloneMarkdownContainerPrefix(base)
+		for _, container := range suffix {
+			prefix = append(prefix, container)
+			if container.kind == markdownContainerList {
+				next = append(next, cloneMarkdownContainerPrefix(prefix))
+			}
+		}
+		if count > 0 || len(next) > 0 {
+			return next
+		}
+		return nil
+	}
+	return nil
+}
+
+func nextMarkdownParagraphState(
+	line string,
+	listContainers []markdownContainerPrefix,
+	previous markdownParagraphState,
+) markdownParagraphState {
+	if markdownContainerBlank(line) {
+		return markdownParagraphState{}
+	}
+	for count := len(listContainers); count >= 0; count-- {
+		var base markdownContainerPrefix
+		if count > 0 {
+			base = listContainers[count-1]
+		}
+		content, ok := stripMarkdownContainerPrefix(line, base)
+		if !ok {
+			continue
+		}
+		content, suffix := stripMarkdownContainerMarkers(content, base, previous)
+		if !markdownContentStartsParagraph(content) {
+			return markdownParagraphState{}
+		}
+		containers := cloneMarkdownContainerPrefix(base)
+		containers = append(containers, suffix...)
+		return markdownParagraphState{active: true, containers: containers}
+	}
+	return markdownParagraphState{}
+}
+
+func markdownContentStartsParagraph(content string) bool {
+	trimmed := strings.TrimLeft(content, " ")
+	if len(content)-len(trimmed) > 3 || trimmed == "" {
+		return false
+	}
+	if trimmed[0] == '#' {
+		count := 0
+		for count < len(trimmed) && count < 7 && trimmed[count] == '#' {
+			count++
+		}
+		if count <= 6 && (count == len(trimmed) || trimmed[count] == ' ' || trimmed[count] == '\t') {
+			return false
+		}
+	}
+	if markdownThematicBreak(trimmed) {
+		return false
+	}
+	return true
+}
+
+func markdownThematicBreak(line string) bool {
+	marker := byte(0)
+	count := 0
+	for index := 0; index < len(line); index++ {
+		switch line[index] {
+		case ' ', '\t':
+			continue
+		case '*', '-', '_':
+			if marker == 0 {
+				marker = line[index]
+			}
+			if line[index] != marker {
+				return false
+			}
+			count++
+		default:
+			return false
+		}
+	}
+	return count >= 3
+}
+
+func markdownListContextsFromPrefix(prefix markdownContainerPrefix) []markdownContainerPrefix {
+	contexts := make([]markdownContainerPrefix, 0, len(prefix))
+	for index, container := range prefix {
+		if container.kind == markdownContainerList {
+			contexts = append(contexts, cloneMarkdownContainerPrefix(prefix[:index+1]))
+		}
+	}
+	return contexts
+}
+
+func cloneMarkdownListContexts(contexts []markdownContainerPrefix) []markdownContainerPrefix {
+	cloned := make([]markdownContainerPrefix, len(contexts))
+	for index, context := range contexts {
+		cloned[index] = cloneMarkdownContainerPrefix(context)
+	}
+	return cloned
+}
+
+func cloneMarkdownContainerPrefix(prefix markdownContainerPrefix) markdownContainerPrefix {
+	return append(markdownContainerPrefix(nil), prefix...)
+}
+
+func markdownContainerPrefixHasQuote(prefix markdownContainerPrefix) bool {
+	for _, container := range prefix {
+		if container.kind == markdownContainerQuote {
+			return true
+		}
+	}
+	return false
+}
+
+func sameMarkdownContainerPrefix(left, right markdownContainerPrefix) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index].kind != right[index].kind || left[index].indent != right[index].indent {
+			return false
+		}
+	}
+	return true
+}
+
+func stripMarkdownContainerPrefix(line string, prefix markdownContainerPrefix) (string, bool) {
+	content := line
+	for _, container := range prefix {
+		switch container.kind {
+		case markdownContainerList:
+			if len(content) < container.indent || strings.Trim(content[:container.indent], " ") != "" {
+				return "", false
+			}
+			content = content[container.indent:]
+		case markdownContainerQuote:
+			var ok bool
+			content, ok = stripMarkdownBlockQuoteMarker(content)
+			if !ok {
+				return "", false
+			}
+		default:
+			return "", false
+		}
+	}
+	return content, true
+}
+
+func stripMarkdownContainerMarkers(
+	line string,
+	base markdownContainerPrefix,
+	paragraph markdownParagraphState,
+) (string, markdownContainerPrefix) {
+	content := line
+	prefix := cloneMarkdownContainerPrefix(base)
+	var containers markdownContainerPrefix
+	for {
+		if rest, ok := stripMarkdownBlockQuoteMarker(content); ok {
+			container := markdownContainer{kind: markdownContainerQuote}
+			containers = append(containers, container)
+			prefix = append(prefix, container)
+			content = rest
+			continue
+		}
+		rest, indent, orderedStart, ok := stripMarkdownListMarker(content)
+		if !ok {
+			return content, containers
+		}
+		if orderedStart != -1 && orderedStart != 1 && paragraph.active && sameMarkdownContainerPrefix(prefix, paragraph.containers) {
+			return content, containers
+		}
+		container := markdownContainer{
+			kind:         markdownContainerList,
+			indent:       indent,
+			orderedStart: orderedStart,
+		}
+		containers = append(containers, container)
+		prefix = append(prefix, container)
+		content = rest
+	}
+}
+
+func stripMarkdownBlockQuoteMarker(line string) (string, bool) {
+	trimmed := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 || trimmed == "" || trimmed[0] != '>' {
+		return "", false
+	}
+	content := trimmed[1:]
+	if strings.HasPrefix(content, " ") {
+		content = content[1:]
+	}
+	return content, true
+}
+
+func stripMarkdownListMarker(line string) (string, int, int, bool) {
+	trimmed := strings.TrimLeft(line, " ")
+	leading := len(line) - len(trimmed)
+	if leading > 3 {
+		return "", 0, 0, false
+	}
+	markerLength := markdownListMarkerLength(trimmed)
+	if markerLength == 0 {
+		return "", 0, 0, false
+	}
+	orderedStart := -1
+	if trimmed[0] >= '0' && trimmed[0] <= '9' {
+		value, err := strconv.Atoi(trimmed[:markerLength-1])
+		if err != nil {
+			return "", 0, 0, false
+		}
+		orderedStart = value
+	}
+	if len(trimmed) == markerLength {
+		return "", leading + markerLength + 1, orderedStart, true
+	}
+	if trimmed[markerLength] != ' ' {
+		return "", 0, 0, false
+	}
+	spaces := 0
+	for markerLength+spaces < len(trimmed) && trimmed[markerLength+spaces] == ' ' {
+		spaces++
+	}
+	if spaces > 4 {
+		spaces = 1
+	}
+	indent := leading + markerLength + spaces
+	return line[indent:], indent, orderedStart, true
+}
+
+func markdownContainerBlank(line string) bool {
+	content := line
+	for {
+		if strings.TrimSpace(content) == "" {
+			return true
+		}
+		rest, ok := stripMarkdownBlockQuoteMarker(content)
+		if !ok {
+			return false
+		}
+		content = rest
+	}
+}
+
+func markdownListMarkerLength(line string) int {
+	if line == "" {
+		return 0
+	}
+	if line[0] == '-' || line[0] == '+' || line[0] == '*' {
+		return 1
+	}
+	index := 0
+	for index < len(line) && index < 9 && line[index] >= '0' && line[index] <= '9' {
+		index++
+	}
+	if index == 0 || index >= len(line) || (line[index] != '.' && line[index] != ')') {
+		return 0
+	}
+	return index + 1
+}
+
+func markdownFenceInfoValid(line string, marker byte, length int) bool {
+	if marker != '`' {
+		return true
+	}
+	trimmed := strings.TrimLeft(line, " ")
+	return !strings.Contains(trimmed[length:], "`")
 }
 
 func markdownFenceDelimiter(line string) (byte, int, bool) {
@@ -396,11 +771,14 @@ func validateRawSourceComment(
 	if err := validateGitHubNodeID(field+".author_id", comment.AuthorID); err != nil {
 		return err
 	}
-	for name, value := range map[string]string{
-		field + ".url":        comment.URL,
-		field + ".updated_at": comment.UpdatedAt,
+	for _, value := range []struct {
+		name string
+		text string
+	}{
+		{name: field + ".url", text: comment.URL},
+		{name: field + ".updated_at", text: comment.UpdatedAt},
 	} {
-		if err := validateTextControls(name, value, false); err != nil {
+		if err := validateTextControls(value.name, value.text, false); err != nil {
 			return err
 		}
 	}

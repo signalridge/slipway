@@ -20,7 +20,7 @@ Slipway 有七个公开命令。请对正在使用的二进制执行 `slipway <c
 slipway install [--root PATH] [--tool ID]... [--surface ide|cli] [--refresh] [--json]
 ```
 
-省略 `--tool` 时选择检测到的宿主。可重复 `--tool` 选择多个宿主。Kiro 首次安装必须指定一个 `--surface`，且该 flag 不能和非 Kiro selection 组合。首次使用 `--tool all` 前应先单独安装 Kiro。
+省略 `--tool` 时选择检测到的宿主。可重复 `--tool` 选择多个宿主。Kiro 首次安装必须指定一个 `--surface`。在混合选择中，`--surface` 只作用于 Kiro；仅当未选择 Kiro 时该 flag 才无效。`--tool all --surface ide` 与 `--tool all --surface cli` 都合法。
 
 首次 install 只认领自己创建的文件。`--refresh` 更新仍与记录一致的 Slipway-owned file，并重建缺失的 pristine file；被修改或未知内容不会被覆盖。
 

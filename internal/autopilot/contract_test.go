@@ -96,6 +96,9 @@ func TestOutcomeValidationRejectsIllegalMatrixCombinations(t *testing.T) {
 		{name: "summary suggestion", kind: ActionSummarize, outcome: withSuggestion(testOutcome(OutcomeCompleted), ActionClarify), want: "summarize outcomes cannot suggest"},
 		{name: "summary partial", kind: ActionSummarize, outcome: testOutcome(OutcomePartial), want: "summarize does not support"},
 		{name: "zero attempts", kind: ActionImplement, outcome: withAttempts(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), 0), want: "attempts must be positive"},
+		{name: "file path tab control", kind: ActionImplement, outcome: withFilesChanged(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), "a.go\tb.go"), want: "disallowed control"},
+		{name: "file path newline control", kind: ActionImplement, outcome: withFilesChanged(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), "a.go\nb.go"), want: "disallowed control"},
+		{name: "file path carriage-return control", kind: ActionImplement, outcome: withFilesChanged(implementedTestOutcome(OutcomeCompleted, ImplementationApplied), "a.go\rb.go"), want: "disallowed control"},
 	}
 
 	for _, test := range tests {
@@ -140,6 +143,9 @@ func TestOutcomeValidationEnforcesSuggestionsAndText(t *testing.T) {
 		{name: "blank suggestion", outcome: withSuggestions(testOutcome(OutcomeCompleted), []SuggestedAction{{Kind: ActionClarify, Brief: " "}}), want: "brief is required"},
 		{name: "oversize suggestion", outcome: withSuggestions(testOutcome(OutcomeCompleted), []SuggestedAction{{Kind: ActionClarify, Brief: strings.Repeat("x", maxSuggestedActionBriefBytes+1)}}), want: "brief exceeds"},
 		{name: "invalid summary utf8", outcome: withSummary(testOutcome(OutcomeCompleted), string([]byte{0xff})), want: "valid utf-8"},
+		{name: "summary nul control", outcome: withSummary(testOutcome(OutcomeCompleted), "facts\x00hidden"), want: "disallowed control"},
+		{name: "summary del control", outcome: withSummary(testOutcome(OutcomeCompleted), "facts\u007fhidden"), want: "disallowed control"},
+		{name: "summary c1 control", outcome: withSummary(testOutcome(OutcomeCompleted), "facts\u0085hidden"), want: "disallowed control"},
 		{name: "nil observations", outcome: withNilObservations(testOutcome(OutcomeCompleted)), want: "observations must be a non-null array"},
 		{name: "nil known issues", outcome: withNilKnownIssues(testOutcome(OutcomeCompleted)), want: "known_issues must be a non-null array"},
 		{name: "nil suggestions", outcome: withNilSuggestions(testOutcome(OutcomeCompleted)), want: "suggested_actions must be a non-null array"},
@@ -173,6 +179,7 @@ func TestDecodeOutcomeRequiresExactStrictJSON(t *testing.T) {
 		{name: "duplicate key", raw: []byte(strings.Replace(valid, `"summary":"facts"`, `"summary":"facts","summary":"other"`, 1)), want: "duplicate object key"},
 		{name: "nested unknown field", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"extra":true},"implementation":null,"review":null}`), want: "unknown field"},
 		{name: "nested duplicate key", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","question":"again","destructive_request":null},"implementation":null,"review":null}`), want: "duplicate object key"},
+		{name: "explicit null decision supersession", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"orient","status":"needs_input","summary":"wait","observations":[],"known_issues":[],"suggested_actions":[],"pause":{"reason":"decision_required","question":"choose","destructive_request":null,"supersedes_answer_action_id":null},"implementation":null,"review":null}`), want: "not null"},
 		{name: "nested missing field", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":[],"activities":[],"uncertainties":[]},"review":null}`), want: "attempts"},
 		{name: "nested null array", raw: []byte(`{"contract_version":2,"action_id":"action-1","action_kind":"implement","status":"completed","summary":"done","observations":[],"known_issues":[],"suggested_actions":[],"pause":null,"implementation":{"result":"applied","files_changed":null,"activities":[],"uncertainties":[],"attempts":1},"review":null}`), want: "array, not null"},
 		{name: "trailing value", raw: []byte(valid + ` {}`), want: "trailing json value"},
@@ -261,6 +268,9 @@ func TestActionValidationEnforcesSourceAuthorizationAndBounds(t *testing.T) {
 			action.Source, action.Requirements = &source, &oversized
 		}, want: "encoded action exceeds"},
 		{name: "invalid utf8", mutate: func(action *Action) { action.Goal = string([]byte{0xff}) }, want: "valid utf-8"},
+		{name: "goal nul control", mutate: func(action *Action) { action.Goal = "goal\x00hidden" }, want: "disallowed control"},
+		{name: "brief del control", mutate: func(action *Action) { action.Brief = "brief\u007fhidden" }, want: "disallowed control"},
+		{name: "context c1 control", mutate: func(action *Action) { action.Context = "context\u0085hidden" }, want: "disallowed control"},
 		{name: "blank identifier", mutate: func(action *Action) { action.ActionID = " " }, want: "action_id is required"},
 	}
 
@@ -557,6 +567,11 @@ func withImplementation(outcome Outcome, result ImplementationResult) Outcome {
 
 func withAttempts(outcome Outcome, attempts int) Outcome {
 	outcome.Implementation.Attempts = attempts
+	return outcome
+}
+
+func withFilesChanged(outcome Outcome, paths ...string) Outcome {
+	outcome.Implementation.FilesChanged = paths
 	return outcome
 }
 

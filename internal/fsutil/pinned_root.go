@@ -160,11 +160,10 @@ func (root *PinnedRoot) Apply(ops []FileTransactionOp) error {
 		return &RootNamespaceIdentityError{Root: root.path}
 	}
 	filesystem := &transactionFilesystem{rootPath: root.path, root: root.root}
-	if err := applyFileTransactionWithFilesystem(normalized, filesystem); err != nil {
-		return err
-	}
+	operationErr := applyFileTransactionWithFilesystem(normalized, filesystem)
+	var namespaceErr error
 	if err := root.ValidateNamespace(); err != nil {
-		return &RootNamespaceIdentityError{Root: root.path, Committed: len(normalized) > 0}
+		namespaceErr = &RootNamespaceIdentityError{Root: root.path, Committed: len(normalized) > 0}
 	}
-	return nil
+	return errors.Join(operationErr, namespaceErr)
 }

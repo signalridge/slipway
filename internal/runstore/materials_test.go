@@ -58,6 +58,45 @@ func TestStorePersistsAndRevalidatesContentAddressedMaterials(t *testing.T) {
 	assert.Contains(t, err.Error(), "corrupt")
 }
 
+func TestReadOnlyVisitWithMaterialReaderUsesCommitBoundaryWithoutMutation(t *testing.T) {
+	repository := createRepository(t)
+	writable, err := Open(repository)
+	require.NoError(t, err)
+	content := []byte("# Read-only material\n")
+	digest := materialDigest(content)
+	event, err := NewEvent("created", map[string]int{"count": 1})
+	require.NoError(t, err)
+	require.NoError(t, writable.CreateWithMaterials(
+		"run-read-only-material",
+		event,
+		map[string]int{"count": 1},
+		[]Material{{Digest: digest, Data: content}},
+	))
+	require.NoError(t, writable.Close())
+
+	readOnly, err := OpenReadOnly(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, readOnly.Close()) })
+	var events int
+	err = readOnly.VisitWithMaterialReader(
+		"run-read-only-material",
+		func(Event) error {
+			events++
+			return nil
+		},
+		func(readMaterial MaterialReader) error {
+			actual, readErr := readMaterial(digest)
+			if readErr != nil {
+				return readErr
+			}
+			assert.Equal(t, content, actual)
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, events)
+}
+
 func TestVisitWithMaterialReaderHoldsRunLockThroughRead(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)

@@ -264,6 +264,29 @@ func TestReleaseWorkflowPostPublishChecksHandleRunnerPolicyDrift(t *testing.T) {
 	assert.Less(t, trustIndex, installIndex)
 }
 
+func TestReleaseObservationsRemainAdvisoryAfterCorePublication(t *testing.T) {
+	workflow := readWorkflowYAML(t, ".github/workflows/release.yaml")
+	releaseJob := workflowMap(t, workflowMap(t, workflow, "jobs"), "release")
+
+	moduleDrift := firstNamedStep(t, releaseJob, "Observe module-file drift")
+	assert.Equal(t, true, moduleDrift["continue-on-error"])
+	assert.Contains(t, moduleDrift["run"], "go mod tidy -diff")
+
+	for _, name := range []string{
+		"Observe release artifacts",
+		"Observe LICENSE inclusion in every archive",
+		"Extract version",
+		"Generate release subjects",
+		"Generate release smoke manifest",
+		"Upload SBOM artifacts",
+	} {
+		assert.Equal(t, true, firstNamedStep(t, releaseJob, name)["continue-on-error"], name)
+	}
+
+	config := readWorkflowYAML(t, ".goreleaser.yaml")
+	assert.NotContains(t, config, "before", "GoReleaser must not turn module drift into a publication gate")
+}
+
 func TestGoReleaserUsesCosignBundleSigning(t *testing.T) {
 	config := readWorkflowYAML(t, ".goreleaser.yaml")
 	signs, ok := config["signs"].([]any)

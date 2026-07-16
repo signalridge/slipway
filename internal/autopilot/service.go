@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"reflect"
 	"sort"
 	"strings"
@@ -23,6 +24,11 @@ type ProtocolError struct {
 }
 
 func (err *ProtocolError) Error() string { return err.Message }
+
+// ValidateRunID checks a Run identifier without opening repository storage.
+func ValidateRunID(runID string) error {
+	return runstore.ValidateRunID(runID)
+}
 
 type SourceChoice string
 
@@ -297,14 +303,25 @@ func (service *Service) RepositoryRoot() string { return service.store.Repositor
 func (service *Service) Close() error           { return service.store.Close() }
 
 func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
+	if strings.TrimSpace(goal) == "" {
+		return Run{}, &ProtocolError{Code: "goal_required", Message: "goal cannot be empty", Next: NoneNext("")}
+	}
+	goalErr := ValidateGoal(goal)
+	var limitErr *GoalLimitError
+	if goalErr != nil && !errors.As(goalErr, &limitErr) {
+		return Run{}, &ProtocolError{Code: "invalid_goal", Message: goalErr.Error(), Next: NoneNext("")}
+	}
 	identity, err := service.validateOpenWorkspace()
 	if err != nil {
 		return Run{}, err
 	}
-	goal = strings.TrimSpace(goal)
 	workspace := identity.WorktreeRoot
-	if goal == "" {
-		return Run{}, &ProtocolError{Code: "goal_required", Message: "goal cannot be empty", Next: NoneNext(identity.ID)}
+	if limitErr != nil {
+		return Run{}, &ProtocolError{
+			Code:    "action_too_large",
+			Message: limitErr.Error(),
+			Next:    startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, options.PinnedSource != nil),
+		}
 	}
 	if err := ValidateBudget(options.Budget); err != nil {
 		return Run{}, &ProtocolError{Code: "invalid_budget", Message: err.Error(), Next: startRunNext(workspace, goal, options.Budget, options.ReviewEnabled, false)}
@@ -350,6 +367,9 @@ func (service *Service) Start(goal string, options CreateOptions) (Run, error) {
 		PinnedSource:      pinnedSource,
 		CreatedAt:         now,
 		UpdatedAt:         now,
+	}
+	if !observation.ContentObservationComplete {
+		run.Uncertainties = appendUniqueString(run.Uncertainties, contentObservationUncertainty)
 	}
 	recordAcceptedSourceComments(&run, run.PinnedSource)
 	durableRun := runBeforeMutation(run)
@@ -639,7 +659,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			return nil, nil, err
 		}
 		if receipt := findAnswerRecord(run, actionID); receipt != nil {
-			if answerReceiptMatches(*receipt, options, payloadSHA256) {
+			if answerReceiptMatches(*receipt, payloadSHA256) {
 				result = run
 				if receipt.ConfirmDestructive && run.State == RunPaused && run.PauseReason == PauseBudgetExhausted && run.RemainingBudget == 0 {
 					responseErr = resumeProtocolError(run, "budget_exhausted", "destructive confirmation cannot issue a fresh implement action without action budget")
@@ -1767,8 +1787,9 @@ func transitionFrom(run *Run, durableRun Run, kind ActionKind, outcome Outcome) 
 }
 
 const (
-	observedSinceStart     = "observed_since_start: the current Git observation differs from the run-start snapshot."
-	attributionUncertainty = "attribution_uncertainty: concurrent user edits, another Run, or tools may have contributed to the observed difference."
+	observedSinceStart            = "observed_since_start: the current Git observation differs from the run-start snapshot."
+	attributionUncertainty        = "attribution_uncertainty: concurrent user edits, another Run, or tools may have contributed to the observed difference."
+	contentObservationUncertainty = "git_content_observation_incomplete: bounded content observation could not fingerprint every dirty regular file; any advisory Review remains skippable."
 )
 
 func observeGitAfterAction(run *Run, kind ActionKind, outcome Outcome) bool {
@@ -1793,6 +1814,9 @@ func observeGitAfterAction(run *Run, kind ActionKind, outcome Outcome) bool {
 
 func recordGitObservation(run *Run, current runstore.GitObservation) bool {
 	run.CurrentGit = cloneGitObservation(current)
+	if !current.ContentObservationComplete {
+		run.Uncertainties = appendUniqueString(run.Uncertainties, contentObservationUncertainty)
+	}
 	changed := current.ChangedFrom(run.InitialGit)
 	if changed {
 		run.Observations = appendUniqueString(run.Observations, observedSinceStart)
@@ -2264,21 +2288,93 @@ func renderContext(classes []*contextClass) string {
 	return builder.String()
 }
 
+const maxFinalSummaryBytes = 64 << 10
+
+type boundedSummaryBuilder struct {
+	limit  int
+	prefix []byte
+	total  int
+	hash   hash.Hash
+}
+
+func newBoundedSummaryBuilder(limit int) *boundedSummaryBuilder {
+	return &boundedSummaryBuilder{
+		limit:  limit,
+		prefix: make([]byte, 0, limit),
+		hash:   sha256.New(),
+	}
+}
+
+func (builder *boundedSummaryBuilder) Write(data []byte) (int, error) {
+	if builder == nil {
+		return 0, errors.New("write summary: nil builder")
+	}
+	_, _ = builder.hash.Write(data)
+	builder.total += len(data)
+	if remaining := builder.limit - len(builder.prefix); remaining > 0 {
+		if len(data) < remaining {
+			remaining = len(data)
+		}
+		builder.prefix = append(builder.prefix, data[:remaining]...)
+	}
+	return len(data), nil
+}
+
+func (builder *boundedSummaryBuilder) WriteString(value string) {
+	_, _ = builder.Write([]byte(value))
+}
+
+func (builder *boundedSummaryBuilder) String() string {
+	if builder.total <= builder.limit {
+		return string(builder.prefix)
+	}
+	digest := fmt.Sprintf("sha256:%x", builder.hash.Sum(nil))
+	cut := builder.limit
+	marker := ""
+	for range 4 {
+		omitted := builder.total - cut
+		marker = fmt.Sprintf("\n\n...[summary truncated omitted_bytes=%d original_sha256=%s]\n", omitted, digest)
+		cut = builder.limit - len(marker)
+		if cut < 0 {
+			cut = 0
+		}
+		if cut > len(builder.prefix) {
+			cut = len(builder.prefix)
+		}
+		for cut > 0 && !utf8.Valid(builder.prefix[:cut]) {
+			cut--
+		}
+	}
+	return string(builder.prefix[:cut]) + marker
+}
+
+func writeSummaryStrings(builder *boundedSummaryBuilder, heading string, values []string) {
+	if len(values) == 0 {
+		return
+	}
+	builder.WriteString(heading + "\n")
+	for _, value := range values {
+		fmt.Fprintf(builder, "- %s\n", value)
+	}
+}
+
 func finalSummary(run Run) string {
-	var builder strings.Builder
+	builder := newBoundedSummaryBuilder(maxFinalSummaryBytes)
 	builder.WriteString("The automatic action queue has ended.\n")
 	builder.WriteString("Observed action reports:\n")
 
 	changedFiles := map[string]struct{}{}
-	var confirmedDecisions, observations, reviewFindings, skipped, voided []string
+	var confirmedDecisions []AnswerRecord
+	var observations []string
+	var reviewFindings []Finding
+	var skipped, voided []string
 	for _, answer := range run.Answers {
-		if !answer.Active || answer.SupersededBy != "" {
-			continue
+		if answer.Active && answer.SupersededBy == "" {
+			confirmedDecisions = append(confirmedDecisions, answer)
 		}
-		confirmedDecisions = append(confirmedDecisions, fmt.Sprintf("action %s: %s", answer.ActionID, answer.Text))
 	}
 	var reviewOutcome *Outcome
-	var reviewSkippedByUser bool
+	var reviewSkippedByUser, reviewVoided bool
 	for index := range run.Actions {
 		record := &run.Actions[index]
 		if record.Skipped {
@@ -2289,6 +2385,9 @@ func finalSummary(run Run) string {
 		}
 		if record.Voided {
 			voided = append(voided, string(record.Action.Kind))
+			if record.Action.Kind == ActionReview {
+				reviewVoided = true
+			}
 		}
 		if record.Outcome == nil {
 			continue
@@ -2299,7 +2398,7 @@ func finalSummary(run Run) string {
 		} else if record.Voided {
 			annotation = " (voided on resume)"
 		}
-		fmt.Fprintf(&builder, "- %s%s: %s\n", record.Action.Kind, annotation, record.Outcome.Summary)
+		fmt.Fprintf(builder, "- %s%s: %s\n", record.Action.Kind, annotation, record.Outcome.Summary)
 		if record.Outcome.Implementation != nil {
 			for _, path := range record.Outcome.Implementation.FilesChanged {
 				if path = strings.TrimSpace(path); path != "" {
@@ -2310,9 +2409,7 @@ func finalSummary(run Run) string {
 		if record.Outcome.Review != nil {
 			reviewOutcome = record.Outcome
 			if record.Outcome.Review.Result == ReviewFindings {
-				for _, finding := range record.Outcome.Review.Findings {
-					reviewFindings = append(reviewFindings, fmt.Sprintf("%s: %s — %s", finding.Location, finding.Summary, finding.Detail))
-				}
+				reviewFindings = append(reviewFindings, record.Outcome.Review.Findings...)
 			}
 		} else {
 			observations = append(observations, record.Outcome.Observations...)
@@ -2338,22 +2435,28 @@ func finalSummary(run Run) string {
 	}
 	sort.Strings(files)
 	if len(files) > 0 {
-		builder.WriteString("Files reported changed by Implement:\n- " + strings.Join(files, "\n- ") + "\n")
+		writeSummaryStrings(builder, "Files reported changed by Implement:", files)
 	} else {
 		builder.WriteString("No files were reported changed by Implement.\n")
 	}
 	if len(confirmedDecisions) > 0 {
-		builder.WriteString("Confirmed decisions:\n- " + strings.Join(confirmedDecisions, "\n- ") + "\n")
+		builder.WriteString("Confirmed decisions:\n")
+		for _, answer := range confirmedDecisions {
+			fmt.Fprintf(builder, "- action %s: %s\n", answer.ActionID, answer.Text)
+		}
 	}
-	if len(observations) > 0 {
-		builder.WriteString("Observations:\n- " + strings.Join(observations, "\n- ") + "\n")
-	}
+	writeSummaryStrings(builder, "Observations:", observations)
 	if len(reviewFindings) > 0 {
-		builder.WriteString("Review findings:\n- " + strings.Join(reviewFindings, "\n- ") + "\n")
+		builder.WriteString("Review findings:\n")
+		for _, finding := range reviewFindings {
+			fmt.Fprintf(builder, "- %s: %s — %s\n", finding.Location, finding.Summary, finding.Detail)
+		}
 	} else if reviewSkippedByUser {
 		builder.WriteString("Review was skipped by the user.\n")
 	} else if reviewOutcome != nil {
-		fmt.Fprintf(&builder, "Review report: %s: %s\n", reviewOutcome.Review.Result, reviewOutcome.Summary)
+		fmt.Fprintf(builder, "Review report: %s: %s\n", reviewOutcome.Review.Result, reviewOutcome.Summary)
+	} else if reviewVoided {
+		builder.WriteString("A Review Action was dispatched but voided on resume before completion.\n")
 	} else if !run.ReviewEnabled {
 		builder.WriteString("Review was disabled for this run.\n")
 	} else {
@@ -2364,35 +2467,27 @@ func finalSummary(run Run) string {
 	} else {
 		builder.WriteString("Reported technical activities:\n")
 		for _, activity := range run.Activities {
-			fmt.Fprintf(&builder, "- %s: %s (exit %d): %s\n", activity.Kind, activity.Command, activity.ExitCode, activity.Summary)
+			fmt.Fprintf(builder, "- %s: %s (exit %d): %s\n", activity.Kind, activity.Command, activity.ExitCode, activity.Summary)
 		}
 	}
-	if len(skipped) > 0 {
-		builder.WriteString("Skipped Actions:\n- " + strings.Join(skipped, "\n- ") + "\n")
-	}
-	if len(voided) > 0 {
-		builder.WriteString("Actions voided on resume:\n- " + strings.Join(voided, "\n- ") + "\n")
-	}
-	if len(run.KnownIssues) > 0 {
-		builder.WriteString("Known issues:\n- " + strings.Join(run.KnownIssues, "\n- ") + "\n")
-	}
-	if len(run.Uncertainties) > 0 {
-		builder.WriteString("Uncertainties:\n- " + strings.Join(run.Uncertainties, "\n- ") + "\n")
-	}
+	writeSummaryStrings(builder, "Skipped Actions:", skipped)
+	writeSummaryStrings(builder, "Actions voided on resume:", voided)
+	writeSummaryStrings(builder, "Known issues:", run.KnownIssues)
+	writeSummaryStrings(builder, "Uncertainties:", run.Uncertainties)
 	if run.InitialGit.PathCount > 0 {
-		fmt.Fprintf(&builder, "Pre-existing dirty path observations at Run start (count=%d; retained=%d; path_fingerprint=%s):\n", run.InitialGit.PathCount, len(run.InitialGit.PathObservations), run.InitialGit.PathFingerprint)
+		fmt.Fprintf(builder, "Pre-existing dirty path observations at Run start (count=%d; retained=%d; path_fingerprint=%s):\n", run.InitialGit.PathCount, len(run.InitialGit.PathObservations), run.InitialGit.PathFingerprint)
 		for _, item := range run.InitialGit.PathObservations {
-			fmt.Fprintf(&builder, "- %s [%s %s; %s", item.Path, item.Category, item.State, item.Observation)
+			fmt.Fprintf(builder, "- %s [%s %s; %s", item.Path, item.Category, item.State, item.Observation)
 			if item.Size != nil {
-				fmt.Fprintf(&builder, "; size=%d", *item.Size)
+				fmt.Fprintf(builder, "; size=%d", *item.Size)
 			}
 			if item.ContentSHA256 != "" {
-				fmt.Fprintf(&builder, "; content_sha256=%s", item.ContentSHA256)
+				fmt.Fprintf(builder, "; content_sha256=%s", item.ContentSHA256)
 			}
 			builder.WriteString("]\n")
 		}
 		if run.InitialGit.DetailsTruncated {
-			fmt.Fprintf(&builder, "- %d additional path detail(s) omitted from the bounded projection.\n", run.InitialGit.PathCount-len(run.InitialGit.PathObservations))
+			fmt.Fprintf(builder, "- %d additional path detail(s) omitted from the bounded projection.\n", run.InitialGit.PathCount-len(run.InitialGit.PathObservations))
 		}
 	}
 	return builder.String()
@@ -2486,36 +2581,8 @@ func answerPayloadSHA256(actionID string, options AnswerOptions) (string, error)
 	), nil
 }
 
-func answerReceiptMatches(receipt AnswerRecord, options AnswerOptions, payloadSHA256 string) bool {
-	if receipt.PayloadSHA256 == payloadSHA256 {
-		return true
-	}
-	if receipt.Text != options.Text || receipt.ConfirmDestructive != options.ConfirmDestructive ||
-		receipt.ScopeSHA256 != options.ScopeSHA256 {
-		return false
-	}
-	legacyDigest, err := legacyAnswerPayloadSHA256(receipt.ActionID, options)
-	return err == nil && receipt.PayloadSHA256 == legacyDigest
-}
-
-func legacyAnswerPayloadSHA256(actionID string, options AnswerOptions) (string, error) {
-	payload := struct {
-		ActionID           string `json:"action_id"`
-		ConfirmDestructive bool   `json:"confirm_destructive"`
-		ScopeSHA256        string `json:"scope_sha256"`
-		Text               string `json:"text"`
-	}{
-		ActionID:           actionID,
-		ConfirmDestructive: options.ConfirmDestructive,
-		ScopeSHA256:        options.ScopeSHA256,
-		Text:               strings.TrimSpace(options.Text),
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode legacy answer payload: %w", err)
-	}
-	digest := sha256.Sum256(encoded)
-	return fmt.Sprintf("sha256:%x", digest), nil
+func answerReceiptMatches(receipt AnswerRecord, payloadSHA256 string) bool {
+	return receipt.PayloadSHA256 == payloadSHA256
 }
 
 func findAnswerRecord(run Run, actionID string) *AnswerRecord {
@@ -2693,10 +2760,7 @@ func validateRunReceipts(run Run) error {
 			return fmt.Errorf("answer receipt %d payload digest does not match", index)
 		}
 		if digest != answer.PayloadSHA256 {
-			legacyDigest, legacyErr := legacyAnswerPayloadSHA256(answer.ActionID, options)
-			if legacyErr != nil || legacyDigest != answer.PayloadSHA256 {
-				return fmt.Errorf("answer receipt %d payload digest does not match", index)
-			}
+			return fmt.Errorf("answer receipt %d payload digest does not match", index)
 		}
 	}
 	for index, record := range run.Actions {

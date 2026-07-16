@@ -72,16 +72,18 @@ func TestAsCLIErrorReportsMutationCommitStateWithoutRetry(t *testing.T) {
 // so the error must offer a recoverable read-only inspection command rather
 // than a terminal `none`.
 func TestAsCLIErrorJournalRecordLimitOffersRecoverableNext(t *testing.T) {
-	for _, message := range []string{
-		"encode event data: payload exceeds journal record limit",
-		"append journal: event exceeds 4194304 bytes",
+	limitErr := &runstore.JournalRecordLimitError{Context: "encoded journal event", Size: 5 << 20, Limit: 4 << 20}
+	for _, err := range []error{
+		limitErr,
+		&runstore.MutationError{Phase: runstore.PhaseJournalWrite, Err: limitErr},
 	} {
-		actual := asCLIError(errors.New(message))
+		actual := asCLIError(err)
 		require.NotNil(t, actual)
 		assert.Equal(t, "journal_record_too_large", actual.Code)
 		assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation, "limit error must not surface as terminal none")
 		require.NotEmpty(t, actual.Next.Variants)
 		assert.Equal(t, "inspect-runs", actual.Next.Variants[0].ID)
 		assert.Contains(t, actual.Next.Variants[0].BaseArgv, "status")
+		assert.Equal(t, 5<<20, actual.Details["size"])
 	}
 }

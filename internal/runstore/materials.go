@@ -277,9 +277,6 @@ func (store *Store) VisitWithMaterialReader(
 	consume func(Event) error,
 	callback func(MaterialReader) error,
 ) error {
-	if err := store.requireWritable(); err != nil {
-		return err
-	}
 	if consume == nil || callback == nil {
 		return errors.New("journal consumer and material callback are required")
 	}
@@ -288,13 +285,24 @@ func (store *Store) VisitWithMaterialReader(
 		return err
 	}
 	defer run.Close()
+	read := func() error {
+		return callback(func(digest string) ([]byte, error) {
+			return store.readMaterial(run, digest)
+		})
+	}
+	if store.readOnly {
+		return withRunCommitBoundary(run, func() error {
+			if _, err := visitJournalReadOnly(run.readOnlyJournalContext(), journalFileName, consume); err != nil {
+				return err
+			}
+			return read()
+		})
+	}
 	return withRunLock(run, nil, func(transaction *runTransaction) error {
 		if _, err := visitJournal(transaction.journalContext(), journalFileName, consume); err != nil {
 			return err
 		}
-		return callback(func(digest string) ([]byte, error) {
-			return store.readMaterial(run, digest)
-		})
+		return read()
 	})
 }
 
