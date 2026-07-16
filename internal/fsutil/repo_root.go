@@ -20,7 +20,7 @@ type GitRepository struct {
 // DiscoverGit resolves start to the containing Git worktree. It never falls
 // back to start when Git metadata cannot be discovered.
 func DiscoverGit(start string) (GitRepository, error) {
-	if strings.TrimSpace(start) == "" {
+	if start == "" {
 		var err error
 		start, err = os.Getwd()
 		if err != nil {
@@ -41,25 +41,46 @@ func DiscoverGit(start string) (GitRepository, error) {
 		return GitRepository{}, fmt.Errorf("resolve repository path: %w", err)
 	}
 
-	output, err := runGit(abs, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir")
-	if err != nil {
-		return GitRepository{}, err
+	queries := [][]string{
+		{"rev-parse", "--path-format=absolute", "--show-toplevel"},
+		{"rev-parse", "--path-format=absolute", "--git-dir"},
+		{"rev-parse", "--path-format=absolute", "--git-common-dir"},
 	}
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 3 {
-		return GitRepository{}, fmt.Errorf("git rev-parse returned %d paths, want 3", len(lines))
-	}
-	for i := range lines {
-		lines[i] = filepath.Clean(strings.TrimSpace(lines[i]))
-		if !filepath.IsAbs(lines[i]) {
-			lines[i] = filepath.Join(abs, lines[i])
+	paths := make([]string, len(queries))
+	for i, query := range queries {
+		output, runErr := runGit(abs, query...)
+		if runErr != nil {
+			return GitRepository{}, runErr
 		}
-		resolved, resolveErr := filepath.EvalSymlinks(lines[i])
-		if resolveErr == nil {
-			lines[i] = resolved
+		path := trimGitOutputTerminator(output)
+		if path == "" {
+			return GitRepository{}, fmt.Errorf("git %s returned an empty path", strings.Join(query, " "))
 		}
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(abs, path)
+		}
+		resolved, resolveErr := filepath.EvalSymlinks(path)
+		if resolveErr != nil {
+			return GitRepository{}, fmt.Errorf("resolve git path %q: %w", path, resolveErr)
+		}
+		info, statErr := os.Stat(resolved)
+		if statErr != nil {
+			return GitRepository{}, fmt.Errorf("inspect git path %q: %w", resolved, statErr)
+		}
+		if !info.IsDir() {
+			return GitRepository{}, fmt.Errorf("git path %q is not a directory", resolved)
+		}
+		paths[i] = filepath.Clean(resolved)
 	}
-	return GitRepository{WorktreeRoot: lines[0], GitDir: lines[1], CommonDir: lines[2]}, nil
+	return GitRepository{WorktreeRoot: paths[0], GitDir: paths[1], CommonDir: paths[2]}, nil
+}
+
+func trimGitOutputTerminator(output string) string {
+	if strings.HasSuffix(output, "\n") {
+		output = strings.TrimSuffix(output, "\n")
+		output = strings.TrimSuffix(output, "\r")
+	}
+	return output
 }
 
 func runGit(root string, args ...string) (string, error) {

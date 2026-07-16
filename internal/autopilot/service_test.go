@@ -29,7 +29,7 @@ func TestServiceCompleteRequestUsesDefaultRouteAndReportsActivitiesHonestly(t *t
 	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "facts gathered"})
 	require.NotNil(t, run.CurrentAction)
 	assert.Equal(t, ActionImplement, run.CurrentAction.Kind)
-	assert.Contains(t, run.CurrentAction.Brief, "Repair-attempt limit: 3.")
+	assert.NotContains(t, run.CurrentAction.Brief, "Repair-attempt limit:")
 
 	require.NoError(t, os.WriteFile(filepath.Join(repository, "new.go"), []byte("package sample\n"), 0o600))
 	implementation := implementationReport(ImplementationApplied, "new.go")
@@ -274,11 +274,11 @@ func TestServiceAcceptsMaxSizeImplementSuggestionBrief(t *testing.T) {
 	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
 	assert.LessOrEqual(t, len(run.CurrentAction.Brief), maxActionBriefBytes)
 	assert.True(t, utf8.ValidString(run.CurrentAction.Brief))
-	assert.Contains(t, run.CurrentAction.Brief, "Repair-attempt limit:")
-	assert.True(t, strings.HasSuffix(run.CurrentAction.Brief, " Repair-attempt limit: 3."))
+	assert.NotContains(t, run.CurrentAction.Brief, "Repair-attempt limit:")
+	assert.Equal(t, suggestionBrief, run.CurrentAction.Brief)
 }
 
-func TestServiceListShowsForeignHeadersAndSkipsCorruptRuns(t *testing.T) {
+func TestServiceListShowsForeignHeadersAndReportsCorruptRuns(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -312,9 +312,14 @@ func TestServiceListShowsForeignHeadersAndSkipsCorruptRuns(t *testing.T) {
 	incompleteDirectory := filepath.Join(service.store.CommonDir(), "slipway", "runs", "incomplete-list-test")
 	require.NoError(t, os.MkdirAll(incompleteDirectory, 0o700))
 
-	runs, err := service.List()
+	runs, unavailable, err := service.ListRecovery()
 	require.NoError(t, err)
 	require.Len(t, runs, 2)
+	require.Len(t, unavailable, 2)
+	assert.Equal(t, []string{"corrupt-list-test", "incomplete-list-test"}, []string{unavailable[0].ID, unavailable[1].ID})
+	_, err = service.List()
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "corrupt-list-test")
 	listed := make(map[string]Run, len(runs))
 	for _, run := range runs {
 		listed[run.ID] = run
@@ -400,7 +405,7 @@ func TestServiceGitObservationRecordsNeutralDiscrepancyAndRoutesDiffFirst(t *tes
 	assert.NotContains(t, joinedObservations+joinedUncertainties, "contradict")
 }
 
-func TestServiceReviewsEachNewObservedGitRevision(t *testing.T) {
+func TestServiceReviewsCurrentSinceStartDifferenceAfterResume(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -428,13 +433,6 @@ func TestServiceReviewsEachNewObservedGitRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ActionOrient, run.CurrentAction.Kind)
 	run = submitCurrent(t, service, run, Outcome{Status: OutcomeCompleted, Summary: "fresh facts"})
-	require.Equal(t, ActionImplement, run.CurrentAction.Kind)
-	require.NoError(t, os.WriteFile(filepath.Join(repository, "second.go"), []byte("package sample\n"), 0o600))
-	run = submitCurrent(t, service, run, Outcome{
-		Status:         OutcomeCompleted,
-		Summary:        "second revision",
-		Implementation: implementationReport(ImplementationApplied, "second.go"),
-	})
 	require.Equal(t, ActionReview, run.CurrentAction.Kind)
 	assert.NotEqual(t, firstReviewID, run.CurrentAction.ActionID)
 }
@@ -1289,7 +1287,7 @@ func TestServiceStructuredDestructiveGrantIsExactIdempotentAndScopeBound(t *test
 	assertProtocolError(t, err, "destructive_scope_mismatch")
 }
 
-func TestServiceConfirmedDestructiveGrantInvalidatedByPureBudgetResume(t *testing.T) {
+func TestServiceBudgetBlockedConfirmationRequiresFreshRequestAfterSourceAwareResume(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -1309,10 +1307,18 @@ func TestServiceConfirmedDestructiveGrantInvalidatedByPureBudgetResume(t *testin
 		ScopeSHA256:        request.ScopeSHA256,
 	})
 	assertProtocolError(t, err, "budget_exhausted")
-	require.NotNil(t, blocked.DestructiveGrant)
+	assert.Nil(t, blocked.DestructiveGrant)
+	assert.Nil(t, blocked.PendingDestructiveRequest)
+	assert.Nil(t, blocked.CurrentAction)
+	assert.Equal(t, PauseBudgetExhausted, blocked.PauseReason)
+	require.Len(t, blocked.Answers, 1)
+	assert.False(t, blocked.Answers[0].Active)
 
 	replacement := 4
-	resumed, err := service.Resume(run.ID, ResumeOptions{Budget: &replacement})
+	_, err = service.Resume(run.ID, ResumeOptions{Budget: &replacement})
+	assertProtocolError(t, err, "source_mode_required")
+
+	resumed, err := service.Resume(run.ID, ResumeOptions{Budget: &replacement, UsePinnedSource: true})
 	require.NoError(t, err)
 	require.NotNil(t, resumed.CurrentAction)
 	assert.Equal(t, ActionOrient, resumed.CurrentAction.Kind)

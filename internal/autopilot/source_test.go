@@ -199,6 +199,26 @@ func TestParseSourceRejectsV1AndMalformedManifest(t *testing.T) {
 	}
 }
 
+func TestParseSourceAllowsLevelMarkerExamplesInsideMarkdownFences(t *testing.T) {
+	t.Parallel()
+	envelope := validSourceEnvelope()
+	envelope.Body += "\n\n````markdown\n```html\n<!-- slipway-level: objective/v1 -->\n```\n````\n"
+	raw, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	_, err = ParseSource(raw)
+	require.NoError(t, err)
+}
+
+func TestValidateSourceManifestReportsFiveSectionMinimum(t *testing.T) {
+	t.Parallel()
+	envelope := validSourceEnvelope()
+	manifest, err := parseSourceManifest(envelope.Body)
+	require.NoError(t, err)
+	manifest.Sections = manifest.Sections[:4]
+	err = validateSourceManifest(manifest)
+	require.ErrorContains(t, err, "sections must contain 5..64 entries")
+}
+
 func TestParseSourceRejectsDELAndC1Controls(t *testing.T) {
 	tests := []struct {
 		name   string

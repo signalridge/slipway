@@ -17,7 +17,7 @@ slipway-decompose  slipway-implement  slipway-review
 | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | `slipway-<name>` skill を呼び出す。 |
 | `codex` | `.codex/skills/slipway-*/SKILL.md` と各 skill の `agents/openai.yaml` | `$slipway-<name>` |
-| `copilot` | `.github/copilot/agents/slipway-<name>.agent.md` | custom agent を選択する。 |
+| `copilot` | `.github/agents/slipway-<name>.agent.md` | custom agent を選択する。 |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | `slipway-<name>` skill を呼び出す。 |
 | `kilo` | `.kilo/commands/slipway-<name>.md` と `.kilocode/slipway/capabilities/` | `/slipway-<name>` |
 | `kiro` IDE | `.kiro/steering/slipway-<name>.md` と `.kiro/slipway/capabilities/` | 手動で `#slipway-<name>` を含める。 |

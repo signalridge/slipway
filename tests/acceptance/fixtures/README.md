@@ -18,8 +18,8 @@ The fixture covers:
 Run from the repository root:
 
 ```bash
-python3 -I acceptance/github_publication_fault_harness.py \
-  --fixture acceptance/fixtures/github-publication-faults.json
+python3 -I tests/acceptance/github_publication_fault_harness.py \
+  --fixture tests/acceptance/fixtures/github-publication-faults.json
 ```
 
 This is a reproducible host-policy fault harness. It makes no HTTP request, uses no GitHub token, and is **not** live GitHub.com G evidence or a model transcript H. Live fixture instructions are in `../live-github/README.md`.

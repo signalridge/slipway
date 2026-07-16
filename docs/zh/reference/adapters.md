@@ -17,7 +17,7 @@ slipway-decompose  slipway-implement  slipway-review
 | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | 调用 `slipway-<name>` skill。 |
 | `codex` | `.codex/skills/slipway-*/SKILL.md`，每个 skill 带 `agents/openai.yaml` | `$slipway-<name>` |
-| `copilot` | `.github/copilot/agents/slipway-<name>.agent.md` | 选择 custom agent。 |
+| `copilot` | `.github/agents/slipway-<name>.agent.md` | 选择 custom agent。 |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | 调用 `slipway-<name>` skill。 |
 | `kilo` | `.kilo/commands/slipway-<name>.md` 与 `.kilocode/slipway/capabilities/` | `/slipway-<name>` |
 | `kiro` IDE | `.kiro/steering/slipway-<name>.md` 与 `.kiro/slipway/capabilities/` | 手工加入 `#slipway-<name>`。 |

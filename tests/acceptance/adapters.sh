@@ -203,18 +203,21 @@ def canonical(host, capability):
     if host in {"claude", "codex", "cursor", "pi", "qwen"}:
         return f'.{host}/skills/{capability}/SKILL.md'
     if host == "copilot":
-        return f'.github/copilot/agents/{capability}.agent.md'
+        return f'.github/agents/{capability}.agent.md'
     roots = {"kilo": ".kilocode", "kiro": ".kiro", "opencode": ".opencode", "windsurf": ".windsurf"}
     return f'{roots[host]}/slipway/capabilities/{capability}.md'
 def wrapper(host, capability):
     roots = {"kilo": ".kilo/commands", "kiro": ".kiro/steering", "opencode": ".opencode/commands", "windsurf": ".windsurf/workflows"}
     return f'{roots[host]}/{capability}.md' if host in roots else None
-def reference_root(host):
+def reference_path(host):
     if host in {"claude", "codex", "cursor", "pi", "qwen"}:
-        return f'.{host}/skills'
-    if host == "copilot":
-        return '.github/copilot/agents'
-    return {"kilo": ".kilocode/slipway/capabilities", "kiro": ".kiro/slipway/capabilities", "opencode": ".opencode/slipway/capabilities", "windsurf": ".windsurf/slipway/capabilities"}[host]
+        return f'.{host}/skills/slipway-clarify/references/decision-interview.md'
+    roots = {
+        "copilot": ".github/agents", "kilo": ".kilocode/slipway/capabilities",
+        "kiro": ".kiro/slipway/capabilities", "opencode": ".opencode/slipway/capabilities",
+        "windsurf": ".windsurf/slipway/capabilities",
+    }
+    return f'{roots[host]}/references/decision-interview.md'
 
 repo = Path(sys.argv[2])
 with open(sys.argv[1], encoding="utf-8") as stream:
@@ -243,7 +246,7 @@ for host in hosts:
             policy = f'.codex/skills/{capability}/agents/openai.yaml'
             assert (repo / policy).read_text(encoding="utf-8") == "policy:\n  allow_implicit_invocation: false\n"
             expected.append(policy)
-    reference = f'{reference_root(host)}/slipway-clarify/references/decision-interview.md'
+    reference = reference_path(host)
     assert (repo / reference).is_file(), reference
     expected.append(reference)
     expected_files.update(expected)
@@ -316,7 +319,7 @@ import sys
 repo = Path(sys.argv[1])
 run_paths = [
     ".claude/skills/slipway-run/SKILL.md", ".codex/skills/slipway-run/SKILL.md",
-    ".github/copilot/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
+    ".github/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
     ".kilocode/slipway/capabilities/slipway-run.md", ".kiro/slipway/capabilities/slipway-run.md",
     ".opencode/slipway/capabilities/slipway-run.md", ".pi/skills/slipway-run/SKILL.md",
     ".qwen/skills/slipway-run/SKILL.md", ".windsurf/slipway/capabilities/slipway-run.md",
@@ -332,7 +335,7 @@ import sys
 repo = Path(sys.argv[1])
 for relative in [
     ".claude/skills/slipway-run/SKILL.md", ".codex/skills/slipway-run/SKILL.md",
-    ".github/copilot/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
+    ".github/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
     ".kilocode/slipway/capabilities/slipway-run.md", ".kiro/slipway/capabilities/slipway-run.md",
     ".opencode/slipway/capabilities/slipway-run.md", ".pi/skills/slipway-run/SKILL.md",
     ".qwen/skills/slipway-run/SKILL.md", ".windsurf/slipway/capabilities/slipway-run.md",
@@ -358,7 +361,7 @@ import sys
 repo = Path(sys.argv[1])
 for relative in [
     ".claude/skills/slipway-run/SKILL.md", ".codex/skills/slipway-run/SKILL.md",
-    ".github/copilot/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
+    ".github/agents/slipway-run.agent.md", ".cursor/skills/slipway-run/SKILL.md",
     ".kilocode/slipway/capabilities/slipway-run.md", ".kiro/slipway/capabilities/slipway-run.md",
     ".opencode/slipway/capabilities/slipway-run.md", ".pi/skills/slipway-run/SKILL.md",
     ".qwen/skills/slipway-run/SKILL.md", ".windsurf/slipway/capabilities/slipway-run.md",
@@ -375,7 +378,7 @@ import sys
 repo = Path(sys.argv[1])
 paths = {
     "claude": ".claude/skills/slipway-review/SKILL.md", "codex": ".codex/skills/slipway-review/SKILL.md",
-    "copilot": ".github/copilot/agents/slipway-review.agent.md", "cursor": ".cursor/skills/slipway-review/SKILL.md",
+    "copilot": ".github/agents/slipway-review.agent.md", "cursor": ".cursor/skills/slipway-review/SKILL.md",
     "kilo": ".kilocode/slipway/capabilities/slipway-review.md", "kiro": ".kiro/slipway/capabilities/slipway-review.md",
     "opencode": ".opencode/slipway/capabilities/slipway-review.md", "pi": ".pi/skills/slipway-review/SKILL.md",
     "qwen": ".qwen/skills/slipway-review/SKILL.md", "windsurf": ".windsurf/slipway/capabilities/slipway-review.md",
@@ -392,7 +395,7 @@ import sys
 repo = Path(sys.argv[2])
 paths = {
     "claude": ".claude/skills/slipway-review/SKILL.md", "codex": ".codex/skills/slipway-review/SKILL.md",
-    "copilot": ".github/copilot/agents/slipway-review.agent.md", "cursor": ".cursor/skills/slipway-review/SKILL.md",
+    "copilot": ".github/agents/slipway-review.agent.md", "cursor": ".cursor/skills/slipway-review/SKILL.md",
     "kilo": ".kilocode/slipway/capabilities/slipway-review.md", "kiro": ".kiro/slipway/capabilities/slipway-review.md",
     "opencode": ".opencode/slipway/capabilities/slipway-review.md", "pi": ".pi/skills/slipway-review/SKILL.md",
     "qwen": ".qwen/skills/slipway-review/SKILL.md", "windsurf": ".windsurf/slipway/capabilities/slipway-review.md",
@@ -416,7 +419,7 @@ import sys
 repo = Path(sys.argv[1])
 paths = {
     "claude": ".claude/skills/slipway-implement/SKILL.md", "codex": ".codex/skills/slipway-implement/SKILL.md",
-    "copilot": ".github/copilot/agents/slipway-implement.agent.md", "cursor": ".cursor/skills/slipway-implement/SKILL.md",
+    "copilot": ".github/agents/slipway-implement.agent.md", "cursor": ".cursor/skills/slipway-implement/SKILL.md",
     "kilo": ".kilocode/slipway/capabilities/slipway-implement.md", "kiro": ".kiro/slipway/capabilities/slipway-implement.md",
     "opencode": ".opencode/slipway/capabilities/slipway-implement.md", "pi": ".pi/skills/slipway-implement/SKILL.md",
     "qwen": ".qwen/skills/slipway-implement/SKILL.md", "windsurf": ".windsurf/slipway/capabilities/slipway-implement.md",
@@ -436,7 +439,7 @@ def capability(host, name):
     if host in {"claude", "codex", "cursor", "pi", "qwen"}:
         return f'.{host}/skills/slipway-{name}/SKILL.md'
     if host == "copilot":
-        return f'.github/copilot/agents/slipway-{name}.agent.md'
+        return f'.github/agents/slipway-{name}.agent.md'
     root = {"kilo": ".kilocode", "kiro": ".kiro", "opencode": ".opencode", "windsurf": ".windsurf"}[host]
     return f'{root}/slipway/capabilities/slipway-{name}.md'
 repo = Path(sys.argv[2])

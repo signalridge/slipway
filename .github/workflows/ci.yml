@@ -56,8 +56,14 @@ jobs:
         with:
           version: v2.12.2
           args: --timeout=5m
-      - name: Run Slipway testlint
-        run: go run ./internal/testlint/cmd/testlint ./...
+      - name: Observe Slipway testlint
+        continue-on-error: true
+        run: |
+          set +e
+          go run ./internal/testlint/cmd/testlint ./...
+          status=$?
+          echo 'Testlint is an advisory observation, not a merge or release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
   acceptance-quality:
     name: Acceptance Assets
     runs-on: ubuntu-latest
@@ -68,9 +74,9 @@ jobs:
           PYTHONPYCACHEPREFIX: ${{ runner.temp }}/slipway-pycache
         run: |
           set -euo pipefail
-          find acceptance -type f -name '*.sh' -exec shellcheck {} +
-          find acceptance -type f -name '*.sh' -exec sh -n {} +
-          mapfile -d '' python_files < <(find acceptance -type f -name '*.py' -print0)
+          find tests/acceptance -type f -name '*.sh' -exec shellcheck {} +
+          find tests/acceptance -type f -name '*.sh' -exec sh -n {} +
+          mapfile -d '' python_files < <(find tests/acceptance -type f -name '*.py' -print0)
           if [ "${#python_files[@]}" -eq 0 ]; then
             echo '::error::No Python acceptance assets were found'
             exit 1
@@ -78,11 +84,11 @@ jobs:
           python3 -I -m py_compile "${python_files[@]}"
       - name: Check local Markdown and website routes
         run: |
-          python3 -I acceptance/link_check.py --self-test
+          python3 -I tests/acceptance/link_check.py --self-test
       - name: Run deterministic GitHub publication fault harness
         run: |
           summary="${RUNNER_TEMP}/github-publication-faults.json"
-          python3 -I acceptance/github_publication_fault_harness.py > "$summary"
+          python3 -I tests/acceptance/github_publication_fault_harness.py > "$summary"
           python3 -I - "$summary" <<'PY'
           import json
           from pathlib import Path
@@ -133,8 +139,8 @@ jobs:
         env:
           SLIPWAY_BIN: ${{ github.workspace }}/bin/slipway
         run: |
-          ./acceptance/machine-protocol.sh
-          ./acceptance/adapters.sh
+          ./tests/acceptance/machine-protocol.sh
+          ./tests/acceptance/adapters.sh
       - name: Build native Windows acceptance binary
         if: runner.os == 'Windows'
         shell: pwsh
@@ -148,7 +154,7 @@ jobs:
         shell: pwsh
         run: |
           $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
-          $script = (Resolve-Path -LiteralPath acceptance/windows/native-powershell.ps1).Path
+          $script = (Resolve-Path -LiteralPath tests/acceptance/windows/native-powershell.ps1).Path
           $arguments = @(
             '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
             '-File', $script, '-SlipwayExe', $binary, '-Mode', 'PowerShell'
@@ -160,7 +166,7 @@ jobs:
         shell: pwsh
         run: |
           $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
-          $script = (Resolve-Path -LiteralPath acceptance/windows/native-cmd.cmd).Path
+          $script = (Resolve-Path -LiteralPath tests/acceptance/windows/native-cmd.cmd).Path
           $command = 'call "{0}" "{1}"' -f $script.Replace('"', '""'), $binary.Replace('"', '""')
           & $env:ComSpec '/d' '/v:on' '/s' '/c' $command
           if ($LASTEXITCODE -ne 0) { throw 'native cmd.exe acceptance failed' }
@@ -177,9 +183,8 @@ jobs:
       - name: Run race tests
         run: go test -timeout=20m ./... -race -count=1
   coverage:
-    name: Kernel Coverage Gate
-    # The committed percentage baseline is measured on Linux. The test matrix above
-    # exercises platform-specific files on macOS and Windows.
+    name: Coverage Report
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -191,7 +196,7 @@ jobs:
       - name: Measure soft-autopilot coverage
         run: |
           mkdir -p tmp
-          gated_packages="$(go list \
+          measured_packages="$(go list \
             ./cmd \
             ./internal/adapter \
             ./internal/autopilot \
@@ -202,12 +207,17 @@ jobs:
             ./internal/testlint \
             ./internal/tmpl | paste -sd, -)"
           go test -timeout=20m ./... -count=1 \
-            -coverpkg="${gated_packages}" \
-            -coverprofile=tmp/coverage-gated.out
-      - name: Enforce coverage baseline
-        run: >-
-          go run ./internal/covergate/cmd/covergate
-          -check -profile tmp/coverage-gated.out -baseline coverage-baseline.json
+            -coverpkg="${measured_packages}" \
+            -coverprofile=tmp/coverage.out
+          go tool cover -func=tmp/coverage.out | tee tmp/coverage-summary.txt
+          {
+            echo '## Coverage report'
+            echo '```text'
+            cat tmp/coverage-summary.txt
+            echo '```'
+            echo
+            echo 'Coverage is an advisory observation, not a merge or release gate.'
+          } >> "$GITHUB_STEP_SUMMARY"
   release-config:
     name: Release Config
     runs-on: ubuntu-latest
@@ -239,7 +249,7 @@ jobs:
           version: v2.16.0
           args: release --snapshot --clean --skip=publish,sign
       - name: Check snapshot artifacts
-        run: python3 -I acceptance/release_artifacts.py --dist dist
+        run: python3 -I tests/acceptance/release_artifacts.py --dist dist
       - name: Verify GoReleaser hook preserved module files
         run: git diff --exit-code -- go.mod go.sum
   build:

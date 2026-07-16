@@ -110,10 +110,12 @@ yay -S slipway-bin
 
 Target Git worktree 内で実行します。
 
+以下の command は current checkout から build した `./slipway` を使います。Compatible な tagged package を install した場合は、代わりに `PATH` 上の `slipway` を使ってください。
+
 ```bash
-slipway install --tool claude
-slipway list
-slipway doctor
+./slipway install --tool claude
+./slipway list
+./slipway doctor
 ```
 
 Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の non-Kiro host は `--tool` を繰り返します。
@@ -121,18 +123,18 @@ Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`
 Kiro は surface を明確にするため、初回は単独で install します。
 
 ```bash
-slipway install --tool kiro --surface ide   # または: --surface cli
+./slipway install --tool kiro --surface ide   # または: --surface cli
 ```
 
 `--surface` を non-Kiro selection と組み合わせないでください。Kiro surface を記録した後、refresh/uninstall は同じ value を推論します。初回 `--tool all` にも Kiro surface の記録が必要なので、explicit per-host setup が明確です。
 
-`--tool` を省略すると detected host directory を選びます。Detection は convenience です。複数 host 設定を持つ repository では install 前に `slipway list` を確認してください。
+`--tool` を省略すると detected host directory を選びます。Detection は convenience です。複数 host 設定を持つ repository では install 前に `./slipway list` を確認してください。
 
 ## Refresh と uninstall
 
 ```bash
-slipway install --tool claude --refresh
-slipway uninstall --tool claude
+./slipway install --tool claude --refresh
+./slipway uninstall --tool claude
 ```
 
 Slipway は host ごとの ownership manifest に generated path と hash を記録します。Refresh/uninstall は記録と一致する managed file だけを変更します。Modified、unknown、malformed、out-of-host、symlinked path は preserve または reject して報告します。Host settings は adapter ownership の外です。

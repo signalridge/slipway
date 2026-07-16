@@ -287,6 +287,7 @@ func TestResumeSourceRecoveryPreservesReplacementBudget(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Empty(t, stdout)
+	assertMachineSchemaOutput(t, "cliError", stderr)
 	var cliErr CLIError
 	require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
 	assert.Equal(t, "invalid_source_candidate", cliErr.Code)
@@ -377,9 +378,10 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 	t.Chdir(cwdRepository)
 
 	tests := []struct {
-		name string
-		args func(string) []string
-		code string
+		name       string
+		args       func(string) []string
+		code       string
+		inspectRun bool
 	}{
 		{
 			name: "blank goal",
@@ -387,11 +389,19 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 			code: "goal_required",
 		},
 		{
-			name: "invalid budget",
+			name: "invalid start budget",
 			args: func(repository string) []string {
 				return []string{"run", "goal", "--budget", "1001", "--root", repository, "--json"}
 			},
 			code: "invalid_budget",
+		},
+		{
+			name: "invalid resume budget",
+			args: func(repository string) []string {
+				return []string{"_machine", "resume", "run-1", "--budget", "1001", "--root", repository}
+			},
+			code:       "invalid_budget",
+			inspectRun: true,
 		},
 		{
 			name: "malformed budget before equals root",
@@ -401,11 +411,12 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 			code: "invalid_usage",
 		},
 		{
-			name: "invalid mode",
+			name: "invalid resume mode",
 			args: func(repository string) []string {
 				return []string{"_machine", "resume", "run-1", "--source-choice", "invalid", "--candidate", "candidate-1", "--root", repository}
 			},
-			code: "invalid_source_choice",
+			code:       "invalid_source_choice",
+			inspectRun: true,
 		},
 		{
 			name: "cobra flag error before root",
@@ -417,19 +428,58 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			explicitRepository := newCLIRepository(t)
+			canonicalRepository, resolveErr := resolveRoot(explicitRepository)
+			require.NoError(t, resolveErr)
 			stdout, stderr, err := executeForTest(t, test.args(explicitRepository)...)
 			require.Error(t, err)
 			assert.Empty(t, stdout)
 			var cliErr CLIError
 			require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
 			assert.Equal(t, test.code, cliErr.Code)
-			expected := autopilot.NoneNext(explicitRepository)
+			expected := autopilot.NoneNext(canonicalRepository)
 			assert.Equal(t, expected.WorkspaceIdentity, cliErr.Next.WorkspaceIdentity)
-			assert.Equal(t, autopilot.NextOperationNone, cliErr.Next.Operation)
+			if test.inspectRun {
+				assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+				require.Len(t, cliErr.Next.Variants, 1)
+				assert.Equal(t, []string{"slipway", "status", "run-1", "--root", canonicalRepository}, cliErr.Next.Variants[0].BaseArgv)
+			} else {
+				assert.Equal(t, autopilot.NextOperationNone, cliErr.Next.Operation)
+			}
 			for _, repository := range []string{cwdRepository, explicitRepository} {
 				_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
 				require.ErrorIs(t, statErr, os.ErrNotExist)
 			}
+		})
+	}
+}
+
+func TestAnswerDestructiveFlagsMustBePairedBeforeOpeningRunstore(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("a", 64)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "confirmation without scope", args: []string{"--confirm-destructive"}},
+		{name: "scope without confirmation", args: []string{"--scope-sha256", digest}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repository := newCLIRepository(t)
+			canonicalRepository, resolveErr := resolveRoot(repository)
+			require.NoError(t, resolveErr)
+			args := []string{"_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", repository}
+			args = append(args, test.args...)
+			stdout, stderr, err := executeForTest(t, args...)
+			require.Error(t, err)
+			assert.Empty(t, stdout)
+			var cliErr CLIError
+			require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+			assert.Equal(t, "destructive_confirmation_pair_required", cliErr.Code)
+			assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+			require.Len(t, cliErr.Next.Variants, 1)
+			assert.Equal(t, []string{"slipway", "status", "run-1", "--root", canonicalRepository}, cliErr.Next.Variants[0].BaseArgv)
+			_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
+			require.ErrorIs(t, statErr, os.ErrNotExist)
 		})
 	}
 }

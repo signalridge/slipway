@@ -7,7 +7,7 @@ This guide takes a current Slipway build from an empty checkout to one user-cont
 The interface documented here has seven public commands:
 
 ```bash
-slipway --help
+./slipway --help
 ```
 
 The output must list `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`. If it does not, the installed package belongs to an earlier release. Build this checkout or choose a newer compatible tag; see [Installation](installation.md).
@@ -17,14 +17,14 @@ The output must list `install`, `uninstall`, `list`, `doctor`, `run`, `status`, 
 Run inside the Git worktree where the AI host will work:
 
 ```bash
-slipway install --tool claude
-slipway doctor
+./slipway install --tool claude
+./slipway doctor
 ```
 
 Replace `claude` with `codex`, `copilot`, `cursor`, `kilo`, `opencode`, `pi`, `qwen`, or `windsurf`. Kiro needs a surface on first install:
 
 ```bash
-slipway install --tool kiro --surface ide   # or: --surface cli
+./slipway install --tool kiro --surface ide   # or: --surface cli
 ```
 
 `install` writes only host-local capability files and records their hashes. It does not change global host settings or install ambient hooks. See [Host adapters](reference/adapters.md) for generated paths.
@@ -40,7 +40,7 @@ The host asks the CLI for an Action, performs that Action, reports a structured 
 A direct CLI integration can start the same ad-hoc Run with:
 
 ```bash
-slipway run --json -- "add CSV export to the reports command"
+./slipway run --json -- "add CSV export to the reports command"
 ```
 
 This command returns the first `orient` Action. The CLI does not edit code by itself.
@@ -71,9 +71,9 @@ The generated host presents the available response. You may also skip, stop, reo
 Useful inspection commands are:
 
 ```bash
-slipway status
-slipway status <run-id> --json
-slipway stop <run-id>
+./slipway status
+./slipway status <run-id> --json
+./slipway stop <run-id>
 ```
 
 `stop` preserves recovery data. An ended Run means only that Slipway has no more automatic Actions; tests, review findings, repository policy, merge approval, and release decisions remain separate facts.

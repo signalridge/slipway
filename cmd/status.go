@@ -34,8 +34,9 @@ func (output runStatusOutput) MarshalJSON() ([]byte, error) {
 }
 
 type statusListOutput struct {
-	ContractVersion int               `json:"contract_version"`
-	Runs            []runStatusOutput `json:"runs"`
+	ContractVersion int                        `json:"contract_version"`
+	Runs            []runStatusOutput          `json:"runs"`
+	UnavailableRuns []autopilot.UnavailableRun `json:"unavailable_runs"`
 }
 
 func makeStatusCmd() *cobra.Command {
@@ -46,7 +47,7 @@ func makeStatusCmd() *cobra.Command {
 		Short: "Show soft-autopilot run journals",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			service, err := openAutopilot(root)
+			service, err := openAutopilotReadOnly(root)
 			if err != nil {
 				return err
 			}
@@ -56,10 +57,13 @@ func makeStatusCmd() *cobra.Command {
 				if err != nil {
 					var protocolErr *autopilot.ProtocolError
 					if errors.As(err, &protocolErr) {
+						if protocolErr.Code == "invalid_run_id" {
+							return newUsageError(protocolErr.Code, protocolErr.Message, protocolErr.Next)
+						}
 						return err
 					}
 					return newRuntimeError(
-						"run_not_found",
+						"run_journal_invalid",
 						err.Error(),
 						inputlessCommandNext(service.RepositoryRoot(), "list-runs", "slipway", "status", "--root", service.RepositoryRoot()),
 						nil,
@@ -74,7 +78,7 @@ func makeStatusCmd() *cobra.Command {
 				}
 				return writeRunStatus(command, run)
 			}
-			runs, err := service.List()
+			runs, unavailable, err := service.ListRecovery()
 			if err != nil {
 				return err
 			}
@@ -90,9 +94,10 @@ func makeStatusCmd() *cobra.Command {
 				return writeJSON(command.OutOrStdout(), statusListOutput{
 					ContractVersion: machineContractVersion,
 					Runs:            outputs,
+					UnavailableRuns: unavailable,
 				})
 			}
-			if len(runs) == 0 {
+			if len(runs) == 0 && len(unavailable) == 0 {
 				_, err := fmt.Fprintln(command.OutOrStdout(), "No run journals were found.")
 				return err
 			}
@@ -104,6 +109,11 @@ func makeStatusCmd() *cobra.Command {
 					continue
 				}
 				if _, err := fmt.Fprintf(command.OutOrStdout(), "%s  %-7s  remaining=%d  %s\n", run.ID, run.State, run.RemainingBudget, run.Goal); err != nil {
+					return err
+				}
+			}
+			for _, entry := range unavailable {
+				if _, err := fmt.Fprintf(command.OutOrStdout(), "%s  unavailable  code=%s  %s\n", entry.ID, entry.Code, entry.Detail); err != nil {
 					return err
 				}
 			}

@@ -54,7 +54,7 @@ func makeInstallCmd() *cobra.Command {
 				if selectionErr := unknownHostSelectionCLIError(err, resolved); selectionErr != nil {
 					return selectionErr
 				}
-				if surfaceErr := surfaceSelectionCLIError(err); surfaceErr != nil {
+				if surfaceErr := surfaceSelectionCLIError(err, resolved); surfaceErr != nil {
 					return surfaceErr
 				}
 				return adapterMutationError("install_failed", err, resolved, report)
@@ -85,12 +85,28 @@ func unknownHostSelectionCLIError(err error, root string) *CLIError {
 	)
 }
 
-func surfaceSelectionCLIError(err error) *CLIError {
+func surfaceSelectionCLIError(err error, root string) *CLIError {
 	var surfaceErr *adapter.SurfaceSelectionError
 	if !errors.As(err, &surfaceErr) {
 		return nil
 	}
-	return newUsageError("invalid_adapter_surface", surfaceErr.Error(), defaultErrorNext())
+	next, nextErr := autopilot.NewCommandNext(
+		autopilot.NextOperationCommand,
+		root,
+		"install-kiro",
+		[]string{"slipway", "install", "--root", root, "--tool", "kiro"},
+		[]autopilot.NextInput{{
+			Name:     "surface",
+			Type:     autopilot.NextInputEnum,
+			Flag:     "--surface",
+			Required: true,
+			Choices:  []string{"ide", "cli"},
+		}},
+	)
+	if nextErr != nil {
+		next = defaultErrorNext()
+	}
+	return newUsageError("invalid_adapter_surface", surfaceErr.Error(), next)
 }
 
 func adapterMutationError(code string, err error, root string, report adapter.ChangeReport) *CLIError {

@@ -16,10 +16,12 @@ import (
 )
 
 const (
-	currentManifestVersion   = 2
-	manifestFileName         = "ownership-manifest.json"
-	sentinelFileName         = ".adapter-generated"
-	generatedSentinelContent = "generated\n"
+	currentManifestVersion    = 2
+	manifestFileName          = "ownership-manifest.json"
+	sentinelFileName          = ".adapter-generated"
+	generatedSentinelContent  = "generated\n"
+	maxOwnershipManifestBytes = 256 << 10
+	maxManagedFileBytes       = 1 << 20
 )
 
 type manifestFile struct {
@@ -158,32 +160,55 @@ func Install(options InstallOptions) (ChangeReport, error) {
 	if err != nil {
 		return report, err
 	}
+	pinnedRoot, err := fsutil.OpenPinnedRoot(root)
+	if err != nil {
+		return report, err
+	}
+	defer func() { _ = pinnedRoot.Close() }()
 	selected, err := resolveHosts(root, options.Tools, true)
 	if err != nil {
 		return report, err
 	}
-	var operations []fsutil.FileTransactionOp
-	for _, host := range selected {
-		if host.ID != "kiro" && options.Surface != "" {
-			return report, &SurfaceSelectionError{
-				HostID:  host.ID,
-				Surface: options.Surface,
-				Reason:  "surface only valid for kiro",
+
+	var kiroSurfaceKind string
+	if options.Surface != "" {
+		hasKiro := false
+		for _, host := range selected {
+			if host.ID == "kiro" {
+				hasKiro = true
+				break
 			}
 		}
-		if host.ID == "kiro" && options.Surface != "" {
-			kind, valid := selectedSurfaceKind(options.Surface)
-			if !valid {
-				return report, &SurfaceSelectionError{
-					HostID:  host.ID,
-					Surface: options.Surface,
-					Reason:  "surface for kiro must be ide or cli",
-				}
+		if !hasKiro {
+			return report, &SurfaceSelectionError{
+				HostID:  "kiro",
+				Surface: options.Surface,
+				Reason:  "--surface requires kiro in the selected hosts",
 			}
-			host.SurfaceKind = kind
+		}
+		var valid bool
+		kiroSurfaceKind, valid = selectedSurfaceKind(options.Surface)
+		if !valid {
+			return report, &SurfaceSelectionError{
+				HostID:  "kiro",
+				Surface: options.Surface,
+				Reason:  "surface for kiro must be ide or cli",
+			}
+		}
+	}
+
+	var operations []fsutil.FileTransactionOp
+	for _, host := range selected {
+		if host.ID == "kiro" && kiroSurfaceKind != "" {
+			host.SurfaceKind = kiroSurfaceKind
 		}
 		plan, err := planInstall(root, host, options.Refresh)
 		if err != nil {
+			var surfaceErr *SurfaceSelectionError
+			if len(options.Tools) == 0 && options.Surface == "" && errors.As(err, &surfaceErr) && surfaceErr.HostID == "kiro" {
+				report.Warnings = append(report.Warnings, "adapter kiro was not installed: first install needs --surface ide or --surface cli; other detected adapters were still planned")
+				continue
+			}
 			return transactionFailureReport(root, report, err), err
 		}
 		report.Hosts = append(report.Hosts, host.ID)
@@ -193,7 +218,7 @@ func Install(options InstallOptions) (ChangeReport, error) {
 		report.Warnings = append(report.Warnings, plan.warnings...)
 		operations = append(operations, plan.ops...)
 	}
-	if err := fsutil.ApplyFileTransactionWithin(root, operations); err != nil {
+	if err := pinnedRoot.Apply(operations); err != nil {
 		return transactionFailureReport(root, report, err), fmt.Errorf("install adapters transactionally: %w", err)
 	}
 	report.TransactionOutcome = TransactionOutcomeCommitted
@@ -206,6 +231,11 @@ func Uninstall(options UninstallOptions) (ChangeReport, error) {
 	if err != nil {
 		return report, err
 	}
+	pinnedRoot, err := fsutil.OpenPinnedRoot(root)
+	if err != nil {
+		return report, err
+	}
+	defer func() { _ = pinnedRoot.Close() }()
 	selected, err := uninstallHosts(root, options.Tools)
 	if err != nil {
 		return report, err
@@ -222,7 +252,7 @@ func Uninstall(options UninstallOptions) (ChangeReport, error) {
 		report.Warnings = append(report.Warnings, plan.warnings...)
 		operations = append(operations, plan.ops...)
 	}
-	if err := fsutil.ApplyFileTransactionWithin(root, operations); err != nil {
+	if err := pinnedRoot.Apply(operations); err != nil {
 		return transactionFailureReport(root, report, err), fmt.Errorf("uninstall adapters transactionally: %w", err)
 	}
 	report.TransactionOutcome = TransactionOutcomeCommitted
@@ -262,6 +292,13 @@ func classifyTransactionOutcome(transactionErr error) TransactionOutcome {
 	var cleanup *fsutil.FileTransactionCleanupError
 	if errors.As(transactionErr, &cleanup) {
 		return TransactionOutcomeCommitted
+	}
+	var rootIdentity *fsutil.RootNamespaceIdentityError
+	if errors.As(transactionErr, &rootIdentity) {
+		if rootIdentity.Committed {
+			return TransactionOutcomeAmbiguous
+		}
+		return TransactionOutcomeNotCommitted
 	}
 	return TransactionOutcomeNotCommitted
 }
@@ -641,7 +678,10 @@ func loadManifest(root string, host Host) (ownershipManifest, bool, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s is not a regular file", host.ID)
 	}
-	raw, err := fsutil.ReadFileNoSymlink(manifestPath)
+	if info.Size() > maxOwnershipManifestBytes {
+		return ownershipManifest{}, false, fmt.Errorf("ownership manifest for %s exceeds %d bytes", host.ID, maxOwnershipManifestBytes)
+	}
+	raw, err := fsutil.ReadFileNoSymlink(manifestPath, maxOwnershipManifestBytes)
 	if err != nil {
 		return ownershipManifest{}, false, err
 	}
@@ -827,6 +867,9 @@ func classifyFile(path, expectedHash string) (string, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "modified", nil
 	}
+	if info.Size() > maxManagedFileBytes {
+		return "modified", nil
+	}
 	hash, err := hashRegularFile(path)
 	if err != nil {
 		return "", err
@@ -845,7 +888,7 @@ func hashRegularFile(path string) (string, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("%s is not a regular file", path)
 	}
-	data, err := fsutil.ReadFileNoSymlink(path)
+	data, err := fsutil.ReadFileNoSymlink(path, maxManagedFileBytes)
 	if err != nil {
 		return "", err
 	}

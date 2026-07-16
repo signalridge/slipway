@@ -81,6 +81,8 @@ slipway status [run-id] [--root ROOT] [--json]
 
 Without an ID, lists Runs in the repository's Git common directory. Current-worktree Runs are replayed; another linked worktree's Run appears only as a read-only header marked `workspace_foreign`. Full inspection and mutation require the owning worktree.
 
+`status` is filesystem-read-only: it does not create the run namespace or lock files, change permissions, or repair an interrupted journal tail. A local recovery directory that cannot be replayed remains visible in JSON under `unavailable_runs`; targeted inspection reports `run_journal_invalid`, while an absent ID reports `run_not_found`.
+
 With an ID, returns the current Run projection and a freshly derived structured `next` operation. Empty list output is valid.
 
 ## `slipway stop`
@@ -89,7 +91,7 @@ With an ID, returns the current Run projection and a freshly derived structured 
 slipway stop [run-id] [--root ROOT] [--json]
 ```
 
-Stops a Run and preserves its journal. Omitting the ID scans all listed active or paused entries and proceeds only when that count is one. An active or paused `workspace_foreign` stub can therefore make selection ambiguous or produce a workspace-mismatch error; in a linked-worktree repository, pass an ID from the owning worktree. A stopped Run can resume; an ended Run cannot.
+Stops a Run and preserves its journal. Omitting the ID scans listed active or paused entries and proceeds only when that count is one; any unreadable local recovery directory also requires an explicit ID rather than being ignored. An active or paused `workspace_foreign` stub is not selected implicitly. A stopped Run can resume; an ended Run cannot.
 
 ## Hidden host operations
 

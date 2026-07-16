@@ -104,6 +104,25 @@ Every public Outcome field is present. Arrays remain arrays when empty; inapplic
 - A non-paused Review uses the `review` branch and reports findings; it does not suggest repair work.
 - Summary and every `needs_input` Outcome have no suggested Action.
 
+### Legal Outcome combinations
+
+| Action | Host status | Required result branches | Allowed pause | Allowed suggestions |
+| --- | --- | --- | --- | --- |
+| Orient | `completed` / `partial` / `error` | `implementation=null`, `review=null` | none | zero or one Clarify, Implement, or Summarize |
+| Orient | `needs_input` | `implementation=null`, `review=null` | decision or environment | none |
+| Clarify | `completed` / `error` | `implementation=null`, `review=null` | none | zero or one Clarify, Implement, or Summarize |
+| Clarify | `needs_input` | `implementation=null`, `review=null` | decision or environment | none |
+| Implement | `completed` | `implementation.result=applied\|not_needed`, `review=null` | none | none |
+| Implement | `partial` | `implementation.result=partial`, `review=null` | none | none |
+| Implement | `error` | `implementation.result=unable`, `review=null` | none | none |
+| Implement | `needs_input` | `implementation=null`, `review=null` | decision, destructive, or environment | none |
+| Review | `completed` | `review.result=no_findings_reported\|findings_reported`, `implementation=null` | none | none |
+| Review | `partial` | `review.result=inconclusive`, `implementation=null` | none | none |
+| Review | `error` | `review.result=error`, `implementation=null` | none | none |
+| Summarize | `completed` / `error` | `implementation=null`, `review=null` | none | none |
+
+Clarify intentionally has no legal `partial` combination: it carries one decision at a time. Review cannot use `needs_input` or suggest Implement, and `not_run` is a CLI-owned review-skip projection.
+
 A `needs_input` Outcome has one pause reason: `decision_required`, `destructive_confirmation_required`, or `environment_unavailable`. `budget_exhausted` is produced only by the CLI.
 
 Destructive confirmation is valid only for an exact current Implement request and scope digest. Natural-language text such as “yes” is feedback, not authorization. Any Action change, resume, scope expansion, or mismatch invalidates the grant.
@@ -156,7 +175,7 @@ A successful resume voids stale outstanding work as required, revalidates the wo
 
 Workspace identity includes the canonical worktree root, per-worktree Git directory, and Git common directory. Every load or mutation rediscovers and compares those paths before changing a journal.
 
-Repository-wide `status` is the read-only exception: Runs from another linked worktree appear as FirstEvent header stubs with `workspace_foreign`, but are not fully replayed or mutated outside their owning worktree.
+Repository-wide `status` is the filesystem-read-only exception: it creates no namespace or lock, changes no permissions, and repairs no journal bytes. Runs from another linked worktree appear as FirstEvent header stubs with `workspace_foreign` and are not fully replayed outside their owning worktree. Unreadable local Run directories remain identified in list JSON as `unavailable_runs`; targeted corruption and absence are distinct errors.
 
 Git observations record hashes and bounded metadata for the index, porcelain status, and dirty paths. They never retain file content. A difference is evidence of change since Run start, not proof that the current host caused it.
 

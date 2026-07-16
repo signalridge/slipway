@@ -110,10 +110,12 @@ yay -S slipway-bin
 
 Run from inside the target Git worktree:
 
+The commands below use `./slipway`, the binary built from this checkout. If you installed a compatible tagged package, use the `slipway` binary on `PATH` instead.
+
 ```bash
-slipway install --tool claude
-slipway list
-slipway doctor
+./slipway install --tool claude
+./slipway list
+./slipway doctor
 ```
 
 Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several non-Kiro hosts.
@@ -121,18 +123,18 @@ Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `openc
 Kiro must be installed separately the first time so its surface is unambiguous:
 
 ```bash
-slipway install --tool kiro --surface ide   # or: --surface cli
+./slipway install --tool kiro --surface ide   # or: --surface cli
 ```
 
 Do not combine `--surface` with non-Kiro selections. Once the Kiro surface is recorded, later refresh and uninstall infer it. A first-time `--tool all` selection also needs Kiro to have a recorded surface, so explicit per-host setup is clearer.
 
-Without `--tool`, Slipway uses detected host directories. Detection is only a convenience; inspect `slipway list` before installing into a repository with several host configurations.
+Without `--tool`, Slipway uses detected host directories. Detection is only a convenience; inspect `./slipway list` before installing into a repository with several host configurations.
 
 ## Refresh and uninstall
 
 ```bash
-slipway install --tool claude --refresh
-slipway uninstall --tool claude
+./slipway install --tool claude --refresh
+./slipway uninstall --tool claude
 ```
 
 Slipway records generated paths and hashes in a per-host ownership manifest. Refresh and uninstall mutate only matching managed files. Modified, unknown, malformed, out-of-host, or symlinked paths are preserved or rejected and reported; host settings remain outside adapter ownership.

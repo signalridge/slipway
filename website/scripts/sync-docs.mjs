@@ -220,8 +220,6 @@ async function main() {
   for (const name of schemaNames) {
     const schemaSrc = path.join(DOCS_DIR, 'reference', 'v2', name);
     await fs.copyFile(schemaSrc, path.join(publicV2, name));
-    // Keep the original unversioned URL as a byte-identical compatibility alias.
-    await fs.copyFile(schemaSrc, path.join(PUBLIC_REFERENCE, name));
   }
 
   console.log(`sync-docs: ${files.length} pages -> ${path.relative(process.cwd(), OUT_DIR)}`);

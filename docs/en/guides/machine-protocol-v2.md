@@ -2,7 +2,7 @@
 
 This tutorial runs one complete local protocol lifecycle: start a Run, submit Orient and Implement outcomes, and end with Summarize. It is intended for host and adapter authors. Generated host capabilities normally perform these hidden operations; they are not an alternative end-user workflow.
 
-The canonical contracts are the versioned [machine protocol schema](../../reference/v2/machine-protocol.schema.json) and [source envelope schema](../../reference/v2/source-envelope.schema.json). Keep the version in the URL and the JSON `contract_version` or `source_version` together. The original unversioned schema URLs remain compatibility aliases for v2, but new integrations should use `/reference/v2/`.
+The canonical contracts are the versioned [machine protocol schema](../../reference/v2/machine-protocol.schema.json) and [source envelope schema](../../reference/v2/source-envelope.schema.json). Keep the version in the URL and the JSON `contract_version` or `source_version` together; unversioned compatibility aliases are intentionally not published.
 
 ## Prerequisites
 

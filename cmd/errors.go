@@ -89,7 +89,11 @@ func asCLIError(err error) *CLIError {
 		case committed:
 			code = "mutation_committed_verification_failed"
 		}
-		return newRuntimeError(code, mutationErr.Error(), defaultErrorNext(), map[string]any{
+		next := defaultErrorNext()
+		if committed || projectionStale || namespaceDetached || ambiguous {
+			next = statusInspectionNext(next.WorkspaceRoot(), "")
+		}
+		return newRuntimeError(code, mutationErr.Error(), next, map[string]any{
 			"phase":              mutationErr.StorageMutationPhase(),
 			"committed":          committed,
 			"projection_stale":   projectionStale,
@@ -107,16 +111,7 @@ func asCLIError(err error) *CLIError {
 	// and a targeted skip. Report a read-only inspection command instead of a
 	// terminal `none` so the user has a concrete next step (issue #434 §1.3).
 	if strings.Contains(lower, "journal record limit") || strings.Contains(lower, "event exceeds") {
-		statusNext, statusErr := autopilot.NewCommandNext(
-			autopilot.NextOperationCommand,
-			workspaceRoot,
-			"inspect-run",
-			[]string{"slipway", "status", "--root", workspaceRoot},
-			nil,
-		)
-		if statusErr == nil {
-			next = statusNext
-		}
+		next = statusInspectionNext(workspaceRoot, "")
 		return newRuntimeError("journal_record_too_large", message, next, nil)
 	}
 	if strings.Contains(lower, "unknown command") ||
@@ -146,4 +141,46 @@ func defaultErrorNext() autopilot.Next {
 		workspace = string(filepath.Separator)
 	}
 	return autopilot.NoneNext(workspace)
+}
+
+func statusInspectionNext(workspaceRoot, runID string) autopilot.Next {
+	if strings.TrimSpace(workspaceRoot) == "" {
+		workspaceRoot = defaultErrorNext().WorkspaceRoot()
+	}
+	if resolved, err := resolveRoot(workspaceRoot); err == nil {
+		workspaceRoot = resolved
+	} else if absolute, absoluteErr := filepath.Abs(workspaceRoot); absoluteErr == nil {
+		workspaceRoot = absolute
+	}
+	argv := []string{"slipway", "status"}
+	variantID := "inspect-runs"
+	if strings.TrimSpace(runID) != "" {
+		argv = append(argv, runID)
+		variantID = "inspect-run"
+	}
+	argv = append(argv, "--root", workspaceRoot)
+	next, err := autopilot.NewCommandNext(
+		autopilot.NextOperationCommand,
+		workspaceRoot,
+		variantID,
+		argv,
+		nil,
+	)
+	if err != nil {
+		return autopilot.NoneNext(workspaceRoot)
+	}
+	return next
+}
+
+func statusInspectionNextForRawRoot(rawRoot, runID string) autopilot.Next {
+	workspaceRoot := rawRoot
+	if strings.TrimSpace(workspaceRoot) == "" {
+		workspaceRoot = defaultErrorNext().WorkspaceRoot()
+	}
+	if resolved, err := resolveRoot(workspaceRoot); err == nil {
+		workspaceRoot = resolved
+	} else if absolute, absoluteErr := filepath.Abs(workspaceRoot); absoluteErr == nil {
+		workspaceRoot = absolute
+	}
+	return statusInspectionNext(workspaceRoot, runID)
 }

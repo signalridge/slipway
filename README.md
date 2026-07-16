@@ -149,7 +149,7 @@ sensitive material.
 
 - [Contributing](CONTRIBUTING.md)
 - [Development reference](docs/en/contributing.md)
-- [Acceptance suite](acceptance/README.md)
+- [Acceptance suite](tests/acceptance/README.md)
 - [Architecture decisions](adr/README.md)
 
 ## License

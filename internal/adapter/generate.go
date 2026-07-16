@@ -116,9 +116,9 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 				})
 			}
 		case "copilot_agent":
-			content := fmt.Sprintf("---\nname: %s\ndescription: %q\ndisable-model-invocation: true\nuser-invocable: true\n---\n\n%s", capability, description, body)
+			content := fmt.Sprintf("---\nname: %s\ndescription: %q\n---\n\n%s", capability, description, body)
 			files = append(files, generatedFile{
-				Relative: filepath.ToSlash(filepath.Join(".github/copilot/agents", capability+".agent.md")),
+				Relative: filepath.ToSlash(filepath.Join(".github/agents", capability+".agent.md")),
 				Data:     []byte(content),
 			})
 		case "kilo_command":
@@ -200,7 +200,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 		return nil, fmt.Errorf("load clarification reference: %w", err)
 	}
 	files = append(files, generatedFile{
-		Relative: filepath.ToSlash(filepath.Join(referenceRoot(host), "slipway-clarify", "references", "decision-interview.md")),
+		Relative: referencePath(host),
 		Data:     []byte(reference),
 	})
 	return files, nil
@@ -211,7 +211,7 @@ func referenceRoot(host Host) string {
 	case "skill":
 		return host.SkillsDir
 	case "copilot_agent":
-		return ".github/copilot/agents"
+		return ".github/agents"
 	case "kilo_command":
 		return ".kilocode/slipway/capabilities"
 	case "kiro_ide", "kiro_cli":
@@ -223,4 +223,12 @@ func referenceRoot(host Host) string {
 	default:
 		return host.SkillsDir
 	}
+}
+
+func referencePath(host Host) string {
+	root := referenceRoot(host)
+	if host.SurfaceKind == "skill" {
+		return filepath.ToSlash(filepath.Join(root, "slipway-clarify", "references", "decision-interview.md"))
+	}
+	return filepath.ToSlash(filepath.Join(root, "references", "decision-interview.md"))
 }

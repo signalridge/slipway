@@ -12,6 +12,8 @@ slipway status <run-id> --json
 
 ID 省略時、`status` は repository の Git common directory を走査します。Current worktree の Run は完全に replay されます。別の linked worktree が作成した Run は `workspace_foreign` マーク付きの read-only header stub として表示され、完全な内容は owning worktree で確認・復旧します。
 
+Inspect は recovery directory や lock を作成せず、journal byte も修復しません。Local Run を安全に replay できない場合、list JSON はそれを隠さず、`unavailable_runs` に ID と診断を保持します。Mutation の前に journal を確認または復旧してください。
+
 ID を指定すると、status には現在の state と fresh 派生の structured `next` operation が含まれます。Generated host は表示用 shell command を parse せず、この object に従います。
 
 ## Stop、skip、resume
@@ -20,7 +22,7 @@ ID を指定すると、status には現在の state と fresh 派生の structu
 slipway stop <run-id>
 ```
 
-`stop` は pending work を無効化しますが、journal を残します。ID 省略時は list にある active/paused entry をすべて数えます。`workspace_foreign` stub があると selection が ambiguous になるか workspace-mismatch error になるため、linked-worktree repository では owning worktree から ID を明示してください。Stopped Run は resume できます。Ended Run はできません。
+`stop` は pending work を無効化しますが、journal を残します。ID 省略時は list の local active/paused entry を数え、`workspace_foreign` stub は除外します。読めない local recovery directory があれば explicit ID を要求します。Stopped Run は resume できます。Ended Run はできません。
 
 Skip は Action level の制御で、理由は不要です。Reorder や take over は queue を書き換えず、automatic loop を止めます。明示的な resume の後だけ続行します。
 

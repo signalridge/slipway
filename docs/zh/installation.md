@@ -110,10 +110,12 @@ yay -S slipway-bin
 
 在目标 Git worktree 内执行：
 
+下列命令使用当前 checkout 构建的 `./slipway`。如果安装的是兼容的 tagged package，请改用 `PATH` 中的 `slipway`。
+
 ```bash
-slipway install --tool claude
-slipway list
-slipway doctor
+./slipway install --tool claude
+./slipway list
+./slipway doctor
 ```
 
 支持的 ID 为 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`。可重复 `--tool` 选择多个非 Kiro 宿主。
@@ -121,18 +123,18 @@ slipway doctor
 Kiro 首次必须单独安装，以明确 surface：
 
 ```bash
-slipway install --tool kiro --surface ide   # 或：--surface cli
+./slipway install --tool kiro --surface ide   # 或：--surface cli
 ```
 
 不要将 `--surface` 与非 Kiro 选择组合。Kiro surface 记录后，后续 refresh 和 uninstall 会自动沿用。首次 `--tool all` 同样要求已有 Kiro surface，因此逐个显式安装更清晰。
 
-省略 `--tool` 时，Slipway 根据宿主目录进行检测。检测只是一项便利功能；在配置多个宿主的仓库中，安装前先检查 `slipway list`。
+省略 `--tool` 时，Slipway 根据宿主目录进行检测。检测只是一项便利功能；在配置多个宿主的仓库中，安装前先检查 `./slipway list`。
 
 ## 刷新与卸载
 
 ```bash
-slipway install --tool claude --refresh
-slipway uninstall --tool claude
+./slipway install --tool claude --refresh
+./slipway uninstall --tool claude
 ```
 
 Slipway 在每个宿主的 ownership manifest 中记录生成路径和 hash。Refresh 与 uninstall 只修改仍与记录相符的 managed file。被用户修改、未知、格式错误、越界或经过 symlink 的路径会被保留或拒绝并报告；宿主设置不属于 adapter ownership。

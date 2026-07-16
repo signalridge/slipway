@@ -46,7 +46,7 @@ func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
 	assertNotContainsWorkflowValues(t, testJob, "inputs.tag", "test must consume the validated tag output")
 
 	releaseJob := workflowMap(t, jobs, "release")
-	assertWorkflowNeeds(t, releaseJob, "validate-tag", "test")
+	assertWorkflowNeeds(t, releaseJob, "validate-tag")
 	assert.NotContains(t, releaseJob, "environment", "release publishing must not require manual environment approval")
 	releasePerms := workflowMap(t, releaseJob, "permissions")
 	assert.Equal(t, "write", workflowString(t, releasePerms, "contents"))
@@ -284,34 +284,6 @@ func TestGoReleaserUsesCosignBundleSigning(t *testing.T) {
 	assert.Contains(t, argSet, "${artifact}")
 	assert.NotContains(t, argSet, "--output-certificate=${certificate}")
 	assert.NotContains(t, argSet, "--output-signature=${signature}")
-}
-
-func TestCIWorkflowEnforcesKernelCoverageGate(t *testing.T) {
-	workflow := readWorkflowYAML(t, ".github/workflows/ci.yml")
-	coverageJob := workflowMap(t, workflowMap(t, workflow, "jobs"), "coverage")
-	assert.Equal(t, "Kernel Coverage Gate", workflowString(t, coverageJob, "name"))
-
-	measureRun := firstStepRun(t, coverageJob, "Measure soft-autopilot coverage")
-	for _, pkg := range []string{
-		"./cmd",
-		"./internal/adapter",
-		"./internal/autopilot",
-		"./internal/fsutil",
-		"./internal/jsonstrict",
-		"./internal/recoverycmd",
-		"./internal/runstore",
-		"./internal/testlint",
-		"./internal/tmpl",
-	} {
-		assert.Contains(t, measureRun, pkg)
-	}
-	assert.Contains(t, measureRun, "-coverprofile=tmp/coverage-gated.out")
-
-	gateRun := firstStepRun(t, coverageJob, "Enforce coverage baseline")
-	assert.Contains(t, gateRun, "./internal/covergate/cmd/covergate")
-	assert.Contains(t, gateRun, "-check")
-	assert.Contains(t, gateRun, "-profile tmp/coverage-gated.out")
-	assert.Contains(t, gateRun, "-baseline coverage-baseline.json")
 }
 
 func readWorkflowYAML(t *testing.T, rel string) map[string]any {

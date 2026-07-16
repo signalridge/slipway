@@ -161,23 +161,34 @@ func parseSourceManifest(body string) (SourceManifest, error) {
 			"source manifest fence is not closed",
 		)
 	}
+	var fenceByte byte
+	fenceLength := 0
 	for index := closingIndex + 1; index < len(lines); index++ {
-		if strings.TrimSpace(lines[index]) == sourceManifestFence {
-			return SourceManifest{}, newSourceBundleError(
-				SourceClassificationManifestInvalid,
-				"source body contains multiple manifest fences",
-			)
+		trimmed := strings.TrimSpace(lines[index])
+		candidateByte, candidateLength, candidateFence := markdownFenceDelimiter(lines[index])
+		if fenceLength == 0 {
+			if trimmed == sourceManifestFence {
+				return SourceManifest{}, newSourceBundleError(
+					SourceClassificationManifestInvalid,
+					"source body contains multiple manifest fences",
+				)
+			}
+			if candidateFence {
+				fenceByte = candidateByte
+				fenceLength = candidateLength
+				continue
+			}
+			if strings.Contains(lines[index], "<!-- slipway-level:") {
+				return SourceManifest{}, newSourceBundleError(
+					SourceClassificationManifestInvalid,
+					"source body contains an additional slipway-level marker outside a code fence",
+				)
+			}
+			continue
 		}
-		// Issue #434 §4.2: a managed Change body must not contain any
-		// `slipway-level:` marker outside the opening level marker / manifest
-		// fence. The first line already established the Level authority; any
-		// later level marker is a conflicting or duplicate authority and must
-		// be rejected rather than silently accepted.
-		if strings.Contains(lines[index], "<!-- slipway-level:") {
-			return SourceManifest{}, newSourceBundleError(
-				SourceClassificationManifestInvalid,
-				"source body contains an additional slipway-level marker outside the manifest fence",
-			)
+		if candidateFence && candidateByte == fenceByte && candidateLength >= fenceLength && markdownFenceCloses(lines[index], candidateByte, candidateLength) {
+			fenceByte = 0
+			fenceLength = 0
 		}
 	}
 
@@ -210,6 +221,27 @@ func parseSourceManifest(body string) (SourceManifest, error) {
 	return manifest, nil
 }
 
+func markdownFenceDelimiter(line string) (byte, int, bool) {
+	trimmed := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 || len(trimmed) < 3 {
+		return 0, 0, false
+	}
+	marker := trimmed[0]
+	if marker != '`' && marker != '~' {
+		return 0, 0, false
+	}
+	length := 0
+	for length < len(trimmed) && trimmed[length] == marker {
+		length++
+	}
+	return marker, length, length >= 3
+}
+
+func markdownFenceCloses(line string, marker byte, length int) bool {
+	trimmed := strings.TrimLeft(line, " ")
+	return len(trimmed) >= length && strings.TrimSpace(trimmed[length:]) == "" && trimmed[0] == marker
+}
+
 func firstNonemptyLine(lines []string, start int) int {
 	for index := start; index < len(lines); index++ {
 		if strings.TrimSpace(lines[index]) != "" {
@@ -232,8 +264,8 @@ func validateSourceManifest(manifest SourceManifest) error {
 	if manifest.Sections == nil {
 		return errors.New("sections must be an initialized array")
 	}
-	if len(manifest.Sections) == 0 || len(manifest.Sections) > maxSourceSections {
-		return fmt.Errorf("sections must contain 1..%d entries", maxSourceSections)
+	if len(manifest.Sections) < 5 || len(manifest.Sections) > maxSourceSections {
+		return fmt.Errorf("sections must contain 5..%d entries", maxSourceSections)
 	}
 
 	keys := make(map[string]struct{}, len(manifest.Sections))

@@ -23,7 +23,6 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 		"runstore":    {"fsutil": true, "jsonstrict": true},
 		"adapter":     {"fsutil": true, "tmpl": true, "jsonstrict": true},
 		"recoverycmd": {},
-		"covergate":   {},
 		"tmpl":        {},
 		"fsutil":      {},
 		"jsonstrict":  {},
@@ -59,7 +58,7 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 func TestRetiredArchitecturePackagesAreAbsent(t *testing.T) {
 	t.Parallel()
 	root := repositoryRoot(t)
-	for _, name := range []string{"engine", "model", "state", "freshness", "wave", "bootstrap", "perfbaseline", "coverage", "toolgen"} {
+	for _, name := range []string{"engine", "model", "state", "freshness", "wave", "bootstrap", "perfbaseline", "coverage", "covergate", "toolgen"} {
 		_, err := os.Stat(filepath.Join(root, "internal", name))
 		assert.ErrorIs(t, err, os.ErrNotExist, name)
 	}

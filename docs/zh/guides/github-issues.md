@@ -16,6 +16,8 @@ Run/source 命令不持有 GitHub token，也不获取或发布 GitHub 数据。
 
 **Change** 表示一个可独立实现、Review 和交付的连贯结果。Change 必须自包含：执行时需要的需求不能只隐含在父 Objective 或普通讨论 comment 中。
 
+Change 完成后应让仓库处于有意义且安全的中间状态，大致适合一个 fresh Agent context；涉及多层时应形成 vertical slice。只有可独立交付的结果才拆成多个 Change，不能独立交付的实施步骤保留为 checklist。Research 交付有证据的结论；后续代码工作另建 Change。纯 refactor 写明 preserved behavior 和可衡量的内部结果；大型 refactor 拆成可独立交付的 expand、migrate 与 contract Changes。
+
 | 场景 | 建议结构 |
 | --- | --- |
 | 小型 feature、bug、refactor 或文档任务 | 一个 Change |
@@ -53,6 +55,12 @@ Change body 还包含一个 `slipway-manifest` block，列出已接受的 sectio
 这些是宿主侧指令，不是 Go CLI 实现的 GitHub transaction。GitHub 不提供多 Issue transaction 或通用 exactly-once create。响应含糊或部分成功时，宿主应报告观察结果，不得声称已回滚或盲目重试。
 
 现有无 marker Issue 不会被静默转换成 managed Change。宿主应提供明确选择：用户手工更新、创建一个链接原 Issue 的独立 managed Change，或使用有界 ad-hoc Run。
+
+## 关系数量限制与工具 fallback
+
+GitHub 每个 parent 最多 100 个 sub-issues；每个 Issue 的 blocking 与 blocked-by 关系分别最多 50 个，两个方向独立计数。获批写入若会超过限制，宿主必须停止并报告受影响 item，不能把溢出关系隐藏成纯正文依赖图。
+
+原生 `gh` 关系命令要求 `gh >= 2.94.0`。版本更旧时，宿主应在可用时使用官方 REST API，否则报告 `environment_unavailable`；不得另建一份本地权威。
 
 ## 启动 issue-backed Run
 

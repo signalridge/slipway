@@ -24,14 +24,14 @@ gofmt -w .
 go vet ./...
 go run ./internal/testlint/cmd/testlint ./...
 go test -timeout=20m ./... -count=1
-just coverage-gate check
+just coverage # optional coverage report; no baseline or release threshold
 go test -timeout=20m ./... -race -count=1
 go build ./...
 just acceptance
 git diff --check
 ```
 
-Coverage baseline updates are reviewed artifacts. `just coverage-gate write` intentionally refuses to rewrite the committed Linux baseline on another operating system.
+Coverage reports are advisory observations. A regression can guide review, but no fixed coverage baseline decides whether a change may merge or release.
 
 When available:
 
@@ -51,11 +51,11 @@ goreleaser check
 - Generated files are deterministic, transactional, symlink-safe, and ownership-aware.
 - Do not add aliases or readers for the retired runtime.
 
-See [architecture](docs/en/explanation/architecture.md), [machine protocol](docs/en/reference/machine-protocol.md), and [acceptance scenarios](acceptance/README.md).
+See [architecture](docs/en/explanation/architecture.md), [machine protocol](docs/en/reference/machine-protocol.md), and [acceptance scenarios](tests/acceptance/README.md).
 
 ## Commits and pull requests
 
-Use Conventional Commits for commits and release-ready pull request titles. CI validates titles against these types; the checker recognizes temporary WIP titles, which must be replaced before the pull request is ready to merge:
+Use Conventional Commits for commits and release-input pull request titles. CI reports title drift; temporary WIP titles can be replaced when the title should feed Release Please:
 
 - `feat`
 - `fix`
@@ -79,6 +79,6 @@ Keep a pull request focused and explain observable behavior, tests run, and rema
 
 Release Please owns `CHANGELOG.md`, `.release-please-manifest.json`, the release pull request, and the `v*` tag. Do not hand-edit a release version or create a release tag as part of an ordinary contribution.
 
-After changes reach `main`, Release Please opens or updates one release pull request. Maintainers review its changelog and manifest together. Merging that pull request creates the matching tag and GitHub Release with the configured automation token; the tag-triggered Release workflow then validates the tag, runs tests, builds and signs artifacts, and performs publication checks. A missing tag or GitHub Release for the manifest version is a failed release state that must be reconciled before another automated release.
+After changes reach `main`, Release Please opens or updates one release pull request. Maintainers review its changelog and manifest together. Merging that pull request creates the matching tag and GitHub Release with the configured automation token. The tag-triggered Release workflow independently collects test evidence while validating the tag and building, signing, and publishing artifacts; test results do not authorize or block publication. A missing tag or GitHub Release for the manifest version is an operational metadata mismatch to reconcile, not a software-readiness verdict.
 
 Contributions are licensed under the repository's [BSD 3-Clause License](LICENSE).

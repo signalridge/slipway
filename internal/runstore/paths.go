@@ -143,16 +143,28 @@ func pathsFor(commonDir, runID string) (Paths, error) {
 	}, nil
 }
 
+// InvalidRunIDError reports a Run identifier outside the storage grammar.
+type InvalidRunIDError struct {
+	RunID string
+}
+
+func (err *InvalidRunIDError) Error() string {
+	if err.RunID == "" {
+		return "invalid run id"
+	}
+	return fmt.Sprintf("invalid run id %q", err.RunID)
+}
+
 func validateRunID(runID string) error {
 	if runID == "" || len(runID) > 128 {
-		return fmt.Errorf("invalid run id")
+		return &InvalidRunIDError{RunID: runID}
 	}
 	for _, char := range runID {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
 			(char >= '0' && char <= '9') || char == '-' || char == '_' {
 			continue
 		}
-		return fmt.Errorf("invalid run id %q", runID)
+		return &InvalidRunIDError{RunID: runID}
 	}
 	return nil
 }
@@ -160,40 +172,15 @@ func validateRunID(runID string) error {
 // DiscoverWorkspaceIdentity resolves start through Git without a shell and
 // canonicalizes the worktree, per-worktree Git directory, and common Git directory.
 func DiscoverWorkspaceIdentity(start string) (WorkspaceIdentity, error) {
-	root, err := gitStartDirectory(start)
+	repository, err := fsutil.DiscoverGit(start)
 	if err != nil {
 		return WorkspaceIdentity{}, err
 	}
-	worktree, err := gitOutput(root, "rev-parse", "--path-format=absolute", "--show-toplevel")
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("discover worktree root: %w", err)
-	}
-	gitDir, err := gitOutput(root, "rev-parse", "--path-format=absolute", "--git-dir")
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("discover git directory: %w", err)
-	}
-	commonDir, err := gitOutput(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("discover git common directory: %w", err)
-	}
-
-	worktree, err = canonicalGitPath(worktree)
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("canonicalize worktree root: %w", err)
-	}
-	gitDir, err = canonicalGitPath(gitDir)
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("canonicalize git directory: %w", err)
-	}
-	commonDir, err = canonicalGitPath(commonDir)
-	if err != nil {
-		return WorkspaceIdentity{}, fmt.Errorf("canonicalize git common directory: %w", err)
-	}
 	identity := WorkspaceIdentity{
 		Version:      WorkspaceIdentityVersion,
-		WorktreeRoot: worktree,
-		GitDir:       gitDir,
-		GitCommonDir: commonDir,
+		WorktreeRoot: repository.WorktreeRoot,
+		GitDir:       repository.GitDir,
+		GitCommonDir: repository.CommonDir,
 	}
 	identity.ID = workspaceIdentityID(identity)
 	return identity, nil
@@ -241,54 +228,6 @@ func workspaceIdentityID(identity WorkspaceIdentity) string {
 	writeHashSection(hasher, "git_dir", []byte(identity.GitDir))
 	writeHashSection(hasher, "git_common_dir", []byte(identity.GitCommonDir))
 	return hashDigest(hasher)
-}
-
-func gitStartDirectory(start string) (string, error) {
-	if strings.TrimSpace(start) == "" {
-		var err error
-		start, err = os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("get working directory: %w", err)
-		}
-	}
-	absolute, err := filepath.Abs(start)
-	if err != nil {
-		return "", fmt.Errorf("absolute repository path: %w", err)
-	}
-	info, err := os.Stat(absolute)
-	if err != nil {
-		return "", fmt.Errorf("inspect repository path: %w", err)
-	}
-	if !info.IsDir() {
-		absolute = filepath.Dir(absolute)
-	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return "", fmt.Errorf("resolve repository path: %w", err)
-	}
-	return filepath.Clean(resolved), nil
-}
-
-func canonicalGitPath(path string) (string, error) {
-	if path == "" {
-		return "", errors.New("git returned an empty path")
-	}
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	resolved, err := filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", errors.New("git path is not a directory")
-	}
-	return filepath.Clean(resolved), nil
 }
 
 // ObserveGit captures exact index and porcelain-v2 fingerprints plus bounded

@@ -122,7 +122,7 @@ Run 数据位于仓库 Git common directory 下的 `<git-common-dir>/slipway/run
 
 - [贡献指南](CONTRIBUTING.md)
 - [开发参考](docs/zh/contributing.md)
-- [验收套件](acceptance/README.md)
+- [验收套件](tests/acceptance/README.md)
 - [架构决策记录](adr/README.md)
 
 ## 许可证

@@ -59,7 +59,7 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 			case "skill":
 				canonicalPath = filepath.Join(host.SkillsDir, capability, "SKILL.md")
 			case "copilot_agent":
-				canonicalPath = filepath.Join(".github/copilot/agents", capability+".agent.md")
+				canonicalPath = filepath.Join(".github/agents", capability+".agent.md")
 			case "kilo_command":
 				canonicalPath = filepath.Join(".kilocode/slipway/capabilities", capability+".md")
 				_, err = os.Stat(filepath.Join(root, ".kilo", "commands", capability+".md"))
@@ -89,6 +89,7 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 			assert.Contains(t, string(content), "public-repository Issue has no private switch")
 			assert.Contains(t, string(content), "Redact recognized credential values")
 			assert.Contains(t, string(content), "Natural-language approval alone is not a grant")
+			assert.Contains(t, string(content), "not cryptographic proof of human presence")
 			for _, fragment := range specificFragments[capability] {
 				assert.Contains(t, string(content), fragment, "%s %s", host.ID, capability)
 			}
@@ -100,7 +101,7 @@ func TestRegistryAndInstallGenerateOnlySixExplicitCapabilitiesForEveryHost(t *te
 			}
 		}
 
-		reference := filepath.Join(root, referenceRoot(host), "slipway-clarify", "references", "decision-interview.md")
+		reference := filepath.Join(root, filepath.FromSlash(referencePath(host)))
 		content, err := os.ReadFile(reference)
 		require.NoError(t, err)
 		clarifyReferences++
@@ -166,7 +167,7 @@ func TestKiroCLIRequiresAndPersistsItsSurface(t *testing.T) {
 func TestCopilotDetectionRecognizesItsSupportedProjectSurfaces(t *testing.T) {
 	host, ok := lookupHost("copilot")
 	require.True(t, ok)
-	for _, relative := range []string{".github/copilot", ".github/prompts", ".github/skills"} {
+	for _, relative := range []string{".github/agents", ".github/copilot", ".github/prompts", ".github/skills"} {
 		t.Run(relative, func(t *testing.T) {
 			root := t.TempDir()
 			require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(relative)), 0o700))
@@ -182,10 +183,78 @@ func TestCopilotDetectionRecognizesItsSupportedProjectSurfaces(t *testing.T) {
 func TestCopilotOwnershipRejectsRetiredPromptSurface(t *testing.T) {
 	host, ok := lookupHost("copilot")
 	require.True(t, ok)
-	assert.True(t, claimAllowed(host, ".github/copilot/agents/slipway-run.agent.md"))
+	assert.True(t, claimAllowed(host, ".github/agents/slipway-run.agent.md"))
+	assert.False(t, claimAllowed(host, ".github/copilot/agents/slipway-run.agent.md"))
 	assert.False(t, claimAllowed(host, ".github/copilot"))
 	assert.False(t, claimAllowed(host, ".github/skills/slipway-run/SKILL.md"))
 	assert.False(t, claimAllowed(host, ".github/prompts/slipway-run.prompt.md"))
+}
+
+func TestInstallAppliesKiroSurfaceOnlyToKiroInMixedSelection(t *testing.T) {
+	root := t.TempDir()
+	report, err := Install(InstallOptions{
+		Root:    root,
+		Tools:   []string{"claude", "kiro"},
+		Surface: "ide",
+		Refresh: true,
+	})
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"claude", "kiro"}, report.Hosts)
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(root, ".kiro", "steering", "slipway-run.md"))
+	require.NoError(t, err)
+}
+
+func TestDetectedFirstKiroInstallWarnsWithoutBlockingOtherHosts(t *testing.T) {
+	root := t.TempDir()
+	for _, relative := range []string{".claude", ".kiro"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, relative), 0o700))
+	}
+
+	report, err := Install(InstallOptions{Root: root, Refresh: true})
+	require.NoError(t, err)
+	assert.Equal(t, TransactionOutcomeCommitted, report.TransactionOutcome)
+	assert.Equal(t, []string{"claude"}, report.Hosts)
+	assert.Contains(t, report.Warnings, "adapter kiro was not installed: first install needs --surface ide or --surface cli; other detected adapters were still planned")
+	_, err = os.Stat(filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(root, ".kiro", "steering", "slipway-run.md"))
+	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestOwnershipInspectionBoundsRepositoryControlledFiles(t *testing.T) {
+	host, ok := lookupHost("claude")
+	require.True(t, ok)
+
+	t.Run("manifest", func(t *testing.T) {
+		root := t.TempDir()
+		manifestPath, _, err := ownershipPaths(root, host)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0o700))
+		file, err := os.Create(manifestPath)
+		require.NoError(t, err)
+		require.NoError(t, file.Truncate(maxOwnershipManifestBytes+1))
+		require.NoError(t, file.Close())
+
+		_, _, err = loadManifest(root, host)
+		require.ErrorContains(t, err, "exceeds")
+	})
+
+	t.Run("managed file", func(t *testing.T) {
+		root := t.TempDir()
+		_, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
+		require.NoError(t, err)
+		managed := filepath.Join(root, ".claude", "skills", "slipway-run", "SKILL.md")
+		require.NoError(t, os.Truncate(managed, maxManagedFileBytes+1))
+
+		report, err := Install(InstallOptions{Root: root, Tools: []string{"claude"}, Refresh: true})
+		require.NoError(t, err)
+		assert.Contains(t, report.Preserved, ".claude/skills/slipway-run/SKILL.md")
+		info, err := os.Stat(managed)
+		require.NoError(t, err)
+		assert.Equal(t, int64(maxManagedFileBytes+1), info.Size())
+	})
 }
 
 func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {

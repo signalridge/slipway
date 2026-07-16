@@ -99,14 +99,14 @@ last-writer-wins reconciliation.
 
 ## Current references
 
-This ADR records rationale; the following current artifacts define and verify the implemented contract:
+This ADR records rationale; the following artifacts implement, describe, and observe the current contract:
 
 - [`docs/reference/v2/source-envelope.schema.json`](../docs/reference/v2/source-envelope.schema.json) and [`machine-protocol.schema.json`](../docs/reference/v2/machine-protocol.schema.json) are the canonical version 2 serialization schemas.
 - [`internal/autopilot/source.go`](../internal/autopilot/source.go) and [`source_bundle.go`](../internal/autopilot/source_bundle.go) implement parsing, identity, and validation; [`service.go`](../internal/autopilot/service.go) coordinates durable writes through [`internal/runstore/materials.go`](../internal/runstore/materials.go), and [`material.go`](../internal/autopilot/material.go) serves verified reads.
 - The [machine protocol reference](../docs/en/reference/machine-protocol.md) and [v2 tutorial](../docs/en/guides/machine-protocol-v2.md) describe the integration surface.
-- [`acceptance/machine-protocol.sh`](../acceptance/machine-protocol.sh) exercises issue-backed import, material reads, refresh, candidate choice, and idempotency.
+- [`tests/acceptance/machine-protocol.sh`](../tests/acceptance/machine-protocol.sh) exercises issue-backed import, material reads, refresh, candidate choice, and idempotency.
 
-If these current artifacts and this historical record differ, the schemas, implementation, and executable acceptance evidence determine current behavior; update or supersede the ADR rather than silently treating its prose as runtime specification.
+If these artifacts and this historical record differ, reconcile them with the complete Chinese contract in issue #434 and the versioned schemas. Implementation describes the behavior users can currently observe; executable evidence records particular runs and never becomes runtime, merge, or release authority. Update or supersede the ADR rather than silently treating its prose as runtime specification.
 
 ## Consequences
 

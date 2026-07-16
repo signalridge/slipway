@@ -135,10 +135,10 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	t.Parallel()
 	workspace := filepath.Join(t.TempDir(), "根 with spaces")
 	next, err := NewCommandNext(
-		NextOperationAnswer,
+		NextOperationCommand,
 		workspace,
-		"typed-answer",
-		[]string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace},
+		"typed-command",
+		[]string{"slipway", "status", "--root", workspace},
 		[]NextInput{
 			{Name: "scope", Type: NextInputDigest, Flag: "--scope-sha256", Required: true},
 			{Name: "text", Type: NextInputString, Flag: "--text", Required: false},
@@ -147,13 +147,13 @@ func TestResolveNextUsesSchemaOrderAndExactRawValues(t *testing.T) {
 	require.NoError(t, err)
 	digest := "sha256:" + strings.Repeat("a", 64)
 	text := " spaces ' \" 界\r\n%!&^ "
-	argv, err := next.Resolve("typed-answer", map[string]NextInputValue{
+	argv, err := next.Resolve("typed-command", map[string]NextInputValue{
 		"text":  {Type: NextInputString, Value: text},
 		"scope": {Type: NextInputDigest, Value: digest},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace,
+		"slipway", "status", "--root", workspace,
 		"--scope-sha256", digest, "--text", text,
 	}, argv)
 }
@@ -251,7 +251,7 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 	valid := Next{
 		Operation: NextOperationResume, WorkspaceIdentity: workspaceID, workspaceRoot: workspace,
 		Variants: []NextVariant{{
-			ID: "resume", BaseArgv: []string{"slipway", "_machine", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
+			ID: "resume-ad-hoc", BaseArgv: []string{"slipway", "_machine", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
 		}},
 	}
 	tests := []struct {
@@ -274,6 +274,7 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 		}, want: "preserve"},
 		{name: "placeholder", mutate: func(next *Next) { next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "<file>") }, want: "placeholder"},
 		{name: "quoted placeholder", mutate: func(next *Next) { next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, `"FILE"`) }, want: "placeholder"},
+		{name: "NUL argument", mutate: func(next *Next) { next.Variants[0].BaseArgv[3] = "run\x00id" }, want: "without NUL"},
 		{name: "invalid flag", mutate: func(next *Next) {
 			next.Variants[0].Inputs = []NextInput{{Name: "value", Type: NextInputString, Flag: "-v"}}
 		}, want: "invalid flag"},
@@ -325,6 +326,7 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 		{name: "resume rejects missing flag value", mutate: func(next *Next) {
 			next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "--source-file")
 		}, want: "requires a value"},
+		{name: "unknown resume variant", mutate: func(next *Next) { next.Variants[0].ID = "resume" }, want: "unsupported variant id"},
 		{name: "skip action grammar mismatch", mutate: func(next *Next) { next.Variants[0].ID = "skip-action" }, want: "_machine skip"},
 		{name: "skip action rejects extra argv", mutate: func(next *Next) {
 			next.Variants[0].ID = "skip-action"
@@ -348,6 +350,87 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 			assert.Contains(t, err.Error(), test.want)
 		})
 	}
+}
+
+func TestNextValidationRejectsUnsafeOptionCombinations(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	digest := "sha256:" + strings.Repeat("a", 64)
+	tests := []struct {
+		name      string
+		operation NextOperation
+		argv      []string
+		inputs    []NextInput
+		want      string
+	}{
+		{
+			name: "destructive confirmation without scope", operation: NextOperationAnswer,
+			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive"},
+			inputs: []NextInput{}, want: "together",
+		},
+		{
+			name: "scope without destructive confirmation", operation: NextOperationAnswer,
+			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--scope-sha256", digest},
+			inputs: []NextInput{}, want: "together",
+		},
+		{
+			name: "invalid destructive scope digest", operation: NextOperationAnswer,
+			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive", "--scope-sha256", "sha256:BAD"},
+			inputs: []NextInput{}, want: "lowercase sha256",
+		},
+		{
+			name: "zero resume budget", operation: NextOperationResume,
+			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "0"},
+			inputs: []NextInput{}, want: "positive base-10",
+		},
+		{
+			name: "zero-padded resume budget", operation: NextOperationResume,
+			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "01"},
+			inputs: []NextInput{}, want: "canonical positive base-10",
+		},
+		{
+			name: "oversized resume budget", operation: NextOperationResume,
+			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "1001"},
+			inputs: []NextInput{}, want: "no greater than 1000",
+		},
+		{
+			name: "nonnumeric start budget", operation: NextOperationStart,
+			argv:   []string{"slipway", "run", "--budget", "many", "--json", "--root", workspace, "--", "goal"},
+			inputs: []NextInput{}, want: "positive base-10",
+		},
+		{
+			name: "zero-padded start budget", operation: NextOperationStart,
+			argv:   []string{"slipway", "run", "--budget", "01", "--json", "--root", workspace, "--", "goal"},
+			inputs: []NextInput{}, want: "canonical positive base-10",
+		},
+		{
+			name: "oversized start budget", operation: NextOperationStart,
+			argv:   []string{"slipway", "run", "--budget", "1001", "--json", "--root", workspace, "--", "goal"},
+			inputs: []NextInput{}, want: "no greater than 1000",
+		},
+		{
+			name: "wrong start source type", operation: NextOperationStart,
+			argv:   []string{"slipway", "run", "--budget", "4", "--json", "--root", workspace, "--", "goal"},
+			inputs: []NextInput{{Name: "source_file", Type: NextInputString, Flag: "--source-file", Required: true}}, want: "required path",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := NewCommandNext(test.operation, workspace, "retry", test.argv, test.inputs)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.want)
+		})
+	}
+	_, err := NewCommandNext(
+		NextOperationStart,
+		workspace,
+		"retry-run",
+		[]string{"slipway", "run", "--budget", "1000", "--json", "--root", workspace, "--", "goal"},
+		nil,
+	)
+	require.NoError(t, err)
 }
 
 func cloneNextForTest(next Next) Next {

@@ -187,7 +187,7 @@ func TestStatusListMarksForeignWorkspaceRunsWithoutReplayingThem(t *testing.T) {
 
 	stdout, stderr, err := executeForTest(t, "status", "--root", repository, "--json")
 	require.NoError(t, err, stderr)
-	listed := exactJSONObject(t, stdout, "contract_version", "runs")
+	listed := exactJSONObject(t, stdout, "contract_version", "runs", "unavailable_runs")
 	listedRuns := rawJSONArray(t, listed, "runs")
 	require.Len(t, listedRuns, 1)
 	exactRawJSONObject(
@@ -198,6 +198,7 @@ func TestStatusListMarksForeignWorkspaceRunsWithoutReplayingThem(t *testing.T) {
 	var output statusListOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &output))
 	require.Len(t, output.Runs, 1)
+	assert.Empty(t, output.UnavailableRuns)
 	foreign := output.Runs[0]
 	assert.Equal(t, started.RunID, foreign.ID)
 	assert.True(t, foreign.WorkspaceForeign)

@@ -27,7 +27,7 @@ Slipway adds a small, user-controlled workflow around an AI coding host. Start w
 - [Architecture](explanation/architecture.md) — process boundaries, packages, storage, and trust boundaries.
 - [Development reference](contributing.md) — repository layout and verification.
 - [Contributing](../../CONTRIBUTING.md) — pull-request workflow.
-- [Acceptance suite](../../acceptance/README.md) — executable and manual behavior checks.
+- [Acceptance suite](../../tests/acceptance/README.md) — executable and manual behavior checks.
 - [Architecture decisions](../../adr/README.md) — historical rationale, kept outside user documentation.
 
 The three language trees describe the same product. Exact machine field shapes live in the language-neutral JSON schemas; no translation is treated as a separate product contract.

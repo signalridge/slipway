@@ -209,6 +209,35 @@ func TestExistingRunOperationsRecreateMissingLockAfterReadOnlyValidation(t *test
 	assert.True(t, lockInfo.Mode().IsRegular())
 }
 
+func TestOpenReadOnlyRejectsMutationsAndDoesNotCreateLocks(t *testing.T) {
+	repository := createRepository(t)
+	writable, err := Open(repository)
+	require.NoError(t, err)
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, writable.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(writable.CommonDir(), "run-one")
+	require.NoError(t, err)
+	require.NoError(t, writable.Close())
+	require.NoError(t, os.Remove(paths.LockFile))
+
+	store, err := OpenReadOnly(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	require.NoError(t, store.Visit("run-one", func(Event) error { return nil }))
+	_, statErr := os.Lstat(paths.LockFile)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+
+	err = store.Create("run-two", event, map[string]string{"state": "active"})
+	assert.ErrorIs(t, err, ErrReadOnly)
+	err = store.UpdateStream("run-one", func(Event) error { return nil }, func() ([]Event, any, error) {
+		return nil, nil, nil
+	})
+	assert.ErrorIs(t, err, ErrReadOnly)
+	err = store.PutMaterials("run-one", nil)
+	assert.ErrorIs(t, err, ErrReadOnly)
+}
+
 func TestJournalIgnoresOnlyAnInterruptedFinalRecord(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "journal.jsonl")
 	first, err := NewEvent("first", map[string]int{"value": 1})

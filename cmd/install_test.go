@@ -93,6 +93,11 @@ func TestInstallSurfaceValidationIsAUsageError(t *testing.T) {
 			require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
 			assert.Equal(t, "invalid_adapter_surface", cliErr.Code)
 			assert.Equal(t, exitCodeUsage, cliErr.ExitCode)
+			assert.Equal(t, autopilot.NextOperationCommand, cliErr.Next.Operation)
+			require.Len(t, cliErr.Next.Variants, 1)
+			assert.Equal(t, "install-kiro", cliErr.Next.Variants[0].ID)
+			require.Len(t, cliErr.Next.Variants[0].Inputs, 1)
+			assert.Equal(t, []string{"ide", "cli"}, cliErr.Next.Variants[0].Inputs[0].Choices)
 		})
 	}
 }

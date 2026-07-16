@@ -12,6 +12,8 @@ slipway status <run-id> --json
 
 省略 ID 时，`status` 扫描仓库的 Git common directory。属于当前 worktree 的 Run 会完整 replay；由另一个 linked worktree 创建的 Run 只显示标记为 `workspace_foreign` 的只读 header stub，必须回到其 owning worktree 才能检查或恢复完整内容。
 
+检查不会创建 recovery directory 或 lock，也不会修复 journal byte。若本地 Run 无法安全 replay，列表 JSON 会在 `unavailable_runs` 中保留其 ID 和诊断，而不是将其隐藏；应先检查或恢复 journal，再尝试 mutation。
+
 指定 ID 后，status 包含当前状态和实时派生的结构化 `next` 操作。生成的宿主遵循该对象，而不是解析显示用 shell command。
 
 ## Stop、skip 与 resume
@@ -20,7 +22,7 @@ slipway status <run-id> --json
 slipway stop <run-id>
 ```
 
-`stop` 使 pending work 失效，但保留 journal。省略 ID 时会统计列出的所有 active/paused entry。`workspace_foreign` stub 可能让选择变得歧义，或导致 workspace-mismatch error，因此在 linked-worktree 仓库中应从 owning worktree 显式传入 ID。Stopped Run 可以 resume；ended Run 不可以。
+`stop` 使 pending work 失效，但保留 journal。省略 ID 时会统计列出的本地 active/paused entry，排除 `workspace_foreign` stub；若任何本地 recovery directory 无法读取，则要求显式 ID。Stopped Run 可以 resume；ended Run 不可以。
 
 Skip 是 Action 级控制，不需要理由。调整顺序或接管会停止自动循环，而不是静默改写队列；只有显式 resume 后才继续。
 

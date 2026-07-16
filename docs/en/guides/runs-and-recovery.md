@@ -12,6 +12,8 @@ slipway status <run-id> --json
 
 Without an ID, `status` scans the repository's Git common directory. Runs owned by the current worktree are replayed fully. Runs created by another linked worktree appear as read-only header stubs marked `workspace_foreign`; inspect or resume them from their owning worktree.
 
+Inspection never creates recovery directories or locks and never repairs journal bytes. If a local Run cannot be replayed safely, list JSON preserves its ID and diagnostic in `unavailable_runs` instead of hiding it; inspect or restore the journal before attempting mutation.
+
 With an ID, the status includes the current state and a freshly derived structured `next` operation. Generated hosts follow that object instead of parsing a displayed shell command.
 
 ## Stop, skip, and resume
@@ -20,7 +22,7 @@ With an ID, the status includes the current state and a freshly derived structur
 slipway stop <run-id>
 ```
 
-`stop` invalidates pending work but keeps the journal. Omitting the ID counts all listed active or paused entries. A `workspace_foreign` stub can make that selection ambiguous or lead to a workspace-mismatch error, so use an explicit ID from the owning worktree in linked-worktree repositories. A stopped Run may be resumed; an ended Run may not.
+`stop` invalidates pending work but keeps the journal. Omitting the ID counts listed active or paused local entries, excludes `workspace_foreign` stubs, and requires an explicit ID if any local recovery directory is unreadable. A stopped Run may be resumed; an ended Run may not.
 
 Skip is an Action-level control and never requires a reason. Reordering or taking over stops the automatic loop rather than silently rewriting a queue. Work continues only after an explicit resume.
 

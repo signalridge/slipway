@@ -201,6 +201,14 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", defaultErrorNext())
 			}
+			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
+			if confirmDestructive != (strings.TrimSpace(scopeSHA256) != "") {
+				return newUsageError(
+					"destructive_confirmation_pair_required",
+					"confirm-destructive and a non-empty scope-sha256 must be provided together",
+					recoveryNext,
+				)
+			}
 			service, err := openAutopilot(*root)
 			if err != nil {
 				return err
@@ -281,9 +289,10 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			if args[0] == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
 			}
+			recoveryNext := statusInspectionNextForRawRoot(*root, args[0])
 			if budgetSet {
 				if err := autopilot.ValidateBudget(budget); err != nil {
-					return newUsageError("invalid_budget", err.Error(), defaultErrorNext())
+					return newUsageError("invalid_budget", err.Error(), recoveryNext)
 				}
 			}
 			var replacementBudget *int
@@ -292,13 +301,13 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 				replacementBudget = &replacement
 			}
 			if sourceFileSet && sourceFile == "" {
-				return newUsageError("source_file_required", "source-file cannot be empty", defaultErrorNext())
+				return newUsageError("source_file_required", "source-file cannot be empty", recoveryNext)
 			}
 			if choiceSet != candidateSet || (candidateSet && candidateID == "") {
-				return newUsageError("source_choice_requires_candidate", "source-choice and candidate must be provided together", defaultErrorNext())
+				return newUsageError("source_choice_requires_candidate", "source-choice and candidate must be provided together", recoveryNext)
 			}
 			if choiceSet && sourceChoice != string(autopilot.SourceChoicePinned) && sourceChoice != string(autopilot.SourceChoiceAdopt) {
-				return newUsageError("invalid_source_choice", "source-choice must be pinned or adopt", defaultErrorNext())
+				return newUsageError("invalid_source_choice", "source-choice must be pinned or adopt", recoveryNext)
 			}
 			modeCount := 0
 			if sourceFileSet {
@@ -311,7 +320,7 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 				modeCount++
 			}
 			if modeCount > 1 {
-				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", defaultErrorNext())
+				return newUsageError("source_mode_conflict", "source-file, use-pinned-source, and source-choice are mutually exclusive", recoveryNext)
 			}
 
 			workspace, err := resolveRoot(*root)
@@ -359,6 +368,23 @@ func openAutopilot(root string) (*autopilot.Service, error) {
 		return nil, err
 	}
 	return openAutopilotResolved(resolved)
+}
+
+func openAutopilotReadOnly(root string) (*autopilot.Service, error) {
+	resolved, err := resolveRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	service, err := autopilot.OpenServiceReadOnly(resolved)
+	if err != nil {
+		return nil, newRuntimeError(
+			"runstore_unavailable",
+			err.Error(),
+			inputlessCommandNext(resolved, "run-doctor", "slipway", "doctor", "--root", resolved),
+			nil,
+		)
+	}
+	return service, nil
 }
 
 func openAutopilotResolved(resolved string) (*autopilot.Service, error) {

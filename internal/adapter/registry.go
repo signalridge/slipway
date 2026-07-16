@@ -37,7 +37,7 @@ func (err *UnknownHostSelectionError) Error() string {
 var hosts = []Host{
 	{ID: "claude", SkillsDir: ".claude/skills", SurfaceKind: "skill", OwnershipRoot: ".claude", DetectPaths: []string{".claude"}},
 	{ID: "codex", SkillsDir: ".codex/skills", SurfaceKind: "skill", OwnershipRoot: ".codex", DetectPaths: []string{".codex"}},
-	{ID: "copilot", SkillsDir: ".github/skills", SurfaceKind: "copilot_agent", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/copilot", ".github/prompts", ".github/skills"}},
+	{ID: "copilot", SkillsDir: ".github/agents", SurfaceKind: "copilot_agent", OwnershipRoot: ".github/copilot", DetectPaths: []string{".github/agents", ".github/copilot", ".github/prompts", ".github/skills"}},
 	{ID: "cursor", SkillsDir: ".cursor/skills", SurfaceKind: "skill", OwnershipRoot: ".cursor", DetectPaths: []string{".cursor"}},
 	{ID: "kilo", SkillsDir: ".kilocode/skills", SurfaceKind: "kilo_command", OwnershipRoot: ".kilocode", DetectPaths: []string{".kilocode"}},
 	{ID: "kiro", SkillsDir: ".kiro/skills", SurfaceKind: "", OwnershipRoot: ".kiro", DetectPaths: []string{".kiro"}},

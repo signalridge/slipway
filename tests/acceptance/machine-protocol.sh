@@ -348,9 +348,10 @@ import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
-assert set(report) == {"contract_version", "runs"}, report
+assert set(report) == {"contract_version", "runs", "unavailable_runs"}, report
 assert report["contract_version"] == 2, report
 assert report["runs"] == [], report
+assert report["unavailable_runs"] == [], report
 PY
 START="$TMP_ROOT/start.json"
 "$BIN" run 'acceptance lifecycle' --root "$REPO" --budget 12 --json > "$START"
@@ -421,8 +422,34 @@ IMPLEMENT2="$TMP_ROOT/implement2.json"
 assert_action "$IMPLEMENT2" implement
 IMPLEMENT2_ID=$(json_get "$IMPLEMENT2" action.action_id)
 printf 'implementation change\n' >> "$REPO/README.md"
+FAILED_ACTIVITY_OUTPUT="$TMP_ROOT/failed-activity-output.txt"
+FAILED_ACTIVITY_COMMAND="sh -c 'printf deterministic-failure >&2; exit 17'"
+set +e
+sh -c 'printf deterministic-failure >&2; exit 17' > "$FAILED_ACTIVITY_OUTPUT" 2>&1
+FAILED_ACTIVITY_EXIT=$?
+set -e
+[ "$FAILED_ACTIVITY_EXIT" -eq 17 ] || fail "deterministic failing activity returned $FAILED_ACTIVITY_EXIT"
+FAILED_ACTIVITY_SUMMARY=$(cat "$FAILED_ACTIVITY_OUTPUT")
+[ "$FAILED_ACTIVITY_SUMMARY" = 'deterministic-failure' ] || fail 'deterministic failing activity output changed'
+FAILED_ACTIVITY_EXTRA=$(python3 -I - "$FAILED_ACTIVITY_COMMAND" "$FAILED_ACTIVITY_EXIT" "$FAILED_ACTIVITY_SUMMARY" <<'PY'
+import json
+import sys
+
+command, exit_code, summary = sys.argv[1:]
+print(json.dumps({
+    "implementation_result": "applied",
+    "files_changed": [],
+    "activities": [{
+        "kind": "test",
+        "command": command,
+        "exit_code": int(exit_code),
+        "summary": summary,
+    }],
+}, separators=(",", ":")))
+PY
+)
 IMPLEMENT2_OUTCOME="$TMP_ROOT/implement2-outcome.json"
-make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report preserved a signal-style test exit.' '{"implementation_result":"applied","files_changed":[],"activities":[{"kind":"test","command":"killed-test-process","exit_code":-1,"summary":"terminated by signal before an exit status was available"}]}'
+make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report preserved a real non-zero test exit.' "$FAILED_ACTIVITY_EXTRA"
 REVIEW="$TMP_ROOT/review.json"
 "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$IMPLEMENT2_ID" --outcome-file "$IMPLEMENT2_OUTCOME" > "$REVIEW"
 assert_action "$REVIEW" review
@@ -446,7 +473,7 @@ with open(sys.argv[1], encoding="utf-8") as stream:
     data = json.load(stream)
 assert "observed_since_start: the current Git observation differs from the run-start snapshot." in data["summary"], data
 assert "attribution_uncertainty: concurrent user edits, another Run, or tools may have contributed" in data["summary"], data
-assert "- test: killed-test-process (exit -1): terminated by signal before an exit status was available" in data["summary"], data
+assert "- test: sh -c 'printf deterministic-failure >&2; exit 17' (exit 17): deterministic-failure" in data["summary"], data
 PY
 FINAL_STATUS="$TMP_ROOT/final-status.json"
 "$BIN" status "$RUN_ID" --root "$REPO" --json > "$FINAL_STATUS"
@@ -461,12 +488,12 @@ assert len(records) == 1, records
 activity = records[0]["outcome"]["implementation"]["activities"][0]
 assert activity == {
     "kind": "test",
-    "command": "killed-test-process",
-    "exit_code": -1,
-    "summary": "terminated by signal before an exit status was available",
+    "command": "sh -c 'printf deterministic-failure >&2; exit 17'",
+    "exit_code": 17,
+    "summary": "deterministic-failure",
 }, activity
 assert run["activities"] == [activity], run["activities"]
-assert "exit -1" in run["summary"], run["summary"]
+assert "exit 17" in run["summary"], run["summary"]
 PY
 ENDED_REPLAY="$TMP_ROOT/ended-replay.json"
 "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED_REPLAY"
@@ -598,7 +625,7 @@ make_outcome "$BUDGET_OUTCOME" "$BUDGET_ORIENT" orient completed 'Oriented at bu
 BUDGET_PAUSED="$TMP_ROOT/budget-paused.json"
 "$BIN" _machine submit --root "$BUDGET_REPO" --run "$BUDGET_RUN" --action "$BUDGET_ORIENT" --outcome-file "$BUDGET_OUTCOME" > "$BUDGET_PAUSED"
 assert_state "$BUDGET_PAUSED" paused budget_exhausted resume-ad-hoc
-expect_error 2 invalid_budget none "$BIN" _machine resume "$BUDGET_RUN" --root "$BUDGET_REPO" --budget 0
+expect_error 2 invalid_budget inspect-run "$BIN" _machine resume "$BUDGET_RUN" --root "$BUDGET_REPO" --budget 0
 BUDGET_RESUMED="$TMP_ROOT/budget-resumed.json"
 "$BIN" _machine resume "$BUDGET_RUN" --root "$BUDGET_REPO" > "$BUDGET_RESUMED"
 assert_action "$BUDGET_RESUMED" orient

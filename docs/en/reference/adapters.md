@@ -17,7 +17,7 @@ The table describes generated files and intended invocation. External host behav
 | --- | --- | --- |
 | `claude` | `.claude/skills/slipway-*/SKILL.md` | Invoke the `slipway-<name>` skill. |
 | `codex` | `.codex/skills/slipway-*/SKILL.md` plus per-skill `agents/openai.yaml` | `$slipway-<name>` |
-| `copilot` | `.github/copilot/agents/slipway-<name>.agent.md` | Select the custom agent. |
+| `copilot` | `.github/agents/slipway-<name>.agent.md` | Select the custom agent. |
 | `cursor` | `.cursor/skills/slipway-*/SKILL.md` | Invoke the `slipway-<name>` skill. |
 | `kilo` | `.kilo/commands/slipway-<name>.md` plus `.kilocode/slipway/capabilities/` | `/slipway-<name>` |
 | `kiro` IDE | `.kiro/steering/slipway-<name>.md` plus `.kiro/slipway/capabilities/` | Manually include `#slipway-<name>`. |

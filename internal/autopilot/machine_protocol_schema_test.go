@@ -71,7 +71,7 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 		schemaStrings(t, schemaMap(t, definitions, "doctorCheck"), "required"),
 	)
 	assert.ElementsMatch(t,
-		[]string{"contract_version", "runs"},
+		[]string{"contract_version", "runs", "unavailable_runs"},
 		schemaStrings(t, schemaMap(t, definitions, "statusList"), "required"),
 	)
 
@@ -131,7 +131,7 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 		"contract_version": ContractVersion, "code": "invalid_usage", "message": "invalid", "next": next, "exit_code": 2,
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "statusList"), marshalTestJSON(t, map[string]any{
-		"contract_version": ContractVersion, "runs": []any{},
+		"contract_version": ContractVersion, "runs": []any{}, "unavailable_runs": []any{},
 	}))
 	var runObject map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(marshalTestJSON(t, runFixture), &runObject))
@@ -303,6 +303,33 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 		)}},
 		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "goal")}},
 		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "status", "--root", "/workspace")}},
+		{"operation": "action", "workspace_identity": workspaceID, "variants": []any{variant(
+			"submit-outcome-stdin", "slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--outcome-stdin", "--extra",
+		)}},
+		{"operation": "answer", "workspace_identity": workspaceID, "variants": []any{variant(
+			"confirm-destructive", "slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--confirm-destructive",
+		)}},
+		{"operation": "resume", "workspace_identity": workspaceID, "variants": []any{variant(
+			"resume-ad-hoc", "slipway", "_machine", "resume", "run-1", "--root", "/workspace", "--budget", "1",
+		)}},
+		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant(
+			"retry-run", "slipway", "run", "--budget", "0", "--json", "--root", "/workspace", "--", "goal",
+		)}},
+		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant(
+			"inspect", "slipway", "status", "--root", "/workspace", "<file>",
+		)}},
+		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant(
+			"inspect", "slipway", "status", "--root", "/workspace", "<line\nbreak>",
+		)}},
+		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant(
+			"inspect", "slipway", "status", "--root", "/work\x00space",
+		)}},
+		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant(
+			"retry-run", "slipway", "run", "--budget", "01", "--json", "--root", "/workspace", "--", "goal",
+		)}},
+		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant(
+			"retry-run", "slipway", "run", "--budget", "1001", "--json", "--root", "/workspace", "--", "goal",
+		)}},
 	}
 	for _, fixture := range invalid {
 		require.Error(t, nextSchema.Validate(machineSchemaValue(t, fixture)))
@@ -313,7 +340,20 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 	})))
 	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
 		"operation": "start", "workspace_identity": workspaceID,
+		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "1000", "--json", "--root", "/workspace", "--", "goal")},
+	})))
+	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
+		"operation": "start", "workspace_identity": workspaceID,
 		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "--")},
+	})))
+	refreshWithBudget := variant(
+		"refresh-source", "slipway", "_machine", "resume", "run-1", "--root", "/workspace", "--budget", "9",
+	)
+	refreshWithBudget["inputs"] = []any{map[string]any{
+		"name": "source_file", "type": "path", "flag": "--source-file", "required": true,
+	}}
+	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
+		"operation": "resume", "workspace_identity": workspaceID, "variants": []any{refreshWithBudget},
 	})))
 
 	stateSchema := compileMachineSchemaDefinition(t, "protocolState")

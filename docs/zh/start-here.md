@@ -7,7 +7,7 @@
 本文档描述的接口有七个公开命令：
 
 ```bash
-slipway --help
+./slipway --help
 ```
 
 输出必须包含 `install`、`uninstall`、`list`、`doctor`、`run`、`status` 和 `stop`。若没有，说明已安装的软件包属于旧版本。请构建当前 checkout 或选择更新且兼容的 tag，详见[安装](installation.md)。
@@ -17,14 +17,14 @@ slipway --help
 在 AI 宿主将要工作的 Git worktree 中执行：
 
 ```bash
-slipway install --tool claude
-slipway doctor
+./slipway install --tool claude
+./slipway doctor
 ```
 
 可将 `claude` 替换为 `codex`、`copilot`、`cursor`、`kilo`、`opencode`、`pi`、`qwen` 或 `windsurf`。Kiro 首次安装需要指定 surface：
 
 ```bash
-slipway install --tool kiro --surface ide   # 或：--surface cli
+./slipway install --tool kiro --surface ide   # 或：--surface cli
 ```
 
 `install` 只写入宿主本地能力文件并记录 hash；不会修改全局宿主设置，也不会安装 ambient hook。生成路径见[宿主适配器](reference/adapters.md)。
@@ -40,7 +40,7 @@ slipway install --tool kiro --surface ide   # 或：--surface cli
 直接集成 CLI 的宿主可以这样启动同一个 ad-hoc Run：
 
 ```bash
-slipway run --json -- "为 reports 命令增加 CSV 导出"
+./slipway run --json -- "为 reports 命令增加 CSV 导出"
 ```
 
 该命令返回第一个 `orient` Action；CLI 本身不会修改代码。
@@ -71,9 +71,9 @@ Run 只会因以下情况暂停：
 常用检查命令：
 
 ```bash
-slipway status
-slipway status <run-id> --json
-slipway stop <run-id>
+./slipway status
+./slipway status <run-id> --json
+./slipway stop <run-id>
 ```
 
 `stop` 会保留恢复数据。Run ended 只表示 Slipway 没有更多自动 Action；测试、Review finding、仓库策略、合并审批和发布决策仍是彼此独立的事实。

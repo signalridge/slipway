@@ -15,7 +15,7 @@
 | `docs/{en,zh,ja}/` | 范围对等的用户、指南、参考与解释页面。 |
 | `docs/reference/` | 与语言无关的 JSON Schema。 |
 | `adr/` | 维护者决策历史，不属于用户文档。 |
-| `acceptance/` | Black-box script、prompt scenario 与人工 evidence procedure。 |
+| `tests/acceptance/` | Black-box script、prompt scenario 与人工 evidence procedure。 |
 | `website/` | 从 `docs/` 生成的 Starlight 网站。 |
 
 强制 package direction 见[架构](explanation/architecture.md)。
@@ -51,10 +51,10 @@ goreleaser check
 仓库 Markdown 是网站来源。除三个 locale splash page 外，不要手工编辑 `website/src/content/docs/` 下的 generated file。
 
 ```bash
-python3 -I acceptance/link_check.py --self-test
+python3 -I tests/acceptance/link_check.py --self-test
 npm --prefix website ci
 npm --prefix website run build
-python3 -I acceptance/link_check.py --require-site
+python3 -I tests/acceptance/link_check.py --require-site
 git diff --check
 ```
 
@@ -77,7 +77,7 @@ git diff --check
 | Action/Outcome routing | Autopilot contract/service test、machine shell acceptance 与 protocol docs。 |
 | Journal 或 locking | Replay/adversarial test、race suite、durability diagnostics 与 recovery docs。 |
 | Source handling | Strict parser、hash/size/identity test、source schema、Issue guide 与 privacy docs。 |
-| Adapter/template | Generator test、ownership test、`acceptance/adapters.sh` 与 adapter docs。 |
+| Adapter/template | Generator test、ownership test、`tests/acceptance/adapters.sh` 与 adapter docs。 |
 | Release channel | GoReleaser check、artifact validation 与 installation compatibility wording。 |
 | 文档 | Link checker、markdown lint、website build 与 locale parity review。 |
 

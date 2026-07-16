@@ -122,7 +122,7 @@ Run data は repository の Git common directory にある `<git-common-dir>/sli
 
 - [コントリビューション](CONTRIBUTING.md)
 - [開発リファレンス](docs/ja/contributing.md)
-- [Acceptance suite](acceptance/README.md)
+- [Acceptance suite](tests/acceptance/README.md)
 - [Architecture Decision Records](adr/README.md)
 
 ## ライセンス

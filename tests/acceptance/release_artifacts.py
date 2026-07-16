@@ -385,7 +385,7 @@ def validate(
 
 
 def main() -> int:
-    default_repo = Path(__file__).resolve().parents[1]
+    default_repo = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=default_repo)
     parser.add_argument("--dist", type=Path, default=Path("dist"))

@@ -15,7 +15,7 @@
 | `docs/{en,zh,ja}/` | 同等の範囲を持つ user、guide、reference、explanation page。 |
 | `docs/reference/` | Language-neutral な JSON Schema。 |
 | `adr/` | メンテナー向け decision history。User docs ではない。 |
-| `acceptance/` | Black-box script、prompt scenario、manual evidence procedure。 |
+| `tests/acceptance/` | Black-box script、prompt scenario、manual evidence procedure。 |
 | `website/` | `docs/` から生成される Starlight site。 |
 
 強制される package direction は[アーキテクチャ](explanation/architecture.md)にあります。
@@ -51,10 +51,10 @@ goreleaser check
 Repository Markdown が website の source です。3つの locale splash page を除き、`website/src/content/docs/` 配下の generated file を手動で編集しないでください。
 
 ```bash
-python3 -I acceptance/link_check.py --self-test
+python3 -I tests/acceptance/link_check.py --self-test
 npm --prefix website ci
 npm --prefix website run build
-python3 -I acceptance/link_check.py --require-site
+python3 -I tests/acceptance/link_check.py --require-site
 git diff --check
 ```
 
@@ -77,7 +77,7 @@ Documentation の規則：
 | Action/Outcome routing | Autopilot contract/service test、machine shell acceptance、protocol docs。 |
 | Journal や locking | Replay/adversarial test、race suite、durability diagnostics、recovery docs。 |
 | Source handling | Strict parser、hash/size/identity test、source schema、Issue guide、privacy docs。 |
-| Adapter/template | Generator test、ownership test、`acceptance/adapters.sh`、adapter docs。 |
+| Adapter/template | Generator test、ownership test、`tests/acceptance/adapters.sh`、adapter docs。 |
 | Release channel | GoReleaser check、artifact validation、installation compatibility wording。 |
 | Documentation | Link checker、markdown lint、website build、locale parity review。 |
 

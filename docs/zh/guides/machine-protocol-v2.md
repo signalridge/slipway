@@ -2,7 +2,7 @@
 
 本教程执行一次完整的本地协议生命周期：启动 Run，提交 Orient 与 Implement Outcome，最后以 Summarize 结束。本文面向宿主与适配器作者。通常由生成的宿主 capability 执行这些隐藏操作；它们不是供终端用户使用的另一套工作流。
 
-规范契约是带版本路径的 [machine protocol schema](../../reference/v2/machine-protocol.schema.json) 与 [source envelope schema](../../reference/v2/source-envelope.schema.json)。URL 中的版本必须与 JSON 的 `contract_version` 或 `source_version` 同步。原有无版本 schema URL 继续作为 v2 兼容别名，但新集成应使用 `/reference/v2/`。
+规范契约是带版本路径的 [machine protocol schema](../../reference/v2/machine-protocol.schema.json) 与 [source envelope schema](../../reference/v2/source-envelope.schema.json)。URL 中的版本必须与 JSON 的 `contract_version` 或 `source_version` 同步；项目有意不发布无版本兼容别名。
 
 ## 前置条件
 

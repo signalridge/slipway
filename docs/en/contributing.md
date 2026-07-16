@@ -15,7 +15,7 @@ This page supplements the root [Contributing guide](../../CONTRIBUTING.md) with 
 | `docs/{en,zh,ja}/` | Equivalent user, guide, reference, and explanation pages. |
 | `docs/reference/` | Language-neutral JSON schemas. |
 | `adr/` | Maintainer decision history; not user documentation. |
-| `acceptance/` | Black-box scripts, prompt scenarios, and manual evidence procedures. |
+| `tests/acceptance/` | Black-box scripts, prompt scenarios, and manual evidence procedures. |
 | `website/` | Starlight site generated from `docs/`. |
 
 The enforced package direction is documented in [Architecture](explanation/architecture.md).
@@ -51,10 +51,10 @@ goreleaser check
 Repository Markdown is the source for the website. Generated files below `website/src/content/docs/` must not be edited, except the three locale splash pages.
 
 ```bash
-python3 -I acceptance/link_check.py --self-test
+python3 -I tests/acceptance/link_check.py --self-test
 npm --prefix website ci
 npm --prefix website run build
-python3 -I acceptance/link_check.py --require-site
+python3 -I tests/acceptance/link_check.py --require-site
 git diff --check
 ```
 
@@ -77,7 +77,7 @@ Documentation rules:
 | Action/Outcome routing | Autopilot contract/service tests, machine shell acceptance, and protocol docs. |
 | Journals or locking | Replay/adversarial tests, race suite, durability diagnostics, and recovery docs. |
 | Source handling | Strict parser, hash/size/identity tests, source schema, Issue guide, and privacy docs. |
-| Adapters/templates | Generator tests, ownership tests, `acceptance/adapters.sh`, and adapter docs. |
+| Adapters/templates | Generator tests, ownership tests, `tests/acceptance/adapters.sh`, and adapter docs. |
 | Release channels | GoReleaser checks, artifact validation, and installation compatibility wording. |
 | Documentation | Link checker, markdown lint, website build, and locale parity review. |
 

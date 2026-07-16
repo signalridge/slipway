@@ -49,8 +49,15 @@ func TestAsCLIErrorReportsMutationCommitStateWithoutRetry(t *testing.T) {
 			actual := asCLIError(test.err)
 			require.NotNil(t, actual)
 			assert.Equal(t, test.code, actual.Code)
-			assert.Equal(t, autopilot.NextOperationNone, actual.Next.Operation)
-			assert.Empty(t, actual.Next.Variants)
+			if test.err.Committed || test.err.Ambiguous {
+				assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation)
+				require.Len(t, actual.Next.Variants, 1)
+				assert.Equal(t, "inspect-runs", actual.Next.Variants[0].ID)
+				assert.Contains(t, actual.Next.Variants[0].BaseArgv, "status")
+			} else {
+				assert.Equal(t, autopilot.NextOperationNone, actual.Next.Operation)
+				assert.Empty(t, actual.Next.Variants)
+			}
 			assert.Equal(t, test.err.Committed, actual.Details["committed"])
 			assert.Equal(t, test.err.ProjectionStale, actual.Details["projection_stale"])
 			if test.err.Committed || test.err.Ambiguous {
@@ -74,7 +81,7 @@ func TestAsCLIErrorJournalRecordLimitOffersRecoverableNext(t *testing.T) {
 		assert.Equal(t, "journal_record_too_large", actual.Code)
 		assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation, "limit error must not surface as terminal none")
 		require.NotEmpty(t, actual.Next.Variants)
-		assert.Equal(t, "inspect-run", actual.Next.Variants[0].ID)
+		assert.Equal(t, "inspect-runs", actual.Next.Variants[0].ID)
 		assert.Contains(t, actual.Next.Variants[0].BaseArgv, "status")
 	}
 }

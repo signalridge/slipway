@@ -24,13 +24,20 @@ func makeStopCmd() *cobra.Command {
 			if len(args) == 1 {
 				runID = args[0]
 			} else {
-				runs, err := service.List()
+				runs, unavailable, err := service.ListRecovery()
 				if err != nil {
 					return err
 				}
+				if len(unavailable) > 0 {
+					return newUsageError(
+						"run_id_required",
+						fmt.Sprintf("stop requires an explicit run id while %d recovery directories are unavailable", len(unavailable)),
+						inputlessCommandNext(service.RepositoryRoot(), "list-runs", "slipway", "status", "--root", service.RepositoryRoot()),
+					)
+				}
 				candidates := make([]autopilot.Run, 0, len(runs))
 				for _, run := range runs {
-					if run.State == autopilot.RunActive || run.State == autopilot.RunPaused {
+					if !run.WorkspaceForeign && (run.State == autopilot.RunActive || run.State == autopilot.RunPaused) {
 						candidates = append(candidates, run)
 					}
 				}

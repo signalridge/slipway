@@ -49,9 +49,10 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 	emptyStatusJSON, stderr, err := executeForTest(t, "status", "--root", emptyRepository, "--json")
 	require.NoError(t, err, stderr)
 	assertMachineSchemaOutput(t, "statusList", emptyStatusJSON)
-	emptyStatus := exactJSONObject(t, emptyStatusJSON, "contract_version", "runs")
+	emptyStatus := exactJSONObject(t, emptyStatusJSON, "contract_version", "runs", "unavailable_runs")
 	assertContractVersion(t, emptyStatus)
 	assert.Empty(t, rawJSONArray(t, emptyStatus, "runs"))
+	assert.Empty(t, rawJSONArray(t, emptyStatus, "unavailable_runs"))
 
 	doctorJSON := executeDoctorWithRunner(t, repository, &fakeDoctorCommandRunner{
 		pathErr: errors.New("not found"), bounded: true,

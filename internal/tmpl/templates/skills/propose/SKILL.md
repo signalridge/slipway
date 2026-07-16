@@ -8,9 +8,10 @@ disable-model-invocation: true
 
 Use this capability only when the user explicitly asks to propose or publish a Slipway Issue. It may use the current conversation directly; it does not require a prior Clarify session and must not start implementation.
 
-Choose the smallest coherent level:
+Choose the coherent level without fragmenting implementation steps:
 
-- one independently deliverable, verifiable, and reversible result becomes a Change;
+- one observable result that is independently deliverable, verifiable, and reversible, leaves a meaningful safe repository state, and roughly fits one fresh Agent context becomes a Change; when several layers are involved, keep it as a vertical slice;
+- split two results only when each can be delivered independently; keep non-deliverable implementation steps as a checklist;
 - a result that necessarily needs multiple independent deliveries becomes an Objective for later explicit decomposition.
 
 A managed Change starts with the exact first non-empty line `<!-- slipway-level: change/v2 -->`, has a `[Change]` title, exactly one `level:change` label, exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`, and one strict Issue-body manifest. Publish Outcome, Requirements, Acceptance examples, Constraints, and Non-goals as independently addressable chapter comments; each starts with its exact `<!-- slipway-section:v1 key=KEY -->` marker. The manifest's ordered entries bind each key/role/title to the comment node ID, database ID hint, and exact body digest. It must be self-contained; unreferenced discussion and a parent Objective are not runtime inheritance. `ready-for-agent` is optional navigation only.
@@ -29,7 +30,7 @@ Trust redirects and transfers only while every hop remains on `github.com`. Afte
 
 ## Objective publication: one confirmed external write
 
-An Objective is a single-stage publication. Show one preview containing the exact title, complete body, exact labels, every relation, one operation UUID, and one item UUID. Its body layout is exactly:
+An Objective is a single-stage publication. Show one preview containing the exact title, complete body, exact labels, every relation, one operation UUID, one item UUID, every pre-existing mutable target's provider identity and observed revision, and any missing-label creation with its exact name, color, and description. Its body layout is exactly:
 
 ```markdown
 <!-- slipway-level: objective/v1 -->
@@ -40,18 +41,18 @@ An Objective is a single-stage publication. Show one preview containing the exac
 ...
 ```
 
-After one current external-write confirmation for that exact preview, refetch mutable relation targets and create the Objective with a private temporary body file (for example, `gh issue create --body-file FILE`), never a POSIX heredoc. On timeout-after-success or another ambiguous response, reconcile the exact operation/item marker pair through a paginated non-search Issue API before any retry. Then perform a complete readback of identity, URL, exact title/full body and digest, both markers, labels, and relations, reporting each write as `created`, `matched`, `failed`, or `ambiguous`. Objective publication creates no chapter comments or manifest, asks for no second commit confirmation, and never starts Implement.
+After one current external-write confirmation for that exact preview, refetch every mutable relation/label target and stop for a new preview if any approved revision drifted. Create every Issue or comment body with a private temporary body file or an equivalent cross-platform safe input path (for example, `gh issue create --body-file FILE`), never a POSIX heredoc. On timeout-after-success or another ambiguous response, reconcile the exact operation/item marker pair through a paginated non-search Issue API before any retry. Then perform a complete readback of identity, URL, exact title/full body and digest, both markers, labels, and relations, reporting each write as `created`, `matched`, `failed`, or `ambiguous`. Objective publication creates no chapter comments or manifest, asks for no second commit confirmation, and never starts Implement.
 
 ## Change publication: two confirmed phases
 
-A Change retains two confirmed phases because remote comment IDs do not exist before creation. First show every complete chapter draft and a draft-resource plan containing one operation UUID, one stable item UUID, target repository, exact comment body digests, intended section order/roles, exact labels, parent/dependencies, and expected parent requirements revision. Confirm creation of non-authoritative drafts. A new Change draft body contains only these receipt markers and no `change/v2` level marker:
+A Change retains two confirmed phases because remote comment IDs do not exist before creation. First show every complete chapter draft and a draft-resource plan containing one operation UUID, one stable item UUID, target repository, exact comment body digests, intended section order/roles, exact labels, parent/dependencies, every pre-existing mutable target's provider identity and observed revision, the expected parent Requirements revision, and any missing-label creation with exact attributes. Confirm all non-authoritative draft and label-creation writes. A new Change draft body contains only these receipt markers and no `change/v2` level marker:
 
 ```html
 <!-- slipway-publication-operation: UUID -->
 <!-- slipway-publication-item: UUID -->
 ```
 
-For an amendment, leave the accepted body unchanged. Create chapter comments, refetch and verify IDs/bodies/visibility, then build and show the exact final manifest. Every amendment manifest, including a content-identical replacement, must set `parent_requirements_revision` to the exact expected pinned revision; an initial manifest omits it. Obtain a second current confirmation for the commit, immediately refetch and reject parent drift, then update the body last. The final body starts with the `change/v2` marker and manifest fence and retains the same receipt markers after that fence:
+For an amendment, leave the accepted body unchanged. Create every body/comment through a private body file or equivalent cross-platform safe input, never a POSIX heredoc. Refetch and verify IDs/bodies/visibility, then build and show the exact final manifest. Every amendment manifest, including a content-identical replacement, must set `parent_requirements_revision` to the exact expected pinned revision; an initial manifest omits it. Obtain a second current confirmation for the commit, immediately refetch every pre-existing mutable target and reject any approved revision drift, then update the body last. The final body starts with the `change/v2` marker and manifest fence and retains the same receipt markers after that fence:
 
 ````markdown
 <!-- slipway-level: change/v2 -->

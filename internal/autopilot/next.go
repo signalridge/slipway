@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -182,12 +183,25 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		_, outcomeFileInBase := baseOptions["--outcome-file"]
 		outcomeFileInput, outcomeFileInInputs := inputOptions["--outcome-file"]
 		_, outcomeStdin := baseOptions["--outcome-stdin"]
-		if outcomeFileInInputs && !outcomeFileInput.Required {
-			return errors.New("operation action requires the --outcome-file input to be required")
+		if outcomeFileInInputs && (!outcomeFileInput.Required || outcomeFileInput.Type != NextInputPath) {
+			return errors.New("operation action requires --outcome-file to be a required path input")
 		}
 		outcomeFile := outcomeFileInBase || outcomeFileInInputs
 		if outcomeFile == outcomeStdin {
 			return errors.New("operation action requires exactly one of --outcome-file or --outcome-stdin")
+		}
+		switch variant.ID {
+		case "submit-outcome-file":
+			if len(argv) != 9 || outcomeFileInBase || outcomeStdin ||
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "outcome_file", Type: NextInputPath, Flag: "--outcome-file", Required: true}) {
+				return errors.New("submit-outcome-file requires one required --outcome-file path input")
+			}
+		case "submit-outcome-stdin":
+			if len(argv) != 10 || !outcomeStdin || len(variant.Inputs) != 0 {
+				return errors.New("submit-outcome-stdin requires fixed --outcome-stdin argv without inputs")
+			}
+		default:
+			return fmt.Errorf("operation action has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationAnswer:
 		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "answer" ||
@@ -195,13 +209,43 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
 			return errors.New("operation answer requires exact slipway _machine answer --run RUN --action ACTION --root ROOT [--text TEXT] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
 		}
-		if _, _, err := validateNextOperationOptions(
+		baseOptions, inputOptions, err := validateNextOperationOptions(
 			"answer", variant, 9,
 			[]string{"--text", "--scope-sha256"},
 			[]string{"--confirm-destructive"},
 			[]string{"--text", "--scope-sha256"},
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		_, confirmDestructive := baseOptions["--confirm-destructive"]
+		scope, scopeInBase := baseOptions["--scope-sha256"]
+		scopeInput, scopeInInputs := inputOptions["--scope-sha256"]
+		if confirmDestructive != (scopeInBase || scopeInInputs) {
+			return errors.New("operation answer requires --confirm-destructive and --scope-sha256 together")
+		}
+		if scopeInBase && !validSHA256(scope) {
+			return errors.New("operation answer requires --scope-sha256 to be a lowercase sha256 digest")
+		}
+		if scopeInInputs && (!scopeInput.Required || scopeInput.Type != NextInputDigest) {
+			return errors.New("operation answer requires --scope-sha256 to be a required digest input")
+		}
+		if textInput, exists := inputOptions["--text"]; exists && textInput.Type != NextInputString {
+			return errors.New("operation answer requires --text to be a string input")
+		}
+		switch variant.ID {
+		case "answer-decision", "decline-or-feedback":
+			if len(argv) != 9 || confirmDestructive || scopeInBase || scopeInInputs ||
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "text", Type: NextInputString, Flag: "--text", Required: true}) {
+				return fmt.Errorf("%s requires one required --text string input", variant.ID)
+			}
+		case "confirm-destructive":
+			if len(argv) != 12 || !confirmDestructive || !scopeInBase || scopeInInputs ||
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "text", Type: NextInputString, Flag: "--text", Required: false}) {
+				return errors.New("confirm-destructive requires fixed confirmation scope argv and one optional --text string input")
+			}
+		default:
+			return fmt.Errorf("operation answer has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationResume:
 		if len(argv) < 6 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "resume" ||
@@ -218,7 +262,14 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			return err
 		}
 		_, sourceFileInBase := baseOptions["--source-file"]
-		_, sourceFileInInputs := inputOptions["--source-file"]
+		sourceFileInput, sourceFileInInputs := inputOptions["--source-file"]
+		if sourceFileInInputs && (!sourceFileInput.Required || sourceFileInput.Type != NextInputPath) {
+			return errors.New("operation resume requires --source-file to be a required path input")
+		}
+		budgetValue, budgetPresent := baseOptions["--budget"]
+		if budgetPresent && !canonicalBudgetDecimal(budgetValue) {
+			return errors.New("operation resume requires --budget to be a canonical positive base-10 integer no greater than 1000")
+		}
 		choice, sourceChoiceInBase := baseOptions["--source-choice"]
 		sourceChoiceInput, sourceChoiceInInputs := inputOptions["--source-choice"]
 		_, candidateInBase := baseOptions["--candidate"]
@@ -239,8 +290,8 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 				return errors.New("operation resume requires a source-choice input to be a required pinned/adopt enum")
 			}
 		}
-		if candidateInInputs && !candidateInput.Required {
-			return errors.New("operation resume requires a candidate input paired with source-choice to be required")
+		if candidateInInputs && (!candidateInput.Required || candidateInput.Type != NextInputString) {
+			return errors.New("operation resume requires --candidate to be a required string input")
 		}
 		modeCount := 0
 		if sourceFileInBase || sourceFileInInputs {
@@ -255,6 +306,32 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if modeCount > 1 {
 			return errors.New("operation resume allows only one source mode")
 		}
+		switch variant.ID {
+		case "resume-ad-hoc":
+			if len(argv) != 6 || modeCount != 0 || len(variant.Inputs) != 0 {
+				return errors.New("resume-ad-hoc requires fixed argv without source mode or inputs")
+			}
+		case "refresh-source":
+			if (len(argv) != 6 && len(argv) != 8) || (len(argv) == 8 && !budgetPresent) ||
+				!sourceFileInInputs || sourceFileInBase || modeCount != 1 ||
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}) {
+				return errors.New("refresh-source requires one required --source-file path input")
+			}
+		case "use-pinned-source":
+			if len(argv) != 7 || !usePinnedSource || len(variant.Inputs) != 0 {
+				return errors.New("use-pinned-source requires fixed --use-pinned-source argv without inputs")
+			}
+		case "keep-pinned":
+			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoicePinned) || !candidateInBase || len(variant.Inputs) != 0 {
+				return errors.New("keep-pinned requires fixed pinned source-choice and candidate argv")
+			}
+		case "adopt":
+			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoiceAdopt) || !candidateInBase || len(variant.Inputs) != 0 {
+				return errors.New("adopt requires fixed adopt source-choice and candidate argv")
+			}
+		default:
+			return fmt.Errorf("operation resume has unsupported variant id %q", variant.ID)
+		}
 	case NextOperationStart:
 		validWithoutReview := len(argv) == 9 && argv[0] == "slipway" && argv[2] == "--budget" && argv[4] == "--json" &&
 			argv[5] == "--root" && argv[7] == "--"
@@ -262,6 +339,29 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			argv[5] == "--root" && argv[7] == "--no-review" && argv[8] == "--"
 		if len(argv) < 2 || argv[1] != "run" || (!validWithoutReview && !validWithReviewDisabled) {
 			return errors.New("operation start requires exact slipway run --budget N --json --root ROOT [--no-review] -- GOAL grammar")
+		}
+		if !canonicalBudgetDecimal(argv[3]) {
+			return errors.New("operation start requires --budget to be a canonical positive base-10 integer no greater than 1000")
+		}
+		for _, input := range variant.Inputs {
+			if input.Flag != "--source-file" {
+				return fmt.Errorf("operation start inputs contain unsupported flag %q", input.Flag)
+			}
+			if !input.Required || input.Type != NextInputPath {
+				return errors.New("operation start requires --source-file to be a required path input")
+			}
+		}
+		switch variant.ID {
+		case "retry-run":
+			if len(variant.Inputs) != 0 {
+				return errors.New("retry-run cannot require inputs")
+			}
+		case "start-with-source":
+			if !nextInputsExactly(variant.Inputs, NextInput{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}) {
+				return errors.New("start-with-source requires one required --source-file path input")
+			}
+		default:
+			return fmt.Errorf("operation start has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationCommand:
 		if len(argv) < 2 {
@@ -322,6 +422,21 @@ func validateNextOperationOptions(
 		inputOptions[input.Flag] = input
 	}
 	return baseOptions, inputOptions, nil
+}
+
+func nextInputsExactly(inputs []NextInput, expected ...NextInput) bool {
+	if len(inputs) != len(expected) {
+		return false
+	}
+	for index := range inputs {
+		actual := inputs[index]
+		want := expected[index]
+		if actual.Name != want.Name || actual.Type != want.Type || actual.Flag != want.Flag ||
+			actual.Required != want.Required || len(actual.Choices) != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func nextSourceChoiceInputIsBounded(input NextInput) bool {
@@ -500,6 +615,19 @@ func variantWorkspaceRoot(variant NextVariant, variantIndex int) (string, error)
 	return root, nil
 }
 
+func canonicalBudgetDecimal(value string) bool {
+	if value == "" || value[0] < '1' || value[0] > '9' {
+		return false
+	}
+	for index := 1; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
+			return false
+		}
+	}
+	parsed, err := strconv.ParseUint(value, 10, 64)
+	return err == nil && parsed <= maxBudget
+}
+
 func validateWorkspaceRoot(root string) error {
 	if root == "" || !utf8.ValidString(root) || strings.IndexByte(root, 0) >= 0 || !filepath.IsAbs(root) {
 		return errors.New("next workspace root must be an absolute valid utf-8 path without NUL")
@@ -675,9 +803,7 @@ func destructiveNext(run Run) (Next, error) {
 func resumeNext(run Run) (Next, error) {
 	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
 	next := Next{Operation: NextOperationResume, WorkspaceIdentity: run.WorkspaceIdentity.ID, workspaceRoot: run.Workspace}
-	if isBudgetBlockedDestructiveGrant(run) {
-		next.Variants = []NextVariant{{ID: "replenish-destructive-budget", BaseArgv: base, Inputs: []NextInput{}}}
-	} else if run.PinnedSource == nil {
+	if run.PinnedSource == nil {
 		next.Variants = []NextVariant{{ID: "resume-ad-hoc", BaseArgv: base, Inputs: []NextInput{}}}
 	} else {
 		next.Variants = []NextVariant{

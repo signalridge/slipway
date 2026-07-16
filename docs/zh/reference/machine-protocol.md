@@ -104,6 +104,25 @@ slipway _machine submit --run RUN --action ACTION --root ROOT --outcome-stdin
 - 非暂停 Review 使用 `review` branch 并报告 finding，不建议 repair work。
 - Summary 和所有 `needs_input` Outcome 都没有 suggested Action。
 
+### 合法 Outcome 组合
+
+| Action | Host status | 必需 result branch | 允许的 pause | 允许的 suggestion |
+| --- | --- | --- | --- | --- |
+| Orient | `completed` / `partial` / `error` | `implementation=null`、`review=null` | 无 | 零或一个 Clarify、Implement 或 Summarize |
+| Orient | `needs_input` | `implementation=null`、`review=null` | decision 或 environment | 无 |
+| Clarify | `completed` / `error` | `implementation=null`、`review=null` | 无 | 零或一个 Clarify、Implement 或 Summarize |
+| Clarify | `needs_input` | `implementation=null`、`review=null` | decision 或 environment | 无 |
+| Implement | `completed` | `implementation.result=applied\|not_needed`、`review=null` | 无 | 无 |
+| Implement | `partial` | `implementation.result=partial`、`review=null` | 无 | 无 |
+| Implement | `error` | `implementation.result=unable`、`review=null` | 无 | 无 |
+| Implement | `needs_input` | `implementation=null`、`review=null` | decision、destructive 或 environment | 无 |
+| Review | `completed` | `review.result=no_findings_reported\|findings_reported`、`implementation=null` | 无 | 无 |
+| Review | `partial` | `review.result=inconclusive`、`implementation=null` | 无 | 无 |
+| Review | `error` | `review.result=error`、`implementation=null` | 无 | 无 |
+| Summarize | `completed` / `error` | `implementation=null`、`review=null` | 无 | 无 |
+
+Clarify 有意不允许 `partial`：一个 Action 只承载一个决定。Review 不能使用 `needs_input` 或建议 Implement；`not_run` 只属于 CLI 生成的 Review-skip projection。
+
 `needs_input` Outcome 只有三种 pause reason：`decision_required`、`destructive_confirmation_required`、`environment_unavailable`。`budget_exhausted` 只能由 CLI 产生。
 
 Destructive confirmation 只对精确 current Implement request 和 scope digest 有效。`yes` 等自然语言只是 feedback，不是授权。Action 变化、resume、scope 扩大或 mismatch 都会使 grant 失效。
@@ -156,7 +175,7 @@ Issue-backed resume 必须明确执行以下一种操作：
 
 Workspace identity 包含 canonical worktree root、per-worktree Git directory 与 Git common directory。每次 load 或 mutation 都会重新发现并比较这些路径，再修改 journal。
 
-Repository-wide `status` 是只读例外：其他 linked worktree 的 Run 显示为带 `workspace_foreign` 的 FirstEvent header stub，但不会在 owning worktree 外完整 replay 或 mutation。
+Repository-wide `status` 是文件系统只读的例外：不创建 namespace 或 lock、不改权限、不修复 journal byte。其他 linked worktree 的 Run 显示为带 `workspace_foreign` 的 FirstEvent header stub，且不会在 owning worktree 外完整 replay。无法读取的本地 Run directory 在列表 JSON 的 `unavailable_runs` 中保留身份；指定读取时会区分损坏与不存在。
 
 Git observation 保存 index、porcelain status 和 dirty path 的 hash 与有界 metadata，不保存文件内容。发现差异只证明 Run start 之后有变化，不能证明当前宿主造成了变化。
 

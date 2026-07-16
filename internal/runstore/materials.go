@@ -43,7 +43,18 @@ func openMaterialGuard(run *runHandle, create bool) (*materialGuard, bool, error
 	if err := run.validate(); err != nil {
 		return nil, false, err
 	}
-	root, identity, created, err := openPrivateChild(run.root, materialsDirectoryName, create)
+	if create && run.store.readOnly {
+		return nil, false, ErrReadOnly
+	}
+	var root *os.Root
+	var identity os.FileInfo
+	var created bool
+	var err error
+	if run.store.readOnly {
+		root, identity, err = openChildReadOnly(run.root, materialsDirectoryName)
+	} else {
+		root, identity, created, err = openPrivateChild(run.root, materialsDirectoryName, create)
+	}
 	if err != nil {
 		return nil, false, err
 	}
@@ -83,6 +94,9 @@ func (guard *materialGuard) close() error {
 // PutMaterials makes all supplied materials durable before returning. Existing
 // matching blobs are accepted idempotently; mismatched blobs fail closed.
 func (store *Store) PutMaterials(runID string, materials []Material) error {
+	if err := store.requireWritable(); err != nil {
+		return err
+	}
 	if len(materials) == 0 {
 		return nil
 	}
@@ -263,6 +277,9 @@ func (store *Store) VisitWithMaterialReader(
 	consume func(Event) error,
 	callback func(MaterialReader) error,
 ) error {
+	if err := store.requireWritable(); err != nil {
+		return err
+	}
 	if consume == nil || callback == nil {
 		return errors.New("journal consumer and material callback are required")
 	}

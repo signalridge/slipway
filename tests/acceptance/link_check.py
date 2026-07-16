@@ -59,7 +59,7 @@ class Link:
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 def line_number(text: str, offset: int) -> int:
@@ -288,7 +288,7 @@ def exact_case_exists(path: Path, root: Path) -> bool:
 
 def source_files(root: Path) -> list[Path]:
     files = [root / name for name in sorted(SOURCE_NAMES) if (root / name).is_file()]
-    for base in (root / "docs", root / "adr", root / "acceptance"):
+    for base in (root / "docs", root / "adr", root / "tests" / "acceptance"):
         if base.is_dir():
             files.extend(path for path in base.rglob("*.md") if path.is_file())
     content = root / "website" / "src" / "content" / "docs"
@@ -676,20 +676,9 @@ def check_built_site(root: Path, site_dir: Path) -> tuple[int, list[Problem]]:
 
     for name in ("machine-protocol.schema.json", "source-envelope.schema.json"):
         versioned = site_dir / "reference" / "v2" / name
-        compatibility = site_dir / "reference" / name
-        checked += 2
+        checked += 1
         if not exact_case_exists(versioned, site_dir):
             problems.append(Problem(str(versioned.relative_to(root)), 1, "versioned schema is missing"))
-            continue
-        if not exact_case_exists(compatibility, site_dir):
-            problems.append(
-                Problem(str(compatibility.relative_to(root)), 1, "unversioned schema compatibility alias is missing")
-            )
-            continue
-        if versioned.read_bytes() != compatibility.read_bytes():
-            problems.append(
-                Problem(str(compatibility.relative_to(root)), 1, "schema compatibility alias differs from canonical v2 schema")
-            )
 
     sitemap_entries, sitemap_problems = check_sitemap(site_dir)
     checked += sitemap_entries
@@ -735,7 +724,7 @@ def self_test() -> None:
         root = Path(directory)
         (root / "docs").mkdir()
         (root / "adr").mkdir()
-        (root / "acceptance").mkdir(parents=True)
+        (root / "tests" / "acceptance").mkdir(parents=True)
         (root / "website" / "src" / "content" / "docs").mkdir(parents=True)
         (root / "docs" / "index.md").write_text("# Docs\n\n[Guide](guide.md#hello-world)\n")
         (root / "docs" / "guide.md").write_text("# Hello, world!\n")
@@ -773,12 +762,10 @@ def self_test() -> None:
         )
         versioned_reference = site_dir / "reference" / "v2"
         versioned_reference.mkdir(parents=True)
-        compatibility_reference = site_dir / "reference"
         for name in ("machine-protocol.schema.json", "source-envelope.schema.json"):
             (versioned_reference / name).write_text("{}\n")
-            (compatibility_reference / name).write_text("{}\n")
         checked, problems = check_built_site(root, site_dir)
-        assert checked == 6 and not problems, problems
+        assert checked == 4 and not problems, problems
 
         built_page.write_text(
             '<a href="https://github.com/signalridge/slipway/edit/main/docs/src/content/docs/guide.md">Edit</a>\n'

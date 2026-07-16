@@ -577,13 +577,24 @@
         }
       ]
     },
+    "unavailableRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "detail"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "code": { "enum": ["run_journal_invalid", "run_unavailable"] },
+        "detail": { "$ref": "#/$defs/nonEmptyPlainText" }
+      }
+    },
     "statusList": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contract_version", "runs"],
+      "required": ["contract_version", "runs", "unavailable_runs"],
       "properties": {
         "contract_version": { "const": 2 },
-        "runs": { "type": "array", "items": { "$ref": "#/$defs/runStatus" } }
+        "runs": { "type": "array", "items": { "$ref": "#/$defs/runStatus" } },
+        "unavailable_runs": { "type": "array", "items": { "$ref": "#/$defs/unavailableRun" } }
       }
     },
     "protocolState": {
@@ -728,7 +739,12 @@
           "type": "array",
           "minItems": 2,
           "prefixItems": [{ "const": "slipway" }],
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\u0000]+$",
+            "not": { "pattern": "^\\s*[\"']*(FILE|<[\\s\\S]*>)[\"']*\\s*$" }
+          }
         },
         "inputs": { "type": "array", "items": { "$ref": "#/$defs/nextInput" } }
       }
@@ -768,11 +784,57 @@
             { "$ref": "#/$defs/nextVariant" },
             {
               "properties": {
-                "id": { "not": { "const": "skip-action" } },
+                "id": { "const": "submit-outcome-file" },
                 "base_argv": {
-                  "minItems": 4,
-                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "submit" }]
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "submit" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "outcome_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--outcome-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
                 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "submit-outcome-stdin" },
+                "base_argv": {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "submit" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--outcome-stdin" }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
               }
             }
           ]
@@ -787,10 +849,72 @@
             { "$ref": "#/$defs/nextVariant" },
             {
               "properties": {
-                "id": { "not": { "const": "skip-action" } },
+                "id": { "enum": ["answer-decision", "decline-or-feedback"] },
                 "base_argv": {
-                  "minItems": 4,
-                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "answer" }]
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "answer" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "text" },
+                      "type": { "const": "string" },
+                      "flag": { "const": "--text" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "confirm-destructive" },
+                "base_argv": {
+                  "minItems": 12,
+                  "maxItems": 12,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "answer" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--confirm-destructive" }, { "const": "--scope-sha256" },
+                    { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "text" },
+                      "type": { "const": "string" },
+                      "flag": { "const": "--text" },
+                      "required": { "const": false }
+                    }
+                  }],
+                  "items": false
                 }
               }
             }
@@ -806,11 +930,112 @@
             { "$ref": "#/$defs/nextVariant" },
             {
               "properties": {
-                "id": { "not": { "const": "skip-action" } },
+                "id": { "const": "resume-ad-hoc" },
                 "base_argv": {
-                  "minItems": 4,
-                  "prefixItems": [{ "const": "slipway" }, { "const": "_machine" }, { "const": "resume" }]
+                  "minItems": 6,
+                  "maxItems": 6,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "refresh-source" },
+                "base_argv": {
+                  "oneOf": [
+                    {
+                      "minItems": 6,
+                      "maxItems": 6,
+                      "prefixItems": [
+                        { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                        { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
+                      ],
+                      "items": false
+                    },
+                    {
+                      "minItems": 8,
+                      "maxItems": 8,
+                      "prefixItems": [
+                        { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                        { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                        { "const": "--budget" }, { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }
+                      ],
+                      "items": false
+                    }
+                  ]
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "source_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--source-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
                 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "use-pinned-source" },
+                "base_argv": {
+                  "minItems": 7,
+                  "maxItems": 7,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--use-pinned-source" }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "oneOf": [
+                { "properties": { "id": { "const": "keep-pinned" }, "base_argv": { "prefixItems": [{}, {}, {}, {}, {}, {}, { "const": "--source-choice" }, { "const": "pinned" }] } } },
+                { "properties": { "id": { "const": "adopt" }, "base_argv": { "prefixItems": [{}, {}, {}, {}, {}, {}, { "const": "--source-choice" }, { "const": "adopt" }] } } }
+              ],
+              "properties": {
+                "base_argv": {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--source-choice" }, { "enum": ["pinned", "adopt"] },
+                    { "const": "--candidate" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
               }
             }
           ]
@@ -821,23 +1046,46 @@
       "allOf": [
         { "$ref": "#/$defs/nextVariant" },
         {
+          "oneOf": [
+            {
+              "properties": {
+                "id": { "const": "retry-run" },
+                "inputs": { "maxItems": 0 }
+              }
+            },
+            {
+              "properties": {
+                "id": { "const": "start-with-source" },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "source_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--source-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ],
           "properties": {
-            "id": { "not": { "const": "skip-action" } },
             "base_argv": {
               "oneOf": [
                 {
                   "minItems": 9,
                   "maxItems": 9,
                   "prefixItems": [
-                    { "const": "slipway" },
-                    { "const": "run" },
-                    { "const": "--budget" },
-                    { "type": "string", "minLength": 1 },
-                    { "const": "--json" },
-                    { "const": "--root" },
-                    { "type": "string", "minLength": 1 },
-                    { "const": "--" },
-                    { "type": "string", "minLength": 1 }
+                    { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
+                    { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--" }, { "type": "string", "minLength": 1 }
                   ],
                   "items": false
                 },
@@ -845,22 +1093,16 @@
                   "minItems": 10,
                   "maxItems": 10,
                   "prefixItems": [
-                    { "const": "slipway" },
-                    { "const": "run" },
-                    { "const": "--budget" },
-                    { "type": "string", "minLength": 1 },
-                    { "const": "--json" },
-                    { "const": "--root" },
-                    { "type": "string", "minLength": 1 },
-                    { "const": "--no-review" },
-                    { "const": "--" },
-                    { "type": "string", "minLength": 1 }
+                    { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
+                    { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--no-review" }, { "const": "--" }, { "type": "string", "minLength": 1 }
                   ],
                   "items": false
                 }
               ]
+            }
           }
-        }
         }
       ]
     },

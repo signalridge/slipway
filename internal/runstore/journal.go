@@ -56,6 +56,21 @@ func (transaction *runTransaction) journalContext() journalContext {
 	}
 }
 
+func (run *runHandle) readOnlyJournalContext() journalContext {
+	return journalContext{
+		root:  run.root,
+		hooks: run.store.hooks,
+		validate: func(_ MutationPhase, point faultPoint) error {
+			if point != faultValidateRun {
+				if err := run.store.hooks.at(point); err != nil {
+					return err
+				}
+			}
+			return run.validate()
+		},
+	}
+}
+
 func newStandaloneJournalContext(root *os.Root) (journalContext, error) {
 	directory, err := root.Open(".")
 	if err != nil {
@@ -87,10 +102,22 @@ func (context journalContext) check(phase MutationPhase, point faultPoint) error
 // by the largest event rather than by the complete run history. Tail repair uses
 // the same verified read/write handle that performed the scan.
 func visitJournal(context journalContext, name string, visit func(Event) error) (int, error) {
+	return visitJournalMode(context, name, visit, true)
+}
+
+func visitJournalReadOnly(context journalContext, name string, visit func(Event) error) (int, error) {
+	return visitJournalMode(context, name, visit, false)
+}
+
+func visitJournalMode(context journalContext, name string, visit func(Event) error, repair bool) (int, error) {
 	if err := context.check(PhaseReplay, faultValidateRun); err != nil {
 		return 0, err
 	}
-	file, _, err := openRegularFileInRoot(context.root, name, os.O_RDWR, 0o600, false)
+	flags := os.O_RDONLY
+	if repair {
+		flags = os.O_RDWR
+	}
+	file, _, err := openRegularFileInRoot(context.root, name, flags, 0o600, false)
 	if errors.Is(err, fs.ErrNotExist) {
 		if validateErr := context.check(PhaseReplay, faultValidateRun); validateErr != nil {
 			return 0, validateErr
@@ -151,10 +178,10 @@ func visitJournal(context journalContext, name string, visit func(Event) error) 
 			return 0, journalReplayFailure(context, name, file, fmt.Errorf("read journal: %w", readErr))
 		}
 	}
-	if truncateAt >= 0 {
-		appendNewline = false
-	}
-	if truncateAt >= 0 || appendNewline {
+	if repair && (truncateAt >= 0 || appendNewline) {
+		if truncateAt >= 0 {
+			appendNewline = false
+		}
 		if err := repairJournalTail(context, name, file, truncateAt, appendNewline); err != nil {
 			return 0, err
 		}

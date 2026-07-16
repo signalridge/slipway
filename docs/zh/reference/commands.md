@@ -81,6 +81,8 @@ slipway status [run-id] [--root ROOT] [--json]
 
 省略 ID 时列出 Git common directory 中的 Run。当前 worktree 的 Run 会 replay；其他 linked worktree 的 Run 只显示标记为 `workspace_foreign` 的只读 header。完整检查和 mutation 必须在 owning worktree 中执行。
 
+`status` 对文件系统是只读的：不会创建 Run namespace 或 lock file，不会修改权限，也不会修复中断的 journal tail。无法 replay 的本地 recovery directory 仍会在 JSON 的 `unavailable_runs` 中可见；指定该 ID 会返回 `run_journal_invalid`，真正不存在的 ID 则返回 `run_not_found`。
+
 指定 ID 时返回当前 Run projection 和实时派生的结构化 `next`。空列表是合法输出。
 
 ## `slipway stop`
@@ -89,7 +91,7 @@ slipway status [run-id] [--root ROOT] [--json]
 slipway stop [run-id] [--root ROOT] [--json]
 ```
 
-停止 Run 并保留 journal。省略 ID 时会扫描列出的所有 active/paused entry，且只有计数为一时才继续。Active/paused `workspace_foreign` stub 可能让选择变得歧义，或导致 workspace-mismatch error；在 linked-worktree 仓库中应从 owning worktree 传入 ID。Stopped Run 可以 resume；ended Run 不可以。
+停止 Run 并保留 journal。省略 ID 时会扫描列出的 active/paused entry，且只有计数为一时才继续；只要存在无法读取的本地 recovery directory，也必须显式指定 ID，不能忽略。Active/paused `workspace_foreign` stub 不会被隐式选中。Stopped Run 可以 resume；ended Run 不可以。
 
 ## 隐藏宿主操作
 

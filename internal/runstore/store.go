@@ -22,6 +22,8 @@ type Store struct {
 	namespaceIdentity os.FileInfo
 	runsIdentity      os.FileInfo
 	hooks             storeHooks
+	readOnly          bool
+	empty             bool
 	closeOnce         sync.Once
 	closeErr          error
 }
@@ -34,8 +36,69 @@ type runHandle struct {
 	writerWait func()
 }
 
+// ErrReadOnly is returned when a mutation is attempted through OpenReadOnly.
+var ErrReadOnly = errors.New("run store is read-only")
+
+// RunNotFoundError identifies a genuinely absent run directory.
+type RunNotFoundError struct {
+	RunID string
+}
+
+func (err *RunNotFoundError) Error() string {
+	return fmt.Sprintf("run %q not found", err.RunID)
+}
+
 func Open(start string) (*Store, error) {
 	return openWithHooks(start, storeHooks{})
+}
+
+// OpenReadOnly opens an existing run namespace without creating directories,
+// rewriting permissions, creating lock files, or repairing journal tails.
+func OpenReadOnly(start string) (*Store, error) {
+	repository, err := discover(start)
+	if err != nil {
+		return nil, err
+	}
+	commonRoot, commonIdentity, err := openAbsoluteDirectoryRoot(repository.CommonDir)
+	if err != nil {
+		return nil, fmt.Errorf("open Git common directory: %w", err)
+	}
+	store := &Store{
+		repositoryRoot: repository.WorktreeRoot,
+		commonDir:      repository.CommonDir,
+		commonRoot:     commonRoot,
+		commonIdentity: commonIdentity,
+		readOnly:       true,
+	}
+
+	namespaceRoot, namespaceIdentity, err := openChildReadOnly(commonRoot, "slipway")
+	if errors.Is(err, fs.ErrNotExist) {
+		store.empty = true
+		return store, nil
+	}
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("open journal namespace read-only: %w", err)
+	}
+	store.namespaceRoot = namespaceRoot
+	store.namespaceIdentity = namespaceIdentity
+
+	runsRoot, runsIdentity, err := openChildReadOnly(namespaceRoot, "runs")
+	if errors.Is(err, fs.ErrNotExist) {
+		store.empty = true
+		return store, nil
+	}
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("open journal root read-only: %w", err)
+	}
+	store.runsRoot = runsRoot
+	store.runsIdentity = runsIdentity
+	if err := store.validateAnchors(); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return store, nil
 }
 
 func openWithHooks(start string, hooks storeHooks) (*Store, error) {
@@ -102,9 +165,29 @@ func openWithHooks(start string, hooks storeHooks) (*Store, error) {
 func (store *Store) RepositoryRoot() string { return store.repositoryRoot }
 func (store *Store) CommonDir() string      { return store.commonDir }
 
+func (store *Store) requireWritable() error {
+	if store.readOnly {
+		return ErrReadOnly
+	}
+	return nil
+}
+
 func (store *Store) Close() error {
+	if store == nil {
+		return nil
+	}
 	store.closeOnce.Do(func() {
-		store.closeErr = errors.Join(store.runsRoot.Close(), store.namespaceRoot.Close(), store.commonRoot.Close())
+		var runsErr, namespaceErr, commonErr error
+		if store.runsRoot != nil {
+			runsErr = store.runsRoot.Close()
+		}
+		if store.namespaceRoot != nil {
+			namespaceErr = store.namespaceRoot.Close()
+		}
+		if store.commonRoot != nil {
+			commonErr = store.commonRoot.Close()
+		}
+		store.closeErr = errors.Join(runsErr, namespaceErr, commonErr)
 	})
 	return store.closeErr
 }
@@ -126,6 +209,9 @@ func (store *Store) CreateWithMaterials(
 }
 
 func (store *Store) create(runID string, event Event, projection any, materials []Material) error {
+	if err := store.requireWritable(); err != nil {
+		return err
+	}
 	tracker := newMutationTracker()
 	if err := validateRunID(runID); err != nil {
 		return tracker.fail(PhaseValidation, false, err)
@@ -218,6 +304,10 @@ func (store *Store) Visit(runID string, consume func(Event) error) error {
 		return err
 	}
 	defer run.Close()
+	if store.readOnly {
+		_, err := visitJournalReadOnly(run.readOnlyJournalContext(), journalFileName, consume)
+		return err
+	}
 	return withRunLock(run, nil, func(transaction *runTransaction) error {
 		_, err := visitJournal(transaction.journalContext(), journalFileName, consume)
 		return err
@@ -227,7 +317,7 @@ func (store *Store) Visit(runID string, consume func(Event) error) error {
 // FirstEvent reads only the immutable initialization record. It never creates a
 // lock file, waits for a writer, or repairs an interrupted journal tail.
 func (store *Store) FirstEvent(runID string) (Event, error) {
-	run, err := store.openRunRoot(runID)
+	run, err := store.openRunRootMode(runID, true)
 	if err != nil {
 		return Event{}, err
 	}
@@ -263,6 +353,12 @@ func (store *Store) UpdateStreamWithMaterials(
 	consume func(Event) error,
 	callback func() (UpdateResult, error),
 ) error {
+	if consume == nil || callback == nil {
+		return errors.New("journal consumer and update callback are required")
+	}
+	if err := store.requireWritable(); err != nil {
+		return err
+	}
 	tracker := newMutationTracker()
 	run, err := store.openRunRoot(runID)
 	if err != nil {
@@ -338,6 +434,9 @@ func (store *Store) ListIDs() ([]string, error) {
 	if err := store.validateAnchors(); err != nil {
 		return nil, err
 	}
+	if store.empty {
+		return []string{}, nil
+	}
 	entries, err := fs.ReadDir(store.runsRoot.FS(), ".")
 	if err != nil {
 		return nil, fmt.Errorf("list runs: %w", err)
@@ -357,15 +456,29 @@ func (store *Store) ListIDs() ([]string, error) {
 }
 
 func (store *Store) openRunRoot(runID string) (*runHandle, error) {
+	return store.openRunRootMode(runID, store.readOnly)
+}
+
+func (store *Store) openRunRootMode(runID string, readOnly bool) (*runHandle, error) {
 	if err := validateRunID(runID); err != nil {
 		return nil, err
 	}
 	if err := store.validateAnchors(); err != nil {
 		return nil, err
 	}
-	runRoot, runIdentity, _, err := openPrivateChild(store.runsRoot, runID, false)
+	if store.empty {
+		return nil, &RunNotFoundError{RunID: runID}
+	}
+	var runRoot *os.Root
+	var runIdentity os.FileInfo
+	var err error
+	if readOnly {
+		runRoot, runIdentity, err = openChildReadOnly(store.runsRoot, runID)
+	} else {
+		runRoot, runIdentity, _, err = openPrivateChild(store.runsRoot, runID, false)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, fmt.Errorf("run %q not found", runID)
+		return nil, &RunNotFoundError{RunID: runID}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("inspect run: %w", err)
@@ -408,6 +521,9 @@ func (store *Store) validateAnchors() error {
 	if err := validateAbsoluteDirectoryIdentity(store.commonDir, store.commonRoot, store.commonIdentity); err != nil {
 		return fmt.Errorf("git common directory changed after opening: %w", err)
 	}
+	if store.namespaceRoot == nil {
+		return nil
+	}
 	if err := store.hooks.at(faultValidateSlipway); err != nil {
 		return fmt.Errorf("validate journal namespace: %w", err)
 	}
@@ -416,6 +532,9 @@ func (store *Store) validateAnchors() error {
 	}
 	if err := validateOpenedDirectoryRoot(store.namespaceRoot, store.namespaceIdentity); err != nil {
 		return fmt.Errorf("opened journal namespace changed: %w", err)
+	}
+	if store.runsRoot == nil {
+		return nil
 	}
 	if err := store.hooks.at(faultValidateRuns); err != nil {
 		return fmt.Errorf("validate journal root: %w", err)
@@ -449,6 +568,43 @@ func openAbsoluteDirectoryRoot(path string) (*os.Root, os.FileInfo, error) {
 		return nil, nil, fmt.Errorf("directory path %q changed while opening: %w", path, err)
 	}
 	return root, before, nil
+}
+
+func openChildReadOnly(parent *os.Root, name string) (*os.Root, os.FileInfo, error) {
+	if name == "" || filepath.Base(name) != name {
+		return nil, nil, fmt.Errorf("invalid child directory %q", name)
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		before, err := parent.Lstat(name)
+		if err != nil {
+			return nil, nil, err
+		}
+		if before.Mode()&os.ModeSymlink != 0 || !before.IsDir() {
+			return nil, nil, fmt.Errorf("run path %q is not a regular directory", name)
+		}
+		child, err := parent.OpenRoot(name)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		current, err := parent.Lstat(name)
+		if err != nil {
+			_ = child.Close()
+			return nil, nil, err
+		}
+		if current.Mode()&os.ModeSymlink != 0 || !current.IsDir() || !os.SameFile(before, current) {
+			_ = child.Close()
+			continue
+		}
+		if err := validateOpenedDirectoryRoot(child, current); err != nil {
+			_ = child.Close()
+			continue
+		}
+		return child, current, nil
+	}
+	return nil, nil, fmt.Errorf("run path %q changed while opening", name)
 }
 
 func openPrivateChild(parent *os.Root, name string, create bool) (*os.Root, os.FileInfo, bool, error) {

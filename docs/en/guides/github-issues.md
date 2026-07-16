@@ -16,6 +16,8 @@ Use an **Objective** only when one outcome needs several independently deliverab
 
 Use a **Change** for one coherent result that can be implemented, reviewed, and delivered independently. A Change must be self-contained: requirements needed at execution time cannot remain implicit in a parent Objective or an ordinary discussion comment.
 
+A Change should leave the repository in a meaningful, safe intermediate state, roughly fit one fresh Agent context, and form a vertical slice when several layers are involved. Split only outcomes that can be delivered independently; keep non-deliverable implementation steps as a checklist. Research delivers an evidence-backed conclusion and creates a separate Change for later code work. Pure refactors state preserved behavior and a measurable internal outcome; large refactors decompose into independently deliverable expand, migrate, and contract Changes.
+
 | Situation | Suggested shape |
 | --- | --- |
 | Small feature, bug, refactor, documentation task | One Change |
@@ -53,6 +55,12 @@ The generated `slipway-propose` and `slipway-decompose` instructions direct the 
 These are host-side instructions, not a GitHub transaction implemented by the Go CLI. GitHub does not provide a multi-Issue transaction or a general exactly-once create operation. If a response is ambiguous or publication is partial, the host reports what it observed instead of claiming rollback or retrying blindly.
 
 An existing unmarked Issue is not silently converted into a managed Change. The host should offer an explicit choice: update it manually, create a separate managed Change with a link, or use a bounded ad-hoc Run.
+
+## Relationship limits and tool fallback
+
+GitHub allows at most 100 sub-issues per parent and at most 50 blocking plus 50 blocked-by relationships per Issue, counted independently by direction. If an approved write would exceed a limit, the host stops and reports the affected item; it does not hide overflow in a prose-only dependency graph.
+
+Native `gh` relationship commands require `gh >= 2.94.0`. With an older client, the host uses the official REST API when available or reports `environment_unavailable`; it does not create a second local source of truth.
 
 ## Starting an issue-backed Run
 

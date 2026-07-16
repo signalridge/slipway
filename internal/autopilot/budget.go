@@ -4,14 +4,16 @@ import "fmt"
 
 const DefaultBudget = 8
 
+const maxBudget = 1000
+
 const minimumResumeBudget = 3
 
 func ValidateBudget(budget int) error {
 	if budget < 1 {
 		return fmt.Errorf("budget must be at least 1")
 	}
-	if budget > 1000 {
-		return fmt.Errorf("budget cannot exceed 1000")
+	if budget > maxBudget {
+		return fmt.Errorf("budget cannot exceed %d", maxBudget)
 	}
 	return nil
 }
