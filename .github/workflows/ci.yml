@@ -96,16 +96,35 @@ jobs:
 
           report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           expected = ["ambiguous", "created", "failed", "matched"]
+          expected_rejections = [
+              "timeout-second-create-is-forbidden",
+              "timeout-second-final-patch-is-forbidden",
+              "cross-repository-marker-match-is-forbidden",
+              "unapproved-readback-body-is-forbidden",
+              "final-body-match-without-patch-is-forbidden",
+              "pre-patch-final-body-is-forbidden",
+          ]
+          assert report["harness_version"] == 7
           assert report["network_used"] is False
           assert report["statuses_covered"] == expected
+          assert report["case_count"] == len(report["cases"])
+          assert report["rejected_case_count"] == len(expected_rejections)
+          assert report["rejected_cases"] == expected_rejections
           assert {case["item_status"] for case in report["cases"]} == set(expected)
           assert all(case["blind_retry"] is False for case in report["cases"])
-          assert report["rejected_cases"] == ["timeout-second-create-is-forbidden"]
-          duplicate = next(case for case in report["cases"] if case["name"] == "duplicate-converges-after-first-match")
-          assert duplicate["first_match_poll"] == 1
-          assert duplicate["reconciliation_polls"] == 2
-          assert duplicate["marker_match_count"] == 2
-          assert duplicate["convergence_readback"] is True
+          assert all(case["create_attempts"] == 1 for case in report["cases"])
+          assert all(case["final_patch_attempts"] <= 1 for case in report["cases"])
+          assert all(case["final_patch_last_modeled_mutation"] in {True, None} for case in report["cases"])
+          sticky = {
+              "duplicate-converges-after-first-match",
+              "duplicate-does-not-converge-back-to-single",
+              "sequential-single-identities-remain-ambiguous",
+          }
+          for name in sticky:
+              case = next(case for case in report["cases"] if case["name"] == name)
+              assert case["historical_multiple_matches"] is True
+              assert case["item_status"] == "ambiguous"
+              assert case["final_patch_attempts"] == 0
           PY
   test:
     name: Test (${{ matrix.os }})
