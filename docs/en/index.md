@@ -18,7 +18,7 @@ Slipway adds a small, user-controlled workflow around an AI coding host. Start w
 
 ## Reference
 
-- [Commands](reference/commands.md) — the seven public CLI commands and their flags.
+- [Commands](reference/commands.md) — the seven user commands, the `protocol` operations, and their flags.
 - [Host adapters](reference/adapters.md) — generated targets, invocation styles, and ownership safety.
 - [Machine protocol](reference/machine-protocol.md) — versioned JSON for host integrations.
 
