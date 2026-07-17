@@ -22,6 +22,8 @@
 
 # Slipway
 
+AI coding host は高速ですが、長時間の自律的な session は、依頼したタスクから drift したり、実行したと報告した verification を skip したり、repository がまだ結果を示していない段階で done と報告したりすることがあります。
+
 Slipway は、ユーザーが明示的に起動する AI coding 用の soft autopilot です。AI coding host に小さく復旧可能な workflow を提供しながら、判断と制御はユーザーに残します。
 
 1回の Run は、境界の明確な Action を1つずつ進みます。`orient`、`clarify`、`implement`、`review`、`summarize` のいずれかです。この順序は固定された pipeline ではなく、CLI が直前の Outcome と自身による独立した Git 観測から各 Action を導きます。
@@ -32,8 +34,9 @@ Host が実際の作業を行い、Slipway CLI は Run の記録、repository ch
 
 > [!IMPORTANT]
 > `slipway --help` に `install`、`uninstall`、`list`、`doctor`、`run`、
-> `status`、`stop` が表示される build を使用してください。Package channel は repository より
-> 遅れる場合があります。この interface を含む tag が公開されるまでは、current checkout から build してください。
+> `status`、`stop` と、generated adapter が呼び出す `protocol` group が表示される build を
+> 使用してください。Package channel は repository より遅れる場合があります。この interface を
+> 含む tag が公開されるまでは、current checkout から build してください。
 
 ## Slipway を使う理由
 
@@ -69,10 +72,24 @@ Kiro の初回 install では surface が必要です。
 生成された capability が machine protocol を操作します。Host を直接 integration する場合は、ad-hoc Run を次のように開始できます。
 
 ```bash
-./slipway run --json -- "reports に CSV export を追加する"
+./slipway run -- "reports に CSV export を追加する"
 ```
 
-この command は最初の Action を返すだけで、code を変更しません。完全な flow は[はじめに](docs/ja/start-here.md)、integration の詳細は[マシンプロトコル](docs/ja/reference/machine-protocol.md)を参照してください。
+```text
+Run 32e483f2-d92e-467c-abd8-1d1649e43778 started.
+State: active
+Goal: reports に CSV export を追加する
+Budget remaining: 7
+Current action: orient (bd6200d6-bd4b-4255-b877-d650b92404d6)
+Next choices:
+- submit-outcome-file: requires outcome_file (path via --outcome-file)
+- submit-outcome-stdin: slipway protocol submit --run 32e483f2-… --action bd6200d6-… --root /path/to/reports --outcome-stdin
+- skip-action: slipway protocol skip --run 32e483f2-… --action bd6200d6-… --root /path/to/reports
+```
+
+これが Run 全体の形です。境界の明確な Action が1つ、remaining budget、そして host が取りうる各分岐に対する正確な次の command——理由が一切不要な skip も含みます。Action を選び記録したのは CLI であり、code は変更していません。`--json` を付けると machine-readable 形式になります。
+
+完全な flow は[はじめに](docs/ja/start-here.md)、integration の詳細は[マシンプロトコル](docs/ja/reference/machine-protocol.md)を参照してください。
 
 ## Source と Run
 

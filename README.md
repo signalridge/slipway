@@ -22,6 +22,10 @@
 
 # Slipway
 
+An AI coding host is fast, but a long autonomous session can drift from the task you
+asked for, skip the verification it reports, or call the work done before the
+repository shows it.
+
 Slipway is a user-invoked soft autopilot for AI coding. It gives an AI coding host a
 small, recoverable workflow while keeping decisions and control with the user.
 
@@ -37,8 +41,9 @@ token, or decide that the software is ready to merge or release.
 
 > [!IMPORTANT]
 > Use a build whose `slipway --help` lists `install`, `uninstall`, `list`, `doctor`,
-> `run`, `status`, and `stop`. Package-manager channels can lag the repository. Until a
-> tagged release contains this interface, build the current checkout from source.
+> `run`, `status`, and `stop`, alongside the `protocol` group that generated adapters
+> call. Package-manager channels can lag the repository. Until a tagged release
+> contains this interface, build the current checkout from source.
 
 ## Why use Slipway?
 
@@ -82,12 +87,28 @@ The generated capability drives the machine protocol for you. If you are integra
 host directly, an ad-hoc Run starts with:
 
 ```bash
-./slipway run --json -- "add CSV export to reports"
+./slipway run -- "add CSV export to the reports command"
 ```
 
-That command returns the first Action; it does not itself edit code. See the
-[getting-started guide](docs/en/start-here.md) for the complete interaction and the
-[machine protocol](docs/en/reference/machine-protocol.md) for integration details.
+```text
+Run d51ecc3e-3b77-4e27-b9e4-f32fa5a0f11c started.
+State: active
+Goal: add CSV export to the reports command
+Budget remaining: 7
+Current action: orient (6da7c41d-7283-4c68-9238-868f3502f67c)
+Next choices:
+- submit-outcome-file: requires outcome_file (path via --outcome-file)
+- submit-outcome-stdin: slipway protocol submit --run d51ecc3e-… --action 6da7c41d-… --root /path/to/reports --outcome-stdin
+- skip-action: slipway protocol skip --run d51ecc3e-… --action 6da7c41d-… --root /path/to/reports
+```
+
+That is the shape of the whole Run: one bounded Action, a remaining budget, and an
+exact next command for every branch the host can take — including skipping, which
+never needs a reason. The CLI chose and recorded that Action; it did not edit code.
+Add `--json` for the machine-readable form.
+
+See the [getting-started guide](docs/en/start-here.md) for the complete interaction and
+the [machine protocol](docs/en/reference/machine-protocol.md) for integration details.
 
 ## Sources and Runs
 
