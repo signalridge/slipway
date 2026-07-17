@@ -2,6 +2,8 @@
 
 A Run is durable enough to stop and resume, but its journal is not a secret vault or a completion certificate. This guide explains what users can inspect and retain.
 
+![Slipway Run states: an explicit start makes a Run active; it pauses for one of four reported reasons — a human decision, an unavailable environment, an exhausted budget, or destructive confirmation — and answering, confirming, or skipping returns it to active; stop invalidates pending work but keeps the journal and can be resumed, while ended is terminal.](../../assets/diagrams/run-states.svg)
+
 ## Inspect Runs
 
 ```bash
@@ -56,6 +58,8 @@ Run data is stored under the repository's Git common directory, not necessarily 
 - `run.json` is a replaceable projection that can be rebuilt from the journal.
 - `materials/` holds accepted issue sections by content digest.
 - `run.lock` is a validated coordination artifact. Actual writer serialization uses an OS-backed directory lock on Unix and a named mutex on Windows.
+
+![Slipway Run storage and mutation ordering: a mutation revalidates workspace identity, acquires the writer guard, writes referenced material before any journal event may point to it, appends and synchronizes the journal, and only then replaces the projection; if projection refresh fails after a committed journal write, Slipway reports the committed mutation and the stale projection instead of claiming a rollback.](../../assets/diagrams/run-storage.svg)
 
 Every load and mutation rechecks the canonical worktree root, per-worktree Git directory, and Git common directory. Reusing a path for another worktree or retargeting Git metadata fails before the journal is modified.
 

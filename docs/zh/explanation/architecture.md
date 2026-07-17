@@ -79,6 +79,8 @@ Accepted section 按内容寻址，并通过本地 material reader 提供。Acti
 
 ## 安全边界
 
+![Slipway 信任边界：Issue 内容与工作区是不可信数据，永远不能授予 shell 权限、泄露凭据、绕过确认或扩大破坏性范围；AI coding host 被信任去执行动作并持有全部凭据；本地 CLI 校验严格 JSON、大小、身份与 digest，自身不持有任何凭据，但无法证明宿主诚实地抓取了 GitHub。](../../assets/diagrams/trust-boundary.svg)
+
 Slipway 假设同账号进程、root、malware 或 compromised host 可以越过其保护。在该边界内，它会：
 
 - anchor filesystem operation 并拒绝 unsafe symlink traversal；

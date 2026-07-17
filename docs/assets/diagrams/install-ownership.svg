@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="install-ownership-title install-ownership-desc">
+  <title id="install-ownership-title">Slipway adapter install and ownership safety</title>
+  <desc id="install-ownership-desc">Install writes host-local capability files and records their repository-relative paths and SHA-256 hashes in a per-host ownership manifest. The manifest is the only file that authorizes later managed-file changes; the generated sentinel reports installation health, not ownership. On refresh or uninstall Slipway reclassifies each recorded file as pristine, modified, or missing by comparing its current hash to the recorded one. Only pristine files are mutated: refresh rewrites them and recreates missing ones, and uninstall removes them. Modified files, unknown files, a modified sentinel, a malformed manifest, a path escape, a duplicate claim, or an unsafe symlink are preserved or rejected with a reported reason, never silently adopted. Install and remove are transactional, and unsupported manifest versions fail before any mutation.
+  </desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart TB
+  Install["slipway install --tool ID [--surface ide|cli]"] --> Write["write host-local capability files only\nno global host settings · no ambient hooks · no launcher"]
+  Write --> Manifest["record ownership manifest\nrepository-relative paths + SHA-256 per file"]
+  Manifest --> Note1["a new install claims ONLY the files it creates"]
+
+  Later["slipway install --refresh   |   slipway uninstall"] --> Version{"manifest version supported?"}
+  Version -->|no| FailFast["fail before any mutation"]
+  Version -->|yes| Classify{"compare each recorded file's\ncurrent hash to its recorded hash"}
+
+  Classify -->|pristine · hash matches| Mutate["refresh: rewrite · uninstall: remove"]
+  Classify -->|missing| Recreate["refresh: recreate · uninstall: nothing to remove"]
+  Classify -->|modified · hash differs| Preserve["PRESERVE and report — never overwrite"]
+
+  Unknown["unknown file · modified sentinel · malformed manifest\npath escape · duplicate claim · unsafe symlink"] --> Reject["never silently adopted as managed content\npreserve or reject, and report the reason"]
+
+  Sentinel["generated sentinel = installation HEALTH"] -. "not ownership authority" .-> Manifest
+  Mutate --> Runs["Run data under the Git common directory is never touched"]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .tag-warn { fill: var(--stop-stroke); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .mono-tiny { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; }
+      .state { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; font-weight: 700; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 1.8; }
+      .manifest { fill: var(--pause-fill); stroke: var(--pause-stroke); stroke-width: 2; }
+      .ok { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .warn { fill: var(--stop-fill); stroke: var(--stop-stroke); stroke-width: 1.8; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .flow-stop { fill: none; stroke: var(--stop-stroke); stroke-width: 1.9; }
+      .flow-weak { fill: none; stroke: var(--pause-stroke); stroke-width: 1.7; stroke-dasharray: 6 4; }
+      .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+    </style>
+    <marker id="io-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="io-arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+    <marker id="io-arrow-stop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--stop-stroke)"/>
+    </marker>
+    <marker id="io-arrow-weak" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--pause-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · adapter install and ownership safety</text>
+  <text class="sub" x="40" y="58">the manifest is the only authority · only hash-matching files are ever mutated · your edits are preserved, not overwritten</text>
+
+  <!-- first install -->
+  <rect class="band" x="40" y="88" width="440" height="228" rx="16"/>
+  <text class="tag" x="60" y="112">FIRST INSTALL</text>
+
+  <rect class="entry" x="60" y="126" width="400" height="42" rx="11"/>
+  <text class="mono" x="78" y="152">slipway install --tool ID [--surface ide|cli]</text>
+
+  <line class="flow" x1="260" y1="168" x2="260" y2="182" marker-end="url(#io-arrow)"/>
+
+  <rect class="host" x="60" y="184" width="400" height="52" rx="11"/>
+  <text class="title" x="78" y="206">Write host-local capability files only</text>
+  <text class="tiny" x="78" y="224">no global host settings · no ambient hooks · no launcher · no router</text>
+
+  <line class="flow-main" x1="260" y1="236" x2="260" y2="250" marker-end="url(#io-arrow-main)"/>
+
+  <rect class="manifest" x="60" y="252" width="400" height="52" rx="11"/>
+  <text class="title" x="78" y="274">Record the ownership manifest</text>
+  <text class="tiny" x="78" y="292">repository-relative paths + SHA-256 per file · claims only what it created</text>
+
+  <!-- sentinel note -->
+  <rect class="card" x="516" y="88" width="290" height="88" rx="12"/>
+  <text class="title" x="536" y="114">Generated sentinel</text>
+  <text class="tiny" x="536" y="133">reports installation HEALTH</text>
+  <text class="tag-warn" x="536" y="153">NOT OWNERSHIP AUTHORITY</text>
+  <text class="tiny" x="536" y="168">a modified sentinel is preserved, not adopted</text>
+  <path class="flow-weak" d="M516 140 H490 V278 H470" marker-end="url(#io-arrow-weak)"/>
+
+  <!-- later ops -->
+  <rect class="band" x="516" y="196" width="644" height="120" rx="16"/>
+  <text class="tag" x="536" y="220">EVERY LATER OPERATION</text>
+
+  <rect class="entry" x="536" y="232" width="604" height="40" rx="11"/>
+  <text class="mono" x="556" y="257">slipway install --tool ID --refresh        ·        slipway uninstall --tool ID</text>
+
+  <rect class="warn" x="536" y="280" width="604" height="26" rx="8"/>
+  <text class="tiny" x="556" y="297">an unsupported manifest version fails before any mutation — nothing is written or removed</text>
+
+  <!-- classify -->
+  <path class="flow-main" d="M838 316 V326 H600 V333" marker-end="url(#io-arrow-main)"/>
+
+  <rect class="ok" x="330" y="340" width="540" height="52" rx="12"/>
+  <text class="title" x="600" y="364" text-anchor="middle">Reclassify every recorded file</text>
+  <text class="tiny" x="600" y="382" text-anchor="middle">compare its current SHA-256 to the hash the manifest recorded</text>
+
+  <!-- three states -->
+  <path class="flow-main" d="M600 392 V408 H205 V417" marker-end="url(#io-arrow-main)"/>
+  <path class="flow-main" d="M600 392 V417" marker-end="url(#io-arrow-main)"/>
+  <path class="flow-stop" d="M600 408 H995 V417" marker-end="url(#io-arrow-stop)"/>
+
+  <rect class="ok" x="40" y="424" width="330" height="96" rx="13"/>
+  <text class="state" x="60" y="450">pristine</text>
+  <text class="tiny" x="60" y="468">hash still matches the manifest</text>
+  <text class="sub" x="60" y="490">refresh → rewrite it</text>
+  <text class="sub" x="60" y="508">uninstall → remove it</text>
+
+  <rect class="host" x="435" y="424" width="330" height="96" rx="13"/>
+  <text class="state" x="455" y="450">missing</text>
+  <text class="tiny" x="455" y="468">recorded, but gone from disk</text>
+  <text class="sub" x="455" y="490">refresh → recreate it pristine</text>
+  <text class="sub" x="455" y="508">uninstall → nothing to remove</text>
+
+  <rect class="warn" x="830" y="424" width="330" height="96" rx="13"/>
+  <text class="state" x="850" y="450">modified</text>
+  <text class="tiny" x="850" y="468">you edited it — hash differs</text>
+  <text class="sub" x="850" y="490">PRESERVED and reported</text>
+  <text class="sub" x="850" y="508">never overwritten, never removed</text>
+
+  <!-- never adopted -->
+  <rect class="warn" x="40" y="546" width="725" height="72" rx="13"/>
+  <text class="tag-warn" x="60" y="570">NEVER SILENTLY ADOPTED AS MANAGED CONTENT</text>
+  <text class="sub" x="60" y="592">unknown file · modified sentinel · malformed manifest · path escape · duplicate claim · unsafe symlink</text>
+  <text class="tiny" x="60" y="610">each is preserved or rejected with a reported reason · transaction recovery artifacts are reported separately from ordinary user files</text>
+
+  <rect class="ok" x="830" y="546" width="330" height="72" rx="13"/>
+  <text class="title" x="850" y="570">Run data is never touched</text>
+  <text class="tiny" x="850" y="589">uninstall removes only pristine adapter</text>
+  <text class="tiny" x="850" y="605">files; journals under the Git common dir stay</text>
+
+  <rect class="band" x="40" y="638" width="1120" height="42" rx="12"/>
+  <text class="sub" x="60" y="664">Ten host targets: claude · codex · copilot · cursor · kilo · kiro · opencode · pi · qwen · windsurf — Kiro records `--surface ide|cli` on first install, and an ordinary refresh cannot switch it.</text>
+</svg>

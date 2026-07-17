@@ -2,6 +2,8 @@
 
 GitHub 是 Slipway 可选的需求来源，不是每次 Run 的前置条件。任务需要长期、可审阅来源时使用 issue-backed Run；否则使用 ad-hoc Run。
 
+![Slipway issue-backed source 流程：Objective 只负责分组 Change，永远不能启动 Run；Change 自包含，是唯一能启动 Run 的 Issue 形态；持有 GitHub 凭据的宿主抓取精确的 Change 正文与仅被 manifest 引用的评论，把每个 Issue 字节都当作不可信数据，并把有界的临时 envelope 交给 CLI；CLI 校验 identity、marker、manifest、大小与 digest，并按内容 digest 在本地存储被接受的 section。](../../assets/diagrams/issue-source.svg)
+
 ## 仓库要求
 
 Issue-backed source 当前支持启用了 Issues 的 `github.com` 仓库。Owner 名称对 Slipway 是不透明字符串，因此个人账号和 Organization 拥有的仓库使用同一种来源格式。

@@ -4,6 +4,8 @@ This tutorial runs one complete local protocol lifecycle: start a Run, submit Or
 
 The canonical contracts are the versioned [machine protocol schema](../../reference/v2/machine-protocol.schema.json) and [source envelope schema](../../reference/v2/source-envelope.schema.json). Keep the version in the URL and the JSON `contract_version` or `source_version` together; unversioned compatibility aliases are intentionally not published.
 
+![Slipway machine protocol exchange: the host starts a Run and receives the first orient Action with a structured next operation; for every Action it performs the work and submits one strict Outcome, and the CLI validates it, appends a journal event, observes Git independently, and returns the following Action; a needs_input Outcome pauses until the host answers or skips, and an explicit resume revalidates workspace identity and voids stale work.](../../assets/diagrams/protocol-sequence.svg)
+
 ## Prerequisites
 
 Install `slipway`, `git`, and `jq`. Run every snippet in the same shell session. The tutorial works inside a disposable directory because it creates a real Run journal and changes a tracked file.

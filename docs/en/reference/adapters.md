@@ -74,6 +74,8 @@ See [Installation](../installation.md) for the first-time Kiro and `--tool all` 
 
 ## Ownership safety
 
+![Slipway adapter install and ownership safety: install writes host-local capability files and records their paths and SHA-256 hashes in a per-host ownership manifest, which is the only authority for later managed-file changes; refresh and uninstall reclassify each recorded file as pristine, missing, or modified by hash, mutate only pristine and missing files, and preserve or reject anything modified, unknown, or unsafe with a reported reason.](../../assets/diagrams/install-ownership.svg)
+
 Each host root contains a Slipway ownership manifest with repository-relative paths and SHA-256 hashes. Refresh and uninstall mutate only files still matching their recorded hash.
 
 A user-modified capability, unknown file, modified sentinel, malformed manifest, path escape, duplicate claim, or unsafe symlink is never silently adopted as managed content. Operations preserve or reject it and report the reason. Transaction recovery artifacts are reported separately from ordinary preserved user files.

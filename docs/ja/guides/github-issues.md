@@ -2,6 +2,8 @@
 
 GitHub は Slipway の optional requirements source であり、Run ごとの前提条件ではありません。Durable で review 可能な source が必要なら issue-backed Run を使い、そうでない場合は ad-hoc Run を使います。
 
+![Slipway の issue-backed source フロー: Objective は Change をまとめるだけで Run を開始できません。Change は self-contained で、Run が開始できる唯一の Issue 形態です。GitHub credential を持つ host が正確な Change body と manifest が参照する comment だけを fetch し、Issue のあらゆるバイトを untrusted data として扱い、bounded な一時 envelope を CLI に渡します。CLI は identity・marker・manifest・サイズ・digest を検証し、受理した section を content digest でローカルに保存します。](../../assets/diagrams/issue-source.svg)
+
 ## Repository 要件
 
 Issue-backed source は現在、Issues が有効な `github.com` repository を対象とします。Owner 名は Slipway にとって不透明なため、personal account と Organization のどちらが所有する repository も同じ source format になります。

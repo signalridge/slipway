@@ -4,6 +4,8 @@
 
 规范契约是带版本路径的 [machine protocol schema](../../reference/v2/machine-protocol.schema.json) 与 [source envelope schema](../../reference/v2/source-envelope.schema.json)。URL 中的版本必须与 JSON 的 `contract_version` 或 `source_version` 同步；项目有意不发布无版本兼容别名。
 
+![Slipway machine protocol 交换：宿主启动 Run 并收到第一个 orient Action 与结构化 next；每个 Action 由宿主执行并提交一份严格 Outcome，CLI 校验后追加 journal 事件、独立观察 Git，再返回下一个 Action；needs_input 会使 Run 暂停，直到宿主 answer 或 skip；显式 resume 会重新校验 workspace identity 并作废过期工作。](../../assets/diagrams/protocol-sequence.svg)
+
 ## 前置条件
 
 安装 `slipway`、`git` 与 `jq`，并在同一个 shell 会话中依次运行所有代码片段。本教程在一次性目录中工作，因为它会创建真实的 Run journal，并修改一个已跟踪文件。

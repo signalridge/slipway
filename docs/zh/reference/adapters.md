@@ -74,6 +74,8 @@ slipway uninstall --tool claude
 
 ## Ownership 安全
 
+![Slipway adapter 安装与 ownership 安全：install 只写入 host-local capability 文件，并把其路径与 SHA-256 记录进每个 host 的 ownership manifest；该 manifest 是后续修改受管文件的唯一授权来源；refresh 与 uninstall 会按 hash 把每个记录文件重新分类为 pristine、missing 或 modified，只修改 pristine 与 missing，对 modified、未知或不安全的内容一律保留或拒绝并报告原因。](../../assets/diagrams/install-ownership.svg)
+
 每个 host root 下都有 Slipway ownership manifest，记录 repository-relative path 与 SHA-256。Refresh 和 uninstall 只修改仍与记录 hash 匹配的文件。
 
 被用户修改的 capability、未知文件、modified sentinel、malformed manifest、path escape、duplicate claim 或 unsafe symlink 不会被静默纳入 managed content；操作会保留或拒绝并报告原因。Transaction recovery artifact 与普通 preserved user file 分开报告。

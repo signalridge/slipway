@@ -2,6 +2,8 @@
 
 Run 可以停止并恢复，但 journal 不是秘密保险箱，也不是完成证明。本指南说明用户可以检查和保留哪些内容。
 
+![Slipway Run 状态：显式启动后 Run 进入 active；它只会因四种上报原因之一暂停——人类决策、环境不可用、budget 耗尽或破坏性确认；answer、confirm 或 skip 会使其回到 active；stop 会作废待处理工作但保留 journal 且可 resume，而 ended 是终态。](../../assets/diagrams/run-states.svg)
+
 ## 检查 Run
 
 ```bash
@@ -56,6 +58,8 @@ Run 数据位于仓库的 Git common directory，不一定是当前 worktree 的
 - `run.json` 是可由 journal 重建的 projection。
 - `materials/` 按内容 digest 保存已接受 Issue section。
 - `run.lock` 是经过验证的协调文件；真正的 writer serialization 在 Unix 使用 OS directory lock，在 Windows 使用 named mutex。
+
+![Slipway Run 存储与 mutation 顺序：一次 mutation 会重新校验 workspace identity、获取 writer guard，先写入被引用的 material（任何 journal 事件都不得指向尚不存在的字节），再追加并同步 journal，最后才替换 projection；若在 journal 提交后 projection 刷新失败，Slipway 会报告"已提交的 mutation + 过期 projection"，而不会声称回滚。](../../assets/diagrams/run-storage.svg)
 
 每次 load 和 mutation 都重新检查 canonical worktree root、per-worktree Git directory 与 Git common directory。路径被其他 worktree 复用或 Git metadata 被重新指向时，会在修改 journal 前失败。
 

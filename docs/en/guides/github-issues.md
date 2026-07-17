@@ -2,6 +2,8 @@
 
 GitHub is an optional requirements source for Slipway, not a prerequisite for every Run. Use an issue-backed Run when the work benefits from a durable, reviewable source; use an ad-hoc Run when it does not.
 
+![Slipway issue-backed source flow: an Objective groups Changes but never starts a Run; a Change is self-contained and is the only issue shape a Run can start from; the host holds the GitHub credentials, fetches the exact Change body and only manifest-referenced comments, treats every Issue byte as untrusted data, and passes a bounded temporary envelope to the CLI, which validates identity, marker, manifest, sizes, and digests and stores accepted sections locally by content digest.](../../assets/diagrams/issue-source.svg)
+
 ## Repository requirements
 
 Issue-backed sources currently use `github.com` repositories with Issues enabled. The owner name is opaque to Slipway, so the same source format applies to repositories owned by personal accounts and organizations.

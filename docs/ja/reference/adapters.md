@@ -74,6 +74,8 @@ slipway uninstall --tool claude
 
 ## Ownership safety
 
+![Slipway の adapter install と ownership safety: install は host-local な capability file だけを書き、その path と SHA-256 を host ごとの ownership manifest に記録します。この manifest だけが以後の managed file 変更を authorize します。Refresh と uninstall は記録された各 file を hash によって pristine・missing・modified に再分類し、pristine と missing だけを変更し、modified・unknown・unsafe なものは理由を報告して保全または拒否します。](../../assets/diagrams/install-ownership.svg)
+
 各 host root には repository-relative path と SHA-256 を記録した Slipway ownership manifest があります。Refresh と uninstall は記録 hash と一致する file だけを変更します。
 
 User-modified capability、unknown file、modified sentinel、malformed manifest、path escape、duplicate claim、unsafe symlink は決して静かに managed content になりません。操作は preserve または reject し理由を報告します。Transaction recovery artifact は通常の preserved user file とは別に報告されます。

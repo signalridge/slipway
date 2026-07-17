@@ -4,6 +4,8 @@
 
 正規の契約は、バージョン付きパスの [machine protocol schema](../../reference/v2/machine-protocol.schema.json) と [source envelope schema](../../reference/v2/source-envelope.schema.json) です。URL のバージョンは JSON の `contract_version` または `source_version` とそろえてください。バージョンなしの互換エイリアスは意図的に公開しません。
 
+![Slipway machine protocol の交換: host が Run を開始し、最初の orient Action と structured next を受け取ります。Action ごとに host が作業を行って厳密な Outcome を1つ submit し、CLI は検証して journal event を append し、独立して Git を観測してから次の Action を返します。needs_input Outcome は host が answer または skip するまで Run を pause し、明示的な resume は workspace identity を再検証して古い作業を無効化します。](../../assets/diagrams/protocol-sequence.svg)
+
 ## 前提条件
 
 `slipway`、`git`、`jq` をインストールし、すべての snippet を同じ shell session で順に実行してください。このチュートリアルは実際の Run journal を作成し、追跡対象ファイルを変更するため、使い捨てディレクトリ内で動作します。

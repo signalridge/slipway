@@ -79,6 +79,8 @@ The design rationale and rejected alternatives are recorded in [ADR-0001](../../
 
 ## Security boundary
 
+![Slipway trust boundaries: Issue content and the working tree are untrusted data that can never grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope; the AI coding host is trusted to act and holds every credential; the local CLI validates strict JSON, sizes, identities, and digests while holding no credentials, but cannot prove the host fetched GitHub honestly.](../../assets/diagrams/trust-boundary.svg)
+
 Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:
 
 - anchors filesystem operations and rejects unsafe symlink traversal;
