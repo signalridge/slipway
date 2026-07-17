@@ -662,6 +662,19 @@ func NewCommandNext(operation NextOperation, workspaceRoot, variantID string, ba
 	return newCommandNext(operation, workspaceIdentity, canonicalRoot, variantID, baseArgv, inputs)
 }
 
+// NewPinnedWorkspaceCommandNext constructs a recovery command that addresses a
+// workspace the journal already pins, such as the worktree owning a foreign
+// Run. Both the identity and the root come from that pinned record:
+// rediscovering them from the current filesystem would let a moved or replaced
+// worktree rewrite a machine-authoritative field, and would synthesize an
+// unavailable-workspace identity for a Run whose real identity is known.
+func NewPinnedWorkspaceCommandNext(identity runstore.WorkspaceIdentity, variantID string, baseArgv []string, inputs []NextInput) (Next, error) {
+	if err := identity.Validate(); err != nil {
+		return Next{}, fmt.Errorf("pinned workspace identity: %w", err)
+	}
+	return newCommandNext(NextOperationCommand, identity.ID, identity.WorktreeRoot, variantID, baseArgv, inputs)
+}
+
 // NewUnavailableWorkspaceCommandNext constructs a recovery command without
 // querying Git metadata that the caller has already found unavailable.
 func NewUnavailableWorkspaceCommandNext(workspaceRoot, variantID string, baseArgv []string, inputs []NextInput) (Next, error) {

@@ -144,11 +144,13 @@ func targetedStatusLoadError(repositoryRoot, runID string, err error) error {
 
 func makeRunStatusOutput(run autopilot.Run) (runStatusOutput, error) {
 	if run.WorkspaceForeign {
-		next, err := autopilot.NewCommandNext(
-			autopilot.NextOperationCommand,
-			run.Workspace,
+		// Journal replay already rejects a Run whose pinned identity is
+		// unusable, so the owning worktree is addressed from that identity
+		// rather than from whatever currently sits at its path.
+		next, err := autopilot.NewPinnedWorkspaceCommandNext(
+			run.WorkspaceIdentity,
 			"inspect-run-in-its-workspace",
-			[]string{"slipway", "status", run.ID, "--root", run.Workspace},
+			[]string{"slipway", "status", run.ID, "--root", run.WorkspaceIdentity.WorktreeRoot},
 			[]autopilot.NextInput{},
 		)
 		if err != nil {

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -217,4 +218,37 @@ func TestStatusListMarksForeignWorkspaceRunsWithoutReplayingThem(t *testing.T) {
 	assert.Contains(t, human, "foreign=true")
 	assert.Contains(t, human, "workspace="+canonicalForeignRoot)
 	assert.NotContains(t, human, "remaining=")
+}
+
+func TestStatusListKeepsForeignRunIdentityPinnedAfterItsWorktreeDisappears(t *testing.T) {
+	repository := newCLIRepository(t)
+	foreignRoot := filepath.Join(t.TempDir(), "foreign worktree")
+	runCLIGit(t, repository, "worktree", "add", "--detach", foreignRoot, "HEAD")
+
+	canonicalForeignRoot, err := filepath.EvalSymlinks(foreignRoot)
+	require.NoError(t, err)
+	startedJSON, stderr, err := executeForTest(t, "run", "foreign visibility", "--root", foreignRoot, "--json")
+	require.NoError(t, err, stderr)
+	started := decodeMutationAction(t, startedJSON)
+
+	// The owning worktree goes away while its identity stays pinned in the
+	// journal, so nothing can be rediscovered from the vanished path.
+	require.NoError(t, os.RemoveAll(canonicalForeignRoot))
+
+	stdout, stderr, err := executeForTest(t, "status", "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	var output statusListOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &output))
+	require.Len(t, output.Runs, 1)
+	foreign := output.Runs[0]
+	assert.Equal(t, started.RunID, foreign.ID)
+	assert.True(t, foreign.WorkspaceForeign)
+	assert.Equal(
+		t,
+		foreign.WorkspaceIdentity.ID,
+		foreign.Next.WorkspaceIdentity,
+		"next must carry the pinned identity, never one synthesized from the vanished path",
+	)
+	require.Len(t, foreign.Next.Variants, 1)
+	assert.Equal(t, []string{"slipway", "status", foreign.ID, "--root", canonicalForeignRoot}, foreign.Next.Variants[0].BaseArgv)
 }
