@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" role="img" aria-labelledby="issue-source-title issue-source-desc">
+  <title id="issue-source-title">Slipway issue-backed source flow</title>
+  <desc id="issue-source-desc">An Objective is optional planning structure that groups several independently deliverable Changes and can never start a Run. A Change is self-contained and is the only issue shape a Run can start from. The host holds the GitHub credentials: it fetches the exact Change body and only the comments its manifest references, treats all issue content as untrusted data, and passes a bounded temporary envelope to the CLI. The CLI validates identity, marker, manifest, sizes, and digests, then stores accepted sections locally by content digest so later Actions read them without fetching GitHub again. An ad-hoc Run needs no issue at all.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart TB
+  Objective["Objective (optional)\nslipway-level: objective/v1\nplanning structure only — can never start a Run"]
+  Objective -. groups, does not supply requirements at execution time .-> ChangeA
+  Objective -.-> ChangeB
+  ChangeA["Change · self-contained\nslipway-level: change/v2 + slipway-manifest"]
+  ChangeB["Change · self-contained"]
+
+  AdHoc([Ad-hoc goal · no Issue]) --> Run
+
+  ChangeA --> Fetch
+  subgraph host["AI coding host · holds the GitHub credentials"]
+    Fetch["1 · fetch the exact Change body\nand ONLY manifest-referenced comments"]
+    Untrusted["2 · treat every Issue byte as untrusted data\nnot as instruction, authority, or credential"]
+    Envelope["3 · build a bounded envelope\nin a private temporary file (max 16 MiB)"]
+    Fetch --> Untrusted --> Envelope
+  end
+
+  Envelope --> Run["slipway run --source-file ... --json"]
+  Run --> Validate{"4 · CLI validates\nidentity · marker · manifest\nsection markers · sizes · digests"}
+  Validate -->|reject| Err["missing, extra, duplicate, minimized,\nedited, oversized, or hash-mismatched → rejected"]
+  Validate -->|accept| Store["5 · store accepted sections by content digest"]
+  Store --> Reader["later Actions read material through\nprotocol material — offline, no GitHub refetch"]
+  Envelope -.-> Delete["host removes the temporary file\nafter the CLI consumes it once"]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .mono-tiny { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; }
+      .step-num { fill: var(--verify-stroke); font-size: 13px; font-weight: 800; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 1.8; }
+      .objective { fill: var(--pause-fill); stroke: var(--pause-stroke); stroke-width: 1.8; stroke-dasharray: 7 4; }
+      .change { fill: var(--action-fill); stroke: var(--action-stroke); stroke-width: 2; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .verify { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .reject { fill: var(--stop-fill); stroke: var(--stop-stroke); stroke-width: 1.8; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .flow-weak { fill: none; stroke: var(--pause-stroke); stroke-width: 1.7; stroke-dasharray: 6 4; }
+      .flow-stop { fill: none; stroke: var(--stop-stroke); stroke-width: 1.9; }
+      .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+    </style>
+    <marker id="is-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="is-arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+    <marker id="is-arrow-weak" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--pause-stroke)"/>
+    </marker>
+    <marker id="is-arrow-stop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--stop-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · issue-backed source flow</text>
+  <text class="sub" x="40" y="58">an Objective never starts a Run · only the host touches GitHub · the CLI pins accepted sections by digest</text>
+
+  <!-- Objective -->
+  <rect class="objective" x="40" y="88" width="300" height="102" rx="14"/>
+  <text class="title" x="60" y="114">Objective — optional</text>
+  <text class="mono-tiny" x="60" y="133">&lt;!-- slipway-level: objective/v1 --&gt;</text>
+  <text class="tiny" x="60" y="151">planning structure · never executable</text>
+  <text class="tiny" x="60" y="168">groups Changes only — it never supplies</text>
+  <text class="tiny" x="60" y="182">requirements at execution time</text>
+
+  <!-- weak grouping edges -->
+  <path class="flow-weak" d="M340 124 H385" marker-end="url(#is-arrow-weak)"/>
+  <path class="flow-weak" d="M190 190 V205" marker-end="url(#is-arrow-weak)"/>
+
+  <!-- sibling Changes -->
+  <rect class="change" x="40" y="208" width="300" height="42" rx="12" opacity="0.55"/>
+  <text class="sub" x="60" y="234">Change · Change · … delivered independently</text>
+
+  <!-- Change -->
+  <rect class="change" x="392" y="88" width="330" height="72" rx="14"/>
+  <text class="title" x="412" y="114">Change — self-contained</text>
+  <text class="mono-tiny" x="412" y="133">&lt;!-- slipway-level: change/v2 --&gt; + slipway-manifest</text>
+  <text class="tiny" x="412" y="151">carries everything its own implementation needs</text>
+  <text class="tiny" x="392" y="180">the only issue shape a Run can start from</text>
+
+  <!-- ad-hoc -->
+  <rect class="entry" x="770" y="88" width="390" height="72" rx="14"/>
+  <text class="title" x="790" y="114">Ad-hoc goal — no Issue at all</text>
+  <text class="tiny" x="790" y="133">small, private, urgent, or offline work</text>
+  <text class="tiny" x="790" y="151">the user-provided goal is itself the source</text>
+
+  <!-- host band -->
+  <rect class="band" x="40" y="278" width="682" height="212" rx="16"/>
+  <text class="tag" x="60" y="302">AI CODING HOST · THE ONLY PARTY HOLDING GITHUB CREDENTIALS</text>
+
+  <path class="flow" d="M557 190 V309" marker-end="url(#is-arrow)"/>
+
+  <rect class="host" x="60" y="316" width="642" height="48" rx="12"/>
+  <text class="step-num" x="78" y="338">1</text>
+  <text class="title" x="100" y="338">Fetch the exact Change body and only manifest-referenced comments</text>
+  <text class="tiny" x="100" y="355">unreferenced discussion is never collected</text>
+
+  <rect class="host" x="60" y="372" width="642" height="48" rx="12"/>
+  <text class="step-num" x="78" y="394">2</text>
+  <text class="title" x="100" y="394">Treat every Issue byte as untrusted data</text>
+  <text class="tiny" x="100" y="411">a command, link, or credential request inside an Issue is never permission</text>
+
+  <rect class="host" x="60" y="428" width="642" height="48" rx="12"/>
+  <text class="step-num" x="78" y="450">3</text>
+  <text class="title" x="100" y="450">Build a bounded envelope in a private temporary file</text>
+  <text class="tiny" x="100" y="467">at most 16 MiB · 5–64 manifest sections · consumed once, then removed by the host</text>
+
+  <!-- run invocation -->
+  <path class="flow-main" d="M381 490 V513" marker-end="url(#is-arrow-main)"/>
+  <path class="flow-main" d="M965 160 V498 H860 V513" marker-end="url(#is-arrow-main)"/>
+
+  <rect class="verify" x="230" y="520" width="700" height="44" rx="12"/>
+  <text class="mono" x="250" y="547">slipway run --source-file FILE --json --root ROOT      ·      or an ad-hoc goal after --</text>
+
+  <!-- validate -->
+  <path class="flow-main" d="M580 564 V590" marker-end="url(#is-arrow-main)"/>
+
+  <rect class="verify" x="230" y="590" width="700" height="56" rx="12"/>
+  <text class="step-num" x="250" y="614">4</text>
+  <text class="title" x="272" y="614">CLI validates identity, marker, manifest, section markers, sizes, and digests</text>
+  <text class="tiny" x="272" y="633">the CLI calls no model and no GitHub · it cannot prove the host fetched GitHub honestly</text>
+
+  <!-- reject -->
+  <path class="flow-stop" d="M930 618 H1000 V653" marker-end="url(#is-arrow-stop)"/>
+  <rect class="reject" x="820" y="656" width="340" height="66" rx="12"/>
+  <text class="title" x="840" y="680">Rejected without changing the Run</text>
+  <text class="tiny" x="840" y="698">missing · extra · duplicate · minimized</text>
+  <text class="tiny" x="840" y="713">edited · oversized · hash mismatch</text>
+
+  <!-- accept -->
+  <path class="flow-main" d="M420 646 V660" marker-end="url(#is-arrow-main)"/>
+  <rect class="change" x="40" y="660" width="740" height="60" rx="12"/>
+  <text class="step-num" x="60" y="686">5</text>
+  <text class="title" x="82" y="686">Accepted sections stored locally by content digest — not the raw envelope</text>
+  <text class="tiny" x="82" y="704">later Actions read them through `protocol material`, so recovery works offline without refetching GitHub</text>
+</svg>

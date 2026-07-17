@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="run-storage-title run-storage-desc">
+  <title id="run-storage-title">Slipway Run storage and mutation ordering</title>
+  <desc id="run-storage-desc">Run data lives under the repository Git common directory, not under a worktree literal .git path. Each Run directory holds an append-only journal, a replaceable projection, a validated lock artifact, and content-addressed materials. A mutation writes referenced material before any journal event may point to it, synchronizes the journal, and only then replaces the projection. If projection refresh fails after a committed journal write, Slipway reports the committed mutation and the stale projection instead of claiming a rollback. Writer serialization uses an OS directory lock on Unix and a named mutex on Windows.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart TB
+  subgraph layout["&lt;git-common-dir&gt;/slipway/runs/&lt;run-id&gt;/"]
+    journal["journal.jsonl · append-only transition record · the recovery authority"]
+    projection["run.json · replaceable projection · rebuildable from the journal"]
+    lock["run.lock · validated coordination artifact · not the sole writer guard"]
+    materials["materials/ · accepted issue sections by content digest"]
+  end
+
+  Start([mutation requested]) --> Identity[revalidate workspace identity\nroot · per-worktree git dir · git common dir]
+  Identity --> Acquire[acquire the writer guard\nUnix: OS lock on the opened Run dir\nWindows: named mutex]
+  Acquire --> Material[1 · write referenced material first\nno journal event may point to absent bytes]
+  Material --> Append[2 · append the journal event]
+  Append --> Sync[3 · synchronize the journal\nUnix: file + directory fsync where supported\nWindows: file flush only]
+  Sync --> Commit{committed}
+  Commit --> Project[4 · replace the projection]
+  Project --> Done([mutation complete])
+  Project -->|refresh fails| Report[report committed mutation + stale projection\nnever claim a rollback]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .mono-big { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; font-weight: 700; }
+      .mono-tiny { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; }
+      .step-num { fill: var(--verify-stroke); font-size: 13px; font-weight: 800; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 1.8; }
+      .journal { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .projection { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .lock { fill: var(--pause-fill); stroke: var(--pause-stroke); stroke-width: 1.8; }
+      .materials { fill: var(--action-fill); stroke: var(--action-stroke); stroke-width: 1.8; }
+      .warn { fill: var(--stop-fill); stroke: var(--stop-stroke); stroke-width: 1.8; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .flow-stop { fill: none; stroke: var(--stop-stroke); stroke-width: 1.9; stroke-dasharray: 6 4; }
+      .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+    </style>
+    <marker id="st-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="st-arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+    <marker id="st-arrow-stop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--stop-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · Run storage and mutation ordering</text>
+  <text class="sub" x="40" y="58">the journal is the recovery authority · the projection is disposable · material exists before anything points to it</text>
+
+  <!-- LEFT: layout -->
+  <rect class="band" x="40" y="88" width="470" height="330" rx="16"/>
+  <text class="tag" x="60" y="112">ON DISK</text>
+  <text class="mono-big" x="60" y="136">&lt;git-common-dir&gt;/slipway/runs/&lt;run-id&gt;/</text>
+  <text class="tiny" x="60" y="154">the Git common directory — not necessarily a worktree's literal .git path</text>
+
+  <rect class="journal" x="60" y="172" width="430" height="54" rx="12"/>
+  <text class="mono" x="78" y="194">journal.jsonl</text>
+  <text class="tiny" x="78" y="212">append-only transition record · order is the recovery record</text>
+
+  <rect class="projection" x="60" y="234" width="430" height="54" rx="12"/>
+  <text class="mono" x="78" y="256">run.json</text>
+  <text class="tiny" x="78" y="274">replaceable projection · may be rebuilt from the journal</text>
+
+  <rect class="materials" x="60" y="296" width="430" height="54" rx="12"/>
+  <text class="mono" x="78" y="318">materials/</text>
+  <text class="tiny" x="78" y="336">accepted issue sections addressed by content digest</text>
+
+  <rect class="lock" x="60" y="358" width="430" height="46" rx="12"/>
+  <text class="mono" x="78" y="378">run.lock</text>
+  <text class="tiny" x="78" y="394">validated coordination artifact · not the sole writer guard</text>
+
+  <!-- RIGHT: ordering -->
+  <rect class="band" x="546" y="88" width="614" height="330" rx="16"/>
+  <text class="tag" x="566" y="112">ORDER OF ONE MUTATION</text>
+
+  <line class="flow" x1="596" y1="146" x2="596" y2="166" marker-end="url(#st-arrow)"/>
+  <rect class="entry" x="566" y="124" width="574" height="26" rx="8"/>
+  <text class="tiny" x="580" y="141">revalidate workspace identity · acquire the writer guard (Unix: OS dir lock · Windows: named mutex)</text>
+
+  <rect class="materials" x="566" y="168" width="574" height="52" rx="12"/>
+  <text class="step-num" x="584" y="190">1</text>
+  <text class="title" x="606" y="190">Write referenced material first</text>
+  <text class="tiny" x="606" y="208">no journal event may ever point at bytes that do not exist yet</text>
+
+  <line class="flow-main" x1="596" y1="220" x2="596" y2="230" marker-end="url(#st-arrow-main)"/>
+
+  <rect class="journal" x="566" y="230" width="574" height="52" rx="12"/>
+  <text class="step-num" x="584" y="252">2</text>
+  <text class="title" x="606" y="252">Append the journal event</text>
+  <text class="tiny" x="606" y="270">one writer at a time, enforced by the platform lock implementation</text>
+
+  <line class="flow-main" x1="596" y1="282" x2="596" y2="292" marker-end="url(#st-arrow-main)"/>
+
+  <rect class="journal" x="566" y="292" width="574" height="56" rx="12"/>
+  <text class="step-num" x="584" y="314">3</text>
+  <text class="title" x="606" y="314">Synchronize the journal — the commit boundary</text>
+  <text class="tiny" x="606" y="332">Unix: file + directory fsync where supported · Windows: file flush only; `doctor` reports the level</text>
+
+  <line class="flow-main" x1="596" y1="348" x2="596" y2="358" marker-end="url(#st-arrow-main)"/>
+
+  <rect class="projection" x="566" y="358" width="574" height="46" rx="12"/>
+  <text class="step-num" x="584" y="380">4</text>
+  <text class="title" x="606" y="380">Replace the projection</text>
+  <text class="tiny" x="606" y="396">only after the journal is durable — never before</text>
+
+  <!-- failure path -->
+  <path class="flow-stop" d="M1140 381 H1172 V444 H660 V470" marker-end="url(#st-arrow-stop)"/>
+  <rect class="label-bg" x="900" y="435" width="164" height="18" rx="5"/>
+  <text class="edge-label" x="906" y="448">if projection refresh fails</text>
+
+  <rect class="warn" x="380" y="470" width="560" height="76" rx="14"/>
+  <text class="title" x="400" y="496">Committed journal write, stale projection</text>
+  <text class="sub" x="400" y="518">Slipway reports the committed mutation and the stale projection.</text>
+  <text class="sub" x="400" y="536">It does not claim a rollback that did not happen.</text>
+
+  <!-- bottom notes -->
+  <rect class="band" x="40" y="576" width="546" height="118" rx="14"/>
+  <text class="tag" x="60" y="600">IDENTITY IS RECHECKED EVERY TIME</text>
+  <text class="sub" x="60" y="624">Every load and mutation rediscovers the canonical worktree root,</text>
+  <text class="sub" x="60" y="644">per-worktree Git directory, and Git common directory, and compares</text>
+  <text class="sub" x="60" y="664">them before touching a journal. Reusing a path for another worktree</text>
+  <text class="sub" x="60" y="684">or retargeting Git metadata fails before any byte is modified.</text>
+
+  <rect class="band" x="614" y="576" width="546" height="118" rx="14"/>
+  <text class="tag" x="634" y="600">WHAT INSPECTION MAY NOT DO</text>
+  <text class="sub" x="634" y="624">`status` is filesystem-read-only: it creates no namespace or lock,</text>
+  <text class="sub" x="634" y="644">changes no permissions, and repairs no journal bytes. Unreadable</text>
+  <text class="sub" x="634" y="664">local Runs stay visible as `unavailable_runs` rather than hidden.</text>
+  <text class="sub" x="634" y="684">Never hand-edit `journal.jsonl` or `run.json`.</text>
+</svg>

@@ -1,0 +1,743 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, for example v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: signalridge/slipway
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate-tag:
+    name: Validate Release Tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag_name: ${{ steps.tag.outputs.tag_name }}
+    steps:
+      - name: Validate release tag syntax
+        id: tag
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag || '' }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          tag="${INPUT_TAG:-$REF_NAME}"
+          if [[ "$tag" == *[[:cntrl:]]* ]]; then
+            printf '::error::Invalid release tag contains control characters.\n'
+            exit 1
+          fi
+          core='(0|[1-9][0-9]*)'
+          prerelease_id='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          semver="^v${core}\\.${core}\\.${core}(-${prerelease_id}(\\.${prerelease_id})*)?$"
+          if [[ ! "$tag" =~ $semver ]]; then
+            message='Expected canonical v-prefixed SemVer without build metadata.'
+            printf '::error::Invalid release tag %q. %s\n' "$tag" "$message"
+            exit 1
+          fi
+          printf 'tag_name=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ steps.tag.outputs.tag_name }}
+      - name: Match tag to release manifest
+        shell: bash
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.tag_name }}
+        run: |
+          manifest_version=$(jq -er '."." | strings' .release-please-manifest.json)
+          if [[ "$TAG_NAME" != "v${manifest_version}" ]]; then
+            printf '::error::Release tag %q does not exactly match manifest version %q.\n' \
+              "$TAG_NAME" "$manifest_version"
+            exit 1
+          fi
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [validate-tag]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.validate-tag.outputs.tag_name }}
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run tests
+        run: go test -timeout=20m ./... -race -count=1
+      - name: Build and verify release metadata
+        env:
+          TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          mkdir -p bin
+          go build \
+            -ldflags="-s -w \
+            -X github.com/signalridge/slipway/cmd.version=${VERSION} \
+            -X github.com/signalridge/slipway/cmd.commit=${GITHUB_SHA::12} \
+            -X github.com/signalridge/slipway/cmd.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o bin/slipway .
+          ./bin/slipway --version
+          ./bin/slipway --help
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [validate-tag]
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      hashes: ${{ steps.hash.outputs.hashes }}
+      tag_name: ${{ needs.validate-tag.outputs.tag_name }}
+      gh_pat_available: ${{ steps.optional-secrets.outputs.gh_pat_available }}
+      aur_key_available: ${{ steps.optional-secrets.outputs.aur_key_available }}
+      binary_matrix: ${{ steps.smoke.outputs.binary_matrix }}
+      deb_asset: ${{ steps.smoke.outputs.deb_asset }}
+      rpm_asset: ${{ steps.smoke.outputs.rpm_asset }}
+      apk_asset: ${{ steps.smoke.outputs.apk_asset }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.validate-tag.outputs.tag_name }}
+      - name: Detect optional publishing secrets
+        id: optional-secrets
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            printf 'gh_pat_available=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'gh_pat_available=false\n' >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$AUR_SSH_PRIVATE_KEY" ]; then
+            printf 'aur_key_available=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'aur_key_available=false\n' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - name: Observe module-file drift
+        continue-on-error: true
+        run: |
+          set +e
+          go mod tidy -diff
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '::warning::go mod tidy reports module-file drift'
+          fi
+          echo 'Module-file drift is an advisory observation, not a release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --clean --skip=homebrew,scoop,aur
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COSIGN_EXPERIMENTAL: "1"
+          OPTIONAL_PUBLISH_ONLY: "false"
+      # Everything below observes or prepares independent downstream evidence.
+      # It must not turn an already-created core release into a channel gate.
+      - name: Observe release artifacts
+        continue-on-error: true
+        env:
+          TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
+        run: >-
+          python3 -I tests/acceptance/release_artifacts.py --dist dist
+          --expected-version "${TAG_NAME}" --core-only
+      - name: Observe LICENSE inclusion in every archive
+        continue-on-error: true
+        run: |
+          archive_count=0
+          while IFS= read -r -d '' archive; do
+            case "$archive" in
+              *.tar.gz) tar -tzf "$archive" | grep -Fxq LICENSE ;;
+              *.zip) unzip -Z1 "$archive" | grep -Fxq LICENSE ;;
+              *) echo "::error::Unsupported archive $archive"; exit 1 ;;
+            esac
+            archive_count=$((archive_count + 1))
+          done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0)
+          if [ "$archive_count" -eq 0 ]; then
+            echo '::error::No release archives were generated'
+            exit 1
+          fi
+      - name: Extract version
+        continue-on-error: true
+        id: version
+        run: |
+          metadata='${{ steps.goreleaser.outputs.metadata }}'
+          VERSION=$(printf '%s\n' "$metadata" | jq -r '.version')
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Generate release subjects
+        continue-on-error: true
+        id: hash
+        run: |
+          cd dist
+          subjects=$(find . -maxdepth 1 \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} + | sort)
+          if [ -z "$subjects" ]; then
+            echo "::error::No archive subjects were generated"
+            exit 1
+          fi
+          hashes=$(printf "%s\n" "$subjects" | base64 -w0)
+          printf 'hashes=%s\n' "$hashes" >> "$GITHUB_OUTPUT"
+      - name: Generate release smoke manifest
+        continue-on-error: true
+        id: smoke
+        run: |
+          cd dist
+          binary_matrix=$(
+            find . -maxdepth 1 -type f \( \
+              -name "slipway_*_linux_amd64.tar.gz" -o \
+              -name "slipway_*_darwin_arm64.tar.gz" -o \
+              -name "slipway_*_windows_amd64.zip" \
+            \) -printf '%f\n' | sort | jq -R -s -c '
+              split("\n")[:-1] | map(
+                if test("_linux_amd64\\.tar\\.gz$") then
+                  {os:"ubuntu-latest", asset:., command:"./slipway"}
+                elif test("_darwin_arm64\\.tar\\.gz$") then
+                  {os:"macos-latest", asset:., command:"./slipway"}
+                elif test("_windows_amd64\\.zip$") then
+                  {os:"windows-latest", asset:., command:"./slipway.exe"}
+                else empty end
+              )'
+          )
+          if [ "$binary_matrix" = "[]" ]; then
+            echo "::error::No executable archive assets were generated for smoke testing"
+            exit 1
+          fi
+          deb_asset=$(find . -maxdepth 1 -type f -name "slipway_*_linux_amd64.deb" -printf '%f\n' | sort | head -n1)
+          rpm_asset=$(find . -maxdepth 1 -type f -name "slipway_*_linux_amd64.rpm" -printf '%f\n' | sort | head -n1)
+          apk_asset=$(find . -maxdepth 1 -type f -name "slipway_*_linux_amd64.apk" -printf '%f\n' | sort | head -n1)
+          for required in deb_asset rpm_asset apk_asset; do
+            if [ -z "${!required}" ]; then
+              printf '::error::Missing release smoke asset output %s\n' "$required"
+              exit 1
+            fi
+          done
+          {
+            printf 'binary_matrix=%s\n' "$binary_matrix"
+            printf 'deb_asset=%s\n' "$deb_asset"
+            printf 'rpm_asset=%s\n' "$rpm_asset"
+            printf 'apk_asset=%s\n' "$apk_asset"
+          } >> "$GITHUB_OUTPUT"
+      - name: Upload SBOM artifacts
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: dist/*.sbom.spdx.json
+          retention-days: 30
+
+  publish-homebrew:
+    name: Publish Homebrew (optional)
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: needs.release.outputs.gh_pat_available == 'true'
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Prepare Homebrew cask
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --clean --skip=docker,nfpm,sbom,sign,scoop,aur
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          OPTIONAL_PUBLISH_ONLY: "true"
+      - name: Verify rebuilt archives match core release
+        env:
+          OPTIONAL_PUBLISH_ONLY: "true"
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: >-
+          python3 -I scripts/verify_optional_release_checksums.py
+          --tag "${TAG_NAME}" --generated dist/checksums.txt
+      - name: Check out Homebrew tap
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: signalridge/homebrew-tap
+          token: ${{ secrets.GH_PAT }}
+          path: optional-publisher
+      - name: Publish verified Homebrew cask
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p optional-publisher/Casks
+          cp dist/homebrew/Casks/slipway.rb optional-publisher/Casks/slipway.rb
+          git -C optional-publisher add Casks/slipway.rb
+          if git -C optional-publisher diff --cached --quiet; then
+            echo "Homebrew cask is already current."
+            exit 0
+          fi
+          git -C optional-publisher config user.name "github-actions[bot]"
+          git -C optional-publisher config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C optional-publisher commit -m "chore: update slipway to ${TAG_NAME}"
+          git -C optional-publisher push origin HEAD
+
+  publish-scoop:
+    name: Publish Scoop (optional)
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: needs.release.outputs.gh_pat_available == 'true'
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Prepare Scoop manifest
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --clean --skip=docker,nfpm,sbom,sign,homebrew,aur
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          OPTIONAL_PUBLISH_ONLY: "true"
+      - name: Verify rebuilt archives match core release
+        env:
+          OPTIONAL_PUBLISH_ONLY: "true"
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: >-
+          python3 -I scripts/verify_optional_release_checksums.py
+          --tag "${TAG_NAME}" --generated dist/checksums.txt
+      - name: Check out Scoop bucket
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          repository: signalridge/scoop-bucket
+          token: ${{ secrets.GH_PAT }}
+          path: optional-publisher
+      - name: Publish verified Scoop manifest
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          cp dist/scoop/slipway.json optional-publisher/slipway.json
+          git -C optional-publisher add slipway.json
+          if git -C optional-publisher diff --cached --quiet; then
+            echo "Scoop manifest is already current."
+            exit 0
+          fi
+          git -C optional-publisher config user.name "github-actions[bot]"
+          git -C optional-publisher config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C optional-publisher commit -m "chore: update slipway to ${TAG_NAME}"
+          git -C optional-publisher push origin HEAD
+
+  publish-aur:
+    name: Publish AUR (optional)
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: needs.release.outputs.aur_key_available == 'true'
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Set up AUR SSH
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+          ssh-keyscan -t ed25519,rsa,ecdsa aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur_key
+            User aur
+          EOF
+      - name: Prepare AUR package
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --clean --skip=docker,nfpm,sbom,sign,homebrew,scoop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPTIONAL_PUBLISH_ONLY: "true"
+      - name: Verify rebuilt archives match core release
+        env:
+          OPTIONAL_PUBLISH_ONLY: "true"
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: >-
+          python3 -I scripts/verify_optional_release_checksums.py
+          --tag "${TAG_NAME}" --generated dist/checksums.txt
+      - name: Publish verified AUR package
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          publisher="$RUNNER_TEMP/slipway-aur"
+          git clone --depth=1 ssh://aur@aur.archlinux.org/slipway-bin.git "$publisher"
+          cp dist/aur/slipway-bin.pkgbuild "$publisher/PKGBUILD"
+          cp dist/aur/slipway-bin.srcinfo "$publisher/.SRCINFO"
+          git -C "$publisher" add PKGBUILD .SRCINFO
+          if git -C "$publisher" diff --cached --quiet; then
+            echo "AUR package is already current."
+            exit 0
+          fi
+          git -C "$publisher" config user.name "github-actions[bot]"
+          git -C "$publisher" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$publisher" commit -m "chore: update slipway to ${TAG_NAME}"
+          git -C "$publisher" push origin HEAD
+  provenance:
+    name: Generate SLSA Provenance
+    needs: [release]
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    # yamllint disable-line rule:line-length
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
+    with:
+      base64-subjects: ${{ needs.release.outputs.hashes }}
+      upload-assets: true
+      compile-generator: true
+
+  verify-nix:
+    name: Verify Nix
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Install Nix
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
+      - name: Build package
+        run: nix build .#slipway
+      - name: Verify binary
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          expected_version="${TAG_NAME#v}"
+          version_output="$(./result/bin/slipway --version)"
+          printf '%s\n' "$version_output"
+          actual_version="$(printf '%s\n' "$version_output" | sed -n '1s/^slipway //p')"
+          if [[ "$actual_version" != "$expected_version" ]]; then
+            printf '::error::Nix binary version differs: expected %s, got %s.\n' "$expected_version" "$actual_version"
+            exit 1
+          fi
+          ./result/bin/slipway --help
+
+  verify-container:
+    name: Verify Container
+    runs-on: ubuntu-latest
+    needs: [release]
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull and test container
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
+          docker pull "$IMAGE"
+          docker run --rm "$IMAGE" --version
+          docker run --rm "$IMAGE" --help
+
+          SMOKE_VOLUME="slipway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+          trap 'docker volume rm -f "$SMOKE_VOLUME" >/dev/null 2>&1 || true' EXIT
+          docker volume create "$SMOKE_VOLUME" >/dev/null
+
+          docker run --rm --user 0 -v "$SMOKE_VOLUME:/workspace" \
+            --entrypoint sh "$IMAGE" -c \
+            'git init --quiet /workspace && chown -R 65532:65532 /workspace'
+
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" -w /workspace \
+            "$IMAGE" doctor --root /workspace --json
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" -w /workspace \
+            "$IMAGE" run --budget 1 --json --root /workspace --no-review -- \
+            "container ad-hoc smoke"
+          docker run --rm -v "$SMOKE_VOLUME:/workspace" \
+            -v "$PWD/tests/acceptance/fixtures/container-source-envelope.json:/source-envelope.json:ro" \
+            -w /workspace \
+            "$IMAGE" run --budget 1 --json --root /workspace --no-review \
+            --source-file /source-envelope.json -- "container source smoke"
+      - name: Run Trivy vulnerability scan
+        id: image-ref
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          TAG="${VERSION#v}"
+          printf 'ref=%s\n' "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}" >> "$GITHUB_OUTPUT"
+      - name: Scan container image
+        # v0.36.0, pinned by commit SHA after GHSA-69fq-xp46-6x23.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ steps.image-ref.outputs.ref }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  verify-homebrew:
+    name: Verify Homebrew
+    runs-on: macos-latest
+    needs: [release, publish-homebrew]
+    if: needs.release.outputs.gh_pat_available == 'true' && needs.publish-homebrew.result == 'success'
+    continue-on-error: true
+    steps:
+      - name: Install via Homebrew
+        run: |
+          brew tap signalridge/tap
+          brew trust signalridge/tap
+          brew install --cask slipway
+      - name: Verify installation
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          expected="${VERSION#v}"
+          version_output="$(slipway --version)"
+          printf '%s\n' "$version_output"
+          actual="$(printf '%s\n' "$version_output" | sed -n '1s/^slipway //p')"
+          if [[ "$actual" != "$expected" ]]; then
+            printf 'Installed Homebrew version differs: expected %s, got %s.\n' "$expected" "$actual" >&2
+            exit 1
+          fi
+          slipway --help
+
+  verify-scoop:
+    name: Verify Scoop
+    runs-on: windows-latest
+    needs: [release, publish-scoop]
+    if: needs.release.outputs.gh_pat_available == 'true' && needs.publish-scoop.result == 'success'
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Install from disposable Scoop bucket
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP ('slipway-scoop-' + [Guid]::NewGuid().ToString('N'))
+          $engine = Join-Path $root 'engine'
+          $env:SCOOP = Join-Path $root 'apps'
+          $env:SCOOP_GLOBAL = Join-Path $root 'global'
+          $env:SCOOP_CACHE = Join-Path $root 'cache'
+          $env:SCOOP_HOME = $engine
+          $env:XDG_CONFIG_HOME = Join-Path $root 'config'
+          try {
+            New-Item -ItemType Directory -Force $root | Out-Null
+            git init --quiet $engine
+            git -C $engine remote add origin https://github.com/ScoopInstaller/Scoop.git
+            git -C $engine fetch --quiet --depth=1 origin b588a06e41d920d2123ec70aee682bae14935939
+            git -C $engine checkout --quiet --detach FETCH_HEAD
+            $scoop = Join-Path $engine 'bin/scoop.ps1'
+            & $scoop bucket add slipway-ci https://github.com/signalridge/scoop-bucket.git
+            if ($LASTEXITCODE -ne 0) { throw 'scoop bucket add failed' }
+            & $scoop install slipway-ci/slipway
+            if ($LASTEXITCODE -ne 0) { throw 'scoop install failed' }
+            $binary = Join-Path $env:SCOOP 'apps/slipway/current/slipway.exe'
+            $versionOutput = (& $binary --version | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'installed slipway --version failed' }
+            $expected = $env:VERSION.TrimStart('v')
+            if (-not $versionOutput.Contains("slipway $expected")) {
+              throw "installed Scoop version differs: $versionOutput"
+            }
+            & $binary --help | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'installed slipway --help failed' }
+          } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+  verify-aur:
+    name: Verify AUR
+    runs-on: ubuntu-latest
+    needs: [release, publish-aur]
+    if: needs.release.outputs.aur_key_available == 'true' && needs.publish-aur.result == 'success'
+    continue-on-error: true
+    permissions:
+      contents: read
+    container: archlinux:base-devel@sha256:b21289eb1954872de0dc9f88976627e38611b1817be75e50946c83ab7b9c474d
+    steps:
+      - name: Build and install published slipway-bin as non-root
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git sudo
+          useradd --create-home --shell /bin/bash builder
+          printf 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman\n' > /etc/sudoers.d/slipway-builder
+          chmod 0440 /etc/sudoers.d/slipway-builder
+          sudo -u builder git clone --depth=1 https://aur.archlinux.org/slipway-bin.git /home/builder/slipway-bin
+          expected="${VERSION#v}"
+          actual=$(sed -n "s/^pkgver=//p" /home/builder/slipway-bin/PKGBUILD | tr '_' '-')
+          if [ "$actual" != "$expected" ]; then
+            echo "Published AUR version differs: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          sudo -u builder bash -lc 'cd /home/builder/slipway-bin && makepkg -si --noconfirm --needed'
+          slipway --version | grep -F "slipway $expected"
+          slipway --help >/dev/null
+
+  verify-deb:
+    name: Verify Debian Package
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Download and install deb
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+          ASSET: ${{ needs.release.outputs.deb_asset }}
+        run: |
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/${ASSET}"
+          sudo dpkg -i "${ASSET}"
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-rpm:
+    name: Verify RPM Package
+    runs-on: ubuntu-latest
+    needs: [release]
+    container: fedora:44@sha256:498c452f32a739b61f0ef215bce9924ebc4866cbe44710f58157d77723b7a6d2
+    steps:
+      - name: Download and install rpm
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+          ASSET: ${{ needs.release.outputs.rpm_asset }}
+        run: |
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/${ASSET}"
+          rpm -i "${ASSET}"
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-apk:
+    name: Verify APK Package
+    runs-on: ubuntu-latest
+    needs: [release]
+    container: alpine@sha256:7c8cb692ae09657cbc4a3f3cbd0e8d5a2690ba38386aaaf252dbb060bf5eb2e6
+    steps:
+      - name: Download and install apk
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+          ASSET: ${{ needs.release.outputs.apk_asset }}
+        run: |
+          apk add --no-cache curl
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/${ASSET}"
+          apk add --allow-untrusted "${ASSET}"
+      - name: Verify installation
+        run: |
+          slipway --version
+          slipway --help
+
+  verify-binary:
+    name: Verify Binary (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.binary_matrix) }}
+    steps:
+      - name: Download and extract binary
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.tag_name }}
+        run: |
+          ASSET="${{ matrix.asset }}"
+          curl -LO "https://github.com/signalridge/slipway/releases/download/${VERSION}/${ASSET}"
+          case "${ASSET}" in
+            *.zip) unzip "${ASSET}" ;;
+            *.tar.gz) tar xzf "${ASSET}" ;;
+          esac
+      - name: Verify binary
+        shell: bash
+        run: |
+          "${{ matrix.command }}" --version
+          "${{ matrix.command }}" --help

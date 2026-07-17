@@ -1,0 +1,217 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="protocol-sequence-title protocol-sequence-desc">
+  <title id="protocol-sequence-title">Slipway machine protocol exchange</title>
+  <desc id="protocol-sequence-desc">One host integration lifecycle in contract version 2. The host starts a Run and receives the first orient Action with a structured next operation. For every Action the host performs the work and submits one strict Outcome, and the CLI validates it, appends a journal event, observes Git independently, and returns the following Action. A needs_input Outcome pauses the Run until the host answers or skips; an explicit resume revalidates workspace identity and voids stale work. The CLI never calls a model or GitHub inside this exchange. An ended Run returns operation none with an empty variant list.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+sequenceDiagram
+  actor User
+  participant Host as AI coding host
+  participant CLI as slipway CLI
+  participant Store as Run store
+
+  User->>Host: explicitly invokes slipway-run capability
+  Host->>CLI: slipway run --budget N --json --root ROOT -- GOAL
+  CLI->>Store: create Run · pin workspace identity
+  CLI-->>Host: run state + orient Action + next{operation}
+
+  loop until pause, stop, or ended
+    Host->>Host: perform the one bounded Action
+    Host->>CLI: protocol submit --run --action (--outcome-file | --outcome-stdin)
+    CLI->>CLI: strict validate · check action_kind + idempotency
+    CLI->>Store: append journal event, then replace projection
+    CLI->>CLI: observe Git independently
+    CLI-->>Host: next Action + next{operation}
+  end
+
+  alt Outcome status = needs_input
+    CLI-->>Host: pause{decision_required | destructive_confirmation_required | environment_unavailable}
+    Host->>CLI: protocol answer --text TEXT
+    Note over Host,CLI: destructive scope needs --confirm-destructive --scope-sha256
+  else user skips
+    Host->>CLI: protocol skip --run --action
+  end
+
+  opt after stop, pause, or budget exhaustion
+    Host->>CLI: protocol resume RUN --root ROOT [--budget N]
+    CLI->>CLI: revalidate workspace identity · void stale work
+    CLI-->>Host: fresh orient Action
+  end
+
+  CLI-->>Host: ended: next{operation: none, variants: []}
+  Note over CLI,Store: ended means the automatic Action queue is empty, nothing more
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+        --lifeline: #cbd5e1;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+          --lifeline: #30363d;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .mono-sub { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 1.8; }
+      .action { fill: var(--action-fill); stroke: var(--action-stroke); stroke-width: 2; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .verify { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .pause { fill: var(--pause-fill); stroke: var(--pause-stroke); stroke-width: 1.8; }
+      .lifeline { stroke: var(--lifeline); stroke-width: 1.6; stroke-dasharray: 5 5; }
+      .msg { fill: none; stroke: var(--line); stroke-width: 1.9; }
+      .msg-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2; }
+      .msg-action { fill: none; stroke: var(--action-stroke); stroke-width: 2; }
+      .msg-pause { fill: none; stroke: var(--pause-stroke); stroke-width: 1.9; }
+      .msg-self { fill: none; stroke: var(--line); stroke-width: 1.7; }
+      .msg-label { fill: var(--text); font-size: 10px; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
+      .term-text { fill: var(--term-text); font-size: 12px; font-weight: 700; }
+    </style>
+    <marker id="ps-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="ps-arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+    <marker id="ps-arrow-action" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--action-stroke)"/>
+    </marker>
+    <marker id="ps-arrow-pause" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--pause-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · machine protocol exchange</text>
+  <text class="sub" x="40" y="58">contract version 2 · one Action at a time · the CLI calls no model and no GitHub inside this exchange</text>
+
+  <!-- lifelines -->
+  <line class="lifeline" x1="118" y1="150" x2="118" y2="662"/>
+  <line class="lifeline" x1="393" y1="150" x2="393" y2="662"/>
+  <line class="lifeline" x1="726" y1="150" x2="726" y2="662"/>
+  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="662"/>
+
+  <!-- participants -->
+  <rect class="entry" x="48" y="88" width="140" height="46" rx="12"/>
+  <text class="title" x="118" y="117" text-anchor="middle">User</text>
+
+  <rect class="host" x="288" y="88" width="210" height="46" rx="12"/>
+  <text class="title" x="393" y="110" text-anchor="middle">AI coding host</text>
+  <text class="tiny" x="393" y="126" text-anchor="middle">model · repository · GitHub</text>
+
+  <rect class="verify" x="616" y="88" width="220" height="46" rx="12"/>
+  <text class="title" x="726" y="110" text-anchor="middle">slipway CLI</text>
+  <text class="tiny" x="726" y="126" text-anchor="middle">validate · schedule · observe</text>
+
+  <rect class="card" x="962" y="88" width="200" height="46" rx="12"/>
+  <text class="title" x="1062" y="110" text-anchor="middle">Run store</text>
+  <text class="tiny" x="1062" y="126" text-anchor="middle">journal · projection · materials</text>
+
+  <!-- 1. explicit start -->
+  <line class="msg" x1="118" y1="172" x2="386" y2="172" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="128" y="166">explicitly invokes the slipway-run capability</text>
+
+  <line class="msg" x1="393" y1="204" x2="719" y2="204" marker-end="url(#ps-arrow)"/>
+  <text class="mono" x="403" y="198">slipway run --budget N --json --root ROOT -- GOAL</text>
+
+  <line class="msg" x1="726" y1="234" x2="1055" y2="234" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="736" y="228">create Run · pin workspace identity</text>
+
+  <path class="msg-action" d="M719 264 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="258">first orient Action + structured next</text>
+
+  <!-- 2. action loop band -->
+  <rect class="band" x="270" y="286" width="880" height="214" rx="14"/>
+  <text class="tag" x="288" y="306">ACTION LOOP · REPEATS UNTIL PAUSE, STOP, OR ENDED</text>
+
+  <path class="msg-self" d="M393 322 H455 V344 H400" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="465" y="338">performs the one bounded Action</text>
+
+  <line class="msg-main" x1="393" y1="372" x2="719" y2="372" marker-end="url(#ps-arrow-main)"/>
+  <text class="mono" x="403" y="366">protocol submit --run RUN --action ACTION</text>
+  <text class="mono-sub" x="403" y="384">--outcome-file FILE | --outcome-stdin</text>
+
+  <path class="msg-self" d="M726 400 H788 V420 H733" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="798" y="414">strict validate · action_kind · idempotency</text>
+
+  <line class="msg" x1="726" y1="440" x2="1055" y2="440" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="736" y="434">append journal event, then replace projection</text>
+
+  <path class="msg-action" d="M719 476 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="470">next Action + next{operation}</text>
+  <text class="tiny" x="410" y="492">the CLI observes Git independently before deciding</text>
+
+  <!-- 3. pause band -->
+  <rect class="band" x="270" y="516" width="880" height="98" rx="14"/>
+  <text class="tag" x="288" y="536">IF THE OUTCOME IS needs_input · OR THE USER SKIPS</text>
+
+  <path class="msg-pause" d="M719 560 H400" marker-end="url(#ps-arrow-pause)"/>
+  <text class="msg-label" x="410" y="554">pause: decision_required · destructive_confirmation_required · environment_unavailable</text>
+
+  <line class="msg-pause" x1="393" y1="590" x2="719" y2="590" marker-end="url(#ps-arrow-pause)"/>
+  <text class="mono" x="403" y="584">protocol answer --text TEXT   ·   protocol skip</text>
+  <text class="tiny" x="403" y="606">destructive scope needs --confirm-destructive --scope-sha256 · “yes” is feedback, not authorization</text>
+
+  <!-- 4. resume -->
+  <line class="msg" x1="393" y1="638" x2="719" y2="638" marker-end="url(#ps-arrow)"/>
+  <text class="mono" x="403" y="632">protocol resume RUN --root ROOT [--budget N]</text>
+  <text class="tiny" x="403" y="652">revalidates workspace identity · voids stale Action IDs, answers, and destructive grants</text>
+
+  <!-- ended -->
+  <rect x="616" y="666" width="220" height="34" rx="10" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
+  <text class="term-text" x="726" y="688" text-anchor="middle">next{operation: "none"}</text>
+
+  <rect class="note" x="40" y="712" width="1120" height="34" rx="10"/>
+  <text class="sub" x="60" y="734">Drive the typed `next` variants: insert values as separate argv elements in schema order · never parse or concatenate a rendered display command.</text>
+</svg>

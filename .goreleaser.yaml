@@ -1,0 +1,221 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+project_name: slipway
+builds:
+  - id: slipway
+    main: .
+    binary: slipway
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/signalridge/slipway/cmd.version={{.Version}}
+      - -X github.com/signalridge/slipway/cmd.commit={{.ShortCommit}}
+      - -X github.com/signalridge/slipway/cmd.date={{.CommitDate}}
+archives:
+  - id: slipway
+    builds_info:
+      mtime: "{{ .CommitDate }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: README.md
+        info:
+          mtime: "{{ .CommitDate }}"
+      - src: LICENSE
+        info:
+          mtime: "{{ .CommitDate }}"
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+changelog:
+  sort: asc
+  use: github
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Performance
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: Refactoring
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: Dependencies
+      regexp: '^.*?deps(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: Security
+      regexp: '^.*?security(\([[:word:]]+\))??!?:.+$'
+      order: 5
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "^style:"
+      - "Merge pull request"
+      - "Merge branch"
+release:
+  disable: '{{ index .Env "OPTIONAL_PUBLISH_ONLY" }}'
+  github:
+    owner: signalridge
+    name: slipway
+  draft: false
+  prerelease: auto
+  mode: replace
+  name_template: "v{{.Version}}"
+  header: |
+    ## Changes in {{ .Tag }}
+  footer: |
+    ---
+    Full changelog: https://github.com/signalridge/slipway/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    Container image: `ghcr.io/signalridge/slipway:{{ .Version }}`
+
+    Installation: https://signalridge.github.io/slipway/en/installation/
+
+    Optional community-managed taps (published only when release secrets are
+    configured; otherwise use the Installation guide above):
+
+    - macOS (optional): `brew install --cask signalridge/tap/slipway`
+    - Windows (optional): add `signalridge/scoop-bucket`, then `scoop install slipway`
+    - Linux packages, direct archives, container, Go, and Nix are always available; see Installation.
+homebrew_casks:
+  - name: slipway
+    repository:
+      owner: signalridge
+      name: homebrew-tap
+      token: "{{ .Env.GH_PAT }}"
+    homepage: "https://github.com/signalridge/slipway"
+    description: "User-controlled soft autopilot for AI coding"
+    license: "BSD-3-Clause"
+    skip_upload: true
+    ids:
+      - slipway
+    binaries:
+      - slipway
+    url:
+      template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      verified: github.com/signalridge/slipway/
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/slipway"]
+          end
+scoops:
+  - name: slipway
+    repository:
+      owner: signalridge
+      name: scoop-bucket
+      token: "{{ .Env.GH_PAT }}"
+    homepage: "https://github.com/signalridge/slipway"
+    description: "User-controlled soft autopilot for AI coding"
+    license: BSD-3-Clause
+    url_template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    skip_upload: true
+nfpms:
+  - id: slipway
+    package_name: slipway
+    vendor: SignalRidge
+    homepage: "https://github.com/signalridge/slipway"
+    maintainer: "SignalRidge <support@signalridge.com>"
+    description: "User-controlled soft autopilot for AI coding"
+    license: BSD-3-Clause
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: LICENSE
+        dst: /usr/share/licenses/slipway/LICENSE
+        file_info:
+          mode: 0644
+      - src: README.md
+        dst: /usr/share/doc/slipway/README.md
+        file_info:
+          mode: 0644
+aurs:
+  - name: slipway-bin
+    homepage: "https://github.com/signalridge/slipway"
+    url_template: "https://github.com/signalridge/slipway/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    description: "User-controlled soft autopilot for AI coding"
+    maintainers:
+      - "SignalRidge <support@signalridge.com>"
+    license: BSD-3-Clause
+    private_key: "{{ .Env.HOME }}/.ssh/aur_key"
+    git_url: "ssh://aur@aur.archlinux.org/slipway-bin.git"
+    skip_upload: true
+    package: |-
+      install -Dm755 "./slipway" "${pkgdir}/usr/bin/slipway"
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/slipway/README.md"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/slipway/LICENSE"
+dockers_v2:
+  - id: slipway
+    ids:
+      - slipway
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - ghcr.io/signalridge/slipway
+    tags:
+      - "{{ .Version }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: slipway
+      org.opencontainers.image.description: User-controlled soft autopilot for AI coding
+      org.opencontainers.image.source: https://github.com/signalridge/slipway
+      org.opencontainers.image.licenses: BSD-3-Clause
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+sboms:
+  - artifacts: archive
+    documents:
+      - "${artifact}.sbom.spdx.json"
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+docker_signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    output: true
+    args:
+      - sign
+      - "${artifact}@${digest}"
+      - "--yes"
