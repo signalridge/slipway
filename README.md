@@ -25,15 +25,13 @@
 Slipway is a user-invoked soft autopilot for AI coding. It gives an AI coding host a
 small, recoverable workflow while keeping decisions and control with the user.
 
-A Slipway Run moves through one bounded Action at a time:
+A Slipway Run moves through one bounded Action at a time: `orient`, `clarify`,
+`implement`, `review`, or `summarize`. The order is not a fixed pipeline — the CLI
+derives each Action from the last Outcome and its own Git observation.
 
-```text
-orient → clarify when needed → implement → review when enabled and code changed → summarize
-```
-
-The host performs the work. The Slipway CLI records the Run, chooses the next Action,
-observes repository changes, and provides structured recovery. It does not call a model,
-hold a GitHub token, or decide that the software is ready to merge or release.
+The host performs the work. The Slipway CLI records the Run, observes repository
+changes, and provides structured recovery. It does not call a model, hold a GitHub
+token, or decide that the software is ready to merge or release.
 
 ![Slipway Run lifecycle: an explicit start enters a one-Action-at-a-time loop in which the CLI issues an Action, the host performs it and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing what happens next. The user can skip without a reason, stop, or resume. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.](docs/assets/diagrams/lifecycle.svg)
 

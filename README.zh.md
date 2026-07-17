@@ -24,13 +24,9 @@
 
 Slipway 是一款由用户显式调用的 AI 编程软自动驾驶工具。它为 AI 编程宿主提供一套小而可恢复的工作流，同时把决策权和控制权留给用户。
 
-一次 Run 每次只推进一个有界 Action：
+一次 Run 每次只推进一个有界 Action：`orient`、`clarify`、`implement`、`review` 或 `summarize`。它们的顺序不是固定流水线——CLI 依据上一个 Outcome 和自己对 Git 的独立观察推导出每一个 Action。
 
-```text
-orient → 必要时 clarify → implement → 代码已变化且启用时 review → summarize
-```
-
-宿主负责实际工作；Slipway CLI 记录 Run、选择下一个 Action、独立观察仓库变化并提供结构化恢复。它不调用模型、不持有 GitHub token，也不替用户判断软件是否可以合并或发布。
+宿主负责实际工作；Slipway CLI 记录 Run、独立观察仓库变化并提供结构化恢复。它不调用模型、不持有 GitHub token，也不替用户判断软件是否可以合并或发布。
 
 ![Slipway Run 生命周期：显式启动后进入每次一个 Action 的循环——CLI 下发一个 Action，宿主执行并返回结构化 Outcome，CLI 校验、记录并独立观察 Git，再决定下一步。用户可以无需理由地 skip，也可以 stop 或 resume。ended 只表示自动 Action 队列为空，并不代表工作正确、已合并、已部署或可以发布。](docs/assets/diagrams/lifecycle.svg)
 

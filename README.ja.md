@@ -24,13 +24,9 @@
 
 Slipway は、ユーザーが明示的に起動する AI coding 用の soft autopilot です。AI coding host に小さく復旧可能な workflow を提供しながら、判断と制御はユーザーに残します。
 
-1回の Run は、境界の明確な Action を1つずつ進みます。
+1回の Run は、境界の明確な Action を1つずつ進みます。`orient`、`clarify`、`implement`、`review`、`summarize` のいずれかです。この順序は固定された pipeline ではなく、CLI が直前の Outcome と自身による独立した Git 観測から各 Action を導きます。
 
-```text
-orient → 必要なら clarify → implement → code change があり有効な場合は review → summarize
-```
-
-Host が実際の作業を行い、Slipway CLI は Run の記録、次の Action の選択、repository change の独立観測、structured recovery を担当します。Model を呼び出さず、GitHub token を保持せず、software が merge や release 可能かをユーザーの代わりに判断しません。
+Host が実際の作業を行い、Slipway CLI は Run の記録、repository change の独立観測、structured recovery を担当します。Model を呼び出さず、GitHub token を保持せず、software が merge や release 可能かをユーザーの代わりに判断しません。
 
 ![Slipway Run の lifecycle: 明示的な start から、1回1 Action の loop に入ります。CLI が Action を1つ発行し、host が実行して structured Outcome を返し、CLI が検証・記録して Git を独立に観測してから次を決めます。ユーザーは理由なく skip でき、stop や resume も可能です。Ended は automatic Action queue が空であることだけを意味し、作業が正しい・merge 済み・deploy 済み・release 可能であることは意味しません。](docs/assets/diagrams/lifecycle.svg)
 
