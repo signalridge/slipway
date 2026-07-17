@@ -1,6 +1,6 @@
 # マシンプロトコル v2 チュートリアル
 
-このチュートリアルでは、Run の開始、Orient と Implement Outcome の送信、Summarize による終了まで、ローカルプロトコルのライフサイクルを一通り実行します。対象はホストおよびアダプターの作者です。通常、これらの hidden operation は生成されたホスト capability が実行します。エンドユーザー向けの別ワークフローではありません。
+このチュートリアルでは、Run の開始、Orient と Implement Outcome の送信、Summarize による終了まで、ローカルプロトコルのライフサイクルを一通り実行します。対象はホストおよびアダプターの作者です。通常、これらの protocol 操作は生成されたホスト capability が実行します。エンドユーザー向けの別ワークフローではありません。
 
 正規の契約は、バージョン付きパスの [machine protocol schema](../../reference/v2/machine-protocol.schema.json) と [source envelope schema](../../reference/v2/source-envelope.schema.json) です。URL のバージョンは JSON の `contract_version` または `source_version` とそろえてください。バージョンなしの互換エイリアスは意図的に公開しません。
 

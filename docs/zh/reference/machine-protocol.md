@@ -28,7 +28,7 @@ slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-sourc
 slipway protocol material --run RUN --action ACTION --root ROOT --section KEY
 ```
 
-隐藏操作是版本化宿主接口，不应作为另一套 end-user command sequence 暴露。
+协议操作是版本化宿主接口。它们有文档且在 help 中可见，但不是另一套 end-user command sequence：应通过 CLI 返回的结构化 `next` variant 来驱动。
 
 ## 启动 Run
 

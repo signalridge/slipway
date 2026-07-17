@@ -178,7 +178,7 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	t.Parallel()
 
 	// These hand-built values exercise the full contract matrix. Real command
-	// emitter bytes are validated separately in cmd/machine_output_test.go.
+	// emitter bytes are validated separately in cmd/protocol_output_test.go.
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "v2", "machine-protocol.schema.json"))
 	require.NoError(t, err)

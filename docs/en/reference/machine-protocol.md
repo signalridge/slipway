@@ -28,7 +28,7 @@ slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-sourc
 slipway protocol material --run RUN --action ACTION --root ROOT --section KEY
 ```
 
-The hidden operations are versioned host interfaces. Do not expose them as an alternative end-user command sequence.
+The protocol operations are versioned host interfaces. They are documented and visible in help, but they are not an alternative end-user command sequence: drive them from the structured `next` variants the CLI returns.
 
 ## Start a Run
 

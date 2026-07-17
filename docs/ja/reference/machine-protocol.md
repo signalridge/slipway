@@ -28,7 +28,7 @@ slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-sourc
 slipway protocol material --run RUN --action ACTION --root ROOT --section KEY
 ```
 
-Hidden operation は versioned host interface であり、代替の end-user command sequence として公開すべきではありません。
+Protocol 操作は versioned host interface です。Documented であり help にも表示されますが、代替の end-user command sequence ではありません。CLI が返す structured `next` variant から実行してください。
 
 ## Run の開始
 
