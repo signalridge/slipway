@@ -1,0 +1,770 @@
+package runstore
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestObserveGitDetectsChangesToInitiallyDirtyAndUntrackedFiles(t *testing.T) {
+	repository := createRepository(t)
+	tracked := filepath.Join(repository, "README.md")
+	untracked := filepath.Join(repository, "notes.txt")
+	require.NoError(t, os.WriteFile(tracked, []byte("dirty one\n"), 0o600))
+	require.NoError(t, os.WriteFile(untracked, []byte("draft one\n"), 0o600))
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"README.md", "notes.txt"}, initial.DirtyFiles)
+
+	require.NoError(t, os.WriteFile(tracked, []byte("dirty two\n"), 0o600))
+	trackedChanged, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.True(t, trackedChanged.ChangedFrom(initial))
+
+	require.NoError(t, os.WriteFile(tracked, []byte("dirty one\n"), 0o600))
+	require.NoError(t, os.WriteFile(untracked, []byte("draft two\n"), 0o600))
+	untrackedChanged, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.True(t, untrackedChanged.ChangedFrom(initial))
+}
+
+func TestObserveGitDetectsRetargetedUntrackedSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges")
+	}
+	repository := createRepository(t)
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "a.txt"), []byte("a\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(repository, "b.txt"), []byte("b\n"), 0o600))
+	link := filepath.Join(repository, "link.txt")
+	require.NoError(t, os.Symlink("a.txt", link))
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	initialLink := requirePathObservation(t, initial, "link.txt")
+	assert.Equal(t, "symlink", initialLink.Observation)
+	assert.Equal(t, digestBytes([]byte("a.txt")), initialLink.ContentSHA256)
+
+	require.NoError(t, os.Remove(link))
+	require.NoError(t, os.Symlink("b.txt", link))
+	changed, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.True(t, changed.ChangedFrom(initial))
+	changedLink := requirePathObservation(t, changed, "link.txt")
+	assert.Equal(t, "symlink", changedLink.Observation)
+	assert.Equal(t, digestBytes([]byte("b.txt")), changedLink.ContentSHA256)
+}
+
+func TestObserveGitSamplesOversizeUntrackedFileContent(t *testing.T) {
+	repository := createRepository(t)
+	path := filepath.Join(repository, "large.bin")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, file.Truncate(MaxObservedFileBytes+1))
+	require.NoError(t, file.Close())
+
+	observation, err := ObserveGit(repository)
+	require.NoError(t, err)
+	require.Len(t, observation.PathObservations, 1)
+	assert.Equal(t, "oversize_sampled", observation.PathObservations[0].Observation)
+	assert.True(t, validSHA256(observation.PathObservations[0].ContentSHA256))
+	require.NotNil(t, observation.PathObservations[0].Size)
+	assert.Equal(t, MaxObservedFileBytes+1, *observation.PathObservations[0].Size)
+}
+
+func TestObserveGitDetectsEqualLengthOversizeRewrite(t *testing.T) {
+	repository := createRepository(t)
+	path := filepath.Join(repository, "large.bin")
+	size := int(MaxObservedFileBytes + 1)
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{'a'}, size), 0o600))
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	require.Len(t, initial.PathObservations, 1)
+
+	require.NoError(t, os.WriteFile(path, bytes.Repeat([]byte{'b'}, size), 0o600))
+	current, err := ObserveGit(repository)
+	require.NoError(t, err)
+	require.Len(t, current.PathObservations, 1)
+	assert.NotEqual(t, initial.PathObservations[0].ContentSHA256, current.PathObservations[0].ContentSHA256)
+	assert.True(t, current.ChangedFrom(initial))
+}
+
+func TestObserveGitBoundsPathDetailsWithoutLosingCompleteFingerprint(t *testing.T) {
+	repository := createRepository(t)
+	const count = 200
+	var lastPath string
+	for index := 0; index < count; index++ {
+		name := fmt.Sprintf("%03d-%s.txt", index, strings.Repeat("x", 230))
+		lastPath = filepath.Join(repository, name)
+		require.NoError(t, os.WriteFile(lastPath, []byte("a"), 0o600))
+	}
+
+	initial, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.Equal(t, count, initial.PathCount)
+	assert.True(t, initial.DetailsTruncated)
+	assert.Less(t, len(initial.PathObservations), initial.PathCount)
+	assert.Len(t, initial.DirtyFiles, len(initial.PathObservations))
+	assert.True(t, validSHA256(initial.PathFingerprint))
+	encoded, err := json.Marshal(initial)
+	require.NoError(t, err)
+	assert.Less(t, len(encoded), 1<<20)
+
+	require.NoError(t, os.WriteFile(lastPath, []byte("b"), 0o600))
+	current, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.Equal(t, initial.PathCount, current.PathCount)
+	assert.NotEqual(t, initial.PathFingerprint, current.PathFingerprint)
+	assert.True(t, current.ChangedFrom(initial))
+}
+
+func TestStoreUsesGitCommonDirectoryAndPrivateJournalFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits and linked-worktree path assertions are Unix-specific")
+	}
+	mainRepository := createRepository(t)
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGitCommand(t, mainRepository, "worktree", "add", "-q", "-b", "linked-test", linked)
+	store, err := Open(linked)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	expectedCommon, err := filepath.EvalSymlinks(filepath.Join(mainRepository, ".git"))
+	require.NoError(t, err)
+	expectedLinked, err := filepath.EvalSymlinks(linked)
+	require.NoError(t, err)
+	assert.Equal(t, expectedCommon, store.CommonDir())
+	assert.Equal(t, expectedLinked, store.RepositoryRoot())
+
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "run-one")
+	require.NoError(t, err)
+	for _, path := range []string{paths.JournalFile, paths.RunFile, paths.LockFile} {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), path)
+	}
+	info, err := os.Stat(paths.Directory)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
+}
+
+func TestFirstEventAcceptsCompleteJSONWithoutTrailingNewlineReadOnly(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "run-one")
+	require.NoError(t, err)
+	journal, err := os.ReadFile(paths.JournalFile)
+	require.NoError(t, err)
+	require.True(t, bytes.HasSuffix(journal, []byte{'\n'}))
+	withoutNewline := bytes.TrimSuffix(journal, []byte{'\n'})
+	require.NoError(t, os.WriteFile(paths.JournalFile, withoutNewline, 0o600))
+
+	first, err := store.FirstEvent("run-one")
+	require.NoError(t, err)
+	assert.Equal(t, event.Type, first.Type)
+	assert.JSONEq(t, string(event.Data), string(first.Data))
+	unchanged, err := os.ReadFile(paths.JournalFile)
+	require.NoError(t, err)
+	assert.Equal(t, withoutNewline, unchanged, "FirstEvent must not repair or mutate the journal")
+}
+
+func TestExistingRunOperationsRecreateMissingLockAfterReadOnlyValidation(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "run-one")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(paths.LockFile))
+
+	_, err = store.FirstEvent("run-one")
+	require.NoError(t, err)
+	_, statErr := os.Lstat(paths.LockFile)
+	assert.ErrorIs(t, statErr, os.ErrNotExist, "immutable first-event validation must remain read-only")
+
+	require.NoError(t, store.Visit("run-one", func(Event) error { return nil }))
+	lockInfo, err := os.Lstat(paths.LockFile)
+	require.NoError(t, err)
+	assert.True(t, lockInfo.Mode().IsRegular())
+}
+
+func TestOpenReadOnlyRejectsMutationsAndDoesNotCreateLocks(t *testing.T) {
+	repository := createRepository(t)
+	writable, err := Open(repository)
+	require.NoError(t, err)
+	event, err := NewEvent("created", map[string]string{"id": "run-one"})
+	require.NoError(t, err)
+	require.NoError(t, writable.Create("run-one", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(writable.CommonDir(), "run-one")
+	require.NoError(t, err)
+	require.NoError(t, writable.Close())
+	require.NoError(t, os.Remove(paths.LockFile))
+
+	store, err := OpenReadOnly(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	require.NoError(t, store.Visit("run-one", func(Event) error { return nil }))
+	_, statErr := os.Lstat(paths.LockFile)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+
+	err = store.Create("run-two", event, map[string]string{"state": "active"})
+	assert.ErrorIs(t, err, ErrReadOnly)
+	err = store.UpdateStream("run-one", func(Event) error { return nil }, func() ([]Event, any, error) {
+		return nil, nil, nil
+	})
+	assert.ErrorIs(t, err, ErrReadOnly)
+	err = putTestMaterials(store, "run-one", nil)
+	assert.ErrorIs(t, err, ErrReadOnly)
+}
+
+func TestReadOnlyVisitSerializesAgainstWriterCommitBoundary(t *testing.T) {
+	repository := createRepository(t)
+	writable, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, writable.Close()) })
+	initial, err := NewEvent("created", map[string]int{"count": 1})
+	require.NoError(t, err)
+	require.NoError(t, writable.Create("serialized-run", initial, map[string]int{"count": 1}))
+	readOnly, err := OpenReadOnly(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, readOnly.Close()) })
+
+	writerEntered := make(chan struct{})
+	releaseWriter := make(chan struct{})
+	writerResult := make(chan error, 1)
+	go func() {
+		writerResult <- writable.UpdateStream("serialized-run", func(Event) error { return nil }, func() ([]Event, any, error) {
+			close(writerEntered)
+			<-releaseWriter
+			next, eventErr := NewEvent("updated", map[string]int{"count": 2})
+			return []Event{next}, map[string]int{"count": 2}, eventErr
+		})
+	}()
+	<-writerEntered
+
+	visitorRun, err := readOnly.openRunRoot("serialized-run")
+	require.NoError(t, err)
+	defer visitorRun.Close()
+	visitorWaiting := make(chan struct{})
+	var waitOnce sync.Once
+	visitorRun.writerWait = func() { waitOnce.Do(func() { close(visitorWaiting) }) }
+	visitorEntered := make(chan struct{})
+	visitorResult := make(chan error, 1)
+	var enterOnce sync.Once
+	go func() {
+		visitorResult <- withRunCommitBoundary(visitorRun, func() error {
+			_, visitErr := visitJournalReadOnly(visitorRun.readOnlyJournalContext(), journalFileName, func(Event) error {
+				enterOnce.Do(func() { close(visitorEntered) })
+				return nil
+			})
+			return visitErr
+		})
+	}()
+	<-visitorWaiting
+	crossedCommitBoundary := false
+	select {
+	case <-visitorEntered:
+		crossedCommitBoundary = true
+	default:
+	}
+
+	close(releaseWriter)
+	require.NoError(t, <-writerResult)
+	require.NoError(t, <-visitorResult)
+	if crossedCommitBoundary {
+		t.Fatal("read-only replay crossed an in-progress writer commit boundary")
+	}
+	select {
+	case <-visitorEntered:
+	default:
+		t.Fatal("read-only visitor did not run after writer release")
+	}
+}
+
+func TestJournalIgnoresOnlyAnInterruptedFinalRecord(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	first, err := NewEvent("first", map[string]int{"value": 1})
+	require.NoError(t, err)
+	first.Sequence = 1
+	encoded, err := json.Marshal(first)
+	require.NoError(t, err)
+	content := append(append(encoded, '\n'), []byte(`{"sequence":2,"type":"partial"`)...)
+	require.NoError(t, os.WriteFile(path, content, 0o600))
+
+	events, err := readAllJournal(path)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "first", events[0].Type)
+	repaired, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, append(append([]byte(nil), encoded...), '\n'), repaired)
+
+	second, err := NewEvent("second", map[string]int{"value": 2})
+	require.NoError(t, err)
+	second.Sequence = 2
+	require.NoError(t, appendAllJournal(path, []Event{second}))
+	events, err = readAllJournal(path)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "second", events[1].Type)
+
+	broken := append(append([]byte(nil), encoded...), []byte("\nnot-json\n")...)
+	require.NoError(t, os.WriteFile(path, broken, 0o600))
+	_, err = readAllJournal(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "event 2")
+}
+
+func TestDecodeJournalEventRejectsDuplicateKeys(t *testing.T) {
+	t.Parallel()
+	at := time.Now().UTC().Format(time.RFC3339Nano)
+	tests := []struct {
+		name string
+		raw  []byte
+	}{
+		{
+			name: "event envelope",
+			raw:  []byte(fmt.Sprintf(`{"sequence":1,"type":"run_started","type":"invented","at":%q,"data":{"value":1}}`, at)),
+		},
+		{
+			name: "nested data",
+			raw:  []byte(fmt.Sprintf(`{"sequence":1,"type":"run_started","at":%q,"data":{"value":1,"value":2}}`, at)),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := decodeJournalEvent(test.raw, 1)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "duplicate object key")
+		})
+	}
+}
+
+func TestJournalBoundsOversizedRecordsAndRepairsOversizedInterruptedTail(t *testing.T) {
+	first, err := NewEvent("first", map[string]int{"value": 1})
+	require.NoError(t, err)
+	first.Sequence = 1
+	encoded, err := json.Marshal(first)
+	require.NoError(t, err)
+
+	t.Run("interrupted final record is truncated", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "journal.jsonl")
+		content := append(append(append([]byte(nil), encoded...), '\n'), bytes.Repeat([]byte{'x'}, maxJournalRecordBytes+1)...)
+		require.NoError(t, os.WriteFile(path, content, 0o600))
+		events, err := readAllJournal(path)
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		repaired, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, append(append([]byte(nil), encoded...), '\n'), repaired)
+	})
+
+	t.Run("complete oversized record is rejected", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "journal.jsonl")
+		content := append(bytes.Repeat([]byte{'x'}, maxJournalRecordBytes+1), '\n')
+		require.NoError(t, os.WriteFile(path, content, 0o600))
+		_, err := readAllJournal(path)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "record exceeds")
+	})
+}
+
+func TestAppendJournalRejectsOversizedEncodedRecordWithoutPartialWrite(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "journal.jsonl")
+	events := []Event{
+		{Type: "first", At: time.Now().UTC(), Data: json.RawMessage(`{"value":1}`)},
+		{Type: strings.Repeat("\n", maxJournalRecordBytes/2+1), At: time.Now().UTC(), Data: json.RawMessage(`null`)},
+	}
+	err := appendAllJournal(path, events)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "event exceeds")
+	_, statErr := os.Stat(path)
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestStoreVisitStreamsEventLargerThanScannerDefaults(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	payload := map[string]string{"value": strings.Repeat("x", 256<<10)}
+	event, err := NewEvent("large", payload)
+	require.NoError(t, err)
+	require.NoError(t, store.Create("large-event", event, payload))
+
+	visited := 0
+	err = store.Visit("large-event", func(event Event) error {
+		visited++
+		assert.Greater(t, len(event.Data), 64<<10)
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, visited)
+}
+
+func TestStoreUpdateRepairsInterruptedTailBeforeAppending(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	runID := "00000000-0000-4000-8000-000000000201"
+	first, err := NewEvent("first", map[string]int{"count": 1})
+	require.NoError(t, err)
+	require.NoError(t, store.Create(runID, first, map[string]int{"count": 1}))
+	paths, err := pathsFor(store.CommonDir(), runID)
+	require.NoError(t, err)
+	file, err := os.OpenFile(paths.JournalFile, os.O_WRONLY|os.O_APPEND, 0o600)
+	require.NoError(t, err)
+	_, err = file.WriteString(`{"sequence":2,"type":"interrupted"`)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	seen := 0
+	require.NoError(t, store.UpdateStream(runID, func(Event) error {
+		seen++
+		return nil
+	}, func() ([]Event, any, error) {
+		require.Equal(t, 1, seen)
+		second, eventErr := NewEvent("second", map[string]int{"count": 2})
+		return []Event{second}, map[string]int{"count": 2}, eventErr
+	}))
+	events := collectStoreEvents(t, store, runID)
+	require.Len(t, events, 2)
+	assert.Equal(t, "second", events[1].Type)
+}
+
+func TestStoreProjectionSerializationFailureIsPreCommit(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	first, err := NewEvent("first", map[string]int{"count": 1})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("projection-failure", first, map[string]int{"count": 1}))
+
+	err = store.UpdateStream("projection-failure", func(Event) error { return nil }, func() ([]Event, any, error) {
+		second, eventErr := NewEvent("second", map[string]int{"count": 2})
+		return []Event{second}, func() {}, eventErr
+	})
+	var mutationErr *MutationError
+	require.ErrorAs(t, err, &mutationErr)
+	assert.False(t, mutationErr.Committed)
+	assert.False(t, mutationErr.ProjectionStale)
+	assert.False(t, mutationErr.Ambiguous)
+	assert.Equal(t, PhaseProjectionEncode, mutationErr.Phase)
+	events := collectStoreEvents(t, store, "projection-failure")
+	require.Len(t, events, 1)
+	assert.Equal(t, "first", events[0].Type)
+}
+
+func TestStoreCreateProjectionSerializationFailureIsPreCommit(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	first, err := NewEvent("first", map[string]int{"count": 1})
+	require.NoError(t, err)
+
+	err = store.Create("create-projection-failure", first, func() {})
+	var mutationErr *MutationError
+	require.ErrorAs(t, err, &mutationErr)
+	assert.False(t, mutationErr.Committed)
+	assert.False(t, mutationErr.ProjectionStale)
+	assert.Equal(t, PhaseProjectionEncode, mutationErr.Phase)
+	_, statErr := os.Stat(filepath.Join(store.CommonDir(), "slipway", "runs", "create-projection-failure"))
+	assert.ErrorIs(t, statErr, os.ErrNotExist)
+}
+
+func TestStoreSerializesConcurrentUpdates(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	event, err := NewEvent("created", map[string]int{"count": 0})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("concurrent", event, map[string]int{"count": 0}))
+
+	const workers = 12
+	var wait sync.WaitGroup
+	errorsSeen := make(chan error, workers)
+	for index := range workers {
+		index := index
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			count := 0
+			errorsSeen <- store.UpdateStream("concurrent", func(Event) error {
+				count++
+				return nil
+			}, func() ([]Event, any, error) {
+				next, err := NewEvent("increment", map[string]int{"worker": index})
+				return []Event{next}, map[string]int{"count": count}, err
+			})
+		}()
+	}
+	wait.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		require.NoError(t, err)
+	}
+	events := collectStoreEvents(t, store, "concurrent")
+	assert.Len(t, events, workers+1)
+	for index, event := range events {
+		assert.Equal(t, index+1, event.Sequence)
+	}
+}
+
+func TestRemovingRunJournalOnlyRemovesRecovery(t *testing.T) {
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+	event, err := NewEvent("created", map[string]string{"goal": "test"})
+	require.NoError(t, err)
+	require.NoError(t, store.Create("remove-me", event, map[string]string{"state": "active"}))
+	paths, err := pathsFor(store.CommonDir(), "remove-me")
+	require.NoError(t, err)
+	require.NoError(t, os.RemoveAll(paths.Directory))
+
+	err = store.Visit("remove-me", func(Event) error { return nil })
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	_, err = os.Stat(filepath.Join(repository, "README.md"))
+	assert.NoError(t, err)
+}
+
+func TestOpenRejectsSymlinkedJournalDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges")
+	}
+	repository := createRepository(t)
+	target := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repository, ".git", "slipway"), 0o700))
+	require.NoError(t, os.Symlink(target, filepath.Join(repository, ".git", "slipway", "runs")))
+	_, err := Open(repository)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular directory")
+}
+
+func TestOpenRejectsSymlinkedSlipwayNamespace(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges")
+	}
+	repository := createRepository(t)
+	target := t.TempDir()
+	require.NoError(t, os.Symlink(target, filepath.Join(repository, ".git", "slipway")))
+	_, err := Open(repository)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular directory")
+}
+
+func TestStoreRejectsJournalParentSwapAfterOpen(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges")
+	}
+	for _, component := range []string{"slipway", filepath.Join("slipway", "runs")} {
+		component := component
+		t.Run(component, func(t *testing.T) {
+			repository := createRepository(t)
+			store, err := Open(repository)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, store.Close()) })
+			original := filepath.Join(store.CommonDir(), component)
+			moved := original + "-original"
+			require.NoError(t, os.Rename(original, moved))
+			outside := t.TempDir()
+			require.NoError(t, os.Symlink(outside, original))
+
+			event, eventErr := NewEvent("created", map[string]int{"count": 0})
+			require.NoError(t, eventErr)
+			err = store.Create("parent-swap", event, map[string]int{"count": 0})
+			require.Error(t, err)
+			assert.Empty(t, mustReadDirNames(t, outside))
+		})
+	}
+}
+
+func TestStoreRejectsSymlinkedRunAndLeafPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require elevated privileges")
+	}
+	repository := createRepository(t)
+	store, err := Open(repository)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, store.Close()) })
+
+	newRun := func(t *testing.T, runID string) Paths {
+		t.Helper()
+		event, err := NewEvent("created", map[string]int{"count": 0})
+		require.NoError(t, err)
+		require.NoError(t, store.Create(runID, event, map[string]int{"count": 0}))
+		paths, err := pathsFor(store.CommonDir(), runID)
+		require.NoError(t, err)
+		return paths
+	}
+
+	t.Run("run directory", func(t *testing.T) {
+		paths := newRun(t, "00000000-0000-4000-8000-000000000101")
+		require.NoError(t, os.RemoveAll(paths.Directory))
+		outside := t.TempDir()
+		require.NoError(t, os.Symlink(outside, paths.Directory))
+		err := store.Visit("00000000-0000-4000-8000-000000000101", func(Event) error { return nil })
+		require.Error(t, err)
+		assert.Empty(t, mustReadDirNames(t, outside))
+	})
+
+	for _, test := range []struct {
+		name  string
+		runID string
+		leaf  func(Paths) string
+		load  bool
+	}{
+		{name: "journal", runID: "00000000-0000-4000-8000-000000000102", leaf: func(paths Paths) string { return paths.JournalFile }, load: true},
+		{name: "lock", runID: "00000000-0000-4000-8000-000000000103", leaf: func(paths Paths) string { return paths.LockFile }, load: true},
+		{name: "projection", runID: "00000000-0000-4000-8000-000000000104", leaf: func(paths Paths) string { return paths.RunFile }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			paths := newRun(t, test.runID)
+			leaf := test.leaf(paths)
+			require.NoError(t, os.Remove(leaf))
+			target := filepath.Join(t.TempDir(), "outside")
+			require.NoError(t, os.WriteFile(target, []byte("unchanged"), 0o600))
+			require.NoError(t, os.Symlink(target, leaf))
+			if test.load {
+				err = store.Visit(test.runID, func(Event) error { return nil })
+			} else {
+				count := 0
+				err = store.UpdateStream(test.runID, func(Event) error {
+					count++
+					return nil
+				}, func() ([]Event, any, error) {
+					next, eventErr := NewEvent("updated", map[string]int{"count": count})
+					return []Event{next}, map[string]int{"count": count}, eventErr
+				})
+			}
+			require.Error(t, err)
+			content, readErr := os.ReadFile(target)
+			require.NoError(t, readErr)
+			assert.Equal(t, "unchanged", string(content))
+		})
+	}
+}
+
+// newStandaloneJournalContext binds a journal context to a bare directory root
+// for the fixture helpers below, which read and append a journal outside any
+// Store. It stays in the test build on purpose: the context it returns carries
+// no tracker and no hooks, so a production caller reaching for it would drop
+// mutation tracking silently. Production builds its contexts from a run
+// transaction or a read-only run handle instead.
+func newStandaloneJournalContext(root *os.Root) (journalContext, error) {
+	directory, err := root.Open(".")
+	if err != nil {
+		return journalContext{}, err
+	}
+	identity, statErr := directory.Stat()
+	closeErr := directory.Close()
+	if statErr != nil {
+		return journalContext{}, statErr
+	}
+	if closeErr != nil {
+		return journalContext{}, closeErr
+	}
+	context := journalContext{root: root}
+	context.validate = func(_ MutationPhase, _ faultPoint) error {
+		return validateOpenedDirectoryRoot(root, identity)
+	}
+	return context, nil
+}
+
+func readAllJournal(path string) ([]Event, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	context, err := newStandaloneJournalContext(root)
+	if err != nil {
+		return nil, err
+	}
+	var events []Event
+	_, err = visitJournal(context, filepath.Base(path), func(event Event) error {
+		events = append(events, event)
+		return nil
+	})
+	return events, err
+}
+
+func appendAllJournal(path string, events []Event) error {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	context, err := newStandaloneJournalContext(root)
+	if err != nil {
+		return err
+	}
+	return appendJournal(context, filepath.Base(path), events)
+}
+
+func collectStoreEvents(t *testing.T, store *Store, runID string) []Event {
+	t.Helper()
+	var events []Event
+	require.NoError(t, store.Visit(runID, func(event Event) error {
+		events = append(events, event)
+		return nil
+	}))
+	return events
+}
+
+func mustReadDirNames(t *testing.T, path string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(path)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+func createRepository(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runGitCommand(t, root, "init", "-q")
+	runGitCommand(t, root, "config", "user.name", "Slipway Test")
+	runGitCommand(t, root, "config", "user.email", "test@example.com")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("initial\n"), 0o600))
+	runGitCommand(t, root, "add", ".")
+	runGitCommand(t, root, "commit", "-qm", "initial")
+	return root
+}
+
+func runGitCommand(t *testing.T, root string, args ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", root}, args...)...)
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+}

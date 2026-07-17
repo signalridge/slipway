@@ -1,0 +1,64 @@
+# Binaries
+slipway
+/bin/
+/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Go build cache
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data left by pre-rewrite Slipway versions (ignored by the current runtime)
+.slipway/
+
+# Temp files
+tmp/
+site/
+*.tmp
+
+.claude/
+.codex/
+.serena/
+.cursor/
+.opencode/
+# Host capabilities generated locally by `slipway install`
+.kilocode/
+.kiro/
+.pi/
+.qwen/
+.windsurf/
+# Copilot adapter output (do not ignore all of .github)
+.github/copilot/
+.github/prompts/
+.github/skills/
+
+# Historical pre-rewrite local data and development worktrees
+/artifacts/changes/**/evidence/
+/artifacts/changes/**/events/
+/artifacts/changes/**/execution/
+/artifacts/changes/**/verification/
+/.worktrees/
+
+# Stray Python bytecode in bundled helpers
+__pycache__/
+*.pyc
+
+# Local scratch copies for research
+skills_ref/
+.ruff_cache/

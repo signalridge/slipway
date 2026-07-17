@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalridge.github.io/slipway/reference/v2/source-envelope.schema.json",
+  "title": "Slipway Source Bundle v2 envelope",
+  "description": "Strict trusted-host observation containing an Issue body and, when its manifest is valid, exactly the referenced comments; an invalid head uses an empty comments array.",
+  "$ref": "#/$defs/rawSourceEnvelope",
+  "$defs": {
+    "markdownText": {
+      "type": "string",
+      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]*$"
+    },
+    "nonEmptyPlainText": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        { "pattern": "^[^\u0000-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
+    },
+    "nonEmptyMarkdownText": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        { "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]+$" },
+        { "pattern": "\\S" }
+      ]
+    },
+    "githubNodeID": {
+      "allOf": [
+        { "$ref": "#/$defs/nonEmptyPlainText" },
+        { "pattern": "^\\S+$" }
+      ]
+    },
+    "githubIssueURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$"
+    },
+    "githubCommentURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$"
+    },
+    "sourceParent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "issue_id", "canonical_url"],
+      "properties": {
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" }
+      }
+    },
+    "rawSourceComment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "database_id", "url", "updated_at", "author_id", "is_minimized", "body"],
+      "properties": {
+        "node_id": { "$ref": "#/$defs/githubNodeID" },
+        "database_id": { "type": "integer", "minimum": 1 },
+        "url": { "$ref": "#/$defs/githubCommentURL" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
+        "is_minimized": { "type": "boolean" },
+        "body": { "$ref": "#/$defs/markdownText" }
+      }
+    },
+    "rawSourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_version", "provider", "host", "repository_id", "issue_id", "issue_number",
+        "canonical_url", "updated_at", "fetched_at", "title", "body", "labels", "comments"
+      ],
+      "properties": {
+        "source_version": { "const": 2 },
+        "provider": { "const": "github" },
+        "host": { "const": "github.com" },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_number": { "type": "integer", "minimum": 1 },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "body": { "$ref": "#/$defs/markdownText" },
+        "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
+        "parent": { "$ref": "#/$defs/sourceParent" },
+        "comments": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/rawSourceComment" }
+        }
+      }
+    },
+    "sourceManifestSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "role", "title", "comment_node_id", "comment_database_id", "body_sha256"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
+        "title": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }], "x-slipway-max-utf8-bytes": 512, "description": "At most 512 UTF-8 bytes." },
+        "comment_node_id": { "$ref": "#/$defs/githubNodeID" },
+        "comment_database_id": { "type": "integer", "minimum": 1 },
+        "body_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "sourceManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_version", "profile", "sections"],
+      "properties": {
+        "manifest_version": { "const": 2 },
+        "profile": { "const": "change/v2" },
+        "parent_requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sections": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/sourceManifestSection" },
+          "allOf": [
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "outcome" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "requirements" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "acceptance_examples" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "constraints" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "non_goals" } } }, "minContains": 1 }
+          ]
+        }
+      }
+    }
+  }
+}

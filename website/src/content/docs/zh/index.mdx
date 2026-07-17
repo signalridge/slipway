@@ -1,0 +1,47 @@
+---
+title: Slipway
+description: 用户主动启动的 AI 编程辅助自动化。
+template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/zh/index.mdx
+hero:
+  tagline: 每次推进一个 Action——先查事实、逐个澄清、实施、只读 Review、可恢复，同时始终由用户掌控。
+  image:
+    file: ../../../assets/slipway-wordmark.svg
+  actions:
+    - text: 从这里开始
+      link: /slipway/zh/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: 核心概念
+      link: /slipway/zh/explanation/concepts/
+      icon: document
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway 是一款由用户主动调用的 AI 编程辅助自动化。宿主写代码；Slipway 记录每次 Run、选择下一个 Action、独立观察 Git，并保存可恢复状态。Run engine 不调用模型或访问 GitHub；独立的 `doctor` 命令可能调用本机 `gh` 做只读诊断。Slipway 不保存模型或 GitHub 凭据。
+
+一次 Run 每次推进一个版本化 Action：`orient → 必要时 clarify → implement → 代码已变化且启用时 review → summarize`。每项 Action 可以 skip，Run 可以 stop/resume，Review 不改代码，`ended` 只表示自动队列为空。
+
+<CardGrid stagger>
+  <Card title="使用 Slipway" icon="rocket">
+    从你要完成的任务开始：ad hoc 或从一个自包含 GitHub Change Issue 启动。
+
+    [从这里开始](/slipway/zh/start-here/) · [GitHub Issues](/slipway/zh/guides/github-issues/) · [Run、恢复与隐私](/slipway/zh/guides/runs-and-recovery/)
+  </Card>
+  <Card title="查询精确接口" icon="puzzle">
+    七个公开命令、十个宿主适配器，以及面向集成方的版本化机器协议。
+
+    [命令](/slipway/zh/reference/commands/) · [协议 v2 教程](/slipway/zh/guides/machine-protocol-v2/) · [机器协议](/slipway/zh/reference/machine-protocol/) · [宿主适配器](/slipway/zh/reference/adapters/)
+  </Card>
+  <Card title="理解与贡献" icon="setting">
+    核心概念、架构与贡献者检查。
+
+    [核心概念](/slipway/zh/explanation/concepts/) · [架构](/slipway/zh/explanation/architecture/) · [贡献](/slipway/zh/contributing/)
+  </Card>
+</CardGrid>

@@ -1,0 +1,47 @@
+---
+title: Slipway
+description: An explicitly invoked soft autopilot for AI coding.
+template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/en/index.mdx
+hero:
+  tagline: One Action at a time—investigate facts, clarify real decisions, implement, review read-only, and recover while the user stays in control.
+  image:
+    file: ../../../assets/slipway-wordmark.svg
+  actions:
+    - text: Start Here
+      link: /slipway/en/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: Core Concepts
+      link: /slipway/en/explanation/concepts/
+      icon: document
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway is a user-invoked soft autopilot for AI coding. A host writes the code; Slipway records each Run, chooses the next Action, observes Git independently, and stores recoverable state. The Run engine calls no model and does not access GitHub; the separate `doctor` command may invoke local `gh` for read-only diagnostics. Slipway does not store model or GitHub credentials.
+
+One Run advances one versioned Action at a time: `orient → clarify when needed → implement → review when enabled and code changed → summarize`. Every Action can be skipped, a Run can stop and resume, Review never edits code, and `ended` means only that the automatic queue is empty.
+
+<CardGrid stagger>
+  <Card title="Use it" icon="rocket">
+    Start from the task you want to accomplish; start ad hoc or from a self-contained GitHub Change Issue.
+
+    [Start here](/slipway/en/start-here/) · [GitHub Issues](/slipway/en/guides/github-issues/) · [Runs, recovery, privacy](/slipway/en/guides/runs-and-recovery/)
+  </Card>
+  <Card title="Look up exact surfaces" icon="puzzle">
+    The seven public commands, ten host adapters, and the versioned machine protocol for integrators.
+
+    [Commands](/slipway/en/reference/commands/) · [Protocol v2 tutorial](/slipway/en/guides/machine-protocol-v2/) · [Machine protocol](/slipway/en/reference/machine-protocol/) · [Adapters](/slipway/en/reference/adapters/)
+  </Card>
+  <Card title="Understand and contribute" icon="setting">
+    Concepts, architecture, and contributor checks.
+
+    [Concepts](/slipway/en/explanation/concepts/) · [Architecture](/slipway/en/explanation/architecture/) · [Contributing](/slipway/en/contributing/)
+  </Card>
+</CardGrid>

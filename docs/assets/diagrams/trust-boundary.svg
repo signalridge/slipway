@@ -1,0 +1,217 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="trust-boundary-title trust-boundary-desc">
+  <title id="trust-boundary-title">Slipway trust boundaries</title>
+  <desc id="trust-boundary-desc">Slipway separates untrusted issue content, the trusted-to-fetch host that holds model and GitHub credentials, and the local CLI that validates without owning credentials. Issue content is data and never instruction: it cannot grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope. The CLI can validate envelope consistency, identities, and digests, but cannot cryptographically prove the host fetched GitHub honestly. Slipway assumes that the same account, root, malware, or a compromised host can exceed its protections, and that reported activity is not proof while an observed diff does not prove which process caused it.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart LR
+  subgraph untrusted["UNTRUSTED · data, never instruction"]
+    Issue["GitHub Issue body, comments, links, attachments"]
+    Repo["repository working tree contents"]
+  end
+
+  subgraph trusted["TRUSTED TO ACT · holds the credentials"]
+    Host["AI coding host\nmodel provider credentials\nGitHub credentials via gh\nshell and tool execution"]
+  end
+
+  subgraph local["VALIDATES · holds no credentials"]
+    CLI["slipway CLI\nstrict JSON · sizes · identities · digests\nanchored paths · no symlink traversal"]
+    Store["Run store · owner-only permissions"]
+  end
+
+  Issue -->|"quoted as data"| Host
+  Repo -->|"read"| Host
+  Host -->|"bounded envelope + strict Outcome"| CLI
+  CLI --> Store
+  CLI -->|"one Action at a time"| Host
+
+  Issue -.->|"CANNOT: grant shell authority · disclose credentials\nbypass confirmation · widen destructive scope"| CLI
+
+  note1["The CLI cannot prove the host fetched GitHub honestly.\nIt can only prove internal consistency."]
+  note2["Outside the boundary: same account, root, malware,\nor a compromised host exceed these protections."]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .tag-warn { fill: var(--stop-stroke); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .tag-ok { fill: var(--verify-stroke); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono-tiny { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 9.5px; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .band-untrusted { fill: var(--band); stroke: var(--stop-stroke); stroke-width: 1.8; stroke-dasharray: 8 5; }
+      .band-trusted { fill: var(--band); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .band-local { fill: var(--band); stroke: var(--verify-stroke); stroke-width: 1.8; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .untrusted { fill: var(--stop-fill); stroke: var(--stop-stroke); stroke-width: 1.8; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .verify { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .flow-deny { fill: none; stroke: var(--stop-stroke); stroke-width: 2; stroke-dasharray: 7 4; }
+      .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .deny-mark { stroke: var(--stop-stroke); stroke-width: 2.4; fill: none; }
+    </style>
+    <marker id="tb-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="tb-arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · trust boundaries</text>
+  <text class="sub" x="40" y="58">Issue content is data, never instruction · the host holds every credential · the CLI validates but cannot prove honesty upstream</text>
+
+  <!-- UNTRUSTED zone -->
+  <rect class="band-untrusted" x="40" y="88" width="330" height="290" rx="16"/>
+  <text class="tag-warn" x="60" y="112">UNTRUSTED · DATA ONLY</text>
+
+  <rect class="untrusted" x="60" y="128" width="290" height="96" rx="12"/>
+  <text class="title" x="80" y="152">GitHub Issue content</text>
+  <text class="tiny" x="80" y="171">body · comments · links · attachments</text>
+  <text class="tiny" x="80" y="189">titles and labels are navigation, not requirements</text>
+  <text class="tiny" x="80" y="207">a `ready-for-agent` label makes nothing executable</text>
+
+  <rect class="untrusted" x="60" y="236" width="290" height="62" rx="12"/>
+  <text class="title" x="80" y="260">Repository working tree</text>
+  <text class="tiny" x="80" y="279">read by the host · observed independently by the CLI</text>
+
+  <text class="tiny" x="60" y="326">Text inside these cannot grant shell authority,</text>
+  <text class="tiny" x="60" y="342">disclose credentials, bypass a confirmation,</text>
+  <text class="tiny" x="60" y="358">or expand a destructive scope.</text>
+
+  <!-- TRUSTED zone -->
+  <rect class="band-trusted" x="420" y="88" width="330" height="290" rx="16"/>
+  <text class="tag" x="440" y="112">TRUSTED TO ACT · HOLDS THE CREDENTIALS</text>
+
+  <rect class="host" x="440" y="128" width="290" height="170" rx="12"/>
+  <text class="title" x="585" y="154" text-anchor="middle">AI coding host</text>
+  <text class="tiny" x="585" y="176" text-anchor="middle">model provider credentials</text>
+  <text class="tiny" x="585" y="194" text-anchor="middle">GitHub credentials · fetch and publish</text>
+  <text class="tiny" x="585" y="212" text-anchor="middle">shell and development tool execution</text>
+  <text class="tiny" x="585" y="230" text-anchor="middle">quotes Issue text as data, never as command</text>
+  <text class="tiny" x="585" y="248" text-anchor="middle">redacts recognized credential values</text>
+  <text class="tiny" x="585" y="266" text-anchor="middle">while preserving truthful command identity</text>
+  <text class="mono-tiny" x="585" y="288" text-anchor="middle">generated capability files · user-editable</text>
+
+  <text class="tiny" x="440" y="326">Reported activity is not proof of success.</text>
+  <text class="tiny" x="440" y="342">The host is trusted to act, not trusted</text>
+  <text class="tiny" x="440" y="358">to be believed without observation.</text>
+
+  <!-- LOCAL zone -->
+  <rect class="band-local" x="800" y="88" width="360" height="290" rx="16"/>
+  <text class="tag-ok" x="820" y="112">VALIDATES · HOLDS NO CREDENTIALS</text>
+
+  <rect class="verify" x="820" y="128" width="320" height="132" rx="12"/>
+  <text class="title" x="980" y="154" text-anchor="middle">slipway CLI</text>
+  <text class="tiny" x="980" y="176" text-anchor="middle">strict JSON · sizes · identities · digests</text>
+  <text class="tiny" x="980" y="194" text-anchor="middle">anchored paths · no unsafe symlink traversal</text>
+  <text class="tiny" x="980" y="212" text-anchor="middle">one-shot destructive grants, scope-digest bound</text>
+  <text class="tiny" x="980" y="230" text-anchor="middle">independent Git observation</text>
+  <text class="tiny" x="980" y="250" text-anchor="middle">calls no model · reaches no GitHub</text>
+
+  <rect class="card" x="820" y="272" width="320" height="66" rx="12"/>
+  <text class="title" x="980" y="296" text-anchor="middle">Run store</text>
+  <text class="tiny" x="980" y="314" text-anchor="middle">Unix 0700/0600 · Windows owner-only ACL</text>
+  <text class="tiny" x="980" y="330" text-anchor="middle">no tokens · no environment dumps</text>
+
+  <text class="tiny" x="820" y="360">`doctor` is the one exception: it may invoke local `gh` for read-only diagnostics.</text>
+
+  <!-- flows -->
+  <path class="flow" d="M350 176 H433" marker-end="url(#tb-arrow)"/>
+  <rect class="label-bg" x="352" y="152" width="80" height="18" rx="5"/>
+  <text class="edge-label" x="358" y="165">as data</text>
+
+  <path class="flow" d="M350 267 H433" marker-end="url(#tb-arrow)"/>
+  <rect class="label-bg" x="352" y="243" width="54" height="18" rx="5"/>
+  <text class="edge-label" x="358" y="256">read</text>
+
+  <path class="flow-main" d="M730 168 H813" marker-end="url(#tb-arrow-main)"/>
+  <rect class="label-bg" x="736" y="142" width="92" height="18" rx="5"/>
+  <text class="edge-label" x="742" y="155">envelope · Outcome</text>
+
+  <path class="flow-main" d="M813 232 H730" marker-end="url(#tb-arrow-main)"/>
+  <rect class="label-bg" x="736" y="206" width="92" height="18" rx="5"/>
+  <text class="edge-label" x="742" y="219">one Action at a time</text>
+
+  <!-- denied path: issue content -> CLI authority -->
+  <path class="flow-deny" d="M205 378 V416 H980 V378"/>
+  <rect class="label-bg" x="614" y="406" width="252" height="20" rx="5"/>
+  <text class="tiny" x="622" y="420">Issue text never becomes authority on this path</text>
+  <circle cx="592" cy="416" r="13" fill="var(--band)" stroke="var(--stop-stroke)" stroke-width="2.4"/>
+  <line class="deny-mark" x1="584" y1="408" x2="600" y2="424"/>
+  <line class="deny-mark" x1="600" y1="408" x2="584" y2="424"/>
+
+  <!-- bottom limits -->
+  <rect class="band" x="40" y="450" width="546" height="120" rx="14"/>
+  <text class="tag-ok" x="60" y="474">WHAT THE BOUNDARY DOES GUARANTEE</text>
+  <text class="sub" x="60" y="498">· the envelope is internally consistent: identity, markers, sizes, digests</text>
+  <text class="sub" x="60" y="518">· credentials stay out of Slipway storage and out of the Run core</text>
+  <text class="sub" x="60" y="538">· destructive grants bind to one exact request and scope digest</text>
+  <text class="sub" x="60" y="558">· user-modified generated files are preserved, never overwritten</text>
+
+  <rect class="band" x="614" y="450" width="546" height="120" rx="14"/>
+  <text class="tag-warn" x="634" y="474">WHAT IT CANNOT GUARANTEE</text>
+  <text class="sub" x="634" y="498">· that the host fetched GitHub honestly — only internal consistency</text>
+  <text class="sub" x="634" y="518">· that a reported activity actually ran, or that it succeeded</text>
+  <text class="sub" x="634" y="538">· which process caused an observed diff since Run start</text>
+  <text class="sub" x="634" y="558">· protection from the same account, root, malware, or a compromised host</text>
+
+  <rect class="band" x="40" y="592" width="1120" height="82" rx="14"/>
+  <text class="tag" x="60" y="616">DELIBERATE NON-RESPONSIBILITIES</text>
+  <text class="sub" x="60" y="640">Slipway does not run a hosted service, manage model or GitHub credentials, create or manage worktrees, certify merge/deployment/release readiness,</text>
+  <text class="sub" x="60" y="660">turn tests, findings, or labels into repository policy, repair Review findings automatically, or overwrite user-modified adapter files.</text>
+</svg>

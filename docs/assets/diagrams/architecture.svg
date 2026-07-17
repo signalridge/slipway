@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-labelledby="architecture-title architecture-desc">
+  <title id="architecture-title">Slipway process architecture</title>
+  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work. It exchanges versioned JSON with the local Slipway CLI: the host submits one strict Outcome and the CLI returns one Action at a time. The CLI validates and schedules work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. The CLI never calls a model or a GitHub API, and credentials stay with the host.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart LR
+  User([Human operator]) -->|explicit invocation| Capability[Generated host capability]
+  subgraph Host[AI coding host · trusted executor]
+    Capability --> Agent[AI coding host · performs the work]
+    Agent --> Model[Model + development tools]
+    Agent --> GitHub[GitHub · authorized fetch/publish only]
+    Agent --> Repo[Git worktree · reads and changes files]
+  end
+  subgraph Core[Slipway core · local deterministic state]
+    CLI[slipway CLI · Run state engine]
+    Store[(Run store · journal / projection / materials)]
+    CLI --> Store
+  end
+  Agent -->|Outcome · strict JSON| CLI
+  CLI -->|one Action at a time| Agent
+  CLI -->|observes Git independently| Repo
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --host-fill: #fff6e6;
+        --host-stroke: #d98a13;
+        --capability-fill: #fff0ea;
+        --capability-stroke: #f2643b;
+        --core-fill: #e7faf6;
+        --core-stroke: #0e8077;
+        --store-fill: #f3efff;
+        --store-stroke: #7c5ce0;
+        --slate-fill: #f1f5f9;
+        --slate-stroke: #475569;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --host-fill: #3a2606;
+          --host-stroke: #fbbf24;
+          --capability-fill: #3a1a10;
+          --capability-stroke: #ff8a5c;
+          --core-fill: #04302b;
+          --core-stroke: #4fd6c6;
+          --store-fill: #241b42;
+          --store-stroke: #a78bfa;
+          --slate-fill: #1e293b;
+          --slate-stroke: #94a3b8;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 2; }
+      .capability { fill: var(--capability-fill); stroke: var(--capability-stroke); stroke-width: 1.8; }
+      .core { fill: var(--core-fill); stroke: var(--core-stroke); stroke-width: 2.2; }
+      .store { fill: var(--store-fill); stroke: var(--store-stroke); stroke-width: 1.8; }
+      .slate { fill: var(--slate-fill); stroke: var(--slate-stroke); stroke-width: 1.5; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-core { fill: none; stroke: var(--core-stroke); stroke-width: 2.2; }
+      .flow-host { fill: none; stroke: var(--host-stroke); stroke-width: 2; }
+      .edge-label { fill: var(--muted); font-size: 9.5px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .dot-host { fill: var(--host-stroke); }
+      .dot-core { fill: var(--core-stroke); }
+      .dot-store { fill: var(--store-stroke); }
+      .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="arrow-host" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--host-stroke)"/>
+    </marker>
+    <marker id="arrow-core" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--core-stroke)"/>
+    </marker>
+  </defs>
+
+  <text class="title-big" x="40" y="36">Slipway · process architecture</text>
+  <text class="sub" x="40" y="58">explicit user intent · host-owned execution · deterministic local Run state</text>
+
+  <!-- region boundaries -->
+  <rect class="band" x="250" y="86" width="530" height="480" rx="18"/>
+  <rect class="band" x="860" y="86" width="300" height="480" rx="18"/>
+
+  <!-- connections: painted before cards -->
+  <path class="flow-host" d="M230 300 H246 V172 H263" marker-end="url(#arrow-host)"/>
+  <line class="flow-host" x1="515" y1="212" x2="515" y2="243" marker-end="url(#arrow-host)"/>
+  <line class="flow" x1="346" y1="350" x2="346" y2="393" marker-end="url(#arrow)"/>
+  <line class="flow" x1="514" y1="350" x2="514" y2="393" marker-end="url(#arrow)"/>
+  <line class="flow" x1="682" y1="350" x2="682" y2="393" marker-end="url(#arrow)"/>
+  <line class="flow-core" x1="760" y1="282" x2="873" y2="282" marker-end="url(#arrow-core)"/>
+  <line class="flow-core" x1="873" y1="318" x2="767" y2="318" marker-end="url(#arrow-core)"/>
+  <path class="flow-core" d="M873 345 H790 V430 H766" marker-end="url(#arrow-core)"/>
+  <line class="flow-core" x1="1010" y1="360" x2="1010" y2="389" marker-end="url(#arrow-core)"/>
+
+  <!-- actor -->
+  <rect class="card" x="40" y="255" width="190" height="95" rx="14"/>
+  <circle class="dot-host" cx="62" cy="283" r="5"/>
+  <text class="title" x="78" y="288">Human operator</text>
+  <text class="sub" x="62" y="312">sets intent · starts explicitly</text>
+  <text class="tiny" x="62" y="332">skip · stop · resume · take over</text>
+
+  <!-- host execution region -->
+  <text class="tag" x="270" y="112">AI CODING HOST · TRUSTED EXECUTOR</text>
+
+  <rect class="capability" x="270" y="132" width="490" height="80" rx="13"/>
+  <circle cx="292" cy="157" r="5" fill="var(--capability-stroke)"/>
+  <text class="title" x="308" y="162">Generated host capability</text>
+  <text class="mono" x="515" y="184" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
+  <text class="mono" x="515" y="203" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
+
+  <rect class="host" x="270" y="250" width="490" height="100" rx="15"/>
+  <text class="title-big" x="515" y="285" text-anchor="middle">AI coding host</text>
+  <text class="sub" x="515" y="307" text-anchor="middle">performs the work · calls the model · reports actual outcomes</text>
+  <text class="tiny" x="515" y="328" text-anchor="middle">explicitly invoked · never started by an ambient hook</text>
+
+  <!-- host-owned resources -->
+  <rect class="slate" x="270" y="400" width="152" height="90" rx="11"/>
+  <circle cx="290" cy="426" r="4.5" fill="var(--slate-stroke)"/>
+  <text class="title" x="304" y="431">Model + tools</text>
+  <text class="tiny" x="290" y="453">model · tests · build</text>
+  <text class="tiny" x="290" y="470">type-check · lint</text>
+
+  <rect class="card" x="438" y="400" width="152" height="90" rx="11"/>
+  <circle cx="458" cy="426" r="4.5" fill="var(--capability-stroke)"/>
+  <text class="title" x="472" y="431">GitHub</text>
+  <text class="tiny" x="458" y="453">authorized fetch and</text>
+  <text class="tiny" x="458" y="470">publish only</text>
+
+  <rect class="card" x="606" y="400" width="152" height="90" rx="11"/>
+  <circle class="dot-host" cx="626" cy="426" r="4.5"/>
+  <text class="title" x="640" y="431">Git worktree</text>
+  <text class="tiny" x="626" y="453">host reads and</text>
+  <text class="tiny" x="626" y="470">changes files</text>
+
+  <rect class="note" x="270" y="508" width="490" height="42" rx="10"/>
+  <text class="tiny" x="515" y="526" text-anchor="middle">Issue content is untrusted data, never instruction authority.</text>
+  <text class="tiny" x="515" y="542" text-anchor="middle">Model and GitHub credentials stay here and never reach Slipway.</text>
+
+  <!-- Slipway core region -->
+  <text class="tag" x="880" y="112">SLIPWAY CORE · LOCAL STATE</text>
+
+  <rect class="core" x="880" y="150" width="260" height="210" rx="16"/>
+  <text class="title-big" x="1010" y="190" text-anchor="middle">slipway CLI</text>
+  <text class="sub" x="1010" y="212" text-anchor="middle">Run state engine</text>
+  <text class="tiny" x="900" y="242">validates the source and every Outcome</text>
+  <text class="tiny" x="900" y="264">issues one Action at a time</text>
+  <text class="tiny" x="900" y="286">observes Git independently</text>
+  <text class="tiny" x="900" y="308">pins workspace identity</text>
+  <text class="tiny" x="900" y="330">never calls a model or GitHub</text>
+
+  <rect class="store" x="880" y="389" width="260" height="161" rx="16"/>
+  <text class="title" x="1010" y="418" text-anchor="middle">Run store</text>
+  <text class="mono" x="1010" y="439" text-anchor="middle">&lt;git-common-dir&gt;/slipway/runs</text>
+  <line x1="900" y1="455" x2="1120" y2="455" stroke="var(--store-stroke)" stroke-opacity="0.45"/>
+  <text class="sub" x="900" y="477">journal.jsonl · append-only</text>
+  <text class="sub" x="900" y="497">run.json · replaceable projection</text>
+  <text class="sub" x="900" y="517">materials · content-addressed</text>
+  <text class="tiny" x="900" y="539">owner-only permissions · no credentials</text>
+
+  <!-- edge labels last -->
+  <rect class="label-bg" x="150" y="238" width="104" height="17" rx="5"/>
+  <text class="edge-label" x="156" y="251">explicit invocation</text>
+
+  <rect class="label-bg" x="778" y="258" width="84" height="17" rx="5"/>
+  <text class="edge-label" x="784" y="271">Outcome</text>
+
+  <rect class="label-bg" x="776" y="292" width="88" height="17" rx="5"/>
+  <text class="edge-label" x="782" y="305">versioned JSON</text>
+
+  <rect class="label-bg" x="778" y="326" width="84" height="17" rx="5"/>
+  <text class="edge-label" x="784" y="339">one Action</text>
+
+  <rect class="label-bg" x="786" y="404" width="70" height="17" rx="5"/>
+  <text class="edge-label" x="792" y="417">observes Git</text>
+
+  <rect class="note" x="40" y="578" width="1120" height="30" rx="10"/>
+  <text class="sub" x="600" y="598" text-anchor="middle">The CLI never calls a model or GitHub API · credentials stay with the host · repository policy, CI, merge, and release remain independent</text>
+</svg>

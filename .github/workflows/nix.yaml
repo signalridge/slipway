@@ -1,0 +1,70 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - "**/*.go"
+      - go.mod
+      - go.sum
+  pull_request:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - "**/*.go"
+      - go.mod
+      - go.sum
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  flake-check:
+    name: Flake Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: DeterminateSystems/nix-installer-action@a7ad9c4f0c65208097f4d34f3cfa1913b80cce5c # main
+      - uses: DeterminateSystems/magic-nix-cache-action@76aaf8814cdb385b86597c32b8c51b66b69b0839 # main
+        with:
+          use-flakehub: false
+          use-gha-cache: true
+      - name: Check flake
+        run: nix flake check
+
+  build:
+    name: Nix Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: DeterminateSystems/nix-installer-action@a7ad9c4f0c65208097f4d34f3cfa1913b80cce5c # main
+      - uses: DeterminateSystems/magic-nix-cache-action@76aaf8814cdb385b86597c32b8c51b66b69b0839 # main
+        with:
+          use-flakehub: false
+          use-gha-cache: true
+      - name: Build package
+        run: nix build .#slipway
+      - name: Test binary
+        run: |
+          ./result/bin/slipway --version
+          ./result/bin/slipway --help
+
+  devshell:
+    name: Dev Shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: DeterminateSystems/nix-installer-action@a7ad9c4f0c65208097f4d34f3cfa1913b80cce5c # main
+      - uses: DeterminateSystems/magic-nix-cache-action@76aaf8814cdb385b86597c32b8c51b66b69b0839 # main
+        with:
+          use-flakehub: false
+          use-gha-cache: true
+      - name: Test dev shell
+        run: |
+          nix develop --command go version
+          nix develop --command go test -timeout=20m ./cmd -count=1
+          nix develop --command go build ./...

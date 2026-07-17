@@ -1,0 +1,851 @@
+{
+  "fixture_version": 7,
+  "operation_id": "11111111-1111-4111-8111-111111111111",
+  "repository_id": "R_kgDOFixture",
+  "repository_url": "https://github.com/example/publication-fixture",
+  "cases": [
+    {
+      "name": "created-with-readback",
+      "item_id": "20000000-0000-4000-8000-000000000001",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:c11d33745ec63c3783102cd6a4cfec6951a3ffd88fb74d4700909d52935874f8",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/101",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000001",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_101",
+              "issue_number": 101,
+              "url": "https://github.com/example/publication-fixture/issues/101",
+              "body_sha256": "sha256:c11d33745ec63c3783102cd6a4cfec6951a3ffd88fb74d4700909d52935874f8"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/101",
+          "body_sha256": "sha256:de8bfa4de5c1329c919fdfc0c7bd0423b38b4baee562586cf327f3a0368a62f7",
+          "result": "success",
+          "sequence": 10
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000001",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_101",
+              "issue_number": 101,
+              "url": "https://github.com/example/publication-fixture/issues/101",
+              "body_sha256": "sha256:de8bfa4de5c1329c919fdfc0c7bd0423b38b4baee562586cf327f3a0368a62f7"
+            }
+          ],
+          "sequence": 11
+        }
+      ],
+      "relationships": [
+        {
+          "name": "label:kind:feature",
+          "call_log": [
+            {
+              "operation": "mutate",
+              "result": "success",
+              "returned_id": "label:kind:feature",
+              "sequence": 3
+            },
+            {
+              "operation": "readback",
+              "matches": [
+                "label:kind:feature"
+              ],
+              "sequence": 4
+            }
+          ]
+        },
+        {
+          "name": "parent",
+          "call_log": [
+            {
+              "operation": "mutate",
+              "result": "timeout",
+              "returned_id": null,
+              "sequence": 5
+            },
+            {
+              "operation": "readback",
+              "matches": [
+                "parent"
+              ],
+              "sequence": 6
+            }
+          ]
+        },
+        {
+          "name": "blocked-by:sticky-ambiguity",
+          "call_log": [
+            {
+              "operation": "mutate",
+              "result": "timeout",
+              "returned_id": null,
+              "sequence": 7
+            },
+            {
+              "operation": "readback",
+              "matches": [
+                "blocked-by:sticky-ambiguity"
+              ],
+              "sequence": 8
+            },
+            {
+              "operation": "readback",
+              "matches": [
+                "blocked-by:duplicate"
+              ],
+              "sequence": 9
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "item_status": "created",
+        "relationship_statuses": [
+          "created",
+          "matched",
+          "ambiguous"
+        ],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "timeout-after-success",
+      "item_id": "20000000-0000-4000-8000-000000000002",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:2ef78378653579655261f9c79e67083b9d9d7d145c2f25ce22d7aaf701e5da43",
+          "result": "timeout",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000002",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_102",
+              "issue_number": 102,
+              "url": "https://github.com/example/publication-fixture/issues/102",
+              "body_sha256": "sha256:2ef78378653579655261f9c79e67083b9d9d7d145c2f25ce22d7aaf701e5da43"
+            }
+          ],
+          "sequence": 3
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/102",
+          "body_sha256": "sha256:7312dca3b0fbe3413d0e2334421c553c999c06922e54fb41f372780a211e4873",
+          "result": "timeout",
+          "sequence": 4
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000002",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_102",
+              "issue_number": 102,
+              "url": "https://github.com/example/publication-fixture/issues/102",
+              "body_sha256": "sha256:7312dca3b0fbe3413d0e2334421c553c999c06922e54fb41f372780a211e4873"
+            }
+          ],
+          "sequence": 5
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "matched",
+        "relationship_statuses": [],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "partial-relation-failure",
+      "item_id": "20000000-0000-4000-8000-000000000003",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:23124443291b53736cc412f71bc5aae7ea16d94ed72984b0877d679999c6c0ba",
+          "result": "partial",
+          "returned_url": "https://github.com/example/publication-fixture/issues/103",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000003",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_103",
+              "issue_number": 103,
+              "url": "https://github.com/example/publication-fixture/issues/103",
+              "body_sha256": "sha256:23124443291b53736cc412f71bc5aae7ea16d94ed72984b0877d679999c6c0ba"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/103",
+          "body_sha256": "sha256:81c8e644716307652d6598c6f7d224cc6390b5f9fc923099a8a566997c20439a",
+          "result": "success",
+          "sequence": 7
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000003",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_103",
+              "issue_number": 103,
+              "url": "https://github.com/example/publication-fixture/issues/103",
+              "body_sha256": "sha256:81c8e644716307652d6598c6f7d224cc6390b5f9fc923099a8a566997c20439a"
+            }
+          ],
+          "sequence": 8
+        }
+      ],
+      "relationships": [
+        {
+          "name": "parent",
+          "call_log": [
+            {
+              "operation": "mutate",
+              "result": "success",
+              "returned_id": "parent",
+              "sequence": 3
+            },
+            {
+              "operation": "readback",
+              "matches": [
+                "parent"
+              ],
+              "sequence": 4
+            }
+          ]
+        },
+        {
+          "name": "blocked-by:104",
+          "call_log": [
+            {
+              "operation": "mutate",
+              "result": "error",
+              "returned_id": null,
+              "sequence": 5
+            },
+            {
+              "operation": "readback",
+              "matches": [],
+              "sequence": 6
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "item_status": "created",
+        "relationship_statuses": [
+          "created",
+          "failed"
+        ],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "duplicate-converges-after-first-match",
+      "item_id": "20000000-0000-4000-8000-000000000004",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42",
+          "result": "ambiguous",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_104",
+              "issue_number": 104,
+              "url": "https://github.com/example/publication-fixture/issues/104",
+              "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_104",
+              "issue_number": 104,
+              "url": "https://github.com/example/publication-fixture/issues/104",
+              "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42"
+            },
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_105",
+              "issue_number": 105,
+              "url": "https://github.com/example/publication-fixture/issues/105",
+              "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42"
+            }
+          ],
+          "sequence": 3
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_104",
+              "issue_number": 104,
+              "url": "https://github.com/example/publication-fixture/issues/104",
+              "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42"
+            },
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_105",
+              "issue_number": 105,
+              "url": "https://github.com/example/publication-fixture/issues/105",
+              "body_sha256": "sha256:258228876a17886fed8b78036f102209de647480a0b1c284ad59cedb72988b42"
+            }
+          ],
+          "sequence": 4
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "ambiguous",
+        "relationship_statuses": [],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "indexing-delay-converges",
+      "item_id": "20000000-0000-4000-8000-000000000005",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:b9da895870526044f3c3b8c40e9daa1fd83ea2ca73c3cdaca61c5ce9b0d0f210",
+          "result": "ambiguous",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 3
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000005",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_106",
+              "issue_number": 106,
+              "url": "https://github.com/example/publication-fixture/issues/106",
+              "body_sha256": "sha256:b9da895870526044f3c3b8c40e9daa1fd83ea2ca73c3cdaca61c5ce9b0d0f210"
+            }
+          ],
+          "sequence": 4
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/106",
+          "body_sha256": "sha256:f8a9c85c94967eb4a4d31689894073067836fef704d94036e30b00df611df3d4",
+          "result": "success",
+          "sequence": 5
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000005",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_106",
+              "issue_number": 106,
+              "url": "https://github.com/example/publication-fixture/issues/106",
+              "body_sha256": "sha256:f8a9c85c94967eb4a4d31689894073067836fef704d94036e30b00df611df3d4"
+            }
+          ],
+          "sequence": 6
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "matched",
+        "relationship_statuses": [],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "zero-marker-matches",
+      "item_id": "20000000-0000-4000-8000-000000000006",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:3867eaa3286d3950810a7eae1be318f0241e6e6bf136f857f8504bd9d29e1fc9",
+          "result": "timeout",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 3
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 4
+        },
+        {
+          "operation": "final_readback",
+          "matches": [],
+          "sequence": 5
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "failed",
+        "relationship_statuses": [],
+        "requires_new_confirmation": true
+      }
+    },
+    {
+      "name": "duplicate-does-not-converge-back-to-single",
+      "item_id": "20000000-0000-4000-8000-000000000007",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:05f61cfabfe6f0ca550c2fbe85369c0d82f38ce7029a1a25ae4576ddd4c863d4",
+          "result": "ambiguous",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000007",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_107",
+              "issue_number": 107,
+              "url": "https://github.com/example/publication-fixture/issues/107",
+              "body_sha256": "sha256:05f61cfabfe6f0ca550c2fbe85369c0d82f38ce7029a1a25ae4576ddd4c863d4"
+            },
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000007",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_108",
+              "issue_number": 108,
+              "url": "https://github.com/example/publication-fixture/issues/108",
+              "body_sha256": "sha256:05f61cfabfe6f0ca550c2fbe85369c0d82f38ce7029a1a25ae4576ddd4c863d4"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000007",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_107",
+              "issue_number": 107,
+              "url": "https://github.com/example/publication-fixture/issues/107",
+              "body_sha256": "sha256:05f61cfabfe6f0ca550c2fbe85369c0d82f38ce7029a1a25ae4576ddd4c863d4"
+            }
+          ],
+          "sequence": 3
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000007",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_107",
+              "issue_number": 107,
+              "url": "https://github.com/example/publication-fixture/issues/107",
+              "body_sha256": "sha256:05f61cfabfe6f0ca550c2fbe85369c0d82f38ce7029a1a25ae4576ddd4c863d4"
+            }
+          ],
+          "sequence": 4
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "ambiguous",
+        "relationship_statuses": [],
+        "requires_new_confirmation": false
+      }
+    },
+    {
+      "name": "sequential-single-identities-remain-ambiguous",
+      "item_id": "20000000-0000-4000-8000-000000000008",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:08d88f15c2c41fba2d43f0d8fd62feca7b407fbbf4c71e7f3cc5028ccf88efa8",
+          "result": "ambiguous",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000008",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_109",
+              "issue_number": 109,
+              "url": "https://github.com/example/publication-fixture/issues/109",
+              "body_sha256": "sha256:08d88f15c2c41fba2d43f0d8fd62feca7b407fbbf4c71e7f3cc5028ccf88efa8"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000008",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_110",
+              "issue_number": 110,
+              "url": "https://github.com/example/publication-fixture/issues/110",
+              "body_sha256": "sha256:08d88f15c2c41fba2d43f0d8fd62feca7b407fbbf4c71e7f3cc5028ccf88efa8"
+            }
+          ],
+          "sequence": 3
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "20000000-0000-4000-8000-000000000008",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_110",
+              "issue_number": 110,
+              "url": "https://github.com/example/publication-fixture/issues/110",
+              "body_sha256": "sha256:08d88f15c2c41fba2d43f0d8fd62feca7b407fbbf4c71e7f3cc5028ccf88efa8"
+            }
+          ],
+          "sequence": 4
+        }
+      ],
+      "relationships": [],
+      "expected": {
+        "item_status": "ambiguous",
+        "relationship_statuses": [],
+        "requires_new_confirmation": false
+      }
+    }
+  ],
+  "rejected_cases": [
+    {
+      "name": "timeout-second-create-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000001",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:6bbfe93e5c5027dead2445969f9e6e5f11af11940c47dbfa7685704ed3ce9994",
+          "result": "timeout",
+          "returned_url": null,
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 2
+        },
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:6bbfe93e5c5027dead2445969f9e6e5f11af11940c47dbfa7685704ed3ce9994",
+          "result": "timeout",
+          "returned_url": null,
+          "sequence": 3
+        },
+        {
+          "operation": "final_readback",
+          "matches": [],
+          "sequence": 4
+        }
+      ],
+      "expected_error": "create attempts=2"
+    },
+    {
+      "name": "timeout-second-final-patch-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000002",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:fa205be6fe614b25e152ee8df87d3c1963af39014be1ea9e8880300ab69975f3",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/201",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000002",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_201",
+              "issue_number": 201,
+              "url": "https://github.com/example/publication-fixture/issues/201",
+              "body_sha256": "sha256:fa205be6fe614b25e152ee8df87d3c1963af39014be1ea9e8880300ab69975f3"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/201",
+          "body_sha256": "sha256:ce53a36d8cd24f132af15333eea3c87d1c8b6b0d6ad0488cfe2616f48195e4f6",
+          "result": "timeout",
+          "sequence": 3
+        },
+        {
+          "operation": "patch_final",
+          "target_url": "https://github.com/example/publication-fixture/issues/201",
+          "body_sha256": "sha256:ce53a36d8cd24f132af15333eea3c87d1c8b6b0d6ad0488cfe2616f48195e4f6",
+          "result": "success",
+          "sequence": 4
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000002",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_201",
+              "issue_number": 201,
+              "url": "https://github.com/example/publication-fixture/issues/201",
+              "body_sha256": "sha256:ce53a36d8cd24f132af15333eea3c87d1c8b6b0d6ad0488cfe2616f48195e4f6"
+            }
+          ],
+          "sequence": 5
+        }
+      ],
+      "expected_error": "final patch attempts=2"
+    },
+    {
+      "name": "cross-repository-marker-match-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000003",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:f9c9f14fe65e5623b89096d091e8a64b55870f02858130e4ba410bb8b1c4791c",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/202",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000003",
+              "repository_id": "R_other",
+              "issue_id": "I_kwDOFixture_202",
+              "issue_number": 202,
+              "url": "https://github.com/example/publication-fixture/issues/202",
+              "body_sha256": "sha256:f9c9f14fe65e5623b89096d091e8a64b55870f02858130e4ba410bb8b1c4791c"
+            }
+          ],
+          "sequence": 2
+        }
+      ],
+      "expected_error": "approved repository identity"
+    },
+    {
+      "name": "unapproved-readback-body-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000004",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:939ec2245335ae15c906ac6c9772e2c53839bfb7ef6d5ff66f3f4ce6b2b797d6",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/203",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000004",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_203",
+              "issue_number": 203,
+              "url": "https://github.com/example/publication-fixture/issues/203",
+              "body_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ],
+          "sequence": 2
+        }
+      ],
+      "expected_error": "both approved publication phases"
+    },
+    {
+      "name": "final-body-match-without-patch-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000005",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:4b2295993c15537fd75914ac660427fa99d4927ff3ce4e70297970d07f09ced8",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/204",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [],
+          "sequence": 2
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000005",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_204",
+              "issue_number": 204,
+              "url": "https://github.com/example/publication-fixture/issues/204",
+              "body_sha256": "sha256:e9b13fea350c1605cf00bf957f87898656b17fb1deb8e1c2012ede8080f958c8"
+            }
+          ],
+          "sequence": 3
+        }
+      ],
+      "expected_error": "final body appeared without the confirmed final-body patch"
+    },
+    {
+      "name": "pre-patch-final-body-is-forbidden",
+      "item_id": "30000000-0000-4000-8000-000000000006",
+      "call_log": [
+        {
+          "operation": "create",
+          "body_phase": "draft",
+          "body_sha256": "sha256:3a0f70f5d4e545cd3692489b8228be150e3e6177deaaad253cbcac8198aabeac",
+          "result": "success",
+          "returned_url": "https://github.com/example/publication-fixture/issues/205",
+          "sequence": 1
+        },
+        {
+          "operation": "poll",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000006",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_205",
+              "issue_number": 205,
+              "url": "https://github.com/example/publication-fixture/issues/205",
+              "body_sha256": "sha256:cff6b8e5874ce8fdbe398c8584b7e7e10e93189c1657b0ee753bde29c99c60ba"
+            }
+          ],
+          "sequence": 2
+        },
+        {
+          "operation": "final_readback",
+          "matches": [
+            {
+              "operation_id": "11111111-1111-4111-8111-111111111111",
+              "item_id": "30000000-0000-4000-8000-000000000006",
+              "repository_id": "R_kgDOFixture",
+              "issue_id": "I_kwDOFixture_205",
+              "issue_number": 205,
+              "url": "https://github.com/example/publication-fixture/issues/205",
+              "body_sha256": "sha256:cff6b8e5874ce8fdbe398c8584b7e7e10e93189c1657b0ee753bde29c99c60ba"
+            }
+          ],
+          "sequence": 3
+        }
+      ],
+      "expected_error": "pre-patch reconciliation observed a non-draft body"
+    }
+  ]
+}

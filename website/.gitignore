@@ -1,0 +1,34 @@
+# build output
+dist/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# synced docs content (generated from ../docs by scripts/sync-docs.mjs)
+src/content/docs/**
+# hand-authored per-locale splash pages (parent dirs must be re-included first)
+!src/content/docs/en/
+!src/content/docs/en/index.mdx
+!src/content/docs/zh/
+!src/content/docs/zh/index.mdx
+!src/content/docs/ja/
+!src/content/docs/ja/index.mdx
+# synced public assets and machine schema (copied from ../docs)
+public/assets/
+public/reference/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# environment variables
+.env
+.env.production
+
+# macOS-specific files
+.DS_Store

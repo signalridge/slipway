@@ -1,0 +1,64 @@
+{
+  "body": "<!-- slipway-level: change/v2 -->\n\n```slipway-manifest\n{\"manifest_version\":2,\"profile\":\"change/v2\",\"sections\":[{\"body_sha256\":\"sha256:870261d9429bbd6babde66662ca9441ec8deaca005b3e4136c3a501483939e17\",\"comment_database_id\":4301,\"comment_node_id\":\"IC_container_outcome\",\"key\":\"outcome\",\"role\":\"outcome\",\"title\":\"Outcome\"},{\"body_sha256\":\"sha256:2b080b2c01f6d308d307bbdef72a64932f4cacb847b8e7363a0b9d6683365575\",\"comment_database_id\":4302,\"comment_node_id\":\"IC_container_requirements\",\"key\":\"requirements\",\"role\":\"requirements\",\"title\":\"Requirements\"},{\"body_sha256\":\"sha256:034c56fb31699b58235570ec777598f4f9d857cf4174f0d4cc6a208fa2314c7f\",\"comment_database_id\":4303,\"comment_node_id\":\"IC_container_acceptance-examples\",\"key\":\"acceptance-examples\",\"role\":\"acceptance_examples\",\"title\":\"Acceptance examples\"},{\"body_sha256\":\"sha256:cfee2d707aff7e2862236568eba48a05b626ece7f454a0b91f44d597a4c22fb3\",\"comment_database_id\":4304,\"comment_node_id\":\"IC_container_constraints\",\"key\":\"constraints\",\"role\":\"constraints\",\"title\":\"Constraints\"},{\"body_sha256\":\"sha256:333d54c0e87f71c9a3e2453756a76c17d7227fbd6ca2583fead5af25d0ab6a09\",\"comment_database_id\":4305,\"comment_node_id\":\"IC_container_non-goals\",\"key\":\"non-goals\",\"role\":\"non_goals\",\"title\":\"Non-goals\"}]}\n```\n",
+  "canonical_url": "https://github.com/example/slipway-smoke/issues/434",
+  "comments": [
+    {
+      "author_id": "U_container_smoke",
+      "body": "<!-- slipway-section:v1 key=outcome -->\n# Outcome\n\nContainer source smoke.\n",
+      "database_id": 4301,
+      "is_minimized": false,
+      "node_id": "IC_container_outcome",
+      "updated_at": "2026-07-12T09:00:00Z",
+      "url": "https://github.com/example/slipway-smoke/issues/434#issuecomment-4301"
+    },
+    {
+      "author_id": "U_container_smoke",
+      "body": "<!-- slipway-section:v1 key=requirements -->\n# Requirements\n\nContainer source smoke.\n",
+      "database_id": 4302,
+      "is_minimized": false,
+      "node_id": "IC_container_requirements",
+      "updated_at": "2026-07-12T09:00:00Z",
+      "url": "https://github.com/example/slipway-smoke/issues/434#issuecomment-4302"
+    },
+    {
+      "author_id": "U_container_smoke",
+      "body": "<!-- slipway-section:v1 key=acceptance-examples -->\n# Acceptance examples\n\nContainer source smoke.\n",
+      "database_id": 4303,
+      "is_minimized": false,
+      "node_id": "IC_container_acceptance-examples",
+      "updated_at": "2026-07-12T09:00:00Z",
+      "url": "https://github.com/example/slipway-smoke/issues/434#issuecomment-4303"
+    },
+    {
+      "author_id": "U_container_smoke",
+      "body": "<!-- slipway-section:v1 key=constraints -->\n# Constraints\n\nContainer source smoke.\n",
+      "database_id": 4304,
+      "is_minimized": false,
+      "node_id": "IC_container_constraints",
+      "updated_at": "2026-07-12T09:00:00Z",
+      "url": "https://github.com/example/slipway-smoke/issues/434#issuecomment-4304"
+    },
+    {
+      "author_id": "U_container_smoke",
+      "body": "<!-- slipway-section:v1 key=non-goals -->\n# Non-goals\n\nContainer source smoke.\n",
+      "database_id": 4305,
+      "is_minimized": false,
+      "node_id": "IC_container_non-goals",
+      "updated_at": "2026-07-12T09:00:00Z",
+      "url": "https://github.com/example/slipway-smoke/issues/434#issuecomment-4305"
+    }
+  ],
+  "fetched_at": "2026-07-12T09:01:00Z",
+  "host": "github.com",
+  "issue_id": "I_containerSmoke",
+  "issue_number": 434,
+  "labels": [
+    "level:change",
+    "kind:maintenance"
+  ],
+  "provider": "github",
+  "repository_id": "R_containerSmoke",
+  "source_version": 2,
+  "title": "[Change] Container source smoke",
+  "updated_at": "2026-07-12T08:00:00Z"
+}

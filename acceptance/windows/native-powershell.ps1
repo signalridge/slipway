@@ -1,0 +1,570 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$SlipwayExe,
+
+    [ValidateSet('PowerShell', 'Cmd')]
+    [string]$Mode = 'PowerShell'
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 reads BOM-less scripts through the legacy code page.
+# Keep this source ASCII and make every native stream/probe explicitly UTF-8.
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$OutputEncoding = $Utf8NoBom
+[Console]::InputEncoding = $Utf8NoBom
+[Console]::OutputEncoding = $Utf8NoBom
+$UnicodeProbe = [char]0x754C
+
+function Fail([string]$Message) {
+    throw "native Windows acceptance ($Mode) failed: $Message"
+}
+
+function Assert-True([bool]$Condition, [string]$Message) {
+    if (-not $Condition) { Fail $Message }
+}
+
+function Assert-TextEqual {
+    param(
+        [AllowEmptyString()]
+        [string]$Actual,
+
+        [AllowEmptyString()]
+        [string]$Expected,
+
+        [string]$Message
+    )
+    if ([string]::Equals($Actual, $Expected, [StringComparison]::Ordinal)) { return }
+
+    $limit = [Math]::Min($Actual.Length, $Expected.Length)
+    $difference = $limit
+    for ($index = 0; $index -lt $limit; $index++) {
+        if ($Actual[$index] -cne $Expected[$index]) {
+            $difference = $index
+            break
+        }
+    }
+    $actualUnit = if ($difference -lt $Actual.Length) { 'U+{0:X4}' -f [int]$Actual[$difference] } else { '<end>' }
+    $expectedUnit = if ($difference -lt $Expected.Length) { 'U+{0:X4}' -f [int]$Expected[$difference] } else { '<end>' }
+    $actualJson = ConvertTo-Json -InputObject $Actual -Compress
+    $expectedJson = ConvertTo-Json -InputObject $Expected -Compress
+    Fail "$Message; first_difference=$difference expected_unit=$expectedUnit actual_unit=$actualUnit expected_length=$($Expected.Length) actual_length=$($Actual.Length) expected=$expectedJson actual=$actualJson"
+}
+
+function Write-Utf8([string]$Path, [string]$Text) {
+    [System.IO.File]::WriteAllText($Path, $Text, $script:Utf8NoBom)
+}
+
+function Get-Sha256([string]$Path) {
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = $null
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $digest = $sha256.ComputeHash($stream)
+        return ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) { $sha256.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+function Get-FramedRevision([string[]]$Fields) {
+    $stream = New-Object System.IO.MemoryStream
+    $sha256 = $null
+    try {
+        foreach ($field in $Fields) {
+            $payload = $script:Utf8NoBom.GetBytes([string]$field)
+            $length = [BitConverter]::GetBytes([UInt64]$payload.Length)
+            if ([BitConverter]::IsLittleEndian) { [Array]::Reverse($length) }
+            $stream.Write($length, 0, $length.Length)
+            $stream.Write($payload, 0, $payload.Length)
+        }
+        $stream.Position = 0
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $digest = $sha256.ComputeHash($stream)
+        return 'sha256:' + ([BitConverter]::ToString($digest)).Replace('-', '').ToLowerInvariant()
+    }
+    finally {
+        if ($null -ne $sha256) { $sha256.Dispose() }
+        $stream.Dispose()
+    }
+}
+
+function Join-NativeOutput($Output) {
+    return (($Output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+}
+
+function ConvertTo-WindowsCommandLineArgument {
+    param(
+        [AllowEmptyString()]
+        [string]$Value
+    )
+    if ($Value.Length -eq 0) { return '""' }
+
+    $hasSpace = ($Value.IndexOf([char]0x20) -ge 0) -or ($Value.IndexOf([char]0x09) -ge 0)
+    $builder = New-Object System.Text.StringBuilder
+    if ($hasSpace) { [void]$builder.Append([char]0x22) }
+
+    $backslashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq [char]0x5c) {
+            $backslashes++
+            [void]$builder.Append($character)
+            continue
+        }
+        if ($character -eq [char]0x22) {
+            for ($index = 0; $index -lt $backslashes; $index++) {
+                [void]$builder.Append([char]0x5c)
+            }
+            [void]$builder.Append([char]0x5c)
+            [void]$builder.Append($character)
+            $backslashes = 0
+            continue
+        }
+        $backslashes = 0
+        [void]$builder.Append($character)
+    }
+
+    if ($hasSpace) {
+        for ($index = 0; $index -lt $backslashes; $index++) {
+            [void]$builder.Append([char]0x5c)
+        }
+        [void]$builder.Append([char]0x22)
+    }
+    return $builder.ToString()
+}
+
+function Join-WindowsCommandLine([string[]]$Values) {
+    $escaped = @(
+        $Values | ForEach-Object {
+            ConvertTo-WindowsCommandLineArgument -Value ([string]$_)
+        }
+    )
+    return ($escaped -join ' ')
+}
+
+function ConvertTo-PowerShellUtf8Expression([string]$Value) {
+    $encoded = [Convert]::ToBase64String($script:Utf8NoBom.GetBytes($Value))
+    return "[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$encoded'))"
+}
+
+function Invoke-ExactNativeProcess {
+    param(
+        [string]$FileName,
+        [string[]]$CommandArgs,
+        [string]$StdinText,
+        [switch]$UseStdin
+    )
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.FileName = $FileName
+    $startInfo.Arguments = Join-WindowsCommandLine -Values $CommandArgs
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.StandardOutputEncoding = $script:Utf8NoBom
+    $startInfo.StandardErrorEncoding = $script:Utf8NoBom
+    if ($UseStdin) {
+        # Windows PowerShell 5.1 runs on .NET Framework, whose redirected
+        # stdin writer inherits Console.InputEncoding configured above.
+        $startInfo.RedirectStandardInput = $true
+    }
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+    try {
+        if (-not $process.Start()) { Fail "could not start native process: $FileName" }
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        if ($UseStdin) {
+            $process.StandardInput.Write($StdinText)
+            $process.StandardInput.Close()
+        }
+        $process.WaitForExit()
+        return [pscustomobject]@{
+            ExitCode = $process.ExitCode
+            Stdout = $stdoutTask.Result
+            Stderr = $stderrTask.Result
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Invoke-SlipwayDirect {
+    param(
+        [string[]]$CommandArgs,
+        [string]$StdinText,
+        [switch]$UseStdin
+    )
+    if ($Mode -eq 'Cmd') {
+        Fail 'Cmd mode attempted to bypass cmd.exe for a Slipway invocation'
+    }
+    $result = Invoke-ExactNativeProcess -FileName $script:Exe -CommandArgs $CommandArgs -StdinText $StdinText -UseStdin:$UseStdin
+    $combined = $result.Stdout
+    if ($result.Stderr.Length -gt 0) {
+        $combined += [Environment]::NewLine + $result.Stderr
+    }
+    if ($result.ExitCode -ne 0) {
+        Fail "command exited $($result.ExitCode): $($CommandArgs -join ' '); output: $combined"
+    }
+    return $combined
+}
+
+function Invoke-SlipwayViaCmd {
+    param([string[]]$CommandArgs)
+    $argumentLine = Join-WindowsCommandLine -Values $CommandArgs
+    $parts = New-Object System.Collections.Generic.List[string]
+    $parts.Add('$ErrorActionPreference = ''Stop'';')
+    $parts.Add('$innerUtf8NoBom = New-Object System.Text.UTF8Encoding($false);')
+    $parts.Add('$OutputEncoding = $innerUtf8NoBom;')
+    $parts.Add('[Console]::InputEncoding = $innerUtf8NoBom;')
+    $parts.Add('[Console]::OutputEncoding = $innerUtf8NoBom;')
+    $parts.Add('$startInfo = New-Object System.Diagnostics.ProcessStartInfo;')
+    $parts.Add('$startInfo.UseShellExecute = $false;')
+    $parts.Add('$startInfo.CreateNoWindow = $true;')
+    $parts.Add('$startInfo.FileName = ' + (ConvertTo-PowerShellUtf8Expression $script:Exe) + ';')
+    $parts.Add('$startInfo.Arguments = ' + (ConvertTo-PowerShellUtf8Expression $argumentLine) + ';')
+    $parts.Add('$startInfo.RedirectStandardOutput = $true;')
+    $parts.Add('$startInfo.RedirectStandardError = $true;')
+    $parts.Add('$startInfo.StandardOutputEncoding = $innerUtf8NoBom;')
+    $parts.Add('$startInfo.StandardErrorEncoding = $innerUtf8NoBom;')
+    $parts.Add('$process = New-Object System.Diagnostics.Process;')
+    $parts.Add('$process.StartInfo = $startInfo;')
+    $parts.Add('if (-not $process.Start()) { exit 1 };')
+    $parts.Add('$stdoutTask = $process.StandardOutput.ReadToEndAsync();')
+    $parts.Add('$stderrTask = $process.StandardError.ReadToEndAsync();')
+    $parts.Add('$process.WaitForExit();')
+    $parts.Add('$stdout = $stdoutTask.Result;')
+    $parts.Add('$stderr = $stderrTask.Result;')
+    $parts.Add('$exitCode = $process.ExitCode;')
+    $parts.Add('$process.Dispose();')
+    $parts.Add('[Console]::Out.Write($stdout);')
+    $parts.Add('[Console]::Error.Write($stderr);')
+    $parts.Add('exit $exitCode')
+    $encoded = [Convert]::ToBase64String(
+        [Text.Encoding]::Unicode.GetBytes(($parts -join ' '))
+    )
+    $safeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded"
+    $output = & $env:ComSpec '/d' '/v:on' '/s' '/c' $safeCommand 2>&1
+    $exitCode = $LASTEXITCODE
+    $text = Join-NativeOutput $output
+    if ($exitCode -ne 0) {
+        Fail "cmd.exe /v:on invocation exited $exitCode; output: $text"
+    }
+    return $text
+}
+
+function Invoke-ResolvedArgv {
+    param([string[]]$CommandArgs)
+    if ($Mode -eq 'Cmd') {
+        return Invoke-SlipwayViaCmd -CommandArgs $CommandArgs
+    }
+    return Invoke-SlipwayDirect -CommandArgs $CommandArgs
+}
+
+function Invoke-NextVariant {
+    param(
+        $Next,
+        [string]$VariantId,
+        [hashtable]$InputValues
+    )
+    $matches = @($Next.variants | Where-Object { $_.id -eq $VariantId })
+    Assert-True ($matches.Count -eq 1) "expected exactly one next variant '$VariantId'"
+    $variant = $matches[0]
+    Assert-True ($variant.base_argv[0] -eq 'slipway') "variant executable must be slipway"
+    Assert-True (-not (($variant.base_argv | ConvertTo-Json -Compress) -match '<answer>|<file>')) "variant contains a placeholder"
+
+    $resolved = New-Object System.Collections.Generic.List[string]
+    for ($index = 1; $index -lt $variant.base_argv.Count; $index++) {
+        $resolved.Add([string]$variant.base_argv[$index])
+    }
+    foreach ($input in $variant.inputs) {
+        $inputName = [string]$input.name
+        Assert-True ($InputValues.ContainsKey($inputName)) "missing typed value for $inputName"
+        $resolved.Add([string]$input.flag)
+        $resolved.Add([string]$InputValues[$inputName])
+    }
+    return Invoke-ResolvedArgv -CommandArgs $resolved.ToArray()
+}
+
+function Get-MutationAction {
+    param(
+        $Envelope,
+        [string]$ExpectedKind
+    )
+    Assert-True ($Envelope.contract_version -eq 2) 'mutation envelope did not return contract_version 2'
+    Assert-True ($Envelope.state -eq 'active') 'Action mutation did not return active state'
+    Assert-True ($Envelope.next.operation -eq 'action') 'Action mutation did not return structured action next'
+    Assert-True ($Envelope.PSObject.Properties.Name -contains 'action') 'mutation envelope omitted Action'
+    $action = $Envelope.action
+    Assert-True ($null -ne $action) 'mutation envelope returned a null Action'
+    Assert-True ($action.kind -eq $ExpectedKind) "mutation envelope did not return $ExpectedKind"
+    Assert-True ($action.run_id -eq $Envelope.run_id) 'mutation envelope Run ID does not match Action'
+    return $action
+}
+
+function New-Outcome {
+    param(
+        [string]$ActionId,
+        [string]$ActionKind,
+        [string]$Status,
+        [string]$Summary,
+        $Pause,
+        $Suggestions
+    )
+    return [ordered]@{
+        contract_version = 2
+        action_id = $ActionId
+        action_kind = $ActionKind
+        status = $Status
+        summary = $Summary
+        observations = @()
+        known_issues = @()
+        suggested_actions = @($Suggestions)
+        pause = $Pause
+        implementation = $null
+        review = $null
+    }
+}
+
+function New-SourceEnvelope {
+    param(
+        [string]$RequirementText,
+        [string]$UpdatedAt,
+        [string]$ParentRequirementsRevision = ''
+    )
+    $issueUrl = 'https://github.com/example/windows-acceptance/issues/434'
+    $definitions = @(
+        [ordered]@{ key = 'outcome'; role = 'outcome'; title = 'Outcome'; text = 'Exercise native Windows source and recovery.' },
+        [ordered]@{ key = 'requirements'; role = 'requirements'; title = 'Requirements'; text = $RequirementText },
+        [ordered]@{ key = 'acceptance-examples'; role = 'acceptance_examples'; title = 'Acceptance examples'; text = 'Structured recovery preserves the selected candidate.' },
+        [ordered]@{ key = 'constraints'; role = 'constraints'; title = 'Constraints'; text = 'No network and no real user data.' },
+        [ordered]@{ key = 'non-goals'; role = 'non_goals'; title = 'Non-goals'; text = 'This script is not live GitHub evidence.' }
+    )
+    $comments = @()
+    $sections = @()
+    for ($index = 0; $index -lt $definitions.Count; $index++) {
+        $definition = $definitions[$index]
+        $databaseId = 3001 + $index
+        $nodeId = 'IC_windows_' + $definition.key
+        if ((-not [string]::IsNullOrWhiteSpace($ParentRequirementsRevision)) -and $definition.key -eq 'requirements') {
+            $databaseId = 4001 + $index
+            $nodeId += '_replacement'
+        }
+        $commentBody = '<!-- slipway-section:v1 key=' + $definition.key + " -->`n# " + $definition.title + "`n`n" + $definition.text + "`n"
+        $comments += [ordered]@{
+            node_id = $nodeId
+            database_id = $databaseId
+            url = "$issueUrl#issuecomment-$databaseId"
+            updated_at = $UpdatedAt
+            author_id = 'U_windowsAcceptance'
+            is_minimized = $false
+            body = $commentBody
+        }
+        $sections += [ordered]@{
+            key = $definition.key
+            role = $definition.role
+            title = $definition.title
+            comment_node_id = $nodeId
+            comment_database_id = $databaseId
+            body_sha256 = Get-FramedRevision -Fields @('slipway-comment-body/v1', $commentBody)
+        }
+    }
+    $manifest = [ordered]@{
+        manifest_version = 2
+        profile = 'change/v2'
+        sections = $sections
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ParentRequirementsRevision)) {
+        $manifest.Add('parent_requirements_revision', $ParentRequirementsRevision)
+    }
+    $manifestJson = ConvertTo-Json -InputObject $manifest -Depth 20 -Compress
+    $body = "<!-- slipway-level: change/v2 -->`n`n``````slipway-manifest`n$manifestJson`n```````n"
+    return [ordered]@{
+        source_version = 2
+        provider = 'github'
+        host = 'github.com'
+        repository_id = 'R_windowsAcceptanceRepository'
+        issue_id = 'I_windowsAcceptanceIssue'
+        issue_number = 434
+        canonical_url = $issueUrl
+        updated_at = $UpdatedAt
+        fetched_at = '2026-07-12T10:01:00Z'
+        title = '[Change] Native Windows acceptance'
+        body = $body
+        labels = @('level:change', 'kind:maintenance')
+        comments = $comments
+    }
+}
+
+$resolvedExe = (Resolve-Path -LiteralPath $SlipwayExe).Path
+Assert-True (Test-Path -LiteralPath $resolvedExe -PathType Leaf) "SlipwayExe is not a file: $SlipwayExe"
+Assert-True ($null -ne (Get-Command git.exe -ErrorAction SilentlyContinue)) 'git.exe is required'
+Assert-True ($null -ne $env:ComSpec) 'COMSPEC is required'
+
+$revision = [Environment]::GetEnvironmentVariable('GITHUB_SHA')
+$serverUrl = [Environment]::GetEnvironmentVariable('GITHUB_SERVER_URL')
+$repositoryName = [Environment]::GetEnvironmentVariable('GITHUB_REPOSITORY')
+$runId = [Environment]::GetEnvironmentVariable('GITHUB_RUN_ID')
+$eventPath = [Environment]::GetEnvironmentVariable('GITHUB_EVENT_PATH')
+$runUrl = 'local'
+if (-not [string]::IsNullOrWhiteSpace($serverUrl) -and
+    -not [string]::IsNullOrWhiteSpace($repositoryName) -and
+    -not [string]::IsNullOrWhiteSpace($runId)) {
+    $runUrl = "$serverUrl/$repositoryName/actions/runs/$runId"
+}
+if ([string]::IsNullOrWhiteSpace($revision)) { $revision = 'local' }
+$sourceRevision = $revision
+if (-not [string]::IsNullOrWhiteSpace($eventPath) -and (Test-Path -LiteralPath $eventPath -PathType Leaf)) {
+    $event = [System.IO.File]::ReadAllText($eventPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
+    if (($event.PSObject.Properties.Name -contains 'pull_request') -and $null -ne $event.pull_request) {
+        $sourceRevision = [string]$event.pull_request.head.sha
+    }
+}
+$cmdVersionOutput = & $env:ComSpec '/d' '/c' 'ver' 2>&1
+if ($LASTEXITCODE -ne 0) { Fail 'cmd.exe version probe failed' }
+$cmdAsset = Join-Path $PSScriptRoot 'native-cmd.cmd'
+$collectorMetadata = [ordered]@{
+    evidence_version = 1
+    mode = $Mode
+    os_version = [Environment]::OSVersion.VersionString
+    runner_image = [Environment]::GetEnvironmentVariable('ImageOS')
+    runner_image_version = [Environment]::GetEnvironmentVariable('ImageVersion')
+    powershell_edition = [string]$PSVersionTable.PSEdition
+    powershell_version = $PSVersionTable.PSVersion.ToString()
+    cmd_version = (Join-NativeOutput $cmdVersionOutput).Trim()
+    source_revision = $sourceRevision
+    checkout_revision = $revision
+    script_sha256 = (Get-Sha256 $PSCommandPath)
+    cmd_asset_sha256 = (Get-Sha256 $cmdAsset)
+    binary_sha256 = (Get-Sha256 $resolvedExe)
+    run_url = $runUrl
+}
+Write-Output ('native Windows acceptance metadata: ' + ($collectorMetadata | ConvertTo-Json -Compress))
+
+$tempName = 'slipway native % ! & ^ ' + $UnicodeProbe + ' ' + [Guid]::NewGuid().ToString('N')
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) $tempName
+$repo = Join-Path $tempRoot ('repository with spaces % ! & ^ ' + $UnicodeProbe)
+$tools = Join-Path $tempRoot 'tools'
+$script:Exe = Join-Path $tools 'slipway.exe'
+
+try {
+    New-Item -ItemType Directory -Path $repo -Force | Out-Null
+    New-Item -ItemType Directory -Path $tools -Force | Out-Null
+    Copy-Item -LiteralPath $resolvedExe -Destination $script:Exe -Force
+    $env:PATH = $tools + [IO.Path]::PathSeparator + $env:PATH
+
+    & git.exe -C $repo init -q
+    if ($LASTEXITCODE -ne 0) { Fail 'git init failed' }
+    & git.exe -C $repo config user.email acceptance@example.invalid
+    & git.exe -C $repo config user.name 'Slipway Windows Acceptance'
+    Write-Utf8 (Join-Path $repo 'README.md') "# Windows acceptance`r`n"
+    & git.exe -C $repo add README.md
+    & git.exe -C $repo commit -qm initial
+    if ($LASTEXITCODE -ne 0) { Fail 'initial git commit failed' }
+
+    $doctor = (Invoke-ResolvedArgv -CommandArgs @('doctor', '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-True ($doctor.contract_version -eq 2) 'doctor did not return contract_version 2'
+    Assert-True ($null -ne $doctor.checks) 'doctor checks are missing'
+
+    $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
+    $startMutation = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
+    $start = Get-MutationAction -Envelope $startMutation -ExpectedKind 'orient'
+    Assert-TextEqual -Actual ([string]$start.goal) -Expected $goal -Message 'special-character goal did not preserve exact text'
+    $startStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-TextEqual -Actual ([string]$startStatus.goal) -Expected $goal -Message 'journaled goal did not preserve exact special characters or CRLF'
+
+    $pause = [ordered]@{
+        reason = 'decision_required'
+        question = 'Choose the exact Windows value.'
+        destructive_request = $null
+    }
+    $decisionOutcome = New-Outcome -ActionId $start.action_id -ActionKind $start.kind -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
+    $outcomePath = Join-Path $tempRoot ('outcome file % ! & ^ ' + $UnicodeProbe + '.json')
+    Write-Utf8 $outcomePath (($decisionOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
+    $paused = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
+    Assert-True ($paused.state -eq 'paused') 'Outcome file did not pause the Run'
+    Assert-True ($paused.next.operation -eq 'answer') 'decision pause did not return structured answer next'
+
+    $specialAnswer = "answer spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
+    $orientedText = Invoke-NextVariant -Next $paused.next -VariantId 'answer-decision' -InputValues @{ text = $specialAnswer }
+    $orientedMutation = $orientedText | ConvertFrom-Json
+    $oriented = Get-MutationAction -Envelope $orientedMutation -ExpectedKind 'orient'
+    $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-TextEqual -Actual ([string]$answeredStatus.answers[-1].text) -Expected $specialAnswer -Message 'journaled answer did not preserve exact special characters or CRLF'
+    $normalizedAnswer = $specialAnswer.Replace("`r`n", "`n")
+    $indentedAnswer = '  ' + $normalizedAnswer.Replace("`n", "`n  ")
+    Assert-True ($oriented.context.Contains($indentedAnswer)) 'bounded context did not contain the normalized and structurally indented special-character answer'
+
+    $implementSuggestion = [ordered]@{ kind = 'implement'; brief = 'Exercise Windows Outcome transport.' }
+    $orientOutcome = New-Outcome -ActionId $oriented.action_id -ActionKind $oriented.kind -Status 'completed' -Summary 'Windows argv observed.' -Pause $null -Suggestions @($implementSuggestion)
+    $orientJson = ($orientOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n"
+    if ($Mode -eq 'PowerShell') {
+        # stdin transport is intentionally PowerShell-only. Cmd mode exercises
+        # the same Outcome through an outcome-file argv that crosses cmd.exe.
+        $implementedText = Invoke-SlipwayDirect -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
+    } else {
+        $secondOutcomePath = Join-Path $tempRoot 'cmd outcome file.json'
+        Write-Utf8 $secondOutcomePath $orientJson
+        $implementedText = Invoke-ResolvedArgv -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
+    }
+    $implementedMutation = $implementedText | ConvertFrom-Json
+    $implemented = Get-MutationAction -Envelope $implementedMutation -ExpectedKind 'implement'
+
+    $stopDisplay = Invoke-ResolvedArgv -CommandArgs @('stop', $start.run_id, '--root', $repo)
+    $resumeLines = @($stopDisplay -split "`r?`n" | Where-Object { $_ -like '- resume-ad-hoc:*' })
+    Assert-True ($resumeLines.Count -eq 1) 'human stop output lacks one resume-ad-hoc command'
+    $rendered = $resumeLines[0].Substring($resumeLines[0].IndexOf(':') + 1).Trim()
+    Assert-True ($rendered -match 'EncodedCommand') 'unsafe %/! root was not rendered through an encoded command'
+    Assert-True (-not ($rendered -match '<answer>|<file>')) 'human recovery command contains a placeholder'
+
+    if ($Mode -eq 'Cmd') {
+        $resumeOutput = & $env:ComSpec '/d' '/v:on' '/s' '/c' $rendered 2>&1
+    } else {
+        $renderedParts = $rendered -split ' '
+        $resumeOutput = & $renderedParts[0] @($renderedParts[1..($renderedParts.Count - 1)]) 2>&1
+    }
+    $resumeExit = $LASTEXITCODE
+    $resumeText = Join-NativeOutput $resumeOutput
+    if ($resumeExit -ne 0) { Fail "rendered recovery command failed: $resumeText" }
+    $resumedMutation = $resumeText | ConvertFrom-Json
+    $resumed = Get-MutationAction -Envelope $resumedMutation -ExpectedKind 'orient'
+
+    $sourcePath = Join-Path $tempRoot ('source file % ! & ^ ' + $UnicodeProbe + '.json')
+    $sourceInitial = New-SourceEnvelope -RequirementText 'Keep the initial Windows requirement.' -UpdatedAt '2026-07-12T09:00:00Z'
+    Write-Utf8 $sourcePath (($sourceInitial | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
+    $sourceStartMutation = (Invoke-ResolvedArgv -CommandArgs @('run', 'issue-bound Windows', '--root', $repo, '--source-file', $sourcePath, '--budget', '8', '--json')) | ConvertFrom-Json
+    $sourceStart = Get-MutationAction -Envelope $sourceStartMutation -ExpectedKind 'orient'
+    Assert-True ($sourceStart.source.kind -eq 'change_issue') 'source identity is missing'
+    Assert-True ($sourceStart.requirements.sections.Count -eq 5) 'source section catalog is incomplete'
+    $initialMaterial = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $sourceStart.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    Assert-True ($initialMaterial.section.markdown -match 'initial Windows') 'initial Requirements material is missing'
+
+    $sourceAmended = New-SourceEnvelope -RequirementText 'Keep the materially amended Windows requirement.' -UpdatedAt '2026-07-12T10:00:00Z' -ParentRequirementsRevision $sourceStart.source.requirements_revision
+    Write-Utf8 $sourcePath (($sourceAmended | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
+    $candidate = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
+    Assert-True ($candidate.state -eq 'paused') 'material source refresh did not pause'
+    Assert-True ($candidate.budget_applied -eq $false) 'candidate creation applied replacement budget'
+    Assert-True ($candidate.source_candidate.candidate_id.Length -gt 0) 'current candidate ID missing'
+    $candidateId = [string]$candidate.source_candidate.candidate_id
+
+    $adoptedText = Invoke-NextVariant -Next $candidate.next -VariantId 'adopt' -InputValues @{}
+    $adoptedMutation = $adoptedText | ConvertFrom-Json
+    $adopted = Get-MutationAction -Envelope $adoptedMutation -ExpectedKind 'orient'
+    $adoptedMaterial = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $adopted.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    Assert-True ($adoptedMaterial.section.markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements material'
+
+    $status = (Invoke-ResolvedArgv -CommandArgs @('status', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-True (-not ($status.PSObject.Properties.Name -contains 'source_candidate')) 'candidate remained current after adopt'
+    Assert-True ($status.last_source_choice.candidate_id -eq $candidateId) 'status lost candidate choice identity'
+    Assert-True ($status.last_source_choice.choice -eq 'adopt') 'status lost candidate choice'
+
+    Write-Output "native Windows acceptance ($Mode): ok"
+} finally {
+    if ((Test-Path -LiteralPath $tempRoot) -and ($env:SLIPWAY_KEEP_WINDOWS_FIXTURE -ne '1')) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}

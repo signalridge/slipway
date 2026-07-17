@@ -1,0 +1,36 @@
+# Normalize repository text to LF so protocol fixtures, generated capabilities,
+# hashes in ownership manifests, and cross-platform builds remain deterministic.
+* text=auto eol=lf
+
+*.go    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.tmpl  text eol=lf
+*.sh    text eol=lf
+*.svg   text eol=lf
+artifacts/** text=auto eol=lf
+
+# Binary assets — never normalize.
+*.bin   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.mp4   binary
+*.mov   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.zip   binary
+*.gz    binary
+*.tgz   binary
+*.xz    binary
+*.zst   binary
+*.tar   binary
+*.db    binary
+*.sqlite binary
+*.wasm  binary

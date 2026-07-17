@@ -1,0 +1,124 @@
+# Run、復旧、プライバシー
+
+Run は stop や resume が可能ですが、ジャーナル は secret vault や completion certificate ではありません。この guide はユーザーが inspect し retention できる内容を説明します。
+
+![Slipway Run の状態: 明示的な start で Run は active になります。Pause する reason は4つだけで、人間の decision、environment の unavailable、budget の exhaustion、destructive scope の confirmation です。Answer・confirm・skip で active に戻り、stop は pending work を無効化しつつ ジャーナル を残して resume でき、ended は終端です。](../../assets/diagrams/run-states.svg)
+
+## Run を inspect する
+
+```bash
+slipway status
+slipway status <run-id>
+slipway status <run-id> --json
+```
+
+ID 省略時、`status` は リポジトリ の Git common directory を走査します。Current worktree の Run は完全に replay されます。別の linked worktree が作成した Run は `workspace_foreign` マーク付きの read-only header stub として表示され、完全な内容は owning worktree で確認・復旧します。
+
+Inspect は recovery directory や lock を作成せず、ジャーナル byte も修復しません。Local Run を安全に replay できない場合、上記の `status` の一覧形式はそれを隠さず、`unavailable_runs` に ID と診断を保持します。Mutation の前に ジャーナル を確認または復旧してください。
+
+ID を指定すると、status には現在の state と fresh 派生の structured `next` operation が含まれます。Generated ホストは表示用 shell コマンドを parse せず、この object に従います。
+
+## Stop、skip、resume
+
+```bash
+slipway stop <run-id>
+```
+
+`stop` は pending work を無効化しますが、ジャーナル を残します。ID 省略時は list の local active/paused entry を数え、`workspace_foreign` stub は除外します。読めない local recovery directory があれば explicit ID を要求します。Stopped Run は resume できます。Ended Run はできません。
+
+Skip は Action level の制御で、理由は不要です。Reorder や take over は queue を書き換えず、automatic loop を止めます。明示的な resume の後だけ続行します。
+
+Resume は original worktree identity を再検証し、fresh work を生成します。Stale Action ID、source candidate、answer、destructive grant は machine protocol に従って reject または無効化されます。
+
+Resume で `--budget` を省略すると、remaining budget が正なら保持し、0なら initial budget と3の大きい方まで補充します。`--budget N` を指定すると remaining budget を `N` に置き換えます。Replacement は operation が実際に Run を resume した場合だけ適用されます。
+
+## Issue source の復旧
+
+Issue-backed Run では、generated ホストが有効な source 選択肢を提示します。
+
+- 現在の Change を fetch して比較する。
+- Refresh できない、または不要な場合は pinned snapshot を明示的に継続する。
+- 変更を検出した場合、pinned snapshot を保つか exact current candidate を adopt する。
+
+Refresh の省略は Issue が unchanged であることの証明になりません。別 Issue identity や source history fork には新しい Run が必要です。
+
+## Storage layout
+
+Run data は リポジトリ の Git common directory にあり、current worktree の文字通りの `.git` path とは限りません。
+
+```text
+<git-common-dir>/slipway/runs/<run-id>/
+├── journal.jsonl
+├── run.json
+├── run.lock
+└── materials/
+```
+
+- `journal.jsonl` は復旧用の append-only transition record。
+- `run.json` は ジャーナル から再構築可能な projection。
+- `materials/` は accepted Issue section を content digest で保持。
+- `run.lock` は validated な coordination artifact。実際の writer serialization は Unix では OS directory lock、Windows では named mutex を使います。
+
+![Slipway の Run storage と mutation 順序: mutation は workspace identity を再検証し writer guard を取得したうえで、まず参照される material を書き（ジャーナル event が存在しないバイトを指すことは決してありません）、次に ジャーナル を append して同期し、最後にはじめて projection を置き換えます。Journal の commit 後に projection の refresh が失敗した場合、Slipway は rollback を主張せず、commit 済みの mutation と stale な projection を報告します。](../../assets/diagrams/run-storage.svg)
+
+Load と mutation のたびに、canonical worktree root、per-worktree Git directory、Git common directory を再確認します。Path が別 worktree に再利用されたり、Git metadata が retarget されたりすると、ジャーナル 変更前に失敗します。
+
+## 保存され得る内容
+
+Run は次を記録する場合があります。
+
+- Goal と source identity。
+- Accepted requirements material と digest。
+- User answer と ソース選択。
+- Action、Outcome、summary、finding、不確実性。
+- 報告された test、type-check、build、lint コマンド と exit code。
+- Start と現在 worktree を比較するための bounded Git observation。
+
+Slipway は GitHub token、認証情報 store、environment dump、unrelated file content、unreferenced Issue comment、full conversation transcript、hidden reasoning を意図的には収集しません。Generated ホストには、認識した 認証情報 value を redact しつつ truthful コマンド identity を保つことが指示されます。
+
+これらの保護は絶対ではありません。Goal、requirements、answer、filename、summary、コマンド argument 自体が機微になり得ます。Run directory は private local data として扱い、secret を貼り付けないでください。
+
+## File 観測
+
+Git observation は fingerprint と bounded metadata を保持し、file content は保持しません。小さな regular dirty/untracked file は full streamed digest になります。大きな file は size と固定 sampling region を使い、sampling 外の同長編集を見逃す場合があります。Symlink は追跡しません。
+
+Run start 以降の観測された変更は、誰またはどの process が原因かを証明しません。Review と summary はこの attribution 不確実性を維持します。
+
+## Durability と platform
+
+Unix では ジャーナル/projection の file sync と、対応環境では directory sync を行います。Windows は file flush しますが、新規や renamed directory entry に対する等価な directory-fsync 保証がなく、`doctor` が利用可能な durability level を報告します。
+
+Slipway は unsafe symbolic-link や reparse-point mutation path を拒否します。これらの制御は偶発的・並行的な破損リスクを減らしますが、root、malware、同じ account で継続的に競合する process までは防ぎません。
+
+## Retention と removal
+
+Run data は自動的に期限切れになりません。ユーザーが削除するまで Git common directory に保持されます。Unix では Slipway は Run directory を `0700`、file を `0600` で作成し、Windows では同等の owner-only ACL を適用します。これらの permission は他の local account からの access を制限しますが、同一 account、administrator、malware、backup、または複製済み data からは保護しません。
+
+`<git-common-dir>/slipway/runs/<run-id>/` の削除は、その Run の Slipway local recovery data を削除します。GitHub content、Git history、backup、filesystem snapshot、log、すでに他へ複製されたデータは消えず、secure erase でもありません。
+
+Adapter removal は別物です。
+
+```bash
+slipway uninstall --tool claude
+```
+
+これは pristine generated file だけを削除し、Run data は変更しません。
+
+## Retired namespace residue
+
+`doctor` は Git common directory の `slipway/` namespace に残る旧 `runtime`、`cache`、`scope-root`、`scopes`、`locks`、`processes`、`repair-backups` を報告することがあります。現在の Run engine はこれらを無視し、アダプターの install、refresh、uninstall は migration、削除、blocking を行いません。
+
+これは advisory warning です。Cleanup が必要なら、まず古い Slipway process をすべて停止し、Git common directory を backup し、報告された path を確認したうえで、不要と確認できたものだけを手動で削除してください。Slipway はこの residue の ownership を推論せず、自動削除もしません。
+
+## トラブルシューティング
+
+まず次を実行します。
+
+```bash
+slipway doctor
+slipway status <run-id> --json
+```
+
+`journal.jsonl` や `run.json` を手動で編集しないでください。元の worktree を保持し、structured error output を保存し、`next` が返す exact recovery option を使います。Source や workspace identity を安全に復旧できない場合は、古い state を無理に操作せず新しい Run を開始してください。
+
+詳細は[コマンドリファレンス](../reference/commands.md)と[アーキテクチャ](../explanation/architecture.md)を参照してください。

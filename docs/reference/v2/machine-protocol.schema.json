@@ -1,0 +1,1798 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json",
+  "title": "Slipway machine protocol v2",
+  "description": "Strict Slipway machine inputs, source bundles, success reports, status projections, and errors for contract_version 2.",
+  "oneOf": [
+    { "$ref": "#/$defs/action" },
+    { "$ref": "#/$defs/actionMaterial" },
+    { "$ref": "#/$defs/rawSourceEnvelope" },
+    { "$ref": "#/$defs/outcome" },
+    { "$ref": "#/$defs/protocolState" },
+    { "$ref": "#/$defs/cliError" },
+    { "$ref": "#/$defs/changeReport" },
+    { "$ref": "#/$defs/listReport" },
+    { "$ref": "#/$defs/doctorReport" },
+    { "$ref": "#/$defs/runStatus" },
+    { "$ref": "#/$defs/statusList" }
+  ],
+  "$defs": {
+    "plainText": {
+      "type": "string",
+      "pattern": "^[^\u0000-\u001F\u007F-\u009F]*$"
+    },
+    "markdownText": {
+      "type": "string",
+      "pattern": "^[^\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]*$"
+    },
+    "nonEmptyPlainText": {
+      "allOf": [
+        { "$ref": "#/$defs/plainText" },
+        { "minLength": 1 },
+        { "pattern": "\\S" }
+      ]
+    },
+    "nonEmptyMarkdownText": {
+      "allOf": [
+        { "$ref": "#/$defs/markdownText" },
+        { "minLength": 1 },
+        { "pattern": "\\S" }
+      ]
+    },
+    "githubNodeID": {
+      "allOf": [
+        { "$ref": "#/$defs/nonEmptyPlainText" },
+        { "pattern": "^\\S+$" }
+      ]
+    },
+    "githubIssueURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*$"
+    },
+    "githubCommentURL": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+/issues/[1-9][0-9]*#issuecomment-[1-9][0-9]*$"
+    },
+    "changeReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "hosts", "transaction_outcome", "written", "removed", "preserved", "recovery_artifacts", "warnings"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "hosts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "transaction_outcome": { "enum": ["committed", "rolled_back", "not_committed", "ambiguous"] },
+        "written": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "removed": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "preserved": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "recovery_artifacts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "warnings": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transaction_outcome": { "enum": ["rolled_back", "not_committed", "ambiguous"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "written": { "maxItems": 0 },
+              "removed": { "maxItems": 0 }
+            }
+          }
+        }
+      ]
+    },
+    "hostStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "detected", "installed", "needs_refresh", "capabilities"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "detected": { "type": "boolean" },
+        "installed": { "type": "boolean" },
+        "needs_refresh": { "type": "boolean" },
+        "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "warning": { "type": "string", "description": "Advisory note when a read-only listing could not fully inspect this host (e.g. an unreadable manifest). Listing is non-mutating, so one host's problem degrades to a warning rather than aborting the whole report." }
+      }
+    },
+    "listReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "hosts"],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "hosts": { "type": "array", "items": { "$ref": "#/$defs/hostStatus" } }
+      }
+    },
+    "doctorDurability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "file_sync", "directory_sync"],
+      "properties": {
+        "level": { "enum": ["file_and_directory_fsync", "file_fsync_only"] },
+        "file_sync": { "type": "boolean" },
+        "directory_sync": { "type": "boolean" },
+        "limitation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "doctorCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "status", "host_id", "name", "detail"],
+      "properties": {
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "status": { "enum": ["ok", "warning", "error"] },
+        "host_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "detail": { "type": "string", "minLength": 1 },
+        "durability": { "$ref": "#/$defs/doctorDurability" }
+      }
+    },
+    "doctorReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "checks"],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "checks": { "type": "array", "items": { "$ref": "#/$defs/doctorCheck" } }
+      }
+    },
+    "rawSourceComment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "database_id", "url", "updated_at", "author_id", "is_minimized", "body"],
+      "properties": {
+        "node_id": { "$ref": "#/$defs/githubNodeID" },
+        "database_id": { "type": "integer", "minimum": 1 },
+        "url": { "$ref": "#/$defs/githubCommentURL" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
+        "is_minimized": { "type": "boolean" },
+        "body": { "$ref": "#/$defs/markdownText" }
+      }
+    },
+    "rawSourceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_version", "provider", "host", "repository_id", "issue_id", "issue_number",
+        "canonical_url", "updated_at", "fetched_at", "title", "body", "labels", "comments"
+      ],
+      "properties": {
+        "source_version": { "const": 2 },
+        "provider": { "const": "github" },
+        "host": { "const": "github.com" },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_number": { "type": "integer", "minimum": 1 },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "fetched_at": { "type": "string", "format": "date-time" },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "body": { "$ref": "#/$defs/markdownText" },
+        "labels": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/nonEmptyPlainText" } },
+        "parent": { "$ref": "#/$defs/sourceParent" },
+        "comments": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/rawSourceComment" }
+        }
+      }
+    },
+    "sourceParent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository_id", "issue_id", "canonical_url"],
+      "properties": {
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "canonical_url": { "$ref": "#/$defs/githubIssueURL" }
+      }
+    },
+    "sourceSectionProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comment_node_id", "comment_database_id", "url", "author_id", "observed_updated_at"],
+      "properties": {
+        "comment_node_id": { "$ref": "#/$defs/githubNodeID" },
+        "comment_database_id": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/" },
+        "author_id": { "$ref": "#/$defs/githubNodeID" },
+        "observed_updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "pinnedSourceSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key", "role", "title", "body_sha256", "section_revision",
+        "material_sha256", "bytes", "provenance"
+      ],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
+        "title": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }], "x-slipway-max-utf8-bytes": 512, "description": "At most 512 UTF-8 bytes." },
+        "body_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "material_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 262144 },
+        "provenance": { "$ref": "#/$defs/sourceSectionProvenance" }
+      }
+    },
+    "pinnedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_version", "parser_version", "manifest_version", "profile", "provider", "host",
+        "repository_id", "issue_id", "issue_number", "canonical_url", "url_aliases",
+        "source_revision", "manifest_revision", "requirements_revision", "title", "sections"
+      ],
+      "properties": {
+        "source_version": { "const": 2 },
+        "parser_version": { "const": 2 },
+        "manifest_version": { "const": 2 },
+        "profile": { "const": "change/v2" },
+        "provider": { "const": "github" },
+        "host": { "const": "github.com" },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_number": { "type": "integer", "minimum": 1 },
+        "canonical_url": { "type": "string", "format": "uri" },
+        "url_aliases": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "format": "uri" } },
+        "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "manifest_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "parent_requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "parent": { "$ref": "#/$defs/sourceParent" },
+        "sections": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/pinnedSourceSection" },
+          "allOf": [
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "outcome" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "requirements" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "acceptance_examples" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "constraints" } } }, "minContains": 1 },
+            { "contains": { "required": ["role"], "properties": { "role": { "const": "non_goals" } } }, "minContains": 1 }
+          ]
+        }
+      }
+    },
+    "sourceCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id", "valid", "classification", "classification_code", "source_version", "parser_version",
+        "provider", "host", "repository_id", "issue_id", "issue_number", "canonical_url", "url_aliases",
+        "title", "created_at"
+      ],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "valid": { "type": "boolean" },
+        "classification": { "enum": ["valid", "invalid"] },
+        "classification_code": {
+          "enum": [
+            "valid_change", "objective_marker", "unsupported_marker", "change_marker_required",
+            "source_manifest_invalid", "source_section_missing", "source_section_unexpected",
+            "source_section_minimized", "source_section_hash_mismatch", "source_section_invalid",
+            "source_section_too_large", "source_bundle_too_large", "invalid_change_body"
+          ]
+        },
+        "classification_error": { "allOf": [{ "$ref": "#/$defs/nonEmptyPlainText" }], "x-slipway-max-utf8-bytes": 1024, "description": "At most 1024 UTF-8 bytes." },
+        "source_version": { "const": 2 },
+        "parser_version": { "const": 2 },
+        "provider": { "const": "github" },
+        "host": { "const": "github.com" },
+        "repository_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "issue_number": { "type": "integer", "minimum": 1 },
+        "canonical_url": { "type": "string", "format": "uri" },
+        "url_aliases": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "format": "uri" } },
+        "observation_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "parent": { "$ref": "#/$defs/sourceParent" },
+        "snapshot": { "$ref": "#/$defs/pinnedSource" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "oneOf": [
+        {
+          "required": ["source_revision", "requirements_revision", "snapshot"],
+          "properties": {
+            "valid": { "const": true },
+            "classification": { "const": "valid" },
+            "classification_code": { "const": "valid_change" }
+          },
+          "not": {
+            "anyOf": [
+              { "required": ["classification_error"] },
+              { "required": ["observation_sha256"] }
+            ]
+          }
+        },
+        {
+          "required": ["classification_error", "observation_sha256"],
+          "properties": {
+            "valid": { "const": false },
+            "classification": { "const": "invalid" },
+            "classification_code": {
+              "enum": [
+                "objective_marker", "unsupported_marker", "change_marker_required",
+                "source_manifest_invalid", "source_section_missing", "source_section_unexpected",
+                "source_section_minimized", "source_section_hash_mismatch", "source_section_invalid",
+                "source_section_too_large", "source_bundle_too_large", "invalid_change_body"
+              ]
+            }
+          },
+          "not": {
+            "anyOf": [
+              { "required": ["source_revision"] },
+              { "required": ["requirements_revision"] },
+              { "required": ["snapshot"] }
+            ]
+          }
+        }
+      ]
+    },
+    "sourceChoiceReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "choice", "resulting_action_id", "at"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "choice": { "enum": ["pinned", "adopt"] },
+        "resulting_action_id": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "resumeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "budget_applied"],
+      "properties": {
+        "operation": {
+          "enum": [
+            "ad_hoc_resumed", "source_refreshed", "source_candidate_created", "source_refresh_skipped",
+            "source_amended", "source_pinned"
+          ]
+        },
+        "budget_applied": { "type": "boolean" },
+        "candidate_id": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        {
+          "required": ["candidate_id"],
+          "properties": {
+            "operation": { "const": "source_candidate_created" },
+            "budget_applied": { "const": false }
+          }
+        },
+        {
+          "required": ["candidate_id"],
+          "properties": {
+            "operation": { "const": "source_amended" },
+            "budget_applied": { "const": true }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "source_pinned" },
+            "budget_applied": { "const": true }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "enum": ["ad_hoc_resumed", "source_refreshed", "source_refresh_skipped"] },
+            "budget_applied": { "const": true }
+          },
+          "not": { "required": ["candidate_id"] }
+        }
+      ]
+    },
+    "workspaceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "worktree_root", "git_dir", "git_common_dir", "id"],
+      "properties": {
+        "version": { "const": 1 },
+        "worktree_root": { "type": "string", "minLength": 1 },
+        "git_dir": { "type": "string", "minLength": 1 },
+        "git_common_dir": { "type": "string", "minLength": 1 },
+        "id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "pathObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "state", "observation"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 1 },
+        "state": { "type": "string", "minLength": 1 },
+        "observation": { "enum": ["regular", "symlink", "oversize_sampled", "content_unobserved", "missing", "non_regular", "unreadable"] },
+        "size": { "type": "integer", "minimum": 0 },
+        "modified_unix_nano": { "type": "integer", "description": "Observed regular-file modification time in Unix nanoseconds; included in the bounded path fingerprint." },
+        "content_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "content_fingerprint_kind": { "enum": ["full_sha256", "symlink_target_sha256", "oversize_samples_v1"] }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["observation"],
+            "properties": { "observation": { "enum": ["regular", "oversize_sampled"] } }
+          },
+          "then": { "required": ["modified_unix_nano"] }
+        }
+      ]
+    },
+    "gitObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "head", "index_fingerprint", "status_fingerprint", "snapshot_hash", "path_count",
+        "path_fingerprint", "details_truncated", "content_observation_complete", "content_bytes_hashed",
+        "content_byte_limit", "content_byte_limit_exceeded", "content_deadline_exceeded", "dirty_files", "path_observations"
+      ],
+      "properties": {
+        "version": { "const": 1 },
+        "head": { "type": "string" },
+        "index_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "status_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "snapshot_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "path_count": { "type": "integer", "minimum": 0 },
+        "path_fingerprint": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "details_truncated": { "type": "boolean" },
+        "content_observation_complete": { "type": "boolean" },
+        "content_bytes_hashed": { "type": "integer", "minimum": 0 },
+        "content_byte_limit": { "type": "integer", "minimum": 1 },
+        "content_byte_limit_exceeded": { "type": "boolean" },
+        "content_deadline_exceeded": { "type": "boolean" },
+        "dirty_files": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "path_observations": { "type": "array", "items": { "$ref": "#/$defs/pathObservation" } }
+      }
+    },
+    "answerRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action_id", "text", "confirm_destructive", "payload_sha256", "active", "at"],
+      "properties": {
+        "action_id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "confirm_destructive": { "type": "boolean" },
+        "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "payload_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "active": { "type": "boolean" },
+        "superseded_by": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "actionRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "action": { "$ref": "#/$defs/action" },
+        "outcome": { "$ref": "#/$defs/outcome" },
+        "outcome_payload_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "review_projection": {
+          "allOf": [
+            { "$ref": "#/$defs/review" },
+            {
+              "properties": {
+                "result": { "const": "not_run" },
+                "findings": { "maxItems": 0 },
+                "uncertainties": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        "voided": { "type": "boolean" },
+        "skipped": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["review_projection"] },
+          "then": {
+            "required": ["skipped"],
+            "properties": {
+              "action": {
+                "allOf": [
+                  { "$ref": "#/$defs/action" },
+                  { "properties": { "kind": { "const": "review" } } }
+                ]
+              },
+              "skipped": { "const": true }
+            },
+            "not": {
+              "anyOf": [
+                { "required": ["outcome"] },
+                { "required": ["outcome_payload_sha256"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "required": ["outcome"] },
+          "then": { "required": ["outcome_payload_sha256"] }
+        },
+        {
+          "if": { "required": ["outcome_payload_sha256"] },
+          "then": { "required": ["outcome"] }
+        }
+      ]
+    },
+    "runStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "id", "goal", "workspace", "workspace_identity", "state", "created_at", "next"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "id": { "type": "string", "minLength": 1 },
+        "goal": { "type": "string", "minLength": 1 },
+        "workspace": { "type": "string", "minLength": 1 },
+        "workspace_identity": { "$ref": "#/$defs/workspaceIdentity" },
+        "workspace_foreign": { "type": "boolean", "description": "True only for a FirstEvent-only list stub owned by another worktree of the same repository. Such a stub is visible for discovery but is not loaded or mutable from the current workspace." },
+        "state": { "enum": ["active", "paused", "stopped", "ended"] },
+        "pause_reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable", "budget_exhausted"] },
+        "review_enabled": { "type": "boolean" },
+        "review_pending": { "type": "boolean" },
+        "initial_budget": { "type": "integer", "minimum": 1 },
+        "remaining_budget": { "type": "integer", "minimum": 0 },
+        "initial_git": { "$ref": "#/$defs/gitObservation" },
+        "current_git": { "$ref": "#/$defs/gitObservation" },
+        "final_git_observed": { "type": "boolean" },
+        "pinned_source": { "$ref": "#/$defs/pinnedSource" },
+        "source_candidate": { "$ref": "#/$defs/sourceCandidate" },
+        "last_source_choice": { "$ref": "#/$defs/sourceChoiceReceipt" },
+        "last_resume_result": { "$ref": "#/$defs/resumeResult" },
+        "current_action": { "$ref": "#/$defs/action" },
+        "actions": { "type": "array", "items": { "$ref": "#/$defs/actionRecord" } },
+        "pending_actions": { "type": "array", "items": { "$ref": "#/$defs/suggestedAction" } },
+        "answers": { "type": "array", "items": { "$ref": "#/$defs/answerRecord" } },
+        "observations": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "known_issues": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "uncertainties": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "activities": { "type": "array", "items": { "$ref": "#/$defs/activity" } },
+        "summary": { "type": "string", "minLength": 1 },
+        "pending_destructive_request": { "$ref": "#/$defs/destructiveRequest" },
+        "destructive_grant": { "$ref": "#/$defs/destructiveAuthorization" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "next": { "$ref": "#/$defs/next" }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "review_enabled", "review_pending", "initial_budget", "remaining_budget", "initial_git", "current_git",
+            "final_git_observed", "actions", "updated_at"
+          ],
+          "properties": { "workspace_foreign": { "const": false } }
+        },
+        {
+          "required": ["workspace_foreign"],
+          "properties": {
+            "workspace_foreign": { "const": true },
+            "pause_reason": false,
+            "review_enabled": false,
+            "review_pending": false,
+            "initial_budget": false,
+            "remaining_budget": false,
+            "initial_git": false,
+            "current_git": false,
+            "final_git_observed": false,
+            "pinned_source": false,
+            "source_candidate": false,
+            "last_source_choice": false,
+            "last_resume_result": false,
+            "current_action": false,
+            "actions": false,
+            "pending_actions": false,
+            "answers": false,
+            "observations": false,
+            "known_issues": false,
+            "uncertainties": false,
+            "activities": false,
+            "summary": false,
+            "pending_destructive_request": false,
+            "destructive_grant": false,
+            "updated_at": false
+          }
+        }
+      ]
+    },
+    "unavailableRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "detail"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "code": { "enum": ["run_journal_invalid", "run_unavailable"] },
+        "detail": { "$ref": "#/$defs/nonEmptyPlainText" }
+      }
+    },
+    "statusList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "runs", "unavailable_runs"],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "runs": { "type": "array", "items": { "$ref": "#/$defs/runStatus" } },
+        "unavailable_runs": { "type": "array", "items": { "$ref": "#/$defs/unavailableRun" } }
+      }
+    },
+    "protocolState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "run_id", "state", "next"],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "run_id": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["active", "paused", "stopped", "ended"] },
+        "pause_reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable", "budget_exhausted"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "action": { "$ref": "#/$defs/action" },
+        "next": { "$ref": "#/$defs/next" },
+        "pinned_source": { "$ref": "#/$defs/pinnedSource" },
+        "source_candidate": { "$ref": "#/$defs/sourceCandidate" },
+        "resume_operation": {
+          "enum": [
+            "ad_hoc_resumed", "source_refreshed", "source_candidate_created", "source_refresh_skipped",
+            "source_amended", "source_pinned"
+          ]
+        },
+        "budget_applied": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "active" } } },
+          "then": { "required": ["action"] }
+        },
+        {
+          "if": { "required": ["resume_operation"] },
+          "then": { "required": ["budget_applied"] }
+        },
+        {
+          "if": { "required": ["budget_applied"] },
+          "then": { "required": ["resume_operation"] }
+        }
+      ]
+    },
+    "mutationErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "committed", "projection_stale", "namespace_detached", "ambiguous"],
+      "properties": {
+        "phase": { "type": "string", "minLength": 1 },
+        "committed": { "type": "boolean" },
+        "projection_stale": { "type": "boolean" },
+        "namespace_detached": { "type": "boolean" },
+        "ambiguous": { "type": "boolean" }
+      }
+    },
+    "runStateErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "state"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["active", "paused", "stopped", "ended"] }
+      }
+    },
+    "workspaceIdentityErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_workspace_identity"],
+      "properties": {
+        "expected_workspace_identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "observed_workspace_identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "discovery_error": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sourceIssueMismatchErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "state", "pinned_issue_id", "refreshed_issue_id"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "state": { "enum": ["active", "paused", "stopped", "ended"] },
+        "pinned_issue_id": { "type": "string", "minLength": 1 },
+        "refreshed_issue_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "adapterMutationErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transaction_outcome", "report"],
+      "properties": {
+        "transaction_outcome": { "enum": ["committed", "rolled_back", "not_committed", "ambiguous"] },
+        "report": { "$ref": "#/$defs/changeReport" }
+      }
+    },
+    "journalRecordLimitErrorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context", "size", "limit"],
+      "properties": {
+        "context": { "type": "string", "minLength": 1 },
+        "size": { "type": "integer", "minimum": 1 },
+        "limit": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "errorDetails": {
+      "oneOf": [
+        { "$ref": "#/$defs/mutationErrorDetails" },
+        { "$ref": "#/$defs/runStateErrorDetails" },
+        { "$ref": "#/$defs/workspaceIdentityErrorDetails" },
+        { "$ref": "#/$defs/sourceIssueMismatchErrorDetails" },
+        { "$ref": "#/$defs/adapterMutationErrorDetails" },
+        { "$ref": "#/$defs/journalRecordLimitErrorDetails" }
+      ]
+    },
+    "cliError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "code", "message", "next", "exit_code"],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "code": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "message": { "type": "string", "minLength": 1 },
+        "next": { "$ref": "#/$defs/next" },
+        "exit_code": { "enum": [2, 3] },
+        "details": { "$ref": "#/$defs/errorDetails" }
+      }
+    },
+    "nextInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "type": { "enum": ["string", "path", "enum", "digest"] },
+        "flag": { "type": "string", "pattern": "^--[a-z][a-z0-9-]*$" },
+        "required": { "type": "boolean" },
+        "choices": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      },
+      "oneOf": [
+        {
+          "properties": { "type": { "const": "enum" } },
+          "required": ["choices"]
+        },
+        {
+          "properties": { "type": { "enum": ["string", "path", "digest"] } },
+          "not": { "required": ["choices"] }
+        }
+      ]
+    },
+    "nextVariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "base_argv", "inputs"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "base_argv": {
+          "type": "array",
+          "minItems": 2,
+          "prefixItems": [{ "const": "slipway" }],
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^\u0000]+$",
+            "not": { "pattern": "^\\s*[\"']*(FILE|<[\\s\\S]*>)[\"']*\\s*$" }
+          }
+        },
+        "inputs": { "type": "array", "items": { "$ref": "#/$defs/nextInput" } }
+      }
+    },
+    "nextSkipVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "properties": {
+            "id": { "const": "skip-action" },
+            "base_argv": {
+              "minItems": 9,
+              "maxItems": 9,
+              "prefixItems": [
+                { "const": "slipway" },
+                { "const": "protocol" },
+                { "const": "skip" },
+                { "const": "--run" },
+                { "type": "string", "minLength": 1 },
+                { "const": "--action" },
+                { "type": "string", "minLength": 1 },
+                { "const": "--root" },
+                { "type": "string", "minLength": 1 }
+              ],
+              "items": false
+            },
+            "inputs": { "maxItems": 0 }
+          }
+        }
+      ]
+    },
+    "nextActionVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "submit-outcome-file" },
+                "base_argv": {
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "submit" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "outcome_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--outcome-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "submit-outcome-stdin" },
+                "base_argv": {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "submit" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--outcome-stdin" }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextAnswerVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "enum": ["answer-decision", "decline-or-feedback"] },
+                "base_argv": {
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "answer" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "text" },
+                      "type": { "const": "string" },
+                      "flag": { "const": "--text" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "confirm-destructive" },
+                "base_argv": {
+                  "minItems": 12,
+                  "maxItems": 12,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "answer" },
+                    { "const": "--run" }, { "type": "string", "minLength": 1 },
+                    { "const": "--action" }, { "type": "string", "minLength": 1 },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--confirm-destructive" }, { "const": "--scope-sha256" },
+                    { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+                  ],
+                  "items": false
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "text" },
+                      "type": { "const": "string" },
+                      "flag": { "const": "--text" },
+                      "required": { "const": false }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextResumeVariant": {
+      "oneOf": [
+        { "$ref": "#/$defs/nextSkipVariant" },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "resume-ad-hoc" },
+                "base_argv": {
+                  "minItems": 6,
+                  "maxItems": 6,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "refresh-source" },
+                "base_argv": {
+                  "oneOf": [
+                    {
+                      "minItems": 6,
+                      "maxItems": 6,
+                      "prefixItems": [
+                        { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
+                        { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
+                      ],
+                      "items": false
+                    },
+                    {
+                      "minItems": 8,
+                      "maxItems": 8,
+                      "prefixItems": [
+                        { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
+                        { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                        { "const": "--budget" }, { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }
+                      ],
+                      "items": false
+                    }
+                  ]
+                },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "source_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--source-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "properties": {
+                "id": { "const": "use-pinned-source" },
+                "base_argv": {
+                  "minItems": 7,
+                  "maxItems": 7,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--use-pinned-source" }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/nextVariant" },
+            {
+              "oneOf": [
+                { "properties": { "id": { "const": "keep-pinned" }, "base_argv": { "prefixItems": [{}, {}, {}, {}, {}, {}, { "const": "--source-choice" }, { "const": "pinned" }] } } },
+                { "properties": { "id": { "const": "adopt" }, "base_argv": { "prefixItems": [{}, {}, {}, {}, {}, {}, { "const": "--source-choice" }, { "const": "adopt" }] } } }
+              ],
+              "properties": {
+                "base_argv": {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
+                    { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--source-choice" }, { "enum": ["pinned", "adopt"] },
+                    { "const": "--candidate" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                "inputs": { "maxItems": 0 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "nextStartVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "id": { "const": "retry-run" },
+                "inputs": { "maxItems": 0 }
+              }
+            },
+            {
+              "properties": {
+                "id": { "const": "start-with-source" },
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "type", "flag", "required"],
+                    "properties": {
+                      "name": { "const": "source_file" },
+                      "type": { "const": "path" },
+                      "flag": { "const": "--source-file" },
+                      "required": { "const": true }
+                    }
+                  }],
+                  "items": false
+                }
+              }
+            }
+          ],
+          "properties": {
+            "base_argv": {
+              "oneOf": [
+                {
+                  "minItems": 9,
+                  "maxItems": 9,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
+                    { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                },
+                {
+                  "minItems": 10,
+                  "maxItems": 10,
+                  "prefixItems": [
+                    { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
+                    { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
+                    { "const": "--root" }, { "type": "string", "minLength": 1 },
+                    { "const": "--no-review" }, { "const": "--" }, { "type": "string", "minLength": 1 }
+                  ],
+                  "items": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nextCommandVariant": {
+      "allOf": [
+        { "$ref": "#/$defs/nextVariant" },
+        {
+          "properties": {
+            "id": { "not": { "const": "skip-action" } },
+            "base_argv": {
+              "prefixItems": [{ "const": "slipway" }, { "not": { "enum": ["run", "protocol"] } }]
+            }
+          }
+        }
+      ]
+    },
+    "next": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "workspace_identity", "variants"],
+      "properties": {
+        "operation": { "enum": ["action", "answer", "resume", "start", "command", "none"] },
+        "workspace_identity": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "variants": { "type": "array" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "operation": { "const": "none" },
+            "variants": { "maxItems": 0 }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "action" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextActionVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "answer" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextAnswerVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "resume" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextResumeVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "start" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextStartVariant" } }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "command" },
+            "variants": { "minItems": 1, "items": { "$ref": "#/$defs/nextCommandVariant" } }
+          }
+        }
+      ]
+    },
+    "actionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "canonical_url", "issue_id", "source_revision", "manifest_revision", "requirements_revision"],
+      "properties": {
+        "kind": { "const": "change_issue" },
+        "canonical_url": { "type": "string", "format": "uri" },
+        "issue_id": { "$ref": "#/$defs/githubNodeID" },
+        "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "manifest_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "actionRequirementSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "role", "title", "section_revision", "material_sha256", "bytes"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "material_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 262144 }
+      }
+    },
+    "actionMaterialInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required", "choices"],
+      "properties": {
+        "name": { "const": "section" },
+        "type": { "const": "enum" },
+        "flag": { "const": "--section" },
+        "required": { "const": true },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
+        }
+      }
+    },
+    "actionMaterialReader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "base_argv", "input"],
+      "properties": {
+        "operation": { "const": "read_material" },
+        "base_argv": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "prefixItems": [
+            { "const": "slipway" },
+            { "const": "protocol" },
+            { "const": "material" },
+            { "const": "--root" },
+            { "$ref": "#/$defs/nonEmptyPlainText" },
+            { "const": "--run" },
+            { "$ref": "#/$defs/nonEmptyPlainText" },
+            { "const": "--action" },
+            { "$ref": "#/$defs/nonEmptyPlainText" }
+          ],
+          "items": false
+        },
+        "input": { "$ref": "#/$defs/actionMaterialInput" }
+      }
+    },
+    "actionRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirements_revision", "sections", "required_for_action", "reader"],
+      "properties": {
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "sections": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/actionRequirementSection" }
+        },
+        "required_for_action": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" }
+        },
+        "reader": { "$ref": "#/$defs/actionMaterialReader" }
+      }
+    },
+    "destructiveTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "enum": ["path", "git_ref", "external_resource", "data_domain"] },
+        "value": { "$ref": "#/$defs/nonEmptyPlainText" }
+      }
+    },
+    "destructiveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "targets", "impact", "scope_sha256"],
+      "properties": {
+        "request_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/destructiveTarget" }
+        },
+        "impact": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "destructiveAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "originating_action_id",
+        "scope_version",
+        "scope_sha256",
+        "targets",
+        "impact",
+        "confirmed_at"
+      ],
+      "properties": {
+        "request_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "not": { "const": "00000000-0000-0000-0000-000000000000" } },
+        "originating_action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "scope_version": { "const": 1 },
+        "scope_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/destructiveTarget" }
+        },
+        "impact": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "confirmed_at": { "type": "string", "format": "date-time", "pattern": "Z$" }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "run_id",
+        "action_id",
+        "kind",
+        "goal",
+        "brief",
+        "context",
+        "remaining_budget"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "kind": { "enum": ["orient", "clarify", "implement", "review", "summarize"] },
+        "goal": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "brief": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }], "x-slipway-max-utf8-bytes": 8192, "description": "At most 8192 UTF-8 bytes." },
+        "context": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }], "x-slipway-max-utf8-bytes": 131072, "description": "At most 131072 UTF-8 bytes." },
+        "source": { "$ref": "#/$defs/actionSource" },
+        "requirements": { "$ref": "#/$defs/actionRequirements" },
+        "destructive_authorization": { "$ref": "#/$defs/destructiveAuthorization" },
+        "remaining_budget": { "type": "integer", "minimum": 0 }
+      },
+      "oneOf": [
+        {
+          "title": "ad-hoc non-Implement Action",
+          "properties": { "kind": { "enum": ["orient", "clarify", "review", "summarize"] } },
+          "not": {
+            "anyOf": [
+              { "required": ["source"] },
+              { "required": ["requirements"] },
+              { "required": ["destructive_authorization"] }
+            ]
+          }
+        },
+        {
+          "title": "issue-bound non-Implement Action",
+          "properties": { "kind": { "enum": ["orient", "clarify", "review", "summarize"] } },
+          "required": ["source", "requirements"],
+          "not": { "required": ["destructive_authorization"] }
+        },
+        {
+          "title": "ad-hoc unscoped Implement Action",
+          "properties": { "kind": { "const": "implement" } },
+          "not": {
+            "anyOf": [
+              { "required": ["source"] },
+              { "required": ["requirements"] },
+              { "required": ["destructive_authorization"] }
+            ]
+          }
+        },
+        {
+          "title": "issue-bound unscoped Implement Action",
+          "properties": { "kind": { "const": "implement" } },
+          "required": ["source", "requirements"],
+          "not": { "required": ["destructive_authorization"] }
+        },
+        {
+          "title": "ad-hoc scoped Implement Action",
+          "properties": { "kind": { "const": "implement" } },
+          "required": ["destructive_authorization"],
+          "not": {
+            "anyOf": [
+              { "required": ["source"] },
+              { "required": ["requirements"] }
+            ]
+          }
+        },
+        {
+          "title": "issue-bound scoped Implement Action",
+          "properties": { "kind": { "const": "implement" } },
+          "required": ["source", "requirements", "destructive_authorization"]
+        }
+      ]
+    },
+    "actionMaterialSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "role", "title", "section_revision", "markdown"],
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$" },
+        "role": { "enum": ["outcome", "requirements", "acceptance_examples", "constraints", "non_goals"] },
+        "title": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "section_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "markdown": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }], "x-slipway-max-utf8-bytes": 262144, "description": "At most 262144 UTF-8 bytes." }
+      }
+    },
+    "actionMaterial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version", "message_type", "run_id", "action_id",
+        "requirements_revision", "section"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "message_type": { "const": "action_material" },
+        "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "section": { "$ref": "#/$defs/actionMaterialSection" }
+      }
+    },
+    "suggestedAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "brief"],
+      "properties": {
+        "kind": { "enum": ["clarify", "implement", "summarize"] },
+        "brief": { "allOf": [{ "$ref": "#/$defs/nonEmptyMarkdownText" }], "x-slipway-max-utf8-bytes": 8192, "description": "At most 8192 UTF-8 bytes." }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "command", "exit_code", "summary"],
+      "properties": {
+        "kind": { "enum": ["test", "typecheck", "build", "lint"] },
+        "command": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "exit_code": { "type": "integer" },
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "summary", "detail"],
+      "properties": {
+        "location": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "detail": { "$ref": "#/$defs/nonEmptyMarkdownText" }
+      }
+    },
+    "pause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "question", "destructive_request"],
+      "properties": {
+        "reason": { "enum": ["decision_required", "destructive_confirmation_required", "environment_unavailable"] },
+        "question": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "destructive_request": {
+          "oneOf": [
+            { "$ref": "#/$defs/destructiveRequest" },
+            { "type": "null" }
+          ]
+        },
+        "supersedes_answer_action_id": { "$ref": "#/$defs/nonEmptyPlainText" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["supersedes_answer_action_id"] },
+          "then": { "properties": { "reason": { "const": "decision_required" } } }
+        }
+      ]
+    },
+    "nonDestructivePause": {
+      "allOf": [
+        { "$ref": "#/$defs/pause" },
+        {
+          "properties": {
+            "reason": { "enum": ["decision_required", "environment_unavailable"] },
+            "destructive_request": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "destructivePause": {
+      "allOf": [
+        { "$ref": "#/$defs/pause" },
+        {
+          "properties": {
+            "reason": { "const": "destructive_confirmation_required" },
+            "destructive_request": { "$ref": "#/$defs/destructiveRequest" }
+          }
+        }
+      ]
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "files_changed", "activities", "uncertainties", "attempts"],
+      "properties": {
+        "result": { "enum": ["applied", "partial", "not_needed", "unable"] },
+        "files_changed": { "type": "array", "items": { "$ref": "#/$defs/plainText" } },
+        "activities": { "type": "array", "items": { "$ref": "#/$defs/activity" } },
+        "uncertainties": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "attempts": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result", "findings", "uncertainties"],
+      "properties": {
+        "result": { "enum": ["no_findings_reported", "findings_reported", "inconclusive", "error", "not_run"] },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+        "uncertainties": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_version",
+        "action_id",
+        "action_kind",
+        "status",
+        "summary",
+        "observations",
+        "known_issues",
+        "suggested_actions",
+        "pause",
+        "implementation",
+        "review"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "action_kind": { "enum": ["orient", "clarify", "implement", "review", "summarize"] },
+        "status": { "enum": ["completed", "needs_input", "partial", "error"] },
+        "summary": { "$ref": "#/$defs/nonEmptyMarkdownText" },
+        "observations": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "known_issues": { "type": "array", "items": { "$ref": "#/$defs/markdownText" } },
+        "suggested_actions": {
+          "type": "array",
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/suggestedAction" }
+        },
+        "pause": {
+          "oneOf": [
+            { "$ref": "#/$defs/pause" },
+            { "type": "null" }
+          ]
+        },
+        "implementation": {
+          "oneOf": [
+            { "$ref": "#/$defs/implementation" },
+            { "type": "null" }
+          ]
+        },
+        "review": {
+          "oneOf": [
+            { "$ref": "#/$defs/review" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "title": "non-paused Orient",
+          "properties": {
+            "action_kind": { "const": "orient" },
+            "status": { "enum": ["completed", "partial", "error"] },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 1 }
+          }
+        },
+        {
+          "title": "paused Orient",
+          "properties": {
+            "action_kind": { "const": "orient" },
+            "status": { "const": "needs_input" },
+            "pause": { "$ref": "#/$defs/nonDestructivePause" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "non-paused Clarify",
+          "properties": {
+            "action_kind": { "const": "clarify" },
+            "status": { "enum": ["completed", "error"] },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 1 }
+          }
+        },
+        {
+          "title": "paused Clarify",
+          "properties": {
+            "action_kind": { "const": "clarify" },
+            "status": { "const": "needs_input" },
+            "pause": { "$ref": "#/$defs/nonDestructivePause" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "completed Implement",
+          "properties": {
+            "action_kind": { "const": "implement" },
+            "status": { "const": "completed" },
+            "pause": { "type": "null" },
+            "implementation": {
+              "allOf": [
+                { "$ref": "#/$defs/implementation" },
+                { "properties": { "result": { "enum": ["applied", "not_needed"] } } }
+              ]
+            },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "partial Implement",
+          "properties": {
+            "action_kind": { "const": "implement" },
+            "status": { "const": "partial" },
+            "pause": { "type": "null" },
+            "implementation": {
+              "allOf": [
+                { "$ref": "#/$defs/implementation" },
+                { "properties": { "result": { "const": "partial" } } }
+              ]
+            },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "error Implement",
+          "properties": {
+            "action_kind": { "const": "implement" },
+            "status": { "const": "error" },
+            "pause": { "type": "null" },
+            "implementation": {
+              "allOf": [
+                { "$ref": "#/$defs/implementation" },
+                { "properties": { "result": { "const": "unable" } } }
+              ]
+            },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "paused Implement",
+          "properties": {
+            "action_kind": { "const": "implement" },
+            "status": { "const": "needs_input" },
+            "pause": {
+              "oneOf": [
+                { "$ref": "#/$defs/nonDestructivePause" },
+                { "$ref": "#/$defs/destructivePause" }
+              ]
+            },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "completed Review",
+          "properties": {
+            "action_kind": { "const": "review" },
+            "status": { "const": "completed" },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": {
+              "allOf": [
+                { "$ref": "#/$defs/review" },
+                {
+                  "oneOf": [
+                    {
+                      "properties": {
+                        "result": { "const": "no_findings_reported" },
+                        "findings": { "maxItems": 0 }
+                      }
+                    },
+                    {
+                      "properties": {
+                        "result": { "const": "findings_reported" },
+                        "findings": { "minItems": 1 }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "partial Review",
+          "properties": {
+            "action_kind": { "const": "review" },
+            "status": { "const": "partial" },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": {
+              "allOf": [
+                { "$ref": "#/$defs/review" },
+                { "properties": { "result": { "const": "inconclusive" } } }
+              ]
+            },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "error Review",
+          "properties": {
+            "action_kind": { "const": "review" },
+            "status": { "const": "error" },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": {
+              "allOf": [
+                { "$ref": "#/$defs/review" },
+                { "properties": { "result": { "const": "error" } } }
+              ]
+            },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        },
+        {
+          "title": "non-paused Summary",
+          "properties": {
+            "action_kind": { "const": "summarize" },
+            "status": { "enum": ["completed", "error"] },
+            "pause": { "type": "null" },
+            "implementation": { "type": "null" },
+            "review": { "type": "null" },
+            "suggested_actions": { "maxItems": 0 }
+          }
+        }
+      ]
+    }
+  }
+}

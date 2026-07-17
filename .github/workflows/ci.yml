@@ -1,0 +1,357 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  lint-yaml:
+    name: Lint YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Run yamllint
+        run: yamllint -c .yamllint.yaml .
+  lint-actions:
+    name: Lint Actions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Run actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2
+  lint-markdown:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@8de2aa07cae85fd17c0b35642db70cf5495f1d25 # v24.0.0
+        with:
+          config: .markdownlint.yaml
+          globs: |
+            **/*.md
+            **/*.mdx
+            !CHANGELOG.md
+            !.codex/**
+            !.github/**
+            !.worktrees/**
+            !artifacts/**
+            !internal/tmpl/templates/**
+  lint-go:
+    name: Lint Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.12.2
+          args: --timeout=5m
+      - name: Observe Slipway testlint
+        continue-on-error: true
+        run: |
+          set +e
+          go run ./internal/testlint/cmd/testlint ./...
+          status=$?
+          echo 'Testlint is an advisory observation, not a merge or release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+  acceptance-quality:
+    name: Acceptance Assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Check Shell and Python acceptance assets
+        env:
+          PYTHONPYCACHEPREFIX: ${{ runner.temp }}/slipway-pycache
+        run: |
+          set -euo pipefail
+          find acceptance -type f -name '*.sh' -exec shellcheck {} +
+          find acceptance -type f -name '*.sh' -exec sh -n {} +
+          mapfile -d '' python_files < <(find acceptance -type f -name '*.py' -print0)
+          if [ "${#python_files[@]}" -eq 0 ]; then
+            echo '::error::No Python acceptance assets were found'
+            exit 1
+          fi
+          python3 -I -m py_compile "${python_files[@]}"
+      - name: Check local Markdown and website routes
+        run: |
+          python3 -I acceptance/link_check.py --self-test
+      - name: Run deterministic GitHub publication fault harness
+        run: |
+          summary="${RUNNER_TEMP}/github-publication-faults.json"
+          python3 -I acceptance/github_publication_fault_harness.py > "$summary"
+          python3 -I - "$summary" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          expected = ["ambiguous", "created", "failed", "matched"]
+          expected_rejections = [
+              "timeout-second-create-is-forbidden",
+              "timeout-second-final-patch-is-forbidden",
+              "cross-repository-marker-match-is-forbidden",
+              "unapproved-readback-body-is-forbidden",
+              "final-body-match-without-patch-is-forbidden",
+              "pre-patch-final-body-is-forbidden",
+          ]
+          assert report["harness_version"] == 7
+          assert report["network_used"] is False
+          assert report["statuses_covered"] == expected
+          assert report["case_count"] == len(report["cases"])
+          assert report["rejected_case_count"] == len(expected_rejections)
+          assert report["rejected_cases"] == expected_rejections
+          assert {case["item_status"] for case in report["cases"]} == set(expected)
+          assert all(case["blind_retry"] is False for case in report["cases"])
+          assert all(case["create_attempts"] == 1 for case in report["cases"])
+          assert all(case["final_patch_attempts"] <= 1 for case in report["cases"])
+          assert all(case["final_patch_last_modeled_mutation"] in {True, None} for case in report["cases"])
+          sticky = {
+              "duplicate-converges-after-first-match",
+              "duplicate-does-not-converge-back-to-single",
+              "sequential-single-identities-remain-ambiguous",
+          }
+          for name in sticky:
+              case = next(case for case in report["cases"] if case["name"] == name)
+              assert case["historical_multiple_matches"] is True
+              assert case["item_status"] == "ambiguous"
+              assert case["final_patch_attempts"] == 0
+          PY
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: core.longpaths
+          GIT_CONFIG_VALUE_0: "true"
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Download dependencies
+        run: go mod download
+      - name: Run tests
+        run: go test -timeout=20m ./... -count=1
+      - name: Build acceptance binary
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p bin
+          go build -o bin/slipway .
+      - name: Run shell acceptance tests
+        if: runner.os != 'Windows'
+        env:
+          SLIPWAY_BIN: ${{ github.workspace }}/bin/slipway
+        run: |
+          ./acceptance/machine-protocol.sh
+          ./acceptance/adapters.sh
+      - name: Build native Windows acceptance binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force bin | Out-Null
+          go build -o bin/slipway.exe .
+          & (Resolve-Path -LiteralPath bin/slipway.exe).Path --version
+          if ($LASTEXITCODE -ne 0) { throw 'slipway.exe --version failed' }
+      - name: Run native PowerShell acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
+          $script = (Resolve-Path -LiteralPath acceptance/windows/native-powershell.ps1).Path
+          $arguments = @(
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-File', $script, '-SlipwayExe', $binary, '-Mode', 'PowerShell'
+          )
+          & powershell.exe @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'native PowerShell acceptance failed' }
+      - name: Run native cmd.exe acceptance
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binary = (Resolve-Path -LiteralPath bin/slipway.exe).Path
+          $script = (Resolve-Path -LiteralPath acceptance/windows/native-cmd.cmd).Path
+          $command = 'call "{0}" "{1}"' -f $script.Replace('"', '""'), $binary.Replace('"', '""')
+          & $env:ComSpec '/d' '/v:on' '/s' '/c' $command
+          if ($LASTEXITCODE -ne 0) { throw 'native cmd.exe acceptance failed' }
+  race:
+    name: Race Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run race tests
+        run: go test -timeout=20m ./... -race -count=1
+  coverage:
+    name: Coverage Report
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Measure soft-autopilot coverage
+        run: |
+          mkdir -p tmp
+          measured_packages="$(go list \
+            ./cmd \
+            ./internal/adapter \
+            ./internal/autopilot \
+            ./internal/fsutil \
+            ./internal/jsonstrict \
+            ./internal/recoverycmd \
+            ./internal/runstore \
+            ./internal/testlint \
+            ./internal/tmpl | paste -sd, -)"
+          go test -timeout=20m ./... -count=1 \
+            -coverpkg="${measured_packages}" \
+            -coverprofile=tmp/coverage.out
+          go tool cover -func=tmp/coverage.out | tee tmp/coverage-summary.txt
+          {
+            echo '## Coverage report'
+            echo '```text'
+            cat tmp/coverage-summary.txt
+            echo '```'
+            echo
+            echo 'Coverage is an advisory observation, not a merge or release gate.'
+          } >> "$GITHUB_STEP_SUMMARY"
+  release-config:
+    name: Release Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check GoReleaser config
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: check
+      - name: Test optional release checksum verifier
+        run: python3 -I acceptance/verify_optional_release_checksums_test.py
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+      - name: Snapshot release dry run
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        with:
+          distribution: goreleaser
+          version: v2.16.0
+          args: release --snapshot --clean --skip=publish,sign
+      - name: Check snapshot artifacts
+        run: python3 -I acceptance/release_artifacts.py --dist dist
+      - name: Observe GoReleaser module-file drift
+        continue-on-error: true
+        run: |
+          set +e
+          git diff --exit-code -- go.mod go.sum
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '::warning::GoReleaser changed go.mod or go.sum'
+          fi
+          echo 'Module-file drift is an advisory observation, not a merge or release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Observe module-file drift
+        continue-on-error: true
+        run: |
+          trap 'git checkout -- go.mod go.sum' EXIT
+          set +e
+          go mod tidy
+          tidy_status=$?
+          git diff --exit-code -- go.mod go.sum
+          diff_status=$?
+          status=$tidy_status
+          if [ "$status" -eq 0 ]; then status=$diff_status; fi
+          if [ "$status" -ne 0 ]; then
+            echo '::warning::go mod tidy changed go.mod or go.sum'
+          fi
+          echo 'Module-file drift is an advisory observation, not a merge or release gate.' >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Vet
+        run: go vet ./...
+      - name: Build packages
+        run: go build ./...
+      - name: Build release-smoke binary
+        run: |
+          mkdir -p bin
+          go build \
+            -ldflags="-s -w \
+            -X github.com/signalridge/slipway/cmd.version=ci \
+            -X github.com/signalridge/slipway/cmd.commit=${GITHUB_SHA::12} \
+            -X github.com/signalridge/slipway/cmd.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o bin/slipway .
+          ./bin/slipway --version
+          ./bin/slipway --help
+  cross-compile:
+    name: Cross Compile
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          suffix=""
+          if [ "${GOOS}" = "windows" ]; then suffix=".exe"; fi
+          go build -ldflags="-s -w" -o "dist/slipway-${GOOS}-${GOARCH}${suffix}" .

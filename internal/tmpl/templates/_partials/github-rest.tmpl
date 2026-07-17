@@ -1,0 +1,20 @@
+{{- define "github-rest" -}}
+## Exact GitHub REST fallback and reconciliation routes
+
+When first-class `gh` relationship commands are unavailable, use only the official REST routes below with existing authentication. Send `Accept: application/vnd.github+json` and `X-GitHub-Api-Version: 2026-03-10`; with `gh api`, pass both headers explicitly. Put every mutation body in a private JSON file and use `--input FILE` (or the equivalent safe request-body API), rather than interpolating JSON or Markdown into a shell command. In REST responses, `id` is the integer database ID used by relationship mutation bodies, `node_id` is the GraphQL identity, and `html_url` is the canonical user-facing URL. Refetch and compare all three where available.
+
+Issue, chapter, and label routes:
+
+- `POST /repos/{owner}/{repo}/issues` creates an Issue from `title`, `body`, and `labels`; `GET` or `PATCH /repos/{owner}/{repo}/issues/{issue_number}` reads or updates it.
+- `POST /repos/{owner}/{repo}/issues/{issue_number}/comments` creates a chapter; `GET /repos/{owner}/{repo}/issues/comments/{comment_id}` reads that exact REST comment database ID. Use `PATCH` on that route only for a still-unaccepted draft whose exact edit is already in the approved operation; never edit a manifest-accepted chapter in place.
+- `GET /repos/{owner}/{repo}/labels?per_page=100`, `POST /repos/{owner}/{repo}/labels`, and `POST /repos/{owner}/{repo}/issues/{issue_number}/labels` read, create, and attach exact labels.
+
+Native relationship routes:
+
+- Parent/sub-issue readback: `GET /repos/{owner}/{repo}/issues/{issue_number}/parent` and paginated `GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues?per_page=100`.
+- Add a child: `POST /repos/{owner}/{repo}/issues/{parent_number}/sub_issues` with `{"sub_issue_id": CHILD_REST_ID}`. Set `replace_parent:true` only when that replacement was shown in the confirmed preview. Do not use the remove or reprioritize routes as rollback.
+- Dependency readback: paginated `GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocked_by?per_page=100` and `GET /repos/{owner}/{repo}/issues/{issue_number}/dependencies/blocking?per_page=100`.
+- Add “blocked by”: `POST /repos/{owner}/{repo}/issues/{blocked_number}/dependencies/blocked_by` with `{"issue_id": BLOCKER_REST_ID}`. Direction matters: the Issue in the path is blocked by the Issue in the body.
+
+For timeout or ambiguous-create reconciliation, do not use GitHub search. Enumerate `GET /repos/{owner}/{repo}/issues?state=all&per_page=100`, follow every response `Link` header (or use `gh api --paginate`), exclude pull requests, and compare the exact operation/item marker pair in each complete raw body. Likewise paginate every comments, labels, sub-issues, and dependency list; a first page is never complete evidence. Follow redirects only while the API stays on `api.github.com` and every resulting `html_url` stays on `github.com`, then refetch identities and revisions. Zero marker matches requires a new preview and confirmation before another create, one exact match may converge through full readback, and multiple matches are ambiguous. Relationship and label mutations follow the same rule: classify from mutation response plus complete readback, never from the request plan and never by blindly retrying.
+{{- end -}}

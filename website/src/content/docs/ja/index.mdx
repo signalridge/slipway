@@ -1,0 +1,47 @@
+---
+title: Slipway
+description: ユーザーが明示的に起動する AI コーディング向けの補助自動化ツール。
+template: splash
+editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/ja/index.mdx
+hero:
+  tagline: Action を1つずつ進める。事実確認、one-by-one の澄清、実装、read-only Review、復旧を、ユーザー制御の下で行います。
+  image:
+    file: ../../../assets/slipway-wordmark.svg
+  actions:
+    - text: はじめに
+      link: /slipway/ja/start-here/
+      icon: right-arrow
+      variant: primary
+    - text: コア概念
+      link: /slipway/ja/explanation/concepts/
+      icon: document
+      variant: minimal
+    - text: GitHub
+      link: https://github.com/signalridge/slipway
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+Slipway は、ユーザーが明示的に起動する AI コーディング向けの補助自動化ツール です。ホストがコードを書き、Slipway は Run を記録し、次の Action を選び、Git を独立観測し、復旧可能な状態を保存します。Run engine は モデルや GitHub を呼び出しません。独立した `doctor` コマンドは 読み取り専用の診断 のために ローカルの `gh` を呼び出す場合があります。Slipway は モデルや GitHub の認証情報を保存しません。
+
+1回の Run は バージョン付き Action を1つずつ進めます：`orient → 必要なら clarify → implement → コード変更があり有効な場合は review → summarize`。Action は skip 可能、Run は stop/resume 可能、Review は コードを編集せず、`ended` は 自動キュー が空であることだけを示します。
+
+<CardGrid stagger>
+  <Card title="Slipway を使う" icon="rocket">
+    達成したいタスクから始めます。アドホックまたは自己完結型 GitHub Change Issue から起動します。
+
+    [はじめに](/slipway/ja/start-here/) · [GitHub Issues](/slipway/ja/guides/github-issues/) · [Run、復旧、プライバシー](/slipway/ja/guides/runs-and-recovery/)
+  </Card>
+  <Card title="正確なインターフェースを調べる" icon="puzzle">
+    7つの公開コマンド、10種類のホストアダプター、統合向けバージョン付きマシンプロトコル。
+
+    [コマンド](/slipway/ja/reference/commands/) · [プロトコル v2 チュートリアル](/slipway/ja/guides/machine-protocol-v2/) · [マシンプロトコル](/slipway/ja/reference/machine-protocol/) · [ホストアダプター](/slipway/ja/reference/adapters/)
+  </Card>
+  <Card title="理解と貢献" icon="setting">
+    コア概念、アーキテクチャ、コントリビューター向けチェック。
+
+    [コア概念](/slipway/ja/explanation/concepts/) · [アーキテクチャ](/slipway/ja/explanation/architecture/) · [コントリビュート](/slipway/ja/contributing/)
+  </Card>
+</CardGrid>
