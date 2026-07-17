@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" role="img" aria-labelledby="adapters-title adapters-desc">
+  <title id="adapters-title">Slipway host adapters</title>
+  <desc id="adapters-desc">The slipway install command writes host-native entry points for ten supported AI coding hosts. Every adapter exposes the same six explicitly invoked capabilities: run, clarify, propose, decompose, implement, and review. Once invoked by the user, the host performs model and repository work while exchanging versioned JSON with the local Slipway CLI.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart TB
+  Install[slipway install --tool <host>] --> Adapters
+  subgraph Adapters[Generated host-native entry points]
+    Claude[Claude · skills]
+    Codex[Codex · skills + policy]
+    Copilot[Copilot · custom agents]
+    Cursor[Cursor · skills]
+    Kilo[Kilo · commands]
+    Kiro[Kiro · IDE steering / CLI agents]
+    OpenCode[OpenCode · commands]
+    Pi[Pi · skills]
+    Qwen[Qwen · skills]
+    Windsurf[Windsurf · workflows]
+  end
+  Adapters --> Capabilities[run · clarify · propose · decompose · implement · review]
+  Capabilities -->|explicit user invocation| Host[AI coding host]
+  Host <-->|versioned JSON| CLI[Slipway CLI]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --plan-fill: #fff0ea;
+        --plan-stroke: #f2643b;
+        --slate-fill: #f1f5f9;
+        --slate-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --violet-fill: #f3efff;
+        --violet-stroke: #7c5ce0;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --plan-fill: #3a1a10;
+          --plan-stroke: #ff8a5c;
+          --slate-fill: #1e293b;
+          --slate-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --violet-fill: #241b42;
+          --violet-stroke: #a78bfa;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 13px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 2; }
+      .plan { fill: var(--plan-fill); stroke: var(--plan-stroke); stroke-width: 1.6; }
+      .slate { fill: var(--slate-fill); stroke: var(--slate-stroke); stroke-width: 1.6; }
+      .verify { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .violet { fill: var(--violet-fill); stroke: var(--violet-stroke); stroke-width: 1.6; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--entry-stroke); stroke-width: 2.2; }
+      .flow-protocol { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .edge-label { fill: var(--muted); font-size: 9.5px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--entry-stroke)"/>
+    </marker>
+    <marker id="arrow-protocol" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+  </defs>
+
+  <!-- generated adapter region -->
+  <rect class="band" x="40" y="180" width="1040" height="285" rx="18"/>
+
+  <!-- connections: painted before cards -->
+  <line class="flow-main" x1="560" y1="150" x2="560" y2="180" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="560" y1="465" x2="560" y2="515" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="560" y1="650" x2="560" y2="700" marker-end="url(#arrow-main)"/>
+  <line class="flow" x1="280" y1="750" x2="390" y2="750" marker-end="url(#arrow)"/>
+  <line class="flow-protocol" x1="650" y1="750" x2="800" y2="750" marker-start="url(#arrow-protocol)" marker-end="url(#arrow-protocol)"/>
+
+  <!-- install entry -->
+  <rect class="entry" x="390" y="85" width="340" height="65" rx="15"/>
+  <text class="mono" x="560" y="113" text-anchor="middle">slipway install --tool &lt;host&gt;</text>
+  <text class="sub" x="560" y="133" text-anchor="middle">write or safely refresh one host adapter</text>
+
+  <!-- host-native targets -->
+  <text class="tag" x="62" y="206">GENERATED HOST-NATIVE ENTRY POINTS · 10 ADAPTERS</text>
+
+  <rect class="card" x="64" y="225" width="176" height="88" rx="11"/>
+  <circle cx="84" cy="248" r="4.5" fill="var(--entry-stroke)"/>
+  <text class="title" x="98" y="253">Claude</text>
+  <text class="mono" x="84" y="278">.claude/skills</text>
+  <text class="tiny" x="84" y="297">skill-native</text>
+
+  <rect class="card" x="268" y="225" width="176" height="88" rx="11"/>
+  <circle cx="288" cy="248" r="4.5" fill="var(--slate-stroke)"/>
+  <text class="title" x="302" y="253">Codex</text>
+  <text class="mono" x="288" y="278">.codex/skills</text>
+  <text class="tiny" x="288" y="297">skills + invocation policy</text>
+
+  <rect class="card" x="472" y="225" width="176" height="88" rx="11"/>
+  <circle cx="492" cy="248" r="4.5" fill="var(--plan-stroke)"/>
+  <text class="title" x="506" y="253">Copilot</text>
+  <text class="mono" x="492" y="278">.github/agents</text>
+  <text class="tiny" x="492" y="297">self-contained agents</text>
+
+  <rect class="card" x="676" y="225" width="176" height="88" rx="11"/>
+  <circle cx="696" cy="248" r="4.5" fill="var(--entry-stroke)"/>
+  <text class="title" x="710" y="253">Cursor</text>
+  <text class="mono" x="696" y="278">.cursor/skills</text>
+  <text class="tiny" x="696" y="297">skill-native</text>
+
+  <rect class="card" x="880" y="225" width="176" height="88" rx="11"/>
+  <circle cx="900" cy="248" r="4.5" fill="var(--verify-stroke)"/>
+  <text class="title" x="914" y="253">Kilo</text>
+  <text class="mono" x="900" y="278">.kilo/commands</text>
+  <text class="tiny" x="900" y="297">thin native commands</text>
+
+  <rect class="card" x="64" y="345" width="176" height="88" rx="11"/>
+  <circle cx="84" cy="368" r="4.5" fill="var(--violet-stroke)"/>
+  <text class="title" x="98" y="373">Kiro</text>
+  <text class="mono" x="84" y="398">steering / agents</text>
+  <text class="tiny" x="84" y="417">IDE or CLI surface</text>
+
+  <rect class="card" x="268" y="345" width="176" height="88" rx="11"/>
+  <circle cx="288" cy="368" r="4.5" fill="var(--entry-stroke)"/>
+  <text class="title" x="302" y="373">OpenCode</text>
+  <text class="mono" x="288" y="398">.opencode/commands</text>
+  <text class="tiny" x="288" y="417">thin native commands</text>
+
+  <rect class="card" x="472" y="345" width="176" height="88" rx="11"/>
+  <circle cx="492" cy="368" r="4.5" fill="var(--slate-stroke)"/>
+  <text class="title" x="506" y="373">Pi</text>
+  <text class="mono" x="492" y="398">.pi/skills</text>
+  <text class="tiny" x="492" y="417">skill-native</text>
+
+  <rect class="card" x="676" y="345" width="176" height="88" rx="11"/>
+  <circle cx="696" cy="368" r="4.5" fill="var(--verify-stroke)"/>
+  <text class="title" x="710" y="373">Qwen</text>
+  <text class="mono" x="696" y="398">.qwen/skills</text>
+  <text class="tiny" x="696" y="417">skill-native</text>
+
+  <rect class="card" x="880" y="345" width="176" height="88" rx="11"/>
+  <circle cx="900" cy="368" r="4.5" fill="var(--plan-stroke)"/>
+  <text class="title" x="914" y="373">Windsurf</text>
+  <text class="mono" x="900" y="398">.windsurf/workflows</text>
+  <text class="tiny" x="900" y="417">thin native workflows</text>
+
+  <!-- shared capability set -->
+  <rect class="band" x="100" y="515" width="920" height="135" rx="16"/>
+  <text class="tag" x="120" y="540">SIX EXPLICIT CAPABILITIES · IDENTICAL SEMANTICS ACROSS HOSTS</text>
+
+  <rect class="entry" x="120" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="185" y="588" text-anchor="middle">slipway-run</text>
+  <text class="tiny" x="185" y="606" text-anchor="middle">recoverable loop</text>
+
+  <rect class="violet" x="270" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="335" y="588" text-anchor="middle">slipway-clarify</text>
+  <text class="tiny" x="335" y="606" text-anchor="middle">stateless decision</text>
+
+  <rect class="plan" x="420" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="485" y="588" text-anchor="middle">slipway-propose</text>
+  <text class="tiny" x="485" y="606" text-anchor="middle">draft work item</text>
+
+  <rect class="plan" x="570" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="635" y="588" text-anchor="middle">slipway-decompose</text>
+  <text class="tiny" x="635" y="606" text-anchor="middle">split objective</text>
+
+  <rect class="slate" x="720" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="785" y="588" text-anchor="middle">slipway-implement</text>
+  <text class="tiny" x="785" y="606" text-anchor="middle">technical work</text>
+
+  <rect class="verify" x="870" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="935" y="588" text-anchor="middle">slipway-review</text>
+  <text class="tiny" x="935" y="606" text-anchor="middle">read-only findings</text>
+
+  <!-- explicit runtime path -->
+  <rect class="card" x="70" y="715" width="210" height="70" rx="14"/>
+  <circle cx="92" cy="740" r="5" fill="var(--entry-stroke)"/>
+  <text class="title" x="108" y="745">Human operator</text>
+  <text class="sub" x="92" y="766">explicitly invokes one capability</text>
+
+  <rect class="slate" x="390" y="700" width="260" height="100" rx="16"/>
+  <text class="title-big" x="520" y="735" text-anchor="middle">AI coding host</text>
+  <text class="sub" x="520" y="758" text-anchor="middle">model · repository · GitHub work</text>
+  <text class="tiny" x="520" y="779" text-anchor="middle">no ambient hook or global router</text>
+
+  <rect class="verify" x="800" y="700" width="240" height="100" rx="16"/>
+  <text class="title-big" x="920" y="735" text-anchor="middle">slipway CLI</text>
+  <text class="sub" x="920" y="758" text-anchor="middle">validation · scheduling · Run state</text>
+  <text class="tiny" x="920" y="779" text-anchor="middle">no model or GitHub credentials</text>
+
+  <rect class="label-bg" x="684" y="724" width="83" height="38" rx="6"/>
+  <text class="edge-label" x="690" y="739">Action / Outcome</text>
+  <text class="edge-label" x="690" y="753">versioned JSON</text>
+
+  <rect class="note" x="40" y="835" width="1040" height="43" rx="11"/>
+  <text class="sub" x="560" y="861" text-anchor="middle">Generated files adapt host-native invocation only; the CLI remains the single Run-state authority, and all entry points require explicit user intent.</text>
+
+  <text class="title-big" x="40" y="36">Slipway · host adapters</text>
+  <text class="sub" x="40" y="58">one shared capability contract · ten host adapters · no ambient invocation</text>
+</svg>

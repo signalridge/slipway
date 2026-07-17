@@ -2,6 +2,8 @@
 
 Slipway 将控制循环放在本地 CLI，将模型相关工作放在生成的宿主 adapter 中。这样 CLI 可以验证状态，而无需持有模型或 GitHub 凭据。
 
+![Slipway 进程架构：用户显式调用 AI 编程宿主中的生成能力；宿主负责模型、仓库和经授权的 GitHub 工作，并通过版本化 JSON 连接本地 CLI 与持久 Run store。](../../assets/diagrams/architecture.svg)
+
 ## 进程边界
 
 ```text

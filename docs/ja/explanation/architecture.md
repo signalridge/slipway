@@ -2,6 +2,8 @@
 
 Slipway は制御 loop を local CLI に置き、model 固有の作業を生成された host adapter に置きます。この境界により、CLI は model や GitHub credential を持たずに state を検証できます。
 
+![Slipway process architecture: ユーザーが AI coding host の generated capability を明示的に呼び出し、host が model、repository、認可済み GitHub work を担い、versioned JSON で local CLI と durable Run store に接続する。](../../assets/diagrams/architecture.svg)
+
 ## Process boundary
 
 ```text

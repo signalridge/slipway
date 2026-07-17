@@ -2,6 +2,8 @@
 
 Slipway は user intent、host execution、durable Run state を分離します。Machine protocol を読む前に、以下の用語だけで product を理解できます。
 
+![Slipway Run lifecycle: explicit start から1回1 Actionの Action/Outcome loopに入り、userは skip、pause、stop、resumeでき、endedはautomatic Action queueが空であることだけを表す。](../../assets/diagrams/lifecycle.svg)
+
 ## Run
 
 **Run** は1つの Git worktree で goal を実行する、1回の interruptible attempt です。Bounded Action budget、recovery history、immutable start workspace identity を持ちます。1つの task に複数 Run を作れますが、1つの Run の primary source は最大1つです。

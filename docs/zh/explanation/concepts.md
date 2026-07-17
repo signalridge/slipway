@@ -2,6 +2,8 @@
 
 Slipway 将用户意图、宿主执行和持久 Run 状态分开。理解以下术语即可使用产品，无需先阅读机器协议。
 
+![Slipway Run 生命周期：显式启动后进入每次一个 Action 的 Action/Outcome 循环；用户可以 skip、pause、stop 或 resume；ended 只表示自动 Action 队列为空。](../../assets/diagrams/lifecycle.svg)
+
 ## Run
 
 **Run** 是在一个 Git worktree 中实现一个目标的一次可中断尝试。它有有界 Action budget、恢复历史和固定的初始 workspace identity。一个任务可以有多个 Run；一个 Run 最多有一个 primary source。

@@ -2,6 +2,8 @@
 
 Slipway separates user intent, host execution, and durable Run state. These terms are enough to understand the product without reading the machine protocol.
 
+![Slipway Run lifecycle: explicit start enters a one-Action-at-a-time Action and Outcome loop; user controls can skip, pause, stop, or resume; ended only means the automatic Action queue is empty.](../../assets/diagrams/lifecycle.svg)
+
 ## Run
 
 A **Run** is one interruptible attempt to carry out a goal in one Git worktree. It has a bounded Action budget, recovery history, and an immutable starting workspace identity. A task may have several Runs; a Run has at most one primary source.

@@ -9,6 +9,8 @@ slipway-decompose  slipway-implement  slipway-review
 
 `run` は recoverable Run を駆動します。`clarify` は standalone/stateless な decision 会話です。`propose` と `decompose` は GitHub work item を準備します。`implement` は technical work を行います。`review` は read-only です。
 
+![Slipway host adapters: install が10個の対応host向けnative entry pointを書き込み、各entryが同じ6個のexplicit capabilityを公開し、versioned JSONでlocal CLIへrouteする。](../../assets/diagrams/tool-adapters.svg)
+
 ## Generated target
 
 下表は generated file と意図される invocation を示します。外部 host の実際の動作はその host version に依存し、repository test は generation と protocol text を検証するもので、すべての host UI の E2E 検証ではありません。

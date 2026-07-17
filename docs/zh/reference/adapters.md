@@ -9,6 +9,8 @@ slipway-decompose  slipway-implement  slipway-review
 
 `run` 驱动可恢复 Run；`clarify` 是独立、无状态的决策对话；`propose` 与 `decompose` 准备 GitHub work item；`implement` 执行技术工作；`review` 只读。
 
+![Slipway 宿主适配器：install 为十个受支持宿主写入原生入口；每个入口暴露相同的六个显式能力，并通过版本化 JSON 路由到本地 CLI。](../../assets/diagrams/tool-adapters.svg)
+
 ## 生成目标
 
 下表描述生成文件和预期调用方式。外部宿主的实际行为取决于其版本；仓库测试验证生成结果和协议文本，不等于对每个宿主 UI 进行 E2E 验证。

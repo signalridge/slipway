@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 690" role="img" aria-labelledby="lifecycle-title lifecycle-desc">
+  <title id="lifecycle-title">Slipway Run lifecycle</title>
+  <desc id="lifecycle-desc">A Run begins only after explicit user invocation. The CLI issues one Action, the host performs work and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing another Action, pausing, stopping, or ending. Paused and stopped Runs can resume explicitly. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.</desc>
+  <metadata id="mermaid-source"><![CDATA[
+flowchart LR
+  User([Explicit user start]) --> Run[Create or resume Run]
+  Run --> Action[CLI issues one Action\norient · clarify · implement · review · summarize]
+  Action --> Host[Host performs work\nand returns structured Outcome]
+  Host --> Validate[CLI validates + records\nand observes Git independently]
+  Validate --> Next{What next?}
+  Next -->|next Action| Action
+  Action -->|skip · no reason required| Validate
+  Next -->|human/source/environment/budget/destructive scope| Paused([Paused])
+  Paused -->|answer or explicit resume| Action
+  Next -->|stop / reorder / take over| Stopped([Stopped])
+  Stopped -->|explicit resume| Action
+  Next -->|automatic queue empty| Ended([Ended])
+  Ended -.-> Note[Not a certificate for tests, findings, merge, deploy, or release]
+]]></metadata>
+  <defs>
+    <style>
+      :root {
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: #94a3b8;
+        --card: #ffffff;
+        --card-border: #e2e8f0;
+        --band: #f8fafc;
+        --band-border: #e2e8f0;
+        --entry-fill: #fff6e6;
+        --entry-stroke: #d98a13;
+        --action-fill: #fff0ea;
+        --action-stroke: #f2643b;
+        --host-fill: #f1f5f9;
+        --host-stroke: #475569;
+        --verify-fill: #e7faf6;
+        --verify-stroke: #0e8077;
+        --pause-fill: #f3efff;
+        --pause-stroke: #7c5ce0;
+        --stop-fill: #fff0f4;
+        --stop-stroke: #c81e63;
+        --term-fill: #0f172a;
+        --term-text: #ffffff;
+        --label-bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --text: #e6edf3;
+          --muted: #8b949e;
+          --line: #64748b;
+          --card: #161b22;
+          --card-border: #30363d;
+          --band: #0d1117;
+          --band-border: #30363d;
+          --entry-fill: #3a2606;
+          --entry-stroke: #fbbf24;
+          --action-fill: #3a1a10;
+          --action-stroke: #ff8a5c;
+          --host-fill: #1e293b;
+          --host-stroke: #94a3b8;
+          --verify-fill: #04302b;
+          --verify-stroke: #4fd6c6;
+          --pause-fill: #241b42;
+          --pause-stroke: #a78bfa;
+          --stop-fill: #330a1b;
+          --stop-stroke: #ff5e9a;
+          --term-fill: #e6edf3;
+          --term-text: #0d1117;
+          --label-bg: #0d1117;
+        }
+      }
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+      .title-big { fill: var(--text); font-size: 19px; font-weight: 700; }
+      .title { fill: var(--text); font-size: 14px; font-weight: 650; }
+      .sub { fill: var(--muted); font-size: 11px; }
+      .tiny { fill: var(--muted); font-size: 9.5px; }
+      .tag { fill: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { fill: var(--text); font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 10.5px; font-weight: 600; }
+      .band { fill: var(--band); stroke: var(--band-border); stroke-width: 1.5; }
+      .card { fill: var(--card); stroke: var(--card-border); stroke-width: 1.6; }
+      .entry { fill: var(--entry-fill); stroke: var(--entry-stroke); stroke-width: 1.8; }
+      .action { fill: var(--action-fill); stroke: var(--action-stroke); stroke-width: 2; }
+      .host { fill: var(--host-fill); stroke: var(--host-stroke); stroke-width: 1.8; }
+      .verify { fill: var(--verify-fill); stroke: var(--verify-stroke); stroke-width: 2; }
+      .pause { fill: var(--pause-fill); stroke: var(--pause-stroke); stroke-width: 1.8; }
+      .stop { fill: var(--stop-fill); stroke: var(--stop-stroke); stroke-width: 1.8; }
+      .flow { fill: none; stroke: var(--line); stroke-width: 2; }
+      .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
+      .flow-control { fill: none; stroke: var(--pause-stroke); stroke-width: 1.8; stroke-dasharray: 6 4; }
+      .flow-pause { fill: none; stroke: var(--pause-stroke); stroke-width: 1.9; }
+      .flow-stop { fill: none; stroke: var(--stop-stroke); stroke-width: 1.9; }
+      .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
+      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .term-text { fill: var(--term-text); font-size: 14px; font-weight: 700; }
+      .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--line)"/>
+    </marker>
+    <marker id="arrow-main" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--verify-stroke)"/>
+    </marker>
+    <marker id="arrow-control" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--pause-stroke)"/>
+    </marker>
+    <marker id="arrow-pause" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--pause-stroke)"/>
+    </marker>
+    <marker id="arrow-stop" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--stop-stroke)"/>
+    </marker>
+  </defs>
+
+  <!-- action-loop region -->
+  <rect class="band" x="112" y="95" width="1048" height="330" rx="18"/>
+
+  <!-- primary flow and loop: painted before cards -->
+  <line class="flow" x1="96" y1="220" x2="125" y2="220" marker-end="url(#arrow)"/>
+  <line class="flow-main" x1="295" y1="220" x2="350" y2="220" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="550" y1="220" x2="600" y2="220" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="820" y1="220" x2="870" y2="220" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="980" y1="290" x2="980" y2="330" marker-end="url(#arrow-main)"/>
+  <path class="flow-main" d="M905 375 H842 V112 H450 V150" marker-end="url(#arrow-main)"/>
+  <path class="flow-control" d="M520 290 V316 H900 V290" marker-end="url(#arrow-control)"/>
+  <path class="flow-pause" d="M930 405 V445 H290 V490" marker-end="url(#arrow-pause)"/>
+  <path class="flow-stop" d="M980 420 V458 H600 V490" marker-end="url(#arrow-stop)"/>
+  <path class="flow" d="M1030 405 V455 H950 V490" marker-end="url(#arrow)"/>
+  <path class="flow-control" d="M290 490 V446 H410 V290" marker-end="url(#arrow-control)"/>
+  <path class="flow-control" d="M600 490 V438 H490 V290" marker-end="url(#arrow-control)"/>
+
+  <!-- explicit start -->
+  <circle cx="65" cy="220" r="31" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
+  <circle cx="65" cy="220" r="8" fill="var(--entry-stroke)"/>
+  <text class="sub" x="65" y="270" text-anchor="middle">explicit start</text>
+
+  <!-- action loop cards -->
+  <text class="tag" x="132" y="122">RECOVERABLE ACTION LOOP</text>
+
+  <rect class="entry" x="125" y="180" width="170" height="80" rx="14"/>
+  <text class="title" x="210" y="211" text-anchor="middle">Create / resume Run</text>
+  <text class="sub" x="210" y="233" text-anchor="middle">worktree-bound · budgeted</text>
+
+  <rect class="action" x="350" y="150" width="200" height="140" rx="15"/>
+  <text class="title" x="450" y="181" text-anchor="middle">CLI issues one Action</text>
+  <text class="mono" x="450" y="207" text-anchor="middle">orient · clarify</text>
+  <text class="mono" x="450" y="227" text-anchor="middle">implement · review</text>
+  <text class="mono" x="450" y="247" text-anchor="middle">summarize</text>
+  <text class="tiny" x="450" y="270" text-anchor="middle">review only after observed changes</text>
+
+  <rect class="host" x="600" y="150" width="220" height="140" rx="15"/>
+  <text class="title" x="710" y="181" text-anchor="middle">Host work + Outcome</text>
+  <text class="sub" x="710" y="207" text-anchor="middle">performs the bounded action</text>
+  <text class="sub" x="710" y="226" text-anchor="middle">reports activities, files, findings</text>
+  <text class="sub" x="710" y="245" text-anchor="middle">and uncertainty truthfully</text>
+  <text class="tiny" x="710" y="270" text-anchor="middle">reported activity is not proof</text>
+
+  <rect class="verify" x="870" y="150" width="220" height="140" rx="15"/>
+  <text class="title" x="980" y="181" text-anchor="middle">Validate · record · observe</text>
+  <text class="sub" x="980" y="207" text-anchor="middle">strict Outcome validation</text>
+  <text class="sub" x="980" y="226" text-anchor="middle">append-only transition record</text>
+  <text class="sub" x="980" y="245" text-anchor="middle">independent Git observation</text>
+  <text class="tiny" x="980" y="270" text-anchor="middle">then derive the next operation</text>
+
+  <!-- scheduler decision -->
+  <polygon points="980,330 1055,375 980,420 905,375" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
+  <text class="title" x="980" y="371" text-anchor="middle">What next?</text>
+  <text class="tiny" x="980" y="390" text-anchor="middle">scheduler + user control</text>
+
+  <!-- outcomes -->
+  <rect class="pause" x="180" y="490" width="220" height="85" rx="22"/>
+  <text class="title" x="290" y="521" text-anchor="middle">Paused</text>
+  <text class="sub" x="290" y="542" text-anchor="middle">decision · source · environment</text>
+  <text class="sub" x="290" y="558" text-anchor="middle">budget · destructive scope</text>
+
+  <rect class="stop" x="490" y="490" width="220" height="85" rx="22"/>
+  <text class="title" x="600" y="521" text-anchor="middle">Stopped</text>
+  <text class="sub" x="600" y="542" text-anchor="middle">stop · reorder · take over</text>
+  <text class="sub" x="600" y="558" text-anchor="middle">journal remains resumable</text>
+
+  <rect x="840" y="490" width="220" height="85" rx="22" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
+  <text class="term-text" x="950" y="521" text-anchor="middle">Ended</text>
+  <text x="950" y="543" fill="var(--term-text)" opacity="0.78" font-size="11" text-anchor="middle">automatic Action queue empty</text>
+  <text x="950" y="559" fill="var(--term-text)" opacity="0.78" font-size="10" text-anchor="middle">terminal for this Run</text>
+
+  <!-- edge labels -->
+  <rect class="label-bg" x="626" y="102" width="83" height="18" rx="5"/>
+  <text class="edge-label" x="632" y="115">next Action</text>
+
+  <rect class="label-bg" x="650" y="301" width="128" height="18" rx="5"/>
+  <text class="edge-label" x="656" y="314">skip · no reason required</text>
+
+  <rect class="label-bg" x="304" y="426" width="179" height="18" rx="5"/>
+  <text class="edge-label" x="310" y="439">answer / explicit resume</text>
+
+  <rect class="label-bg" x="511" y="426" width="125" height="18" rx="5"/>
+  <text class="edge-label" x="517" y="439">explicit resume</text>
+
+  <rect class="note" x="40" y="610" width="1120" height="58" rx="12"/>
+  <text class="sub" x="60" y="634">User controls: skip needs no reason · stop/resume are explicit · review is read-only and does not create an automatic repair loop</text>
+  <text class="sub" x="60" y="653">Ended is not a certificate for tests, correctness, clean review, branch policy, merge, deployment, or release readiness.</text>
+
+  <text class="title-big" x="40" y="36">Slipway · Run lifecycle</text>
+  <text class="sub" x="40" y="58">one Action at a time · interruptible recovery · honest non-certifying completion</text>
+</svg>

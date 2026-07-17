@@ -9,6 +9,8 @@ slipway-decompose  slipway-implement  slipway-review
 
 `run` drives a recoverable Run. `clarify` is a standalone, stateless decision conversation. `propose` and `decompose` prepare GitHub work items. `implement` performs technical work. `review` is read-only.
 
+![Slipway host adapters: install writes host-native entry points for ten supported hosts; each exposes the same six explicitly invoked capabilities and routes versioned JSON to the local CLI.](../../assets/diagrams/tool-adapters.svg)
+
 ## Generated targets
 
 The table describes generated files and intended invocation. External host behavior depends on the installed host version; repository tests validate generation and protocol text, not every host's runtime UI.

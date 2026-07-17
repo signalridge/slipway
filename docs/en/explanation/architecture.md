@@ -2,6 +2,8 @@
 
 Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning model or GitHub credentials.
 
+![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while versioned JSON connects it to the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
+
 ## Process boundaries
 
 ```text
