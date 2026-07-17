@@ -81,4 +81,14 @@ Release Please owns `CHANGELOG.md`, `.release-please-manifest.json`, the release
 
 After changes reach `main`, Release Please opens or updates one release pull request. Maintainers review its changelog and manifest together. Merging that pull request creates the matching tag and GitHub Release with the configured automation token. The tag-triggered Release workflow independently collects test evidence while validating the tag and building, signing, and publishing artifacts; test results do not authorize or block publication. A missing tag or GitHub Release for the manifest version is an operational metadata mismatch to reconcile, not a software-readiness verdict.
 
+The three READMEs deliberately carry no package-manager install badges while the
+published tag predates the `install`/`uninstall`/`list`/`doctor`/`run`/`status`/`stop`
+interface and its `protocol` group: every channel in
+[`.goreleaser.yaml`](.goreleaser.yaml) still resolves to that older generation, so a
+badge would advertise a binary that cannot run what the READMEs document. Once a tag
+ships this interface, restore the Homebrew, Scoop, AUR, deb, rpm, apk, Docker, Nix, and
+Go badges — pointing at each locale's installation page — and drop the source-build
+admonition. The `pkg.go.dev` badge is not part of that restoration: this module
+publishes no importable library surface.
+
 Contributions are licensed under the repository's [BSD 3-Clause License](LICENSE).
