@@ -221,6 +221,24 @@ func TestStartNextAllowsFlagLikeGoals(t *testing.T) {
 	}
 }
 
+func TestStartNextAllowsPlaceholderShapedGoals(t *testing.T) {
+	for _, goal := range []string{"FILE", "<T>", "<answer>", "<div>broken</div>", "<!-- fix the comment -->"} {
+		goal := goal
+		t.Run(goal, func(t *testing.T) {
+			t.Parallel()
+			workspace := t.TempDir()
+			next := startRunNext(workspace, goal, 4, true, false)
+			require.Equal(t, NextOperationStart, next.Operation, "a goal is a literal positional value, not a placeholder slot")
+
+			argv, err := next.Resolve("retry-run", map[string]NextInputValue{})
+			require.NoError(t, err)
+			assert.Equal(t, []string{
+				"slipway", "run", "--budget", "4", "--json", "--root", workspace, "--", goal,
+			}, argv)
+		})
+	}
+}
+
 func TestResolveNextRejectsMalformedTypedInputs(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()

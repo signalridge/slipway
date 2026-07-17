@@ -455,9 +455,22 @@ func validateNextVariant(workspaceRoot string, variant NextVariant, variantIndex
 	if root != workspaceRoot {
 		return fmt.Errorf("next.variants[%d].base_argv must preserve the exact workspace root after --root", variantIndex)
 	}
+	// The placeholder ban targets generated operand slots, which only ever
+	// appear before `--`: resolved inputs are inserted immediately before that
+	// separator, so everything after it is a literal positional value supplied
+	// by the user (a Run goal). Scanning past `--` would reject goals that
+	// merely look like placeholders and silently degrade the variant to `none`.
+	positional := false
 	for index, argument := range variant.BaseArgv {
 		if !utf8.ValidString(argument) || argument == "" || strings.IndexByte(argument, 0) >= 0 {
 			return fmt.Errorf("next.variants[%d].base_argv[%d] must be nonempty valid utf-8 without NUL", variantIndex, index)
+		}
+		if positional {
+			continue
+		}
+		if argument == "--" {
+			positional = true
+			continue
 		}
 		if isPseudoValue(argument) {
 			return fmt.Errorf("next.variants[%d].base_argv[%d] cannot contain a placeholder", variantIndex, index)
