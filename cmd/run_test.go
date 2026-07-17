@@ -25,12 +25,12 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts gathered")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the requested update."}}
 	outcomePath := writeOutcome(t, orient)
-	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
+	stdout, stderr, err = executeForTest(t, "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", outcomePath)
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "skip", "--root", repository, "--run", action.RunID, "--action", action.ActionID)
+	stdout, stderr, err = executeForTest(t, "protocol", "skip", "--root", repository, "--run", action.RunID, "--action", action.ActionID)
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
@@ -43,7 +43,7 @@ func TestMachineProtocolStartSubmitSkipStopResume(t *testing.T) {
 	assert.Equal(t, autopilot.NextOperationResume, state.Next.Operation)
 	assert.Equal(t, "resume-ad-hoc", state.Next.Variants[0].ID)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository)
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", action.RunID, "--root", repository)
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, action.Kind)
@@ -73,7 +73,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	outcome.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the inspected change."}}
 	encoded, err := json.Marshal(outcome)
 	require.NoError(t, err)
-	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionImplement, action.Kind)
@@ -82,7 +82,7 @@ func TestMachineProtocolReadsOutcomeFromStdinAndReturnsPreciseVersionRecovery(t 
 	bad.ContractVersion = 999
 	encoded, err = json.Marshal(bad)
 	require.NoError(t, err)
-	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, string(encoded), "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"contract_version_mismatch"`)
@@ -118,19 +118,19 @@ func TestSubmitRejectsInvalidOutcomeShapeBeforeWritingJournal(t *testing.T) {
 	valid, err := json.Marshal(machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts"))
 	require.NoError(t, err)
 	missingKind := strings.Replace(string(valid), `"action_kind":"orient",`, "", 1)
-	stdout, stderr, err = executeForTestWithInput(t, missingKind, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, missingKind, "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `required field \"action_kind\" is missing`)
 
 	mismatchedKind := strings.Replace(string(valid), `"action_kind":"orient"`, `"action_kind":"clarify"`, 1)
-	stdout, stderr, err = executeForTestWithInput(t, mismatchedKind, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, mismatchedKind, "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "does not match current action kind")
 
 	bad := strings.Replace(string(valid), `"review":null`, `"review":null,"approved":true`, 1)
-	stdout, stderr, err = executeForTestWithInput(t, bad, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
+	stdout, stderr, err = executeForTestWithInput(t, bad, "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-stdin")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "unknown field")
@@ -155,7 +155,7 @@ func TestSubmitRejectsSymlinkOutcomeFileBeforeWritingJournal(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink creation is unavailable: %v", err)
 	}
-	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", link)
+	stdout, stderr, err = executeForTest(t, "protocol", "submit", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--outcome-file", link)
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"outcome_unavailable"`)
@@ -185,7 +185,7 @@ func TestRunResumeRejectsExplicitZeroBudget(t *testing.T) {
 	require.NoError(t, err, stderr)
 	action := decodeMutationAction(t, stdout)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", action.RunID, "--root", repository, "--budget", "0")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", action.RunID, "--root", repository, "--budget", "0")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"invalid_budget"`)
@@ -200,10 +200,10 @@ func TestMachineUsageValidationPrecedesRunstoreOpen(t *testing.T) {
 	}{
 		{name: "run budget", code: "invalid_budget", args: []string{"run", "inspect", "--budget", "1001", "--json"}},
 		{name: "run source file", code: "source_file_required", args: []string{"run", "inspect", "--source-file", "", "--json"}},
-		{name: "submit mode", code: "outcome_mode_required", args: []string{"_machine", "submit", "--run", "run-1", "--action", "action-1"}},
-		{name: "answer run", code: "run_id_required", args: []string{"_machine", "answer", "--run", "", "--action", "action-1"}},
-		{name: "skip action", code: "action_id_required", args: []string{"_machine", "skip", "--run", "run-1", "--action", ""}},
-		{name: "resume source pair", code: "source_choice_requires_candidate", args: []string{"_machine", "resume", "run-1", "--source-choice", "adopt"}},
+		{name: "submit mode", code: "outcome_mode_required", args: []string{"protocol", "submit", "--run", "run-1", "--action", "action-1"}},
+		{name: "answer run", code: "run_id_required", args: []string{"protocol", "answer", "--run", "", "--action", "action-1"}},
+		{name: "skip action", code: "action_id_required", args: []string{"protocol", "skip", "--run", "run-1", "--action", ""}},
+		{name: "resume source pair", code: "source_choice_requires_candidate", args: []string{"protocol", "resume", "run-1", "--source-choice", "adopt"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestMachineMissingActionOffersRunStatusRecovery(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			stdout, stderr, err := executeForTest(
 				t,
-				"_machine", operation, "--root", repository, "--run", runID,
+				"protocol", operation, "--root", repository, "--run", runID,
 			)
 			require.Error(t, err)
 			assert.Empty(t, stdout)
@@ -322,7 +322,7 @@ func TestResumeSourceRecoveryPreservesReplacementBudget(t *testing.T) {
 
 	stdout, stderr, err := executeForTest(
 		t,
-		"_machine", "resume", "run-1", "--budget", "9", "--source-file", invalidSource,
+		"protocol", "resume", "run-1", "--budget", "9", "--source-file", invalidSource,
 		"--root", repository,
 	)
 	require.Error(t, err)
@@ -335,14 +335,14 @@ func TestResumeSourceRecoveryPreservesReplacementBudget(t *testing.T) {
 	assert.Equal(t, autopilot.NextOperationResume, cliErr.Next.Operation)
 	require.Len(t, cliErr.Next.Variants, 1)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
+		"slipway", "protocol", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
 	}, cliErr.Next.Variants[0].BaseArgv)
 	resolved, resolveErr := cliErr.Next.Resolve("refresh-source", map[string]autopilot.NextInputValue{
 		"source_file": {Type: autopilot.NextInputPath, Value: "/tmp/retry-source.json"},
 	})
 	require.NoError(t, resolveErr)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
+		"slipway", "protocol", "resume", "run-1", "--root", canonicalRepository, "--budget", "9",
 		"--source-file", "/tmp/retry-source.json",
 	}, resolved)
 	_, statErr := os.Stat(filepath.Join(repository, ".git", "slipway"))
@@ -396,7 +396,7 @@ func TestFileAndFlagPreflightFailuresDoNotOpenRunstore(t *testing.T) {
 			name:    "invalid resume source candidate",
 			content: "{}\n",
 			args: func(repository, path string) []string {
-				return []string{"_machine", "resume", "run-1", "--source-file", path, "--root", repository}
+				return []string{"protocol", "resume", "run-1", "--source-file", path, "--root", repository}
 			},
 			code: "invalid_source_candidate",
 		},
@@ -404,7 +404,7 @@ func TestFileAndFlagPreflightFailuresDoNotOpenRunstore(t *testing.T) {
 			name:    "invalid outcome",
 			content: `{"contract_version":2}`,
 			args: func(repository, path string) []string {
-				return []string{"_machine", "submit", "--run", "run-1", "--action", "action-1", "--outcome-file", path, "--root", repository}
+				return []string{"protocol", "submit", "--run", "run-1", "--action", "action-1", "--outcome-file", path, "--root", repository}
 			},
 			code: "invalid_outcome",
 		},
@@ -459,7 +459,7 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 		{
 			name: "invalid resume budget",
 			args: func(repository string) []string {
-				return []string{"_machine", "resume", "run-1", "--budget", "1001", "--root", repository}
+				return []string{"protocol", "resume", "run-1", "--budget", "1001", "--root", repository}
 			},
 			code:       "invalid_budget",
 			inspectRun: true,
@@ -474,7 +474,7 @@ func TestEarlyPreflightErrorsUseExplicitRootIdentityWithoutOpeningEitherRunstore
 		{
 			name: "invalid resume mode",
 			args: func(repository string) []string {
-				return []string{"_machine", "resume", "run-1", "--source-choice", "invalid", "--candidate", "candidate-1", "--root", repository}
+				return []string{"protocol", "resume", "run-1", "--source-choice", "invalid", "--candidate", "candidate-1", "--root", repository}
 			},
 			code:       "invalid_source_choice",
 			inspectRun: true,
@@ -528,7 +528,7 @@ func TestAnswerDestructiveFlagsMustBePairedBeforeOpeningRunstore(t *testing.T) {
 			repository := newCLIRepository(t)
 			canonicalRepository, resolveErr := resolveRoot(repository)
 			require.NoError(t, resolveErr)
-			args := []string{"_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", repository}
+			args := []string{"protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", repository}
 			args = append(args, test.args...)
 			stdout, stderr, err := executeForTest(t, args...)
 			require.Error(t, err)
@@ -554,7 +554,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 
 	orient := machineOutcome(action.ActionID, action.Kind, autopilot.OutcomeCompleted, "facts")
 	orient.SuggestedActions = []autopilot.SuggestedAction{{Kind: autopilot.ActionImplement, Brief: "Implement the change."}}
-	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
+	stdout, stderr, err = executeForTest(t, "protocol", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, orient))
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 
@@ -567,7 +567,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 		Uncertainties: []string{},
 		Attempts:      1,
 	}
-	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, implementation))
+	stdout, stderr, err = executeForTest(t, "protocol", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, implementation))
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionReview, action.Kind)
@@ -582,7 +582,7 @@ func TestMachineProtocolReviewFindingsRouteToSummaryWithoutRepair(t *testing.T) 
 		}},
 		Uncertainties: []string{},
 	}
-	stdout, stderr, err = executeForTest(t, "_machine", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, review))
+	stdout, stderr, err = executeForTest(t, "protocol", "submit", "--root", repository, "--run", runID, "--action", action.ActionID, "--outcome-file", writeOutcome(t, review))
 	require.NoError(t, err, stderr)
 	action = decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionSummarize, action.Kind)
@@ -670,7 +670,7 @@ func TestIssueBoundCLIStartImportsOnceAndExposesSafeStatus(t *testing.T) {
 
 	materialStdout, materialStderr, materialErr := executeForTest(
 		t,
-		"_machine", "material",
+		"protocol", "material",
 		"--root", repository,
 		"--run", action.RunID,
 		"--action", action.ActionID,
@@ -736,7 +736,7 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	setCLISourceSection(&amended, "requirements", "\n# Requirements\n\nKeep the amended CLI contract.\n")
 	setCLISourceParentRevision(&amended, initial.Source.RequirementsRevision)
 	candidatePath := writeCLISource(t, amended)
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-file", candidatePath, "--budget", "20")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", initial.RunID, "--root", repository, "--source-file", candidatePath, "--budget", "20")
 	require.NoError(t, err, stderr)
 	require.NoError(t, os.Remove(candidatePath))
 	var paused mutationEnvelope
@@ -762,18 +762,18 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	require.Len(t, candidateStatus.Next.Variants, 2)
 	assert.Equal(t, "keep-pinned", candidateStatus.Next.Variants[0].ID)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"slipway", "protocol", "resume", initial.RunID, "--root", candidateStatus.Workspace,
 		"--source-choice", "pinned", "--candidate", candidateID,
 	}, candidateStatus.Next.Variants[0].BaseArgv)
 	assert.Empty(t, candidateStatus.Next.Variants[0].Inputs)
 	assert.Equal(t, "adopt", candidateStatus.Next.Variants[1].ID)
 	assert.Equal(t, []string{
-		"slipway", "_machine", "resume", initial.RunID, "--root", candidateStatus.Workspace,
+		"slipway", "protocol", "resume", initial.RunID, "--root", candidateStatus.Workspace,
 		"--source-choice", "adopt", "--candidate", candidateID,
 	}, candidateStatus.Next.Variants[1].BaseArgv)
 	assert.Empty(t, candidateStatus.Next.Variants[1].Inputs)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "5")
 	require.NoError(t, err, stderr)
 	adopted := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, adopted.Kind)
@@ -781,11 +781,11 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 	require.NotNil(t, adopted.Source)
 	assert.Equal(t, paused.SourceCandidate.RequirementsRevision, adopted.Source.RequirementsRevision)
 
-	retry, retryStderr, err := executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "999")
+	retry, retryStderr, err := executeForTest(t, "protocol", "resume", initial.RunID, "--root", repository, "--source-choice", "adopt", "--candidate", candidateID, "--budget", "999")
 	require.NoError(t, err, retryStderr)
 	assert.JSONEq(t, stdout, retry)
 
-	conflictStdout, conflictStderr, err := executeForTest(t, "_machine", "resume", initial.RunID, "--root", repository, "--source-choice", "pinned", "--candidate", candidateID)
+	conflictStdout, conflictStderr, err := executeForTest(t, "protocol", "resume", initial.RunID, "--root", repository, "--source-choice", "pinned", "--candidate", candidateID)
 	require.Error(t, err)
 	assert.Empty(t, conflictStdout)
 	assert.Contains(t, conflictStderr, `"code":"source_choice_conflict"`)
@@ -803,13 +803,13 @@ func TestIssueBoundCLIResumeCandidateBudgetAndIdempotency(t *testing.T) {
 }
 
 func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
-	resumeHelp, resumeHelpStderr, err := executeForTest(t, "_machine", "resume", "--help")
+	resumeHelp, resumeHelpStderr, err := executeForTest(t, "protocol", "resume", "--help")
 	require.NoError(t, err, resumeHelpStderr)
 	assert.Contains(t, resumeHelp, "--source-file string")
 	assert.Contains(t, resumeHelp, "--use-pinned-source")
 	assert.Contains(t, resumeHelp, "--source-choice string")
 	assert.Contains(t, resumeHelp, "--candidate string")
-	assert.Contains(t, resumeHelp, "slipway _machine resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]")
+	assert.Contains(t, resumeHelp, "slipway protocol resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]")
 
 	issueRepository := newCLIRepository(t)
 	sourcePath := writeCLISource(t, cliSourceEnvelope())
@@ -817,12 +817,12 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 	require.NoError(t, err, stderr)
 	issueAction := decodeMutationAction(t, stdout)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository)
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", issueAction.RunID, "--root", issueRepository)
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_required"`)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", issueAction.RunID, "--root", issueRepository, "--use-pinned-source")
 	require.NoError(t, err, stderr)
 	refreshed := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, refreshed.Kind)
@@ -832,16 +832,16 @@ func TestCLIResumeEnforcesSourceModeCombinations(t *testing.T) {
 	stdout, stderr, err = executeForTest(t, "run", "ad-hoc", "--root", adHocRepository, "--json")
 	require.NoError(t, err, stderr)
 	adHocAction := decodeMutationAction(t, stdout)
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", adHocAction.RunID, "--root", adHocRepository, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", adHocAction.RunID, "--root", adHocRepository, "--use-pinned-source")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_not_allowed"`)
 
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--source-choice", "adopt")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", issueAction.RunID, "--root", issueRepository, "--source-choice", "adopt")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_choice_requires_candidate"`)
-	stdout, stderr, err = executeForTest(t, "_machine", "resume", issueAction.RunID, "--root", issueRepository, "--source-file", sourcePath, "--use-pinned-source")
+	stdout, stderr, err = executeForTest(t, "protocol", "resume", issueAction.RunID, "--root", issueRepository, "--source-file", sourcePath, "--use-pinned-source")
 	require.Error(t, err)
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, `"code":"source_mode_conflict"`)

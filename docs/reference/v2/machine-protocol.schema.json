@@ -807,7 +807,7 @@
               "maxItems": 9,
               "prefixItems": [
                 { "const": "slipway" },
-                { "const": "_machine" },
+                { "const": "protocol" },
                 { "const": "skip" },
                 { "const": "--run" },
                 { "type": "string", "minLength": 1 },
@@ -836,7 +836,7 @@
                   "minItems": 9,
                   "maxItems": 9,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "submit" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "submit" },
                     { "const": "--run" }, { "type": "string", "minLength": 1 },
                     { "const": "--action" }, { "type": "string", "minLength": 1 },
                     { "const": "--root" }, { "type": "string", "minLength": 1 }
@@ -873,7 +873,7 @@
                   "minItems": 10,
                   "maxItems": 10,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "submit" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "submit" },
                     { "const": "--run" }, { "type": "string", "minLength": 1 },
                     { "const": "--action" }, { "type": "string", "minLength": 1 },
                     { "const": "--root" }, { "type": "string", "minLength": 1 },
@@ -901,7 +901,7 @@
                   "minItems": 9,
                   "maxItems": 9,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "answer" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "answer" },
                     { "const": "--run" }, { "type": "string", "minLength": 1 },
                     { "const": "--action" }, { "type": "string", "minLength": 1 },
                     { "const": "--root" }, { "type": "string", "minLength": 1 }
@@ -938,7 +938,7 @@
                   "minItems": 12,
                   "maxItems": 12,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "answer" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "answer" },
                     { "const": "--run" }, { "type": "string", "minLength": 1 },
                     { "const": "--action" }, { "type": "string", "minLength": 1 },
                     { "const": "--root" }, { "type": "string", "minLength": 1 },
@@ -982,7 +982,7 @@
                   "minItems": 6,
                   "maxItems": 6,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
                     { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
                   ],
                   "items": false
@@ -1004,7 +1004,7 @@
                       "minItems": 6,
                       "maxItems": 6,
                       "prefixItems": [
-                        { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                        { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
                         { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 }
                       ],
                       "items": false
@@ -1013,7 +1013,7 @@
                       "minItems": 8,
                       "maxItems": 8,
                       "prefixItems": [
-                        { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                        { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
                         { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
                         { "const": "--budget" }, { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }
                       ],
@@ -1051,7 +1051,7 @@
                   "minItems": 7,
                   "maxItems": 7,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
                     { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
                     { "const": "--use-pinned-source" }
                   ],
@@ -1075,7 +1075,7 @@
                   "minItems": 10,
                   "maxItems": 10,
                   "prefixItems": [
-                    { "const": "slipway" }, { "const": "_machine" }, { "const": "resume" },
+                    { "const": "slipway" }, { "const": "protocol" }, { "const": "resume" },
                     { "type": "string", "minLength": 1 }, { "const": "--root" }, { "type": "string", "minLength": 1 },
                     { "const": "--source-choice" }, { "enum": ["pinned", "adopt"] },
                     { "const": "--candidate" }, { "type": "string", "minLength": 1 }
@@ -1160,7 +1160,7 @@
           "properties": {
             "id": { "not": { "const": "skip-action" } },
             "base_argv": {
-              "prefixItems": [{ "const": "slipway" }, { "not": { "enum": ["run", "_machine"] } }]
+              "prefixItems": [{ "const": "slipway" }, { "not": { "enum": ["run", "protocol"] } }]
             }
           }
         }
@@ -1270,7 +1270,7 @@
           "maxItems": 9,
           "prefixItems": [
             { "const": "slipway" },
-            { "const": "_machine" },
+            { "const": "protocol" },
             { "const": "material" },
             { "const": "--root" },
             { "$ref": "#/$defs/nonEmptyPlainText" },

@@ -90,7 +90,7 @@ func newRootCmd() *cobra.Command {
 		makeRunCmd(),
 		makeStatusCmd(),
 		makeStopCmd(),
-		makeMachineCmd(),
+		makeProtocolCmd(),
 	)
 	root.SetHelpCommand(&cobra.Command{
 		Use:    "_help [command]",

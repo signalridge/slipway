@@ -68,7 +68,7 @@ jq -n --arg action "$ORIENT_ID" '{
   review: null
 }' > orient-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$ORIENT_ID" \
   --root "$WORKSPACE" \
@@ -114,7 +114,7 @@ jq -n --arg action "$IMPLEMENT_ID" \
   review: null
 }' > implement-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$IMPLEMENT_ID" \
   --root "$WORKSPACE" \
@@ -143,7 +143,7 @@ jq -n --arg action "$SUMMARIZE_ID" '{
   review: null
 }' > summarize-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$SUMMARIZE_ID" \
   --root "$WORKSPACE" \
@@ -163,4 +163,4 @@ rm -rf "$TUTORIAL_DIR"
 
 ## Issue-backed 扩展
 
-对于 issue-backed Run，受信任宿主先验证 source envelope 并写入私有临时文件，再通过 `--source-file` 一次性传入。响应会增加 `pinned_source`、`action.source`、`action.requirements` 与结构化 `_machine material` reader。只获取 manifest 引用的评论，绝不能把普通讨论评论视为需求。权威性与发布模型详见[机器协议参考](../reference/machine-protocol.md)和 [ADR-0001](../../../adr/0001-source-bundle-v2.md)。
+对于 issue-backed Run，受信任宿主先验证 source envelope 并写入私有临时文件，再通过 `--source-file` 一次性传入。响应会增加 `pinned_source`、`action.source`、`action.requirements` 与结构化 `protocol material` reader。只获取 manifest 引用的评论，绝不能把普通讨论评论视为需求。权威性与发布模型详见[机器协议参考](../reference/machine-protocol.md)和 [ADR-0001](../../../adr/0001-source-bundle-v2.md)。

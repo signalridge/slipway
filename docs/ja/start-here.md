@@ -4,7 +4,7 @@ Current Slipway build を使い、空の checkout から1回の user-controlled 
 
 ## 1. CLI generation を確認する
 
-この documentation が対象とする interface には7つの public command があります。
+この documentation が対象とする interface には7つの user command と machine protocol があります。
 
 ```bash
 ./slipway --help
@@ -35,7 +35,7 @@ AI coding host で、生成された `slipway-run` capability を明示的に呼
 
 > reports command に CSV export を追加し、test を追加する。
 
-Host は CLI に Action を要求し、その Action を実行して structured Outcome を報告します。Run が pause または summary に達するまで繰り返します。Hidden machine command を手動で操作する必要はありません。
+Host は CLI に Action を要求し、その Action を実行して structured Outcome を報告します。Run が pause または summary に達するまで繰り返します。使用される `protocol` 操作は公開され documented ですが、手動で操作する必要はありません。各 response が正確な次の command を既に含んでいます。
 
 CLI を直接 integration する host は、同じ ad-hoc Run を次のように開始できます。
 

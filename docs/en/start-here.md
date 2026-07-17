@@ -4,13 +4,13 @@ This guide takes a current Slipway build from an empty checkout to one user-cont
 
 ## 1. Confirm the CLI generation
 
-The interface documented here has seven public commands:
+The interface documented here has seven user commands plus the machine protocol:
 
 ```bash
 ./slipway --help
 ```
 
-The output must list `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`. If it does not, the installed package belongs to an earlier release. Build this checkout or choose a newer compatible tag; see [Installation](installation.md).
+The output must list `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`, alongside the `protocol` group that generated adapters call. If it does not, the installed package belongs to an earlier release. Build this checkout or choose a newer compatible tag; see [Installation](installation.md).
 
 ## 2. Install one host adapter
 
@@ -35,7 +35,7 @@ In the AI coding host, explicitly invoke the generated `slipway-run` capability 
 
 > Add a CSV export to the reports command and cover it with tests.
 
-The host asks the CLI for an Action, performs that Action, reports a structured Outcome, and repeats until the Run pauses or reaches its summary. You do not need to drive the hidden machine commands manually.
+The host asks the CLI for an Action, performs that Action, reports a structured Outcome, and repeats until the Run pauses or reaches its summary. The `protocol` operations it uses are documented, but you do not need to drive them manually: each response already carries the exact next command.
 
 A direct CLI integration can start the same ad-hoc Run with:
 

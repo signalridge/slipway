@@ -471,7 +471,7 @@ func testActionRequirements() ActionRequirements {
 		Reader: ActionMaterialReader{
 			Operation: "read_material",
 			BaseArgv: []string{
-				"slipway", "_machine", "material", "--root", "/workspace",
+				"slipway", "protocol", "material", "--root", "/workspace",
 				"--run", "run-1", "--action", "action-1",
 			},
 			Input: ActionMaterialInput{

@@ -19,13 +19,13 @@ A host normally uses JSON on every step:
 
 ```text
 slipway run --budget N --json --root ROOT [--no-review] [--source-file FILE] -- GOAL
-slipway _machine submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
-slipway _machine answer --run RUN --action ACTION --root ROOT --text TEXT
-slipway _machine answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
-slipway _machine skip --run RUN --action ACTION --root ROOT
-slipway _machine resume RUN --root ROOT [--budget N]
-slipway _machine resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
-slipway _machine material --run RUN --action ACTION --root ROOT --section KEY
+slipway protocol submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
+slipway protocol answer --run RUN --action ACTION --root ROOT --text TEXT
+slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway protocol skip --run RUN --action ACTION --root ROOT
+slipway protocol resume RUN --root ROOT [--budget N]
+slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
+slipway protocol material --run RUN --action ACTION --root ROOT --section KEY
 ```
 
 The hidden operations are versioned host interfaces. Do not expose them as an alternative end-user command sequence.
@@ -65,7 +65,7 @@ Issue-backed Actions additionally contain:
 
 - source, manifest, and requirements revisions;
 - an ordered, bounded section catalog;
-- a structured `_machine material` reader;
+- a structured `protocol material` reader;
 - the section keys required for the current Action.
 
 They do not copy requirements Markdown into `context`. The material reader is valid only for the current non-void Action and verifies digest, byte count, and section revision before returning content.
@@ -79,8 +79,8 @@ The versioned field for those keys is `requirements.required_for_action`. In pro
 Submit an Outcome from exactly one input:
 
 ```text
-slipway _machine submit --run RUN --action ACTION --root ROOT --outcome-file FILE
-slipway _machine submit --run RUN --action ACTION --root ROOT --outcome-stdin
+slipway protocol submit --run RUN --action ACTION --root ROOT --outcome-file FILE
+slipway protocol submit --run RUN --action ACTION --root ROOT --outcome-stdin
 ```
 
 Every public Outcome field is present. Arrays remain arrays when empty; inapplicable object branches are JSON `null`:

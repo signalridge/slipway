@@ -11,7 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRootExposesExactlySevenPublicCommands(t *testing.T) {
+// The published surface is the seven user commands plus the machine protocol.
+// The protocol group is deliberately among them: its operations are a published
+// contract that a generated adapter must be able to discover, so the CLI must
+// not present them as an implementation detail. Only `_help` stays hidden.
+func TestRootExposesTheUserCommandsAndTheMachineProtocol(t *testing.T) {
 	t.Parallel()
 	root := newRootCmd()
 	root.InitDefaultHelpCmd()
@@ -22,7 +26,7 @@ func TestRootExposesExactlySevenPublicCommands(t *testing.T) {
 		}
 	}
 	sort.Strings(names)
-	assert.Equal(t, []string{"doctor", "install", "list", "run", "status", "stop", "uninstall"}, names)
+	assert.Equal(t, []string{"doctor", "install", "list", "protocol", "run", "status", "stop", "uninstall"}, names)
 
 	stdout, stderr, err := executeForTest(t, "--help")
 	require.NoError(t, err, stderr)
@@ -35,12 +39,14 @@ func TestRootExposesExactlySevenPublicCommands(t *testing.T) {
 	}
 }
 
-func TestRunMachineCommandsRemainHiddenFromHelp(t *testing.T) {
+// The protocol operations are public, but they belong to `slipway protocol`
+// alone. `run` starts a Run and must never regrow them as subcommands.
+func TestRunDoesNotRegrowTheProtocolOperations(t *testing.T) {
 	t.Parallel()
 	stdout, stderr, err := executeForTest(t, "run", "--help")
 	require.NoError(t, err, stderr)
-	for _, hidden := range []string{"submit", "answer", "skip", "resume"} {
-		assert.NotContains(t, stdout, "  "+hidden)
+	for _, operation := range []string{"submit", "answer", "skip", "resume"} {
+		assert.NotContains(t, stdout, "  "+operation)
 	}
 	assert.Contains(t, stdout, "--no-review")
 	assert.Contains(t, stdout, "--budget")

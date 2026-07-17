@@ -154,10 +154,10 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if operation != NextOperationAction && operation != NextOperationAnswer && operation != NextOperationResume {
 			return errors.New("skip-action is only valid for action, answer, or resume operations")
 		}
-		if len(argv) != 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "skip" ||
+		if len(argv) != 9 || argv[0] != "slipway" || argv[1] != "protocol" || argv[2] != "skip" ||
 			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
 			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
-			return errors.New("skip-action requires exact slipway _machine skip --run RUN --action ACTION --root ROOT grammar")
+			return errors.New("skip-action requires exact slipway protocol skip --run RUN --action ACTION --root ROOT grammar")
 		}
 		if len(variant.Inputs) != 0 {
 			return errors.New("skip-action cannot require inputs")
@@ -167,10 +167,10 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 
 	switch operation {
 	case NextOperationAction:
-		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "submit" ||
+		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "protocol" || argv[2] != "submit" ||
 			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
 			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
-			return errors.New("operation action requires exact slipway _machine submit --run RUN --action ACTION --root ROOT [--outcome-file FILE | --outcome-stdin] grammar")
+			return errors.New("operation action requires exact slipway protocol submit --run RUN --action ACTION --root ROOT [--outcome-file FILE | --outcome-stdin] grammar")
 		}
 		baseOptions, inputOptions, err := validateNextOperationOptions(
 			"action", variant, 9,
@@ -205,10 +205,10 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			return fmt.Errorf("operation action has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationAnswer:
-		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "answer" ||
+		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "protocol" || argv[2] != "answer" ||
 			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
 			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
-			return errors.New("operation answer requires exact slipway _machine answer --run RUN --action ACTION --root ROOT [--text TEXT] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
+			return errors.New("operation answer requires exact slipway protocol answer --run RUN --action ACTION --root ROOT [--text TEXT] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
 		}
 		baseOptions, inputOptions, err := validateNextOperationOptions(
 			"answer", variant, 9,
@@ -249,9 +249,9 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			return fmt.Errorf("operation answer has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationResume:
-		if len(argv) < 6 || argv[0] != "slipway" || argv[1] != "_machine" || argv[2] != "resume" ||
+		if len(argv) < 6 || argv[0] != "slipway" || argv[1] != "protocol" || argv[2] != "resume" ||
 			strings.HasPrefix(argv[3], "--") || argv[4] != "--root" {
-			return errors.New("operation resume requires exact slipway _machine resume RUN --root ROOT [--budget N] [--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE] grammar")
+			return errors.New("operation resume requires exact slipway protocol resume RUN --root ROOT [--budget N] [--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE] grammar")
 		}
 		baseOptions, inputOptions, err := validateNextOperationOptions(
 			"resume", variant, 6,
@@ -370,9 +370,9 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		}
 		// Command covers read-only or advisory recovery commands that are not a
 		// Run mutation (status, doctor, list, install --refresh). The run and
-		// _machine grammars are owned by start and the mutation operations.
-		if argv[1] == "_machine" || argv[1] == "run" {
-			return errors.New("operation command must not carry run or _machine grammar")
+		// protocol grammars are owned by start and the mutation operations.
+		if argv[1] == "protocol" || argv[1] == "run" {
+			return errors.New("operation command must not carry run or protocol grammar")
 		}
 	case NextOperationNone:
 		// Validated above; no variant reaches here.
@@ -749,7 +749,7 @@ func DeriveResumeNext(run Run) (Next, error) {
 
 func actionNext(run Run) (Next, error) {
 	actionID := run.CurrentAction.ActionID
-	fixed := []string{"slipway", "_machine", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}
+	fixed := []string{"slipway", "protocol", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}
 	next := Next{
 		Operation:         NextOperationAction,
 		WorkspaceIdentity: run.WorkspaceIdentity.ID,
@@ -774,7 +774,7 @@ func actionNext(run Run) (Next, error) {
 func skipActionVariant(run Run) NextVariant {
 	return NextVariant{
 		ID:       "skip-action",
-		BaseArgv: []string{"slipway", "_machine", "skip", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+		BaseArgv: []string{"slipway", "protocol", "skip", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 		Inputs:   []NextInput{},
 	}
 }
@@ -796,7 +796,7 @@ func decisionNext(run Run) (Next, error) {
 		Variants: []NextVariant{
 			{
 				ID:       "answer-decision",
-				BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+				BaseArgv: []string{"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
 			},
 			skipActionVariant(run),
@@ -818,14 +818,14 @@ func destructiveNext(run Run) (Next, error) {
 			{
 				ID: "confirm-destructive",
 				BaseArgv: []string{
-					"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID,
+					"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID,
 					"--root", run.Workspace, "--confirm-destructive", "--scope-sha256", request.ScopeSHA256,
 				},
 				Inputs: []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: false}},
 			},
 			{
 				ID:       "decline-or-feedback",
-				BaseArgv: []string{"slipway", "_machine", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
+				BaseArgv: []string{"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
 				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
 			},
 			skipActionVariant(run),
@@ -835,7 +835,7 @@ func destructiveNext(run Run) (Next, error) {
 }
 
 func resumeNext(run Run) (Next, error) {
-	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
+	base := []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}
 	next := Next{Operation: NextOperationResume, WorkspaceIdentity: run.WorkspaceIdentity.ID, workspaceRoot: run.Workspace}
 	if run.PinnedSource == nil {
 		next.Variants = []NextVariant{{ID: "resume-ad-hoc", BaseArgv: base, Inputs: []NextInput{}}}
@@ -858,7 +858,7 @@ func resumeNext(run Run) (Next, error) {
 
 func sourceCandidateNext(run Run) (Next, error) {
 	candidate := run.SourceCandidate
-	base := []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}
+	base := []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}
 	next := Next{
 		Operation:         NextOperationResume,
 		WorkspaceIdentity: run.WorkspaceIdentity.ID,

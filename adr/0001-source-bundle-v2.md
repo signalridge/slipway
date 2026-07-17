@@ -43,7 +43,7 @@ Source protocol version 2 uses a manifest-addressed bundle:
    journal event may reference it.
 5. Pinned source, status, candidates, journals, and Actions retain only the
    ordered catalog, provenance, byte counts, and domain-separated revisions.
-   Markdown is returned only by the local, hidden `_machine material` operation.
+   Markdown is returned only by the local, hidden `protocol material` operation.
 6. The Issue body manifest is updated last during publication. New unreferenced
    chapter comments are drafts. An accepted comment identity is immutable across
    manifest heads: the service rejects in-place changes, so an amendment publishes

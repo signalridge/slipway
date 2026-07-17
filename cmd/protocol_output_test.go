@@ -114,7 +114,7 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 	assertMachineSchemaOutput(t, "protocolState", issueJSON)
 	issueAction := decodeMutationAction(t, issueJSON)
 	materialJSON, stderr, err := executeForTest(
-		t, "_machine", "material", "--root", issueRepository,
+		t, "protocol", "material", "--root", issueRepository,
 		"--run", issueAction.RunID, "--action", issueAction.ActionID, "--section", "requirements",
 	)
 	require.NoError(t, err, stderr)

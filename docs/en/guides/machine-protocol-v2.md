@@ -68,7 +68,7 @@ jq -n --arg action "$ORIENT_ID" '{
   review: null
 }' > orient-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$ORIENT_ID" \
   --root "$WORKSPACE" \
@@ -114,7 +114,7 @@ jq -n --arg action "$IMPLEMENT_ID" \
   review: null
 }' > implement-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$IMPLEMENT_ID" \
   --root "$WORKSPACE" \
@@ -143,7 +143,7 @@ jq -n --arg action "$SUMMARIZE_ID" '{
   review: null
 }' > summarize-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$SUMMARIZE_ID" \
   --root "$WORKSPACE" \
@@ -163,4 +163,4 @@ Submitting the exact same Outcome bytes again is idempotent. Different bytes for
 
 ## Issue-backed extension
 
-For an issue-backed Run, the trusted host first validates and writes a private temporary source envelope, then passes it once with `--source-file`. The response adds `pinned_source`, `action.source`, `action.requirements`, and a structured `_machine material` reader. Fetch only manifest-referenced comments and never treat discussion comments as requirements. See the [machine protocol reference](../reference/machine-protocol.md) and [ADR-0001](../../../adr/0001-source-bundle-v2.md) for the authority and publication model.
+For an issue-backed Run, the trusted host first validates and writes a private temporary source envelope, then passes it once with `--source-file`. The response adds `pinned_source`, `action.source`, `action.requirements`, and a structured `protocol material` reader. Fetch only manifest-referenced comments and never treat discussion comments as requirements. See the [machine protocol reference](../reference/machine-protocol.md) and [ADR-0001](../../../adr/0001-source-bundle-v2.md) for the authority and publication model.

@@ -424,7 +424,7 @@ func validateActionRequirements(
 		return errors.New("requirements.reader.operation must be read_material")
 	}
 	expectedArgv := []string{
-		"slipway", "_machine", "material", "--root", actionMaterialRoot(reader.BaseArgv),
+		"slipway", "protocol", "material", "--root", actionMaterialRoot(reader.BaseArgv),
 		"--run", action.RunID, "--action", action.ActionID,
 	}
 	if !equalStrings(reader.BaseArgv, expectedArgv) || strings.TrimSpace(expectedArgv[4]) == "" {

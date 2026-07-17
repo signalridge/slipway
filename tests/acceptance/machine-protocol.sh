@@ -130,7 +130,7 @@ keys = [section["key"] for section in requirements["sections"]]
 assert requirements["required_for_action"] == keys, data
 assert requirements["reader"]["operation"] == "read_material", data
 assert requirements["reader"]["input"]["choices"] == keys, data
-assert requirements["reader"]["base_argv"][:3] == ["slipway", "_machine", "material"], data
+assert requirements["reader"]["base_argv"][:3] == ["slipway", "protocol", "material"], data
 PY
 }
 
@@ -365,24 +365,24 @@ ORIENT_ID=$(json_get "$START" action.action_id)
 ORIENT_OUTCOME="$TMP_ROOT/orient-outcome.json"
 make_outcome "$ORIENT_OUTCOME" "$ORIENT_ID" orient completed 'Repository facts observed.' '{"suggested_actions":[{"kind":"clarify","brief":"Ask for the release channel."}]}'
 CLARIFY="$TMP_ROOT/clarify.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$CLARIFY"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$CLARIFY"
 assert_action "$CLARIFY" clarify
 CLARIFY_ID=$(json_get "$CLARIFY" action.action_id)
 
 RETRY="$TMP_ROOT/retry.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$RETRY"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$ORIENT_OUTCOME" > "$RETRY"
 cmp -s "$CLARIFY" "$RETRY" || fail 'identical Outcome retry did not return the derived current Action'
 CONFLICT_OUTCOME="$TMP_ROOT/conflict-outcome.json"
 make_outcome "$CONFLICT_OUTCOME" "$ORIENT_ID" orient completed 'Conflicting retry.' '{}'
-expect_error 3 outcome_conflict skip-action "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$CONFLICT_OUTCOME"
+expect_error 3 outcome_conflict skip-action "$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$ORIENT_ID" --outcome-file "$CONFLICT_OUTCOME"
 
 CLARIFY_OUTCOME="$TMP_ROOT/clarify-outcome.json"
 make_outcome "$CLARIFY_OUTCOME" "$CLARIFY_ID" clarify needs_input 'Release channel requires a user decision.' '{"pause_reason":"decision_required"}'
 PAUSED="$TMP_ROOT/paused.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --outcome-file "$CLARIFY_OUTCOME" > "$PAUSED"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --outcome-file "$CLARIFY_OUTCOME" > "$PAUSED"
 assert_state "$PAUSED" paused decision_required answer-decision
 IMPLEMENT="$TMP_ROOT/implement.json"
-"$BIN" _machine answer --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --text stable > "$IMPLEMENT"
+"$BIN" protocol answer --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --text stable > "$IMPLEMENT"
 assert_action "$IMPLEMENT" orient
 OLD_IMPLEMENT_ID=$(json_get "$IMPLEMENT" action.action_id)
 
@@ -394,13 +394,13 @@ assert_state "$STOPPED" stopped "" resume-ad-hoc
 cmp -s "$STOPPED" "$STOPPED_AGAIN" || fail 'repeated stop was not idempotent'
 STOPPED_OUTCOME="$TMP_ROOT/stopped-outcome.json"
 make_outcome "$STOPPED_OUTCOME" "$OLD_IMPLEMENT_ID" orient completed 'Should not be accepted.' '{"implementation_result":"not_needed"}'
-expect_error 3 run_not_active resume-ad-hoc "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$OLD_IMPLEMENT_ID" --outcome-file "$STOPPED_OUTCOME"
+expect_error 3 run_not_active resume-ad-hoc "$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$OLD_IMPLEMENT_ID" --outcome-file "$STOPPED_OUTCOME"
 
 RESUMED="$TMP_ROOT/resumed.json"
-"$BIN" _machine resume "$RUN_ID" --root "$REPO" > "$RESUMED"
+"$BIN" protocol resume "$RUN_ID" --root "$REPO" > "$RESUMED"
 assert_action "$RESUMED" orient
 RESUMED_ORIENT_ID=$(json_get "$RESUMED" action.action_id)
-expect_error 3 stale_action skip-action "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$OLD_IMPLEMENT_ID" --outcome-file "$STOPPED_OUTCOME"
+expect_error 3 stale_action skip-action "$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$OLD_IMPLEMENT_ID" --outcome-file "$STOPPED_OUTCOME"
 STATUS="$TMP_ROOT/status.json"
 "$BIN" status "$RUN_ID" --root "$REPO" --json > "$STATUS"
 python3 -I - "$STATUS" "$OLD_IMPLEMENT_ID" <<'PY'
@@ -418,7 +418,7 @@ PY
 RESUMED_ORIENT_OUTCOME="$TMP_ROOT/resumed-orient-outcome.json"
 make_outcome "$RESUMED_ORIENT_OUTCOME" "$RESUMED_ORIENT_ID" orient completed 'Repository re-oriented after resume.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 IMPLEMENT2="$TMP_ROOT/implement2.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$RESUMED_ORIENT_ID" --outcome-file "$RESUMED_ORIENT_OUTCOME" > "$IMPLEMENT2"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$RESUMED_ORIENT_ID" --outcome-file "$RESUMED_ORIENT_OUTCOME" > "$IMPLEMENT2"
 assert_action "$IMPLEMENT2" implement
 IMPLEMENT2_ID=$(json_get "$IMPLEMENT2" action.action_id)
 printf 'implementation change\n' >> "$REPO/README.md"
@@ -451,20 +451,20 @@ PY
 IMPLEMENT2_OUTCOME="$TMP_ROOT/implement2-outcome.json"
 make_outcome "$IMPLEMENT2_OUTCOME" "$IMPLEMENT2_ID" implement completed 'Implementation report preserved a real non-zero test exit.' "$FAILED_ACTIVITY_EXTRA"
 REVIEW="$TMP_ROOT/review.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$IMPLEMENT2_ID" --outcome-file "$IMPLEMENT2_OUTCOME" > "$REVIEW"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$IMPLEMENT2_ID" --outcome-file "$IMPLEMENT2_OUTCOME" > "$REVIEW"
 assert_action "$REVIEW" review
 REVIEW_ID=$(json_get "$REVIEW" action.action_id)
 
 REVIEW_OUTCOME="$TMP_ROOT/review-outcome.json"
 make_outcome "$REVIEW_OUTCOME" "$REVIEW_ID" review completed 'Review reported one advisory finding.' '{"review_result":"findings_reported","findings":[{"location":"README.md:1","summary":"Advisory finding","detail":"Report only; do not repair automatically."}]}'
 SUMMARIZE="$TMP_ROOT/summarize.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$REVIEW_ID" --outcome-file "$REVIEW_OUTCOME" > "$SUMMARIZE"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$REVIEW_ID" --outcome-file "$REVIEW_OUTCOME" > "$SUMMARIZE"
 assert_action "$SUMMARIZE" summarize
 SUMMARIZE_ID=$(json_get "$SUMMARIZE" action.action_id)
 SUMMARY_OUTCOME="$TMP_ROOT/summary-outcome.json"
 make_outcome "$SUMMARY_OUTCOME" "$SUMMARIZE_ID" summarize completed 'Final report prepared.' '{}'
 ENDED="$TMP_ROOT/ended.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED"
 assert_state "$ENDED" ended
 python3 -I - "$ENDED" <<'PY'
 import json
@@ -496,13 +496,13 @@ assert run["activities"] == [activity], run["activities"]
 assert "exit 17" in run["summary"], run["summary"]
 PY
 ENDED_REPLAY="$TMP_ROOT/ended-replay.json"
-"$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED_REPLAY"
+"$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_OUTCOME" > "$ENDED_REPLAY"
 assert_state "$ENDED_REPLAY" ended
 SUMMARY_CONFLICT="$TMP_ROOT/summary-conflict.json"
 make_outcome "$SUMMARY_CONFLICT" "$SUMMARIZE_ID" summarize completed 'Different final report.' '{}'
-expect_error 3 outcome_conflict none "$BIN" _machine submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_CONFLICT"
+expect_error 3 outcome_conflict none "$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$SUMMARIZE_ID" --outcome-file "$SUMMARY_CONFLICT"
 expect_error 3 run_already_ended none "$BIN" stop "$RUN_ID" --root "$REPO" --json
-expect_error 3 run_already_ended none "$BIN" _machine resume "$RUN_ID" --root "$REPO"
+expect_error 3 run_already_ended none "$BIN" protocol resume "$RUN_ID" --root "$REPO"
 
 # Skipping Review goes directly to Summarize and is recorded in the report.
 SKIP_REPO="$TMP_ROOT/skip"
@@ -514,22 +514,22 @@ SKIP_ORIENT=$(json_get "$SKIP_START" action.action_id)
 SKIP_ORIENT_OUT="$TMP_ROOT/skip-orient-out.json"
 make_outcome "$SKIP_ORIENT_OUT" "$SKIP_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 SKIP_IMPLEMENT_JSON="$TMP_ROOT/skip-implement.json"
-"$BIN" _machine submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_ORIENT" --outcome-file "$SKIP_ORIENT_OUT" > "$SKIP_IMPLEMENT_JSON"
+"$BIN" protocol submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_ORIENT" --outcome-file "$SKIP_ORIENT_OUT" > "$SKIP_IMPLEMENT_JSON"
 SKIP_IMPLEMENT=$(json_get "$SKIP_IMPLEMENT_JSON" action.action_id)
 printf 'skip scenario change\n' >> "$SKIP_REPO/README.md"
 SKIP_IMPLEMENT_OUT="$TMP_ROOT/skip-implement-out.json"
 make_outcome "$SKIP_IMPLEMENT_OUT" "$SKIP_IMPLEMENT" implement completed 'Changed README.' '{"implementation_result":"applied","files_changed":["README.md"]}'
 SKIP_REVIEW_JSON="$TMP_ROOT/skip-review.json"
-"$BIN" _machine submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_IMPLEMENT" --outcome-file "$SKIP_IMPLEMENT_OUT" > "$SKIP_REVIEW_JSON"
+"$BIN" protocol submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_IMPLEMENT" --outcome-file "$SKIP_IMPLEMENT_OUT" > "$SKIP_REVIEW_JSON"
 SKIP_REVIEW=$(json_get "$SKIP_REVIEW_JSON" action.action_id)
 SKIP_SUMMARY="$TMP_ROOT/skip-summary.json"
-"$BIN" _machine skip --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_REVIEW" > "$SKIP_SUMMARY"
+"$BIN" protocol skip --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_REVIEW" > "$SKIP_SUMMARY"
 assert_action "$SKIP_SUMMARY" summarize
 SKIP_SUMMARY_ID=$(json_get "$SKIP_SUMMARY" action.action_id)
 SKIP_SUMMARY_OUT="$TMP_ROOT/skip-summary-out.json"
 make_outcome "$SKIP_SUMMARY_OUT" "$SKIP_SUMMARY_ID" summarize completed 'Skip report prepared.' '{}'
 SKIP_ENDED="$TMP_ROOT/skip-ended.json"
-"$BIN" _machine submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_SUMMARY_ID" --outcome-file "$SKIP_SUMMARY_OUT" > "$SKIP_ENDED"
+"$BIN" protocol submit --root "$SKIP_REPO" --run "$SKIP_RUN" --action "$SKIP_SUMMARY_ID" --outcome-file "$SKIP_SUMMARY_OUT" > "$SKIP_ENDED"
 assert_state "$SKIP_ENDED" ended
 python3 -I - "$SKIP_ENDED" <<'PY'
 import json
@@ -560,7 +560,7 @@ with open(path, "w", encoding="utf-8") as stream:
     json.dump(data, stream, separators=(",", ":"), sort_keys=True)
     stream.write("\n")
 PY
-expect_error 3 contract_version_mismatch refresh-adapters "$BIN" _machine submit --root "$VERSION_REPO" --run "$VERSION_RUN" --action "$VERSION_ACTION" --outcome-file "$VERSION_OUTCOME"
+expect_error 3 contract_version_mismatch refresh-adapters "$BIN" protocol submit --root "$VERSION_REPO" --run "$VERSION_RUN" --action "$VERSION_ACTION" --outcome-file "$VERSION_OUTCOME"
 
 # Host-reported files do not create a Review when the CLI observes no diff.
 REPORTED_REPO="$TMP_ROOT/reported-only"
@@ -572,13 +572,13 @@ REPORTED_ORIENT=$(json_get "$REPORTED_START" action.action_id)
 REPORTED_ORIENT_OUT="$TMP_ROOT/reported-orient-out.json"
 make_outcome "$REPORTED_ORIENT_OUT" "$REPORTED_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 REPORTED_IMPLEMENT_JSON="$TMP_ROOT/reported-implement.json"
-"$BIN" _machine submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_ORIENT" --outcome-file "$REPORTED_ORIENT_OUT" > "$REPORTED_IMPLEMENT_JSON"
+"$BIN" protocol submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_ORIENT" --outcome-file "$REPORTED_ORIENT_OUT" > "$REPORTED_IMPLEMENT_JSON"
 assert_action "$REPORTED_IMPLEMENT_JSON" implement
 REPORTED_IMPLEMENT=$(json_get "$REPORTED_IMPLEMENT_JSON" action.action_id)
 REPORTED_IMPLEMENT_OUT="$TMP_ROOT/reported-implement-out.json"
 make_outcome "$REPORTED_IMPLEMENT_OUT" "$REPORTED_IMPLEMENT" implement completed 'Host reported a file without changing Git.' '{"implementation_result":"applied","files_changed":["ghost.txt"]}'
 REPORTED_SUMMARY="$TMP_ROOT/reported-summary.json"
-"$BIN" _machine submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_IMPLEMENT" --outcome-file "$REPORTED_IMPLEMENT_OUT" > "$REPORTED_SUMMARY"
+"$BIN" protocol submit --root "$REPORTED_REPO" --run "$REPORTED_RUN" --action "$REPORTED_IMPLEMENT" --outcome-file "$REPORTED_IMPLEMENT_OUT" > "$REPORTED_SUMMARY"
 assert_action "$REPORTED_SUMMARY" summarize
 
 # --no-review suppresses Review even when the CLI observes an actual diff.
@@ -591,14 +591,14 @@ NO_REVIEW_ORIENT=$(json_get "$NO_REVIEW_START" action.action_id)
 NO_REVIEW_ORIENT_OUT="$TMP_ROOT/no-review-orient-out.json"
 make_outcome "$NO_REVIEW_ORIENT_OUT" "$NO_REVIEW_ORIENT" orient completed 'Oriented.' '{"suggested_actions":[{"kind":"implement","brief":"Implement the accepted work."}]}'
 NO_REVIEW_IMPLEMENT_JSON="$TMP_ROOT/no-review-implement.json"
-"$BIN" _machine submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_ORIENT" --outcome-file "$NO_REVIEW_ORIENT_OUT" > "$NO_REVIEW_IMPLEMENT_JSON"
+"$BIN" protocol submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_ORIENT" --outcome-file "$NO_REVIEW_ORIENT_OUT" > "$NO_REVIEW_IMPLEMENT_JSON"
 assert_action "$NO_REVIEW_IMPLEMENT_JSON" implement
 NO_REVIEW_IMPLEMENT=$(json_get "$NO_REVIEW_IMPLEMENT_JSON" action.action_id)
 printf 'no-review change\n' >> "$NO_REVIEW_REPO/README.md"
 NO_REVIEW_IMPLEMENT_OUT="$TMP_ROOT/no-review-implement-out.json"
 make_outcome "$NO_REVIEW_IMPLEMENT_OUT" "$NO_REVIEW_IMPLEMENT" implement completed 'Changed without review.' '{"implementation_result":"applied","files_changed":["README.md"]}'
 NO_REVIEW_SUMMARY="$TMP_ROOT/no-review-summary.json"
-"$BIN" _machine submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_IMPLEMENT" --outcome-file "$NO_REVIEW_IMPLEMENT_OUT" > "$NO_REVIEW_SUMMARY"
+"$BIN" protocol submit --root "$NO_REVIEW_REPO" --run "$NO_REVIEW_RUN" --action "$NO_REVIEW_IMPLEMENT" --outcome-file "$NO_REVIEW_IMPLEMENT_OUT" > "$NO_REVIEW_SUMMARY"
 assert_action "$NO_REVIEW_SUMMARY" summarize
 NO_REVIEW_STATUS="$TMP_ROOT/no-review-status.json"
 "$BIN" status "$NO_REVIEW_RUN" --root "$NO_REVIEW_REPO" --json > "$NO_REVIEW_STATUS"
@@ -623,11 +623,11 @@ BUDGET_ORIENT=$(json_get "$BUDGET_START" action.action_id)
 BUDGET_OUTCOME="$TMP_ROOT/budget-outcome.json"
 make_outcome "$BUDGET_OUTCOME" "$BUDGET_ORIENT" orient completed 'Oriented at budget limit.' '{}'
 BUDGET_PAUSED="$TMP_ROOT/budget-paused.json"
-"$BIN" _machine submit --root "$BUDGET_REPO" --run "$BUDGET_RUN" --action "$BUDGET_ORIENT" --outcome-file "$BUDGET_OUTCOME" > "$BUDGET_PAUSED"
+"$BIN" protocol submit --root "$BUDGET_REPO" --run "$BUDGET_RUN" --action "$BUDGET_ORIENT" --outcome-file "$BUDGET_OUTCOME" > "$BUDGET_PAUSED"
 assert_state "$BUDGET_PAUSED" paused budget_exhausted resume-ad-hoc
-expect_error 2 invalid_budget inspect-run "$BIN" _machine resume "$BUDGET_RUN" --root "$BUDGET_REPO" --budget 0
+expect_error 2 invalid_budget inspect-run "$BIN" protocol resume "$BUDGET_RUN" --root "$BUDGET_REPO" --budget 0
 BUDGET_RESUMED="$TMP_ROOT/budget-resumed.json"
-"$BIN" _machine resume "$BUDGET_RUN" --root "$BUDGET_REPO" > "$BUDGET_RESUMED"
+"$BIN" protocol resume "$BUDGET_RUN" --root "$BUDGET_REPO" > "$BUDGET_RESUMED"
 assert_action "$BUDGET_RESUMED" orient
 [ "$(json_get "$BUDGET_RESUMED" action.remaining_budget)" -eq 2 ] || fail 'default budget resume did not replenish to three Actions'
 
@@ -643,7 +643,7 @@ DESTRUCTIVE_ORIENT=$(json_get "$DESTRUCTIVE_START" action.action_id)
 DESTRUCTIVE_ORIENT_OUT="$TMP_ROOT/destructive-orient-out.json"
 make_outcome "$DESTRUCTIVE_ORIENT_OUT" "$DESTRUCTIVE_ORIENT" orient completed 'Destructive scope discovered.' '{"suggested_actions":[{"kind":"implement","brief":"Request exact destructive confirmation."}]}'
 DESTRUCTIVE_IMPLEMENT_JSON="$TMP_ROOT/destructive-implement.json"
-"$BIN" _machine submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_ORIENT" --outcome-file "$DESTRUCTIVE_ORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT_JSON"
+"$BIN" protocol submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_ORIENT" --outcome-file "$DESTRUCTIVE_ORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT_JSON"
 assert_action "$DESTRUCTIVE_IMPLEMENT_JSON" implement
 DESTRUCTIVE_IMPLEMENT=$(json_get "$DESTRUCTIVE_IMPLEMENT_JSON" action.action_id)
 DESTRUCTIVE_DIGEST=$(python3 -I - <<'PY'
@@ -677,16 +677,16 @@ PY
 DESTRUCTIVE_PAUSE_OUT="$TMP_ROOT/destructive-pause-out.json"
 make_outcome "$DESTRUCTIVE_PAUSE_OUT" "$DESTRUCTIVE_IMPLEMENT" implement needs_input 'Exact destructive confirmation required.' "$DESTRUCTIVE_EXTRA"
 DESTRUCTIVE_PAUSED="$TMP_ROOT/destructive-paused.json"
-"$BIN" _machine submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT" --outcome-file "$DESTRUCTIVE_PAUSE_OUT" > "$DESTRUCTIVE_PAUSED"
+"$BIN" protocol submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT" --outcome-file "$DESTRUCTIVE_PAUSE_OUT" > "$DESTRUCTIVE_PAUSED"
 assert_state "$DESTRUCTIVE_PAUSED" paused destructive_confirmation_required confirm-destructive
 DESTRUCTIVE_DECLINED="$TMP_ROOT/destructive-declined.json"
-"$BIN" _machine answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT" --text yes > "$DESTRUCTIVE_DECLINED"
+"$BIN" protocol answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT" --text yes > "$DESTRUCTIVE_DECLINED"
 assert_action "$DESTRUCTIVE_DECLINED" orient
 DESTRUCTIVE_REORIENT=$(json_get "$DESTRUCTIVE_DECLINED" action.action_id)
 DESTRUCTIVE_REORIENT_OUT="$TMP_ROOT/destructive-reorient-out.json"
 make_outcome "$DESTRUCTIVE_REORIENT_OUT" "$DESTRUCTIVE_REORIENT" orient completed 'User feedback recorded without authority.' '{"suggested_actions":[{"kind":"implement","brief":"Request a fresh exact destructive scope."}]}'
 DESTRUCTIVE_IMPLEMENT2_JSON="$TMP_ROOT/destructive-implement2.json"
-"$BIN" _machine submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_REORIENT" --outcome-file "$DESTRUCTIVE_REORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT2_JSON"
+"$BIN" protocol submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_REORIENT" --outcome-file "$DESTRUCTIVE_REORIENT_OUT" > "$DESTRUCTIVE_IMPLEMENT2_JSON"
 assert_action "$DESTRUCTIVE_IMPLEMENT2_JSON" implement
 DESTRUCTIVE_IMPLEMENT2=$(json_get "$DESTRUCTIVE_IMPLEMENT2_JSON" action.action_id)
 DESTRUCTIVE_DIGEST2=$(python3 -I - <<'PY'
@@ -720,11 +720,11 @@ PY
 DESTRUCTIVE_PAUSE2_OUT="$TMP_ROOT/destructive-pause2-out.json"
 make_outcome "$DESTRUCTIVE_PAUSE2_OUT" "$DESTRUCTIVE_IMPLEMENT2" implement needs_input 'Fresh destructive confirmation required.' "$DESTRUCTIVE_EXTRA2"
 DESTRUCTIVE_PAUSED2="$TMP_ROOT/destructive-paused2.json"
-"$BIN" _machine submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --outcome-file "$DESTRUCTIVE_PAUSE2_OUT" > "$DESTRUCTIVE_PAUSED2"
+"$BIN" protocol submit --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --outcome-file "$DESTRUCTIVE_PAUSE2_OUT" > "$DESTRUCTIVE_PAUSED2"
 assert_state "$DESTRUCTIVE_PAUSED2" paused destructive_confirmation_required confirm-destructive
-expect_error 3 destructive_scope_mismatch confirm-destructive "$BIN" _machine answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --confirm-destructive --scope-sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+expect_error 3 destructive_scope_mismatch confirm-destructive "$BIN" protocol answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --confirm-destructive --scope-sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 DESTRUCTIVE_AUTHORIZED="$TMP_ROOT/destructive-authorized.json"
-"$BIN" _machine answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --confirm-destructive --scope-sha256 "$DESTRUCTIVE_DIGEST2" --text 'confirmed in acceptance host' > "$DESTRUCTIVE_AUTHORIZED"
+"$BIN" protocol answer --root "$DESTRUCTIVE_REPO" --run "$DESTRUCTIVE_RUN" --action "$DESTRUCTIVE_IMPLEMENT2" --confirm-destructive --scope-sha256 "$DESTRUCTIVE_DIGEST2" --text 'confirmed in acceptance host' > "$DESTRUCTIVE_AUTHORIZED"
 assert_authorized_action "$DESTRUCTIVE_AUTHORIZED" "$DESTRUCTIVE_IMPLEMENT2" "$DESTRUCTIVE_DIGEST2"
 
 # Issue-bound source is pinned once; material refresh pauses without applying
@@ -810,7 +810,7 @@ assert_issue_action "$SOURCE_START" orient
 SOURCE_RUN=$(json_get "$SOURCE_START" run_id)
 SOURCE_PARENT_REQUIREMENTS=$(json_get "$SOURCE_START" action.source.requirements_revision)
 SOURCE_MATERIAL="$TMP_ROOT/source-material.json"
-"$BIN" _machine material --root "$SOURCE_REPO" --run "$SOURCE_RUN" --action "$(json_get "$SOURCE_START" action.action_id)" --section requirements > "$SOURCE_MATERIAL"
+"$BIN" protocol material --root "$SOURCE_REPO" --run "$SOURCE_RUN" --action "$(json_get "$SOURCE_START" action.action_id)" --section requirements > "$SOURCE_MATERIAL"
 python3 -I - "$SOURCE_MATERIAL" <<'PY'
 import json
 import sys
@@ -820,9 +820,9 @@ assert material["contract_version"] == 2, material
 assert material["message_type"] == "action_material", material
 assert "original accepted requirement" in material["section"]["markdown"], material
 PY
-expect_error 3 source_mode_required use-pinned-source "$BIN" _machine resume "$SOURCE_RUN" --root "$SOURCE_REPO"
+expect_error 3 source_mode_required use-pinned-source "$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO"
 SOURCE_PINNED="$TMP_ROOT/source-pinned.json"
-"$BIN" _machine resume "$SOURCE_RUN" --root "$SOURCE_REPO" --use-pinned-source > "$SOURCE_PINNED"
+"$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --use-pinned-source > "$SOURCE_PINNED"
 assert_issue_action "$SOURCE_PINNED" orient
 python3 -I - "$SOURCE_FILE" "$SOURCE_PARENT_REQUIREMENTS" <<'PY'
 import hashlib
@@ -865,7 +865,7 @@ with open(path, "w", encoding="utf-8") as stream:
     stream.write("\n")
 PY
 SOURCE_CANDIDATE="$TMP_ROOT/source-candidate.json"
-"$BIN" _machine resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-file "$SOURCE_FILE" --budget 20 > "$SOURCE_CANDIDATE"
+"$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-file "$SOURCE_FILE" --budget 20 > "$SOURCE_CANDIDATE"
 CANDIDATE_ID=$(json_get "$SOURCE_CANDIDATE" source_candidate.candidate_id)
 assert_state "$SOURCE_CANDIDATE" paused decision_required keep-pinned
 [ "$(json_get "$SOURCE_CANDIDATE" budget_applied)" = false ] || fail 'candidate creation applied the replacement budget'
@@ -875,10 +875,10 @@ SOURCE_STATUS_BEFORE="$TMP_ROOT/source-status-before.json"
 [ "$(json_get "$SOURCE_STATUS_BEFORE" remaining_budget)" -eq 6 ] || fail 'candidate creation changed the preserved budget'
 rm -f "$SOURCE_FILE"
 SOURCE_ADOPTED="$TMP_ROOT/source-adopted.json"
-"$BIN" _machine resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-choice adopt --candidate "$CANDIDATE_ID" --budget 5 > "$SOURCE_ADOPTED"
+"$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-choice adopt --candidate "$CANDIDATE_ID" --budget 5 > "$SOURCE_ADOPTED"
 assert_issue_action "$SOURCE_ADOPTED" orient
 SOURCE_ADOPTED_MATERIAL="$TMP_ROOT/source-adopted-material.json"
-"$BIN" _machine material --root "$SOURCE_REPO" --run "$SOURCE_RUN" --action "$(json_get "$SOURCE_ADOPTED" action.action_id)" --section requirements > "$SOURCE_ADOPTED_MATERIAL"
+"$BIN" protocol material --root "$SOURCE_REPO" --run "$SOURCE_RUN" --action "$(json_get "$SOURCE_ADOPTED" action.action_id)" --section requirements > "$SOURCE_ADOPTED_MATERIAL"
 python3 -I - "$SOURCE_ADOPTED_MATERIAL" <<'PY'
 import json
 import sys
@@ -888,7 +888,7 @@ assert "materially amended accepted requirement" in material["section"]["markdow
 PY
 [ "$(json_get "$SOURCE_ADOPTED" action.remaining_budget)" -eq 4 ] || fail 'candidate choice did not apply replacement budget before Orient'
 SOURCE_RETRY="$TMP_ROOT/source-retry.json"
-"$BIN" _machine resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-choice adopt --candidate "$CANDIDATE_ID" --budget 999 > "$SOURCE_RETRY"
+"$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-choice adopt --candidate "$CANDIDATE_ID" --budget 999 > "$SOURCE_RETRY"
 cmp -s "$SOURCE_ADOPTED" "$SOURCE_RETRY" || fail 'identical candidate choice retry issued another Action'
 SOURCE_STATUS="$TMP_ROOT/source-status.json"
 "$BIN" status "$SOURCE_RUN" --root "$SOURCE_REPO" --json > "$SOURCE_STATUS"

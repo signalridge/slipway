@@ -129,9 +129,9 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 	var runID, actionID, outcomeFile string
 	var outcomeStdin bool
 	command := &cobra.Command{
-		Use:    "submit",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:   "submit",
+		Short: "Report one Action Outcome and receive the next Action",
+		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			fileSet := command.Flags().Changed("outcome-file")
 			stdinSet := command.Flags().Changed("outcome-stdin") && outcomeStdin
@@ -202,9 +202,9 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 	var runID, actionID, text, scopeSHA256 string
 	var confirmDestructive bool
 	command := &cobra.Command{
-		Use:    "answer",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:   "answer",
+		Short: "Answer a Clarify Action, or confirm an authorized destructive scope",
+		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
@@ -251,9 +251,9 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 func makeRunSkipCmd(root *string) *cobra.Command {
 	var runID, actionID string
 	command := &cobra.Command{
-		Use:    "skip",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:   "skip",
+		Short: "Skip the current Action and receive the next one",
+		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
@@ -290,12 +290,12 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 	var sourceChoice string
 	var candidateID string
 	command := &cobra.Command{
-		Use:    "resume <run-id>",
-		Hidden: true,
-		Example: "  slipway _machine resume RUN [--budget N]\n" +
-			"  slipway _machine resume RUN --source-file FILE [--budget N]\n" +
-			"  slipway _machine resume RUN --use-pinned-source [--budget N]\n" +
-			"  slipway _machine resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
+		Use:   "resume <run-id>",
+		Short: "Resume a paused Run",
+		Example: "  slipway protocol resume RUN [--budget N]\n" +
+			"  slipway protocol resume RUN --source-file FILE [--budget N]\n" +
+			"  slipway protocol resume RUN --use-pinned-source [--budget N]\n" +
+			"  slipway protocol resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
 		Args: cobra.ExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			budgetSet := command.Flags().Changed("budget")
@@ -499,7 +499,7 @@ func runStartNext(workspace, goal string, budget int, noReview, sourceRequired b
 }
 
 func submitRetryNext(workspace, runID, actionID string, stdin bool) autopilot.Next {
-	base := []string{"slipway", "_machine", "submit", "--run", runID, "--action", actionID, "--root", workspace}
+	base := []string{"slipway", "protocol", "submit", "--run", runID, "--action", actionID, "--root", workspace}
 	if stdin {
 		return commandNext(
 			workspace,
@@ -519,7 +519,7 @@ func submitRetryNext(workspace, runID, actionID string, stdin bool) autopilot.Ne
 }
 
 func resumeSourceNext(workspace, runID string, budget *int) autopilot.Next {
-	base := []string{"slipway", "_machine", "resume", runID, "--root", workspace}
+	base := []string{"slipway", "protocol", "resume", runID, "--root", workspace}
 	if budget != nil {
 		base = append(base, "--budget", fmt.Sprint(*budget))
 	}

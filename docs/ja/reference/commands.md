@@ -1,6 +1,6 @@
 # コマンドリファレンス
 
-Slipway には7つの public command があります。使用中の binary で `slipway <command> --help` を確認してください。Package channel には古い command generation が含まれる場合があります。
+Slipway には7つの user command と、generated adapter が呼び出す `protocol` 操作があります。使用中の binary で `slipway <command> --help` を確認してください。Package channel には古い command generation が含まれる場合があります。
 
 | Command | 目的 |
 | --- | --- |
@@ -93,8 +93,10 @@ slipway stop [run-id] [--root ROOT] [--json]
 
 Run を停止し、journal を保存します。ID 省略時は list の active/paused entry を数え、1つだけの場合に進みます。読めない local recovery directory が1つでもあれば、無視せず explicit ID を要求します。Active/paused `workspace_foreign` stub は暗黙に選択しません。Stopped Run は resume できます。Ended Run はできません。
 
-## Hidden host 操作
+## Machine protocol 操作
 
-Generated adapter は versioned `_machine` 操作で Outcome 提出、Action の answer/skip、Run resume、pinned material 読み取りを行います。これらは top-level help に意図的に表示されず、第2の user workflow でもありません。
+Generated adapter は `protocol` 操作で Outcome 提出、Action の answer/skip、Run resume、pinned material 読み取りを行います。これらは実装詳細ではなく公開された contract であるため top-level help に表示されます。contract を隠すことは、それを偽って伝えることになります。
 
-Prose から hidden command を組み立てず、CLI が返す structured `next` variant を使ってください。詳細は[マシンプロトコル](machine-protocol.md)を参照してください。
+ただし第2の user workflow ではありません。いずれの操作も、手渡された Action だけが持つ Run と Action を必要とするため、単独では呼び出せません。
+
+Prose から command を組み立てず、CLI が返す structured `next` variant を使ってください。詳細は[マシンプロトコル](machine-protocol.md)を参照してください。

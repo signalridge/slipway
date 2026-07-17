@@ -1,6 +1,6 @@
 # Command reference
 
-Slipway exposes seven public commands. Run `slipway <command> --help` against the binary you are using; package channels can contain an older command generation.
+Slipway exposes seven user commands plus the `protocol` operations that generated adapters call. Run `slipway <command> --help` against the binary you are using; package channels can contain an older command generation.
 
 | Command | Purpose |
 | --- | --- |
@@ -93,8 +93,8 @@ slipway stop [run-id] [--root ROOT] [--json]
 
 Stops a Run and preserves its journal. Omitting the ID scans listed active or paused entries and proceeds only when that count is one; any unreadable local recovery directory also requires an explicit ID rather than being ignored. An active or paused `workspace_foreign` stub is not selected implicitly. A stopped Run can resume; an ended Run cannot.
 
-## Hidden host operations
+## Machine protocol operations
 
-Generated adapters use versioned `_machine` operations to submit an Outcome, answer or skip an Action, resume a Run, and read pinned material. They are intentionally absent from top-level help and are not a second user workflow.
+Generated adapters use the `protocol` operations to submit an Outcome, answer or skip an Action, resume a Run, and read pinned material. They appear in top-level help because they are a published contract rather than an implementation detail, and hiding a contract would misrepresent it.
 
-Use the structured `next` variants returned by the CLI rather than constructing hidden commands from prose. See the [machine protocol](machine-protocol.md).
+They are still not a second user workflow. Every one of them needs a Run and an Action that only the Action you were handed carries, so none of them is callable on its own: use the structured `next` variants the CLI returns instead of constructing a command from prose. `run` and `status` are the entry points that produce those variants. See the [machine protocol](machine-protocol.md).

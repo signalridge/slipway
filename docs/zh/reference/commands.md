@@ -1,6 +1,6 @@
 # 命令参考
 
-Slipway 有七个公开命令。请对正在使用的二进制执行 `slipway <command> --help`；包管理渠道可能仍提供旧命令版本。
+Slipway 有七个用户命令，外加 generated adapter 调用的 `protocol` 操作。请对正在使用的二进制执行 `slipway <command> --help`；包管理渠道可能仍提供旧命令版本。
 
 | 命令 | 用途 |
 | --- | --- |
@@ -93,8 +93,10 @@ slipway stop [run-id] [--root ROOT] [--json]
 
 停止 Run 并保留 journal。省略 ID 时会扫描列出的 active/paused entry，且只有计数为一时才继续；只要存在无法读取的本地 recovery directory，也必须显式指定 ID，不能忽略。Active/paused `workspace_foreign` stub 不会被隐式选中。Stopped Run 可以 resume；ended Run 不可以。
 
-## 隐藏宿主操作
+## 机器协议操作
 
-Generated adapter 使用版本化 `_machine` 操作提交 Outcome、回答或 skip Action、resume Run，并读取 pinned material。它们刻意不出现在 top-level help 中，也不是另一套用户工作流。
+Generated adapter 使用 `protocol` 操作提交 Outcome、回答或 skip Action、resume Run，并读取 pinned material。它们出现在 top-level help 中，因为它们是已发布的契约而非实现细节；隐藏一份契约会让人误解它。
 
-应使用 CLI 返回的结构化 `next` variant，不要根据文档 prose 拼接隐藏命令。详见[机器协议](machine-protocol.md)。
+它们仍然不是另一套用户工作流。每个操作都需要一个 Run 和一个 Action，而这些只能来自递给你的那个 Action，因此没有任何一个可以独立调用。
+
+应使用 CLI 返回的结构化 `next` variant，不要根据文档 prose 拼接命令。详见[机器协议](machine-protocol.md)。

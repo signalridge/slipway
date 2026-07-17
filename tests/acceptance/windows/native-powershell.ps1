@@ -485,7 +485,7 @@ try {
     $decisionOutcome = New-Outcome -ActionId $start.action_id -ActionKind $start.kind -Status 'needs_input' -Summary 'One Windows decision is required.' -Pause $pause -Suggestions @()
     $outcomePath = Join-Path $tempRoot ('outcome file % ! & ^ ' + $UnicodeProbe + '.json')
     Write-Utf8 $outcomePath (($decisionOutcome | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $paused = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
+    $paused = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $start.action_id, '--outcome-file', $outcomePath)) | ConvertFrom-Json
     Assert-True ($paused.state -eq 'paused') 'Outcome file did not pause the Run'
     Assert-True ($paused.next.operation -eq 'answer') 'decision pause did not return structured answer next'
 
@@ -505,11 +505,11 @@ try {
     if ($Mode -eq 'PowerShell') {
         # stdin transport is intentionally PowerShell-only. Cmd mode exercises
         # the same Outcome through an outcome-file argv that crosses cmd.exe.
-        $implementedText = Invoke-SlipwayDirect -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
+        $implementedText = Invoke-SlipwayDirect -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-stdin') -StdinText $orientJson -UseStdin
     } else {
         $secondOutcomePath = Join-Path $tempRoot 'cmd outcome file.json'
         Write-Utf8 $secondOutcomePath $orientJson
-        $implementedText = Invoke-ResolvedArgv -CommandArgs @('_machine', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
+        $implementedText = Invoke-ResolvedArgv -CommandArgs @('protocol', 'submit', '--root', $repo, '--run', $start.run_id, '--action', $oriented.action_id, '--outcome-file', $secondOutcomePath)
     }
     $implementedMutation = $implementedText | ConvertFrom-Json
     $implemented = Get-MutationAction -Envelope $implementedMutation -ExpectedKind 'implement'
@@ -540,12 +540,12 @@ try {
     $sourceStart = Get-MutationAction -Envelope $sourceStartMutation -ExpectedKind 'orient'
     Assert-True ($sourceStart.source.kind -eq 'change_issue') 'source identity is missing'
     Assert-True ($sourceStart.requirements.sections.Count -eq 5) 'source section catalog is incomplete'
-    $initialMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $sourceStart.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    $initialMaterial = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $sourceStart.action_id, '--section', 'requirements')) | ConvertFrom-Json
     Assert-True ($initialMaterial.section.markdown -match 'initial Windows') 'initial Requirements material is missing'
 
     $sourceAmended = New-SourceEnvelope -RequirementText 'Keep the materially amended Windows requirement.' -UpdatedAt '2026-07-12T10:00:00Z' -ParentRequirementsRevision $sourceStart.source.requirements_revision
     Write-Utf8 $sourcePath (($sourceAmended | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
-    $candidate = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
+    $candidate = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
     Assert-True ($candidate.state -eq 'paused') 'material source refresh did not pause'
     Assert-True ($candidate.budget_applied -eq $false) 'candidate creation applied replacement budget'
     Assert-True ($candidate.source_candidate.candidate_id.Length -gt 0) 'current candidate ID missing'
@@ -554,7 +554,7 @@ try {
     $adoptedText = Invoke-NextVariant -Next $candidate.next -VariantId 'adopt' -InputValues @{}
     $adoptedMutation = $adoptedText | ConvertFrom-Json
     $adopted = Get-MutationAction -Envelope $adoptedMutation -ExpectedKind 'orient'
-    $adoptedMaterial = (Invoke-ResolvedArgv -CommandArgs @('_machine', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $adopted.action_id, '--section', 'requirements')) | ConvertFrom-Json
+    $adoptedMaterial = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'material', '--root', $repo, '--run', $sourceStart.run_id, '--action', $adopted.action_id, '--section', 'requirements')) | ConvertFrom-Json
     Assert-True ($adoptedMaterial.section.markdown -match 'materially amended Windows') 'candidate adoption did not update Requirements material'
 
     $status = (Invoke-ResolvedArgv -CommandArgs @('status', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json

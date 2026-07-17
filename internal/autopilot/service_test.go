@@ -291,7 +291,7 @@ func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
 	require.Len(t, protocolErr.Next.Variants, 1)
 	variant := protocolErr.Next.Variants[0]
 	assert.Equal(t, "resume-ad-hoc", variant.ID)
-	assert.Equal(t, []string{"slipway", "_machine", "resume", run.ID, "--root", run.Workspace}, variant.BaseArgv)
+	assert.Equal(t, []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}, variant.BaseArgv)
 
 	persisted, loadErr := service.Load(run.ID)
 	require.NoError(t, loadErr)

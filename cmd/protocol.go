@@ -6,15 +6,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func makeMachineCmd() *cobra.Command {
+func makeProtocolCmd() *cobra.Command {
 	var root string
 	command := &cobra.Command{
-		Use:    "_machine",
-		Short:  "Versioned host-machine operations",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:   "protocol",
+		Short: "Machine protocol operations that generated adapters call to drive a Run",
+		// Public on purpose: these operations are the published machine-protocol
+		// contract, not an implementation detail, so the CLI must not present
+		// them as one. They stay a distinct group because their caller is a
+		// generated adapter rather than a person: each needs a Run and Action it
+		// can only learn from the Action it was handed, and every response
+		// already carries the exact next command to run.
+		Args: cobra.NoArgs,
 		RunE: func(*cobra.Command, []string) error {
-			return newUsageError("machine_operation_required", "a machine operation is required", defaultErrorNext())
+			return newUsageError("protocol_operation_required", "a protocol operation is required", defaultErrorNext())
 		},
 	}
 	command.PersistentFlags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")
@@ -23,20 +28,19 @@ func makeMachineCmd() *cobra.Command {
 		makeRunAnswerCmd(&root),
 		makeRunSkipCmd(&root),
 		makeRunResumeCmd(&root),
-		makeMachineMaterialCmd(&root),
+		makeProtocolMaterialCmd(&root),
 	)
 	return command
 }
 
-func makeMachineMaterialCmd(root *string) *cobra.Command {
+func makeProtocolMaterialCmd(root *string) *cobra.Command {
 	var runID string
 	var actionID string
 	var section string
 	command := &cobra.Command{
-		Use:    "material",
-		Short:  "Read one locally pinned Action source chapter",
-		Hidden: true,
-		Args:   cobra.NoArgs,
+		Use:   "material",
+		Short: "Read one locally pinned Action source chapter",
+		Args:  cobra.NoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", statusInspectionNextForRawRoot(*root, ""))

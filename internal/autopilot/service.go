@@ -1970,7 +1970,7 @@ func actionRequirements(workspace, runID, actionID string, source PinnedSource) 
 		Reader: ActionMaterialReader{
 			Operation: "read_material",
 			BaseArgv: []string{
-				"slipway", "_machine", "material", "--root", workspace,
+				"slipway", "protocol", "material", "--root", workspace,
 				"--run", runID, "--action", actionID,
 			},
 			Input: ActionMaterialInput{

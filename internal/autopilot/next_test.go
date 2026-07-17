@@ -286,7 +286,7 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 	valid := Next{
 		Operation: NextOperationResume, WorkspaceIdentity: workspaceID, workspaceRoot: workspace,
 		Variants: []NextVariant{{
-			ID: "resume-ad-hoc", BaseArgv: []string{"slipway", "_machine", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
+			ID: "resume-ad-hoc", BaseArgv: []string{"slipway", "protocol", "resume", "run-1", "--root", workspace}, Inputs: []NextInput{},
 		}},
 	}
 	tests := []struct {
@@ -325,34 +325,34 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 		{name: "operation family mismatch", mutate: func(next *Next) { next.Operation = NextOperationAction }, want: "operation action"},
 		{name: "answer rejects bogus prefix-only argv", mutate: func(next *Next) {
 			next.Operation = NextOperationAnswer
-			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--bogus", "x", "--root", workspace}
+			next.Variants[0].BaseArgv = []string{"slipway", "protocol", "answer", "--bogus", "x", "--root", workspace}
 		}, want: "operation answer"},
 		{name: "answer requires run", mutate: func(next *Next) {
 			next.Operation = NextOperationAnswer
-			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--action", "action-1", "--root", workspace}
+			next.Variants[0].BaseArgv = []string{"slipway", "protocol", "answer", "--action", "action-1", "--root", workspace}
 		}, want: "operation answer"},
 		{name: "answer requires action", mutate: func(next *Next) {
 			next.Operation = NextOperationAnswer
-			next.Variants[0].BaseArgv = []string{"slipway", "_machine", "answer", "--run", "run-1", "--root", workspace}
+			next.Variants[0].BaseArgv = []string{"slipway", "protocol", "answer", "--run", "run-1", "--root", workspace}
 		}, want: "operation answer"},
 		{name: "answer rejects unknown typed input", mutate: func(next *Next) {
 			next.Operation = NextOperationAnswer
 			next.Variants[0].BaseArgv = []string{
-				"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace,
+				"slipway", "protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace,
 			}
 			next.Variants[0].Inputs = []NextInput{{Name: "bogus", Type: NextInputString, Flag: "--bogus", Required: true}}
 		}, want: "unsupported flag"},
 		{name: "action rejects unknown flag", mutate: func(next *Next) {
 			next.Operation = NextOperationAction
 			next.Variants[0].BaseArgv = []string{
-				"slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
+				"slipway", "protocol", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
 				"--outcome-stdin", "--bogus",
 			}
 		}, want: "unsupported flag"},
 		{name: "action requires outcome mode", mutate: func(next *Next) {
 			next.Operation = NextOperationAction
 			next.Variants[0].BaseArgv = []string{
-				"slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
+				"slipway", "protocol", "submit", "--run", "run-1", "--action", "action-1", "--root", workspace,
 			}
 		}, want: "exactly one"},
 		{name: "resume rejects unknown flag", mutate: func(next *Next) {
@@ -362,13 +362,13 @@ func TestNextValidationRejectsAmbiguousSchemasAndPlaceholders(t *testing.T) {
 			next.Variants[0].BaseArgv = append(next.Variants[0].BaseArgv, "--source-file")
 		}, want: "requires a value"},
 		{name: "unknown resume variant", mutate: func(next *Next) { next.Variants[0].ID = "resume" }, want: "unsupported variant id"},
-		{name: "skip action grammar mismatch", mutate: func(next *Next) { next.Variants[0].ID = "skip-action" }, want: "_machine skip"},
+		{name: "skip action grammar mismatch", mutate: func(next *Next) { next.Variants[0].ID = "skip-action" }, want: "protocol skip"},
 		{name: "skip action rejects extra argv", mutate: func(next *Next) {
 			next.Variants[0].ID = "skip-action"
 			next.Variants[0].BaseArgv = []string{
-				"slipway", "_machine", "skip", "--run", "run-1", "--action", "action-1", "--root", workspace, "--extra",
+				"slipway", "protocol", "skip", "--run", "run-1", "--action", "action-1", "--root", workspace, "--extra",
 			}
-		}, want: "exact slipway _machine skip"},
+		}, want: "exact slipway protocol skip"},
 		{name: "command cannot carry run grammar", mutate: func(next *Next) {
 			next.Operation = NextOperationCommand
 			next.Variants[0].BaseArgv = []string{"slipway", "run", "--root", workspace, "--", "goal"}
@@ -400,32 +400,32 @@ func TestNextValidationRejectsUnsafeOptionCombinations(t *testing.T) {
 	}{
 		{
 			name: "destructive confirmation without scope", operation: NextOperationAnswer,
-			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive"},
+			argv:   []string{"slipway", "protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive"},
 			inputs: []NextInput{}, want: "together",
 		},
 		{
 			name: "scope without destructive confirmation", operation: NextOperationAnswer,
-			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--scope-sha256", digest},
+			argv:   []string{"slipway", "protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--scope-sha256", digest},
 			inputs: []NextInput{}, want: "together",
 		},
 		{
 			name: "invalid destructive scope digest", operation: NextOperationAnswer,
-			argv:   []string{"slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive", "--scope-sha256", "sha256:BAD"},
+			argv:   []string{"slipway", "protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", workspace, "--confirm-destructive", "--scope-sha256", "sha256:BAD"},
 			inputs: []NextInput{}, want: "lowercase sha256",
 		},
 		{
 			name: "zero resume budget", operation: NextOperationResume,
-			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "0"},
+			argv:   []string{"slipway", "protocol", "resume", "run-1", "--root", workspace, "--budget", "0"},
 			inputs: []NextInput{}, want: "positive base-10",
 		},
 		{
 			name: "zero-padded resume budget", operation: NextOperationResume,
-			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "01"},
+			argv:   []string{"slipway", "protocol", "resume", "run-1", "--root", workspace, "--budget", "01"},
 			inputs: []NextInput{}, want: "canonical positive base-10",
 		},
 		{
 			name: "oversized resume budget", operation: NextOperationResume,
-			argv:   []string{"slipway", "_machine", "resume", "run-1", "--root", workspace, "--budget", "1001"},
+			argv:   []string{"slipway", "protocol", "resume", "run-1", "--root", workspace, "--budget", "1001"},
 			inputs: []NextInput{}, want: "no greater than 1000",
 		},
 		{

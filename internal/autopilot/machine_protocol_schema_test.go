@@ -402,22 +402,22 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 		return map[string]any{"id": id, "base_argv": argv, "inputs": []any{}}
 	}
 	invalid := []map[string]any{
-		{"operation": "action", "workspace_identity": workspaceID, "variants": []any{variant("submit", "slipway", "_machine", "resume", "run-1", "--root", "/workspace")}},
+		{"operation": "action", "workspace_identity": workspaceID, "variants": []any{variant("submit", "slipway", "protocol", "resume", "run-1", "--root", "/workspace")}},
 		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "goal", "extra")}},
 		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant("bad-command", "slipway", "run", "--root", "/workspace", "--", "goal")}},
 		{"operation": "resume", "workspace_identity": workspaceID, "variants": []any{variant(
-			"skip-action", "slipway", "_machine", "skip", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--extra",
+			"skip-action", "slipway", "protocol", "skip", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--extra",
 		)}},
 		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "goal")}},
 		{"operation": "command", "workspace_identity": workspaceID, "variants": []any{variant("skip-action", "slipway", "status", "--root", "/workspace")}},
 		{"operation": "action", "workspace_identity": workspaceID, "variants": []any{variant(
-			"submit-outcome-stdin", "slipway", "_machine", "submit", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--outcome-stdin", "--extra",
+			"submit-outcome-stdin", "slipway", "protocol", "submit", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--outcome-stdin", "--extra",
 		)}},
 		{"operation": "answer", "workspace_identity": workspaceID, "variants": []any{variant(
-			"confirm-destructive", "slipway", "_machine", "answer", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--confirm-destructive",
+			"confirm-destructive", "slipway", "protocol", "answer", "--run", "run-1", "--action", "action-1", "--root", "/workspace", "--confirm-destructive",
 		)}},
 		{"operation": "resume", "workspace_identity": workspaceID, "variants": []any{variant(
-			"resume-ad-hoc", "slipway", "_machine", "resume", "run-1", "--root", "/workspace", "--budget", "1",
+			"resume-ad-hoc", "slipway", "protocol", "resume", "run-1", "--root", "/workspace", "--budget", "1",
 		)}},
 		{"operation": "start", "workspace_identity": workspaceID, "variants": []any{variant(
 			"retry-run", "slipway", "run", "--budget", "0", "--json", "--root", "/workspace", "--", "goal",
@@ -454,7 +454,7 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "--")},
 	})))
 	refreshWithBudget := variant(
-		"refresh-source", "slipway", "_machine", "resume", "run-1", "--root", "/workspace", "--budget", "9",
+		"refresh-source", "slipway", "protocol", "resume", "run-1", "--root", "/workspace", "--budget", "9",
 	)
 	refreshWithBudget["inputs"] = []any{map[string]any{
 		"name": "source_file", "type": "path", "flag": "--source-file", "required": true,

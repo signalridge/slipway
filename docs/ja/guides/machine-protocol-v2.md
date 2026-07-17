@@ -68,7 +68,7 @@ jq -n --arg action "$ORIENT_ID" '{
   review: null
 }' > orient-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$ORIENT_ID" \
   --root "$WORKSPACE" \
@@ -114,7 +114,7 @@ jq -n --arg action "$IMPLEMENT_ID" \
   review: null
 }' > implement-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$IMPLEMENT_ID" \
   --root "$WORKSPACE" \
@@ -143,7 +143,7 @@ jq -n --arg action "$SUMMARIZE_ID" '{
   review: null
 }' > summarize-outcome.json
 
-slipway _machine submit \
+slipway protocol submit \
   --run "$RUN_ID" \
   --action "$SUMMARIZE_ID" \
   --root "$WORKSPACE" \
@@ -163,4 +163,4 @@ rm -rf "$TUTORIAL_DIR"
 
 ## Issue-backed 拡張
 
-Issue-backed Run では、trusted host が source envelope を検証して private temporary file に書き、`--source-file` で一度だけ渡します。レスポンスには `pinned_source`、`action.source`、`action.requirements`、構造化された `_machine material` reader が追加されます。Manifest が参照するコメントだけを取得し、通常の discussion comment を requirement として扱わないでください。Authority と publication model は[マシンプロトコルリファレンス](../reference/machine-protocol.md)および [ADR-0001](../../../adr/0001-source-bundle-v2.md)を参照してください。
+Issue-backed Run では、trusted host が source envelope を検証して private temporary file に書き、`--source-file` で一度だけ渡します。レスポンスには `pinned_source`、`action.source`、`action.requirements`、構造化された `protocol material` reader が追加されます。Manifest が参照するコメントだけを取得し、通常の discussion comment を requirement として扱わないでください。Authority と publication model は[マシンプロトコルリファレンス](../reference/machine-protocol.md)および [ADR-0001](../../../adr/0001-source-bundle-v2.md)を参照してください。
