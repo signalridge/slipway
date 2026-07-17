@@ -10,7 +10,7 @@ flowchart LR
   Validate --> Next{What next?}
   Next -->|next Action| Action
   Action -->|skip · no reason required| Validate
-  Next -->|human/source/environment/budget/destructive scope| Paused([Paused])
+  Next -->|four reported reasons: decision (incl. changed source), environment, budget, destructive scope| Paused([Paused])
   Paused -->|answer or explicit resume| Action
   Next -->|stop / reorder / take over| Stopped([Stopped])
   Stopped -->|explicit resume| Action
@@ -169,8 +169,8 @@ flowchart LR
   <!-- outcomes -->
   <rect class="pause" x="180" y="490" width="220" height="85" rx="22"/>
   <text class="title" x="290" y="521" text-anchor="middle">Paused</text>
-  <text class="sub" x="290" y="542" text-anchor="middle">decision · source · environment</text>
-  <text class="sub" x="290" y="558" text-anchor="middle">budget · destructive scope</text>
+  <text class="sub" x="290" y="542" text-anchor="middle">decision (incl. changed source)</text>
+  <text class="sub" x="290" y="558" text-anchor="middle">environment · budget · destructive scope</text>
 
   <rect class="stop" x="490" y="490" width="220" height="85" rx="22"/>
   <text class="title" x="600" y="521" text-anchor="middle">Stopped</text>

@@ -120,7 +120,7 @@ The commands below use `./slipway`, the binary built from this checkout. If you 
 ./slipway doctor
 ```
 
-Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several hosts.
+Supported IDs are `claude`, `codex`, `copilot`, `cursor`, `kilo`, `kiro`, `opencode`, `pi`, `qwen`, and `windsurf`. Repeat `--tool` to select several hosts, or pass one comma-separated value such as `--tool claude,codex`.
 
 Kiro needs an explicit surface on its first install:
 

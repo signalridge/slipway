@@ -12,7 +12,7 @@ slipway status <run-id> --json
 
 省略 ID 时，`status` 扫描仓库的 Git common directory。属于当前 worktree 的 Run 会完整 replay；由另一个 linked worktree 创建的 Run 只显示标记为 `workspace_foreign` 的只读 header stub，必须回到其 owning worktree 才能检查或恢复完整内容。
 
-检查不会创建 recovery directory 或 lock，也不会修复 journal byte。若本地 Run 无法安全 replay，列表 JSON 会在 `unavailable_runs` 中保留其 ID 和诊断，而不是将其隐藏；应先检查或恢复 journal，再尝试 mutation。
+检查不会创建 recovery directory 或 lock，也不会修复 journal byte。若本地 Run 无法安全 replay，上面 `status` 的列表形式会在 `unavailable_runs` 中保留其 ID 和诊断，而不是将其隐藏；应先检查或恢复 journal，再尝试 mutation。
 
 指定 ID 后，status 包含当前状态和实时派生的结构化 `next` 操作。生成的宿主遵循该对象，而不是解析显示用 shell command。
 

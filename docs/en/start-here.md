@@ -58,10 +58,9 @@ An Objective can group several Changes, but it cannot start a Run. Read [Using G
 
 ## 5. Stay in control
 
-A Run may pause for one of five reasons:
+A Run reports one of four pause reasons:
 
-- a genuine human decision;
-- a changed or unavailable issue source;
+- a genuine human decision — this also covers a changed or unavailable issue source, which pauses as a decision rather than as a reason of its own;
 - an unavailable environment dependency;
 - exhaustion of the Action budget;
 - confirmation of an exact destructive scope.

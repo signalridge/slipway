@@ -72,6 +72,22 @@ They do not copy requirements Markdown into `context`. The material reader is va
 
 The versioned field for those keys is `requirements.required_for_action`. In protocol v2 it is the ordered list of every key in `requirements.sections`; hosts must preserve that exact equality rather than infer a smaller subset.
 
+The reader's `base_argv` is the authoritative invocation and is pinned to an exact nine-element sequence that begins `slipway protocol material --root ROOT --run RUN --action ACTION`. Append the section flag as separate argv elements; do not reorder it to match the synopsis above, which is written in human flag order.
+
+An Implement Action re-issued after a granted destructive confirmation carries a third variant field, `destructive_authorization`. It is absent from every other Action, so treat the two shapes above as non-exhaustive rather than modelling `kind` alone:
+
+| Field | Meaning |
+| --- | --- |
+| `request_id` | UUID of the `destructive_request` this grant answers. |
+| `originating_action_id` | The Implement Action that raised the request. |
+| `scope_version` | Always `1` in contract v2. |
+| `scope_sha256` | `sha256:<64 hex>` over the canonical scope. |
+| `targets` | The exact non-empty target list; each is a `path`, `git_ref`, `external_resource`, or `data_domain`. |
+| `impact` | The stated consequence text. |
+| `confirmed_at` | RFC 3339 UTC instant of confirmation. |
+
+Slipway recomputes `scope_sha256` from `request_id`, `targets`, and `impact` on every load and rejects the Action when it does not match. The grant authorizes that scope and nothing wider.
+
 `context` is a bounded projection of active answers and prior Outcome summaries. It is not the full journal, source, conversation, or hidden model reasoning.
 
 ## Outcome
@@ -103,7 +119,7 @@ Every public Outcome field is present. Arrays remain arrays when empty; inapplic
 
 `action_kind` must match the outstanding Action. Host status is `completed`, `needs_input`, `partial`, or `error`; skip is a CLI operation, not an Outcome status.
 
-- Orient or Clarify may suggest at most one immediate `clarify`, `implement`, or `summarize` Action.
+- Orient or Clarify may suggest at most one immediate `clarify`, `implement`, or `summarize` Action. A suggestion is advisory, not a reservation: when review is enabled and Slipway has already observed code changes, it interposes Review before honoring the suggestion.
 - A non-paused Implement uses the `implementation` branch and reports actual files, attempts, uncertainty, and test/type-check/build/lint activities with exit codes.
 - A non-paused Review uses the `review` branch and reports findings; it does not suggest repair work.
 - Summary and every `needs_input` Outcome have no suggested Action.
@@ -125,9 +141,11 @@ Every public Outcome field is present. Arrays remain arrays when empty; inapplic
 | Review | `error` | `review.result=error`, `implementation=null` | none | none |
 | Summarize | `completed` / `error` | `implementation=null`, `review=null` | none | none |
 
-Clarify intentionally has no legal `partial` combination: it carries one decision at a time. Review cannot use `needs_input` or suggest Implement, and `not_run` is a CLI-owned review-skip projection.
+Clarify intentionally has no legal `partial` combination: it carries one decision at a time. Review cannot use `needs_input` and cannot suggest any Action at all, and `not_run` is a CLI-owned review-skip projection.
 
 A `needs_input` Outcome has one pause reason: `decision_required`, `destructive_confirmation_required`, or `environment_unavailable`. `budget_exhausted` is produced only by the CLI.
+
+A pause may also carry the optional `supersedes_answer_action_id`, naming the earlier Clarify Action whose answer this pause replaces. It is legal only together with `reason: "decision_required"`.
 
 Destructive confirmation is valid only for an exact current Implement request and scope digest. Natural-language text such as “yes” is feedback, not authorization. Any Action change, resume, scope expansion, or mismatch invalidates the grant.
 
@@ -181,7 +199,7 @@ A successful resume voids stale outstanding work as required, revalidates the wo
 
 Workspace identity includes the canonical worktree root, per-worktree Git directory, and Git common directory. Every load or mutation rediscovers and compares those paths before changing a journal.
 
-Repository-wide `status` is the filesystem-read-only exception: it creates no namespace or lock, changes no permissions, and repairs no journal bytes. Runs from another linked worktree appear as FirstEvent header stubs with `workspace_foreign` and are not fully replayed outside their owning worktree. Unreadable local Run directories remain identified in list JSON as `unavailable_runs`; targeted corruption and absence are distinct errors.
+Repository-wide `status` is the filesystem-read-only exception: it creates no namespace or lock, changes no permissions, and repairs no journal bytes. Runs from another linked worktree appear as FirstEvent header stubs with `workspace_foreign` and are not fully replayed outside their owning worktree. Unreadable local Run directories remain identified as `unavailable_runs` in the JSON of `status` without a Run ID; targeted corruption and absence are distinct errors. That listing is not `slipway list`, which reports host adapters and carries no Run data.
 
 Git observations record hashes and bounded metadata for the index, porcelain status, and dirty paths. They never retain file content. A difference is evidence of change since Run start, not proof that the current host caused it.
 
@@ -195,6 +213,15 @@ Git observations record hashes and bounded metadata for the index, porcelain sta
 ## Errors and compatibility
 
 Machine errors include `contract_version`, a stable `code`, human `message`, `exit_code`, and structured recovery where available. Preserve all fields and branch on code/version, not message text.
+
+`exit_code` mirrors the process exit status and is one of two values:
+
+| Value | Meaning |
+| --- | --- |
+| `2` | Usage error: the invocation itself was wrong. |
+| `3` | Runtime error: the invocation was well-formed but the operation failed. |
+
+A process that fails without producing a structured CLI error exits `1` and emits no JSON body. Treat a `1` as a defect or an environment failure, not as a protocol outcome.
 
 `journal_record_too_large` carries the strict detail fields `context`, `size`, and `limit`, plus a read-only `status` recovery variant for the affected Run when its ID is known. Rejecting an oversized record does not end or invalidate the persistent Run.
 

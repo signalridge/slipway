@@ -120,7 +120,7 @@ yay -S slipway-bin
 ./slipway doctor
 ```
 
-支持的 ID 为 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`。可重复 `--tool` 选择多个宿主。
+支持的 ID 为 `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf`。可重复 `--tool` 选择多个宿主，也可以传入一个逗号分隔的值，例如 `--tool claude,codex`。
 
 Kiro 首次安装需要显式指定 surface：
 

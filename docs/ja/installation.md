@@ -120,7 +120,7 @@ Target Git worktree 内で実行します。
 ./slipway doctor
 ```
 
-Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の host は `--tool` を繰り返して選択します。
+Supported ID は `claude`、`codex`、`copilot`、`cursor`、`kilo`、`kiro`、`opencode`、`pi`、`qwen`、`windsurf` です。複数の host は `--tool` を繰り返すか、`--tool claude,codex` のようにカンマ区切りの値を1つ渡して選択します。
 
 Kiro の初回 install では surface を明示します。
 

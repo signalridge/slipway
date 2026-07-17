@@ -20,7 +20,7 @@ Slipway には7つの user command と、generated adapter が呼び出す `prot
 slipway install [--root PATH] [--tool ID]... [--surface ide|cli] [--refresh] [--json]
 ```
 
-`--tool` 省略時は detected host を選びます。複数 host は `--tool` を繰り返します。Kiro の初回 install では `--surface` が1つ必須です。Mixed selection では `--surface` は Kiro のみに適用され、Kiro が選択されていない場合だけ無効です。`--tool all --surface ide` と `--tool all --surface cli` は有効です。
+`--tool` 省略時は detected host を選びます。複数 host は `--tool` を繰り返すか、`--tool claude,codex` のようにカンマ区切りの値を1つ渡します。どちらの書き方も同じです。Kiro の初回 install では `--surface` が1つ必須です。Mixed selection では `--surface` は Kiro のみに適用され、Kiro が選択されていない場合だけ無効です。`--tool all --surface ide` と `--tool all --surface cli` は有効です。
 
 新規 install は作成した file だけを claim します。`--refresh` は一致する Slipway-owned file を更新し、欠落した pristine file を再作成します。Modified や unknown content は上書きされず、報告されます。
 

@@ -12,7 +12,7 @@ slipway status <run-id> --json
 
 Without an ID, `status` scans the repository's Git common directory. Runs owned by the current worktree are replayed fully. Runs created by another linked worktree appear as read-only header stubs marked `workspace_foreign`; inspect or resume them from their owning worktree.
 
-Inspection never creates recovery directories or locks and never repairs journal bytes. If a local Run cannot be replayed safely, list JSON preserves its ID and diagnostic in `unavailable_runs` instead of hiding it; inspect or restore the journal before attempting mutation.
+Inspection never creates recovery directories or locks and never repairs journal bytes. If a local Run cannot be replayed safely, the listing form of `status` above preserves its ID and diagnostic in `unavailable_runs` instead of hiding it; inspect or restore the journal before attempting mutation.
 
 With an ID, the status includes the current state and a freshly derived structured `next` operation. Generated hosts follow that object instead of parsing a displayed shell command.
 

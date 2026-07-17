@@ -12,7 +12,7 @@ slipway status <run-id> --json
 
 ID 省略時、`status` は repository の Git common directory を走査します。Current worktree の Run は完全に replay されます。別の linked worktree が作成した Run は `workspace_foreign` マーク付きの read-only header stub として表示され、完全な内容は owning worktree で確認・復旧します。
 
-Inspect は recovery directory や lock を作成せず、journal byte も修復しません。Local Run を安全に replay できない場合、list JSON はそれを隠さず、`unavailable_runs` に ID と診断を保持します。Mutation の前に journal を確認または復旧してください。
+Inspect は recovery directory や lock を作成せず、journal byte も修復しません。Local Run を安全に replay できない場合、上記の `status` の一覧形式はそれを隠さず、`unavailable_runs` に ID と診断を保持します。Mutation の前に journal を確認または復旧してください。
 
 ID を指定すると、status には現在の state と fresh 派生の structured `next` operation が含まれます。Generated host は表示用 shell command を parse せず、この object に従います。
 
