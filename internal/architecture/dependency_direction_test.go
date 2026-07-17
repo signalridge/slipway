@@ -32,33 +32,55 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 		if source != "cmd" {
 			directory = filepath.Join(root, "internal", source)
 		}
-		entries, err := os.ReadDir(directory)
-		require.NoError(t, err)
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
-				continue
+		// Walk nested directories too: a sub-package inherits its parent's
+		// allowance, so scanning only top-level files would let a wrapper
+		// package under the source tree import a forbidden target unseen.
+		require.NoError(t, filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			path := filepath.Join(directory, entry.Name())
+			if entry.IsDir() {
+				if entry.Name() == "testdata" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
+			}
 			file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-			require.NoError(t, err)
+			if err != nil {
+				return err
+			}
 			for _, spec := range file.Imports {
 				importPath, err := strconv.Unquote(spec.Path.Value)
-				require.NoError(t, err)
+				if err != nil {
+					return err
+				}
 				const prefix = "github.com/signalridge/slipway/internal/"
 				if !strings.HasPrefix(importPath, prefix) {
 					continue
 				}
 				target := strings.Split(strings.TrimPrefix(importPath, prefix), "/")[0]
+				if target == source {
+					continue
+				}
 				assert.True(t, allowed[target], "%s must not import internal/%s", path, target)
 			}
-		}
+			return nil
+		}))
 	}
 }
 
 func TestRetiredArchitecturePackagesAreAbsent(t *testing.T) {
 	t.Parallel()
 	root := repositoryRoot(t)
-	for _, name := range []string{"engine", "model", "state", "freshness", "wave", "bootstrap", "perfbaseline", "coverage", "covergate", "toolgen"} {
+	// The first group is retired scaffolding; the second is the set issue #434
+	// §16 names outright as packages that must not be introduced.
+	for _, name := range []string{
+		"engine", "model", "state", "freshness", "wave", "bootstrap", "perfbaseline", "coverage", "covergate", "toolgen",
+		"change", "spec", "plan", "lifecycle", "gate", "tracker",
+	} {
 		_, err := os.Stat(filepath.Join(root, "internal", name))
 		assert.ErrorIs(t, err, os.ErrNotExist, name)
 	}
