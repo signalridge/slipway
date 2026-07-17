@@ -234,7 +234,7 @@ func TestOpenReadOnlyRejectsMutationsAndDoesNotCreateLocks(t *testing.T) {
 		return nil, nil, nil
 	})
 	assert.ErrorIs(t, err, ErrReadOnly)
-	err = store.PutMaterials("run-one", nil)
+	err = putTestMaterials(store, "run-one", nil)
 	assert.ErrorIs(t, err, ErrReadOnly)
 }
 

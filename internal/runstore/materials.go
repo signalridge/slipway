@@ -175,29 +175,6 @@ func (leaf *materialLeafGuard) validate(root *os.Root) error {
 	return nil
 }
 
-// PutMaterials makes all supplied materials durable before returning. Existing
-// matching blobs are accepted idempotently; mismatched blobs fail closed.
-func (store *Store) PutMaterials(runID string, materials []Material) error {
-	if err := store.requireWritable(); err != nil {
-		return err
-	}
-	if len(materials) == 0 {
-		return nil
-	}
-	run, err := store.openRunRoot(runID)
-	if err != nil {
-		return err
-	}
-	defer run.Close()
-	return withRunLock(run, nil, func(_ *runTransaction) error {
-		guard, err := store.putMaterials(run, materials)
-		if err != nil {
-			return err
-		}
-		return errors.Join(guard.validate(), guard.close())
-	})
-}
-
 func (store *Store) putMaterials(run *runHandle, materials []Material) (*materialGuard, error) {
 	if len(materials) == 0 {
 		return nil, nil
@@ -343,16 +320,6 @@ func putMaterial(guard *materialGuard, filename string, material Material) error
 	}
 	_, err = readMaterialFile(root, filename, material.Digest)
 	return err
-}
-
-// ReadMaterial returns a bounded blob after revalidating its content digest.
-func (store *Store) ReadMaterial(runID, digest string) ([]byte, error) {
-	run, err := store.openRunRoot(runID)
-	if err != nil {
-		return nil, err
-	}
-	defer run.Close()
-	return store.readMaterial(run, digest)
 }
 
 // VisitWithMaterialReader replays the authoritative journal and performs a

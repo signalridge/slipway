@@ -15,6 +15,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// putTestMaterials and readTestMaterial drive the material core directly so the
+// tests below can exercise validation, idempotency, digest revalidation, and
+// conflict handling without standing up a journal event for each case. They stay
+// in the test build because production has no single-shot material call: it
+// writes materials together with their journal event through CreateWithMaterials
+// and UpdateStreamWithMaterials, and reads them under the run lock through
+// VisitWithMaterialReader, which keeps a journal-derived decision from going
+// stale before the bytes are read. Exporting either shape from Store again would
+// offer a caller that guarantee-free shortcut.
+func putTestMaterials(store *Store, runID string, materials []Material) error {
+	if err := store.requireWritable(); err != nil {
+		return err
+	}
+	if len(materials) == 0 {
+		return nil
+	}
+	run, err := store.openRunRoot(runID)
+	if err != nil {
+		return err
+	}
+	defer run.Close()
+	return withRunLock(run, nil, func(_ *runTransaction) error {
+		guard, err := store.putMaterials(run, materials)
+		if err != nil {
+			return err
+		}
+		return errors.Join(guard.validate(), guard.close())
+	})
+}
+
+func readTestMaterial(store *Store, runID, digest string) ([]byte, error) {
+	run, err := store.openRunRoot(runID)
+	if err != nil {
+		return nil, err
+	}
+	defer run.Close()
+	return store.readMaterial(run, digest)
+}
+
 func TestStorePersistsAndRevalidatesContentAddressedMaterials(t *testing.T) {
 	repository := createRepository(t)
 	store, err := Open(repository)
@@ -33,10 +72,10 @@ func TestStorePersistsAndRevalidatesContentAddressedMaterials(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	read, err := store.ReadMaterial("run-material", digest)
+	read, err := readTestMaterial(store, "run-material", digest)
 	require.NoError(t, err)
 	assert.Equal(t, content, read)
-	require.NoError(t, store.PutMaterials("run-material", []Material{{Digest: digest, Data: content}}))
+	require.NoError(t, putTestMaterials(store, "run-material", []Material{{Digest: digest, Data: content}}))
 
 	filename, err := materialFilename(digest)
 	require.NoError(t, err)
@@ -55,7 +94,7 @@ func TestStorePersistsAndRevalidatesContentAddressedMaterials(t *testing.T) {
 	assert.NotContains(t, string(journal), "Preserve exact bytes")
 
 	require.NoError(t, os.WriteFile(materialPath, []byte(strings.Repeat("x", len(content))), 0o600))
-	_, err = store.ReadMaterial("run-material", digest)
+	_, err = readTestMaterial(store, "run-material", digest)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "corrupt")
 }
@@ -195,7 +234,7 @@ func TestStoreRejectsInvalidMaterialInputsAndUnsafeLeaves(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := store.PutMaterials("run-material-invalid", []Material{test.material})
+			err := putTestMaterials(store, "run-material-invalid", []Material{test.material})
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), test.want)
 		})
@@ -204,13 +243,13 @@ func TestStoreRejectsInvalidMaterialInputsAndUnsafeLeaves(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	require.NoError(t, store.PutMaterials("run-material-invalid", []Material{{Digest: digest, Data: content}}))
+	require.NoError(t, putTestMaterials(store, "run-material-invalid", []Material{{Digest: digest, Data: content}}))
 	filename, err := materialFilename(digest)
 	require.NoError(t, err)
 	materialPath := filepath.Join(store.CommonDir(), "slipway", "runs", "run-material-invalid", materialsDirectoryName, filename)
 	require.NoError(t, os.Remove(materialPath))
 	require.NoError(t, os.Symlink(filepath.Join(repository, "README.md"), materialPath))
-	_, err = store.ReadMaterial("run-material-invalid", digest)
+	_, err = readTestMaterial(store, "run-material-invalid", digest)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "regular file")
 }
@@ -234,7 +273,7 @@ func TestMaterialCommitNeverOverwritesConflictingDestination(t *testing.T) {
 	before, err := os.Stat(path)
 	require.NoError(t, err)
 
-	err = store.PutMaterials("run-material-conflict", []Material{{Digest: digest, Data: content}})
+	err = putTestMaterials(store, "run-material-conflict", []Material{{Digest: digest, Data: content}})
 	require.Error(t, err)
 	after, statErr := os.Stat(path)
 	require.NoError(t, statErr)
@@ -256,7 +295,7 @@ func TestMaterialsReplacementBeforeJournalAppendKeepsJournalUnchanged(t *testing
 	require.NoError(t, createOneRun(store, runID))
 
 	seed := []byte("seed")
-	require.NoError(t, store.PutMaterials(runID, []Material{{Digest: materialDigest(seed), Data: seed}}))
+	require.NoError(t, putTestMaterials(store, runID, []Material{{Digest: materialDigest(seed), Data: seed}}))
 	runDirectory := filepath.Join(store.CommonDir(), "slipway", "runs", runID)
 	materialDirectory := filepath.Join(runDirectory, materialsDirectoryName)
 	journalPath := filepath.Join(runDirectory, journalFileName)
@@ -335,7 +374,7 @@ func TestMaterialMutationThroughPinnedInodeDuringJournalCommitIsReportedCommitte
 	assert.True(t, mutationErr.ProjectionStale)
 	assert.Contains(t, mutationErr.Error(), "material")
 	assertReplayContainsOneUpdate(t, store, runID)
-	_, err = store.ReadMaterial(runID, digest)
+	_, err = readTestMaterial(store, runID, digest)
 	assert.Error(t, err)
 }
 
