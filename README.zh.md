@@ -32,6 +32,8 @@ orient → 必要时 clarify → implement → 代码已变化且启用时 revie
 
 宿主负责实际工作；Slipway CLI 记录 Run、选择下一个 Action、独立观察仓库变化并提供结构化恢复。它不调用模型、不持有 GitHub token，也不替用户判断软件是否可以合并或发布。
 
+![Slipway Run 生命周期：显式启动后进入每次一个 Action 的循环——CLI 下发一个 Action，宿主执行并返回结构化 Outcome，CLI 校验、记录并独立观察 Git，再决定下一步。用户可以无需理由地 skip，也可以 stop 或 resume。ended 只表示自动 Action 队列为空，并不代表工作正确、已合并、已部署或可以发布。](docs/assets/diagrams/lifecycle.svg)
+
 > [!IMPORTANT]
 > 请使用 `slipway --help` 中包含 `install`、`uninstall`、`list`、`doctor`、
 > `run`、`status`、`stop` 的版本。包管理渠道可能落后于仓库；在包含这套接口的

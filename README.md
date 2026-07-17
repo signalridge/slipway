@@ -35,6 +35,8 @@ The host performs the work. The Slipway CLI records the Run, chooses the next Ac
 observes repository changes, and provides structured recovery. It does not call a model,
 hold a GitHub token, or decide that the software is ready to merge or release.
 
+![Slipway Run lifecycle: an explicit start enters a one-Action-at-a-time loop in which the CLI issues an Action, the host performs it and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing what happens next. The user can skip without a reason, stop, or resume. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.](docs/assets/diagrams/lifecycle.svg)
+
 > [!IMPORTANT]
 > Use a build whose `slipway --help` lists `install`, `uninstall`, `list`, `doctor`,
 > `run`, `status`, and `stop`. Package-manager channels can lag the repository. Until a
