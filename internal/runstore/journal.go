@@ -95,26 +95,6 @@ func (run *runHandle) readOnlyJournalContext() journalContext {
 	}
 }
 
-func newStandaloneJournalContext(root *os.Root) (journalContext, error) {
-	directory, err := root.Open(".")
-	if err != nil {
-		return journalContext{}, err
-	}
-	identity, statErr := directory.Stat()
-	closeErr := directory.Close()
-	if statErr != nil {
-		return journalContext{}, statErr
-	}
-	if closeErr != nil {
-		return journalContext{}, closeErr
-	}
-	context := journalContext{root: root}
-	context.validate = func(_ MutationPhase, _ faultPoint) error {
-		return validateOpenedDirectoryRoot(root, identity)
-	}
-	return context, nil
-}
-
 func (context journalContext) check(phase MutationPhase, point faultPoint) error {
 	if context.validate == nil {
 		return errors.New("journal namespace validator is required")

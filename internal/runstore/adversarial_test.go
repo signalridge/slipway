@@ -594,13 +594,13 @@ func TestOpenResyncsExistingNamespaceDurability(t *testing.T) {
 }
 
 func TestMutationErrorSupportsErrorsIsAndAs(t *testing.T) {
-	err := mutationFailure(PhaseProjectionSync, true, true, false, false, errInjectedRunstoreFault)
+	err := mutationFailure(PhaseProjectionFsync, true, true, false, false, errInjectedRunstoreFault)
 	assert.ErrorIs(t, err, errInjectedRunstoreFault)
 	var mutationErr *MutationError
 	require.ErrorAs(t, err, &mutationErr)
 	assert.True(t, mutationErr.Committed)
 	assert.True(t, mutationErr.ProjectionStale)
-	assert.Equal(t, PhaseProjectionSync, mutationErr.Phase)
+	assert.Equal(t, PhaseProjectionFsync, mutationErr.Phase)
 }
 
 func TestPlatformDurabilityCapabilityIsStable(t *testing.T) {

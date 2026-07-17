@@ -29,7 +29,6 @@ const (
 	PhaseJournalSync             MutationPhase = "journal_sync"
 	PhaseJournalVerify           MutationPhase = "journal_verify"
 	PhaseProjectionRename        MutationPhase = "projection_rename"
-	PhaseProjectionSync          MutationPhase = "projection_sync"
 	PhaseNamespaceVerify         MutationPhase = "namespace_verify"
 )
 
