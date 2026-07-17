@@ -82,8 +82,12 @@ func (transaction *runTransaction) validate(phase MutationPhase, point faultPoin
 	if err := transaction.run.validate(); err != nil {
 		return transaction.tracker.fail(phase, transaction.tracker != nil && transaction.tracker.wroteJournal, err)
 	}
+	// A replaceable in-directory lock is not namespace identity: only the
+	// anchored run directory above proves path membership. Report a replaced
+	// lock through the journal-derived committed/ambiguous state instead, so a
+	// durably committed mutation stays a determinate outcome.
 	if err := verifyOpenedRegularFileInRoot(transaction.run.root, lockFileName, transaction.lock); err != nil {
-		return transaction.tracker.fail(phase, transaction.tracker != nil && transaction.tracker.wroteJournal, fmt.Errorf("run lock changed after acquisition: %w", err))
+		return transaction.tracker.fail(phase, false, fmt.Errorf("run lock changed after acquisition: %w", err))
 	}
 	return nil
 }
