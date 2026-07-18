@@ -266,11 +266,12 @@ roots = {
     "cursor": ".cursor", "kilo": ".kilocode", "kiro": ".kiro",
     "opencode": ".opencode", "pi": ".pi", "qwen": ".qwen", "windsurf": ".windsurf",
 }
-capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review"]
+capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review", "slipway-workflow"]
 specific = {
     "slipway-run": ["`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "Source Bundle v2 envelope", "fetch exactly its declared comment node IDs", "Redact recognized credentials while preserving command identity"],
     "slipway-propose": ["exactly one `level:change`", "exactly one `level:objective`", "official GitHub REST API", "same-host redirect or transfer", "100 sub-issues per parent", "timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`"],
     "slipway-decompose": ["missing or conflicting labels never block decomposition", "exactly one `level:change`", "official REST API", "cross-host redirects", "exactly 100 children", "duplicate marker matches"],
+    "slipway-workflow": ["stateless only in the Slipway sense", "self-contained and must work when no Matt Pocock skill is installed", "Never invoke a user-only front door", "`code-review` even when it is model-reachable", "Model-invocable primitives are optional accelerators", "model-invocable `/grilling` primitive", "run the `/grilling` skill", "Artifact-producing primitives", "For an Objective, instead produce its distinct planning shape", "not an approved publication plan", "Publication and Run start are two deliberate authorization boundaries", "`budget_exhausted` pause is normal", "`max(initial_budget, 3)`"],
 }
 def canonical(host, capability):
     if host in {"claude", "codex", "cursor", "pi", "qwen"}:
@@ -297,7 +298,7 @@ with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 assert report["transaction_outcome"] == "committed", report
 assert report["hosts"] == hosts, report
-assert len(report["written"]) == 120, report
+assert len(report["written"]) == 135, report
 expected_files = {"README.md", ".pi/settings.json"}
 expected_files.update(f"{roots[host]}/user.keep" for host in hosts)
 expected_files.update(f"{roots[host]}/slipway/user.keep" for host in hosts)
@@ -348,7 +349,7 @@ import json
 import sys
 
 hosts = ["claude", "codex", "copilot", "cursor", "kilo", "kiro", "opencode", "pi", "qwen", "windsurf"]
-capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review"]
+capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review", "slipway-workflow"]
 with open(sys.argv[1], encoding="utf-8") as stream:
     listed_report = json.load(stream)
 assert set(listed_report) == {"contract_version", "hosts"}, listed_report
@@ -555,5 +556,87 @@ for item in listed:
     assert item["capabilities"] == [], item
 PY
 [ "$(cat "$LEGACY_RESIDUE")" = '{"legacy":true}' ] || fail 'legacy runtime residue was modified'
+
+# Kiro CLI is a distinct generated surface, not an alias of the IDE steering
+# surface. Exercise its full install/list/doctor/refresh/uninstall lifecycle.
+KIRO_CLI_REPO="$TMP_ROOT/kiro-cli-repository"
+mkdir -p "$KIRO_CLI_REPO"
+git -C "$KIRO_CLI_REPO" init -q
+git -C "$KIRO_CLI_REPO" config user.email acceptance@example.invalid
+git -C "$KIRO_CLI_REPO" config user.name 'Slipway Acceptance'
+printf '# Kiro CLI adapter acceptance\n' > "$KIRO_CLI_REPO/README.md"
+git -C "$KIRO_CLI_REPO" add README.md
+git -C "$KIRO_CLI_REPO" commit -qm initial
+"$BIN" install --root "$KIRO_CLI_REPO" --tool kiro --surface cli --json > "$TMP_ROOT/kiro-cli-install.json"
+"$BIN" list --root "$KIRO_CLI_REPO" --json > "$TMP_ROOT/kiro-cli-list.json"
+"$BIN" doctor --root "$KIRO_CLI_REPO" --json > "$TMP_ROOT/kiro-cli-doctor.json"
+python3 -I - "$KIRO_CLI_REPO" "$TMP_ROOT/kiro-cli-install.json" "$TMP_ROOT/kiro-cli-list.json" "$TMP_ROOT/kiro-cli-doctor.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+repo = Path(sys.argv[1])
+capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review", "slipway-workflow"]
+with open(sys.argv[2], encoding="utf-8") as stream:
+    install = json.load(stream)
+assert install["transaction_outcome"] == "committed", install
+for capability in capabilities:
+    agent_path = repo / ".kiro/agents" / f"{capability}.json"
+    body_path = repo / ".kiro/slipway/capabilities" / f"{capability}.md"
+    agent = json.loads(agent_path.read_text(encoding="utf-8"))
+    assert set(agent) == {"name", "description", "prompt", "tools"}, agent
+    assert agent["name"] == capability, agent
+    assert agent["description"], agent
+    assert agent["prompt"] == f"file://../slipway/capabilities/{capability}.md", agent
+    assert agent["tools"] == ["*"], agent
+    assert body_path.is_file(), body_path
+manifest = json.loads((repo / ".kiro/slipway/ownership-manifest.json").read_text(encoding="utf-8"))
+assert manifest["surface"] == {"kiro": "cli"}, manifest
+assert len(manifest["files"]) == 15, manifest
+with open(sys.argv[3], encoding="utf-8") as stream:
+    listed = json.load(stream)
+kiro = next(item for item in listed["hosts"] if item["id"] == "kiro")
+assert kiro["installed"] is True and kiro["needs_refresh"] is False, kiro
+assert kiro["capabilities"] == capabilities, kiro
+with open(sys.argv[4], encoding="utf-8") as stream:
+    doctor = json.load(stream)
+check = next(item for item in doctor["checks"] if item["host_id"] == "kiro" and item["name"] == "adapter")
+assert check["code"] == "adapter_healthy" and check["detail"] == "15 managed files", check
+PY
+rm -f "$KIRO_CLI_REPO/.kiro/agents/slipway-workflow.json"
+"$BIN" list --root "$KIRO_CLI_REPO" --json > "$TMP_ROOT/kiro-cli-degraded.json"
+python3 -I - "$TMP_ROOT/kiro-cli-degraded.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+kiro = next(item for item in report["hosts"] if item["id"] == "kiro")
+assert kiro["needs_refresh"] is True, kiro
+assert "slipway-workflow" not in kiro["capabilities"], kiro
+PY
+"$BIN" install --root "$KIRO_CLI_REPO" --tool kiro --refresh --json > "$TMP_ROOT/kiro-cli-refresh.json"
+"$BIN" list --root "$KIRO_CLI_REPO" --json > "$TMP_ROOT/kiro-cli-refreshed-list.json"
+python3 -I - "$TMP_ROOT/kiro-cli-refreshed-list.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    report = json.load(stream)
+kiro = next(item for item in report["hosts"] if item["id"] == "kiro")
+assert kiro["needs_refresh"] is False, kiro
+assert "slipway-workflow" in kiro["capabilities"], kiro
+PY
+"$BIN" uninstall --root "$KIRO_CLI_REPO" --tool kiro --json > "$TMP_ROOT/kiro-cli-uninstall.json"
+python3 -I - "$KIRO_CLI_REPO" "$TMP_ROOT/kiro-cli-uninstall.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+repo = Path(sys.argv[1])
+with open(sys.argv[2], encoding="utf-8") as stream:
+    report = json.load(stream)
+assert report["transaction_outcome"] == "committed", report
+assert not (repo / ".kiro/slipway/ownership-manifest.json").exists()
+assert not any((repo / ".kiro/agents").glob("slipway-*.json"))
+assert not any((repo / ".kiro/slipway/capabilities").glob("slipway-*.md"))
+PY
 
 printf 'adapter acceptance: ok\n'

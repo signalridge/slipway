@@ -122,6 +122,13 @@ start an issue-backed Run. Repository ownership by a personal account or an orga
 is not part of the source format. Slipway does not require GitHub Projects,
 organization-only Issue Types, or organization-only fields.
 
+The generated `workflow` capability autonomously turns a rough idea into a
+ready-to-publish Change or Objective draft — investigating facts, grilling genuine
+decisions one at a time, and synthesizing the correct work-item shape — then names the
+next explicit capability. It is self-contained, but may reuse Matt Pocock's installed,
+model-invocable `/grilling` primitive; it never invokes Matt's user-only front doors,
+writes to GitHub, or starts a Run itself.
+
 Generated `propose` and `decompose` capabilities can help prepare Issues. Those are
 host-side operations: the host previews external writes, uses the user's GitHub access,
 and reports partial or failed publication. The Run/source core neither fetches nor
@@ -155,6 +162,7 @@ sensitive material.
 
 - [Start here](docs/en/start-here.md)
 - [Installation](docs/en/installation.md)
+- [Idea-to-Run workflow](docs/en/guides/idea-to-run-workflow.md)
 - [GitHub Issue workflow](docs/en/guides/github-issues.md)
 - [Runs, recovery, and privacy](docs/en/guides/runs-and-recovery.md)
 - [Core concepts](docs/en/explanation/concepts.md)

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">Slipway process architecture</title>
-  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work. It exchanges versioned JSON with the local Slipway CLI: the host submits one strict Outcome and the CLI returns one Action at a time. The CLI validates and schedules work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. The CLI never calls a model or a GitHub API, and credentials stay with the host.</desc>
+  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work. When a Run-backed capability is active, the host exchanges versioned JSON with the local Slipway CLI: the host submits one strict Outcome and the CLI returns one Action at a time. Planning-only workflow, propose, and decompose activity remains host-side until a later explicit Run. The CLI validates and schedules Run work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. The CLI never calls a model or a GitHub API, and credentials stay with the host.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
   User([Human operator]) -->|explicit invocation| Capability[Generated host capability]
@@ -15,8 +15,8 @@ flowchart LR
     Store[(Run store · journal / projection / materials)]
     CLI --> Store
   end
-  Agent -->|Outcome · strict JSON| CLI
-  CLI -->|one Action at a time| Agent
+  Agent -->|Run-backed Outcome · strict JSON| CLI
+  CLI -->|one Run Action at a time| Agent
   CLI -->|observes Git independently| Repo
 ]]></metadata>
   <defs>
@@ -129,8 +129,9 @@ flowchart LR
   <rect class="capability" x="270" y="132" width="490" height="80" rx="13"/>
   <circle cx="292" cy="157" r="5" fill="var(--capability-stroke)"/>
   <text class="title" x="308" y="162">Generated host capability</text>
-  <text class="mono" x="515" y="184" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
-  <text class="mono" x="515" y="203" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
+  <text class="mono" x="515" y="174" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
+  <text class="mono" x="515" y="190" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
+  <text class="mono" x="515" y="206" text-anchor="middle">slipway-workflow</text>
 
   <rect class="host" x="270" y="250" width="490" height="100" rx="15"/>
   <text class="title-big" x="515" y="285" text-anchor="middle">AI coding host</text>
@@ -185,18 +186,18 @@ flowchart LR
   <rect class="label-bg" x="150" y="238" width="104" height="17" rx="5"/>
   <text class="edge-label" x="156" y="251">explicit invocation</text>
 
-  <rect class="label-bg" x="778" y="258" width="84" height="17" rx="5"/>
-  <text class="edge-label" x="784" y="271">Outcome</text>
+  <rect class="label-bg" x="768" y="258" width="104" height="17" rx="5"/>
+  <text class="edge-label" x="774" y="271">Run Outcome</text>
 
   <rect class="label-bg" x="776" y="292" width="88" height="17" rx="5"/>
   <text class="edge-label" x="782" y="305">versioned JSON</text>
 
-  <rect class="label-bg" x="778" y="326" width="84" height="17" rx="5"/>
-  <text class="edge-label" x="784" y="339">one Action</text>
+  <rect class="label-bg" x="768" y="326" width="104" height="17" rx="5"/>
+  <text class="edge-label" x="774" y="339">one Run Action</text>
 
   <rect class="label-bg" x="786" y="404" width="70" height="17" rx="5"/>
   <text class="edge-label" x="792" y="417">observes Git</text>
 
   <rect class="note" x="40" y="578" width="1120" height="30" rx="10"/>
-  <text class="sub" x="600" y="598" text-anchor="middle">The CLI never calls a model or GitHub API · credentials stay with the host · repository policy, CI, merge, and release remain independent</text>
+  <text class="sub" x="600" y="598" text-anchor="middle">Only Run-backed paths exchange Action/Outcome JSON · planning remains host-side · the CLI never calls a model or GitHub API</text>
 </svg>

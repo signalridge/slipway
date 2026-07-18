@@ -100,6 +100,8 @@ Next choices:
 
 GitHub Objective Issue は複数の Change をまとめられますが、issue-backed Run を開始できるのは 自己完結型 Change だけです。Source format は リポジトリ が個人 account と Organization のどちらに所有されるかを区別しません。Slipway は GitHub Projects、Organization 専用 Issue Types、Organization 専用 field を必要としません。
 
+生成された `workflow` capability は rough idea を publish 可能な Change または Objective draft へ自律的に進めます。Fact を調査し、genuine な human decision を 1 つずつ問い、正しい work-item shape を合成して、次に明示的に呼び出す capability を示します。Self-contained ですが、Matt Pocock の installed かつ model-invocable な `/grilling` primitive は再利用できます。Matt の user-only front door は呼び出さず、自身では GitHub に書き込まず、Run も開始しません。
+
 生成された `propose` と `decompose` capability は Issue の準備を支援します。これらは host-side operation です。ホストが external write を preview し、ユーザーの GitHub access を使い、partial success や failure を報告します。Run/source core は GitHub data を fetch/publish せず、認証情報 も保存しません。独立した `doctor` command は read-only diagnosis のためにユーザー環境の `gh` を呼び出す場合があります。
 
 ## 制御と復旧
@@ -122,6 +124,7 @@ Run data は リポジトリ の Git common directory にある `<git-common-dir
 
 - [はじめに](docs/ja/start-here.md)
 - [インストール](docs/ja/installation.md)
+- [アイデアから Run までのワークフロー](docs/ja/guides/idea-to-run-workflow.md)
 - [GitHub Issue ワークフロー](docs/ja/guides/github-issues.md)
 - [Run、復旧、プライバシー](docs/ja/guides/runs-and-recovery.md)
 - [コア概念](docs/ja/explanation/concepts.md)

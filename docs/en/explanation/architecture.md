@@ -2,7 +2,7 @@
 
 Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning model or GitHub credentials.
 
-![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while versioned JSON connects it to the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while only Run-backed paths exchange versioned JSON with the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
 
 ## Process boundaries
 
@@ -75,7 +75,7 @@ For issue-backed work, the trusted host fetches the Issue and manifest-reference
 
 Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
 
-The design rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The complete contract in issue #434 and the versioned schemas are normative; runtime tests are executable evidence of the current implementation.
+The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The base contract in issue #434, later accepted ADRs, and the versioned schemas together define the intended contract; [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) narrowly supersedes every exact-six host-capability statement in the issue and reaffirms the no-router boundary. Runtime tests are executable evidence of the current implementation, not a replacement for those sources.
 
 ## Security boundary
 

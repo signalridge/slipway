@@ -390,7 +390,15 @@ func List(root string) ([]HostStatus, error) {
 					inspection.StaleClaims,
 				)
 			}
-			status.Capabilities = healthyCapabilities(host, manifest, inspection.HealthyFiles)
+			capabilities, err := healthyCapabilities(host, manifest, inspection.HealthyFiles)
+			if err != nil {
+				if status.Warning != "" {
+					status.Warning += "; "
+				}
+				status.Warning += "managed capabilities could not be classified: " + err.Error()
+			} else {
+				status.Capabilities = capabilities
+			}
 		}
 		statuses = append(statuses, status)
 	}
@@ -1158,17 +1166,23 @@ func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (
 	return inspection, nil
 }
 
-func healthyCapabilities(_ Host, manifest ownershipManifest, healthyFiles map[string]bool) []string {
+func healthyCapabilities(host Host, manifest ownershipManifest, healthyFiles map[string]bool) ([]string, error) {
+	desired, err := generateHostFiles(host)
+	if err != nil {
+		return nil, err
+	}
+	manifestFiles := manifestIndex(manifest)
 	capabilities := make([]string, 0, len(capabilityNames))
 	for _, capability := range capabilityNames {
 		found := false
 		healthy := true
-		for _, file := range manifest.Files {
-			if !strings.Contains(file.Path, capability) {
+		for _, file := range desired {
+			if file.Capability != capability {
 				continue
 			}
 			found = true
-			if !healthyFiles[file.Path] {
+			record, claimed := manifestFiles[file.Relative]
+			if !claimed || record.SHA256 != hashBytes(file.Data) || !healthyFiles[file.Relative] {
 				healthy = false
 			}
 		}
@@ -1176,7 +1190,7 @@ func healthyCapabilities(_ Host, manifest ownershipManifest, healthyFiles map[st
 			capabilities = append(capabilities, capability)
 		}
 	}
-	return capabilities
+	return capabilities, nil
 }
 
 func managedSurfaceComplete(host Host, manifest ownershipManifest) (bool, error) {
