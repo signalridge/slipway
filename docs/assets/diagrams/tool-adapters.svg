@@ -204,7 +204,7 @@ flowchart TB
 
   <rect class="violet" x="1020" y="562" width="130" height="58" rx="10"/>
   <text class="mono" x="1085" y="588" text-anchor="middle">slipway-workflow</text>
-  <text class="tiny" x="1085" y="606" text-anchor="middle">idea to draft</text>
+  <text class="tiny" x="1085" y="606" text-anchor="middle">lifecycle routing</text>
 
   <!-- explicit runtime path -->
   <rect class="card" x="70" y="715" width="210" height="70" rx="14"/>

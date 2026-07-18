@@ -20,4 +20,4 @@ All scenarios use the same baseline: explicit invocation only; repository facts 
 | [10](10-no-implicit-materialization.md) | Clarification never materializes docs implicitly |
 | [11](11-destructive-confirmation.md) | Destructive work requires exact structured authorization |
 | [12](12-activity-truth.md) | An unstarted activity is never reported as run |
-| [13](13-workflow-orchestration.md) | Rough idea becomes the correct draft without crossing publication or Run boundaries |
+| [13](13-workflow-orchestration.md) | Workflow routes every #434 function and lifecycle provenance class without becoming a skill router or crossing explicit capability boundaries |

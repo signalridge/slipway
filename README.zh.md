@@ -99,7 +99,7 @@ Next choices:
 
 GitHub Objective Issue 可以组织多个 Change，但只有自包含 Change 能启动 issue-backed Run。来源格式不区分仓库属于个人账号还是 Organization。Slipway 不依赖 GitHub Projects、Organization 专属 Issue Types 或专属字段。
 
-生成的 `workflow` 能力可以把粗略想法自主推进为可发布的 Change 或 Objective 草稿——调查事实、就真正的人类决策逐一追问，并综合出正确的 work-item 形态——随后点名下一项明确调用的能力。它本身自包含，但可以复用 Matt Pocock 已安装且允许 model invocation 的 `/grilling` primitive；它不会调用 Matt 的 user-only 前门，也不会自行写入 GitHub 或启动 Run。
+生成的 `workflow` 能力负责衔接 Slipway Issue 工作流中的产品功能。无论起点是粗略想法、Objective、Change 还是已有 Run，它都会先核实当前阶段，再点名最短的下一项显式调用能力或明确的 no-further-action outcome；需要时可以调查事实、逐一访谈真正的人类决策并综合 work-item 草稿，但不会充当通用 skill 路由器。它本身自包含，只可复用已经安装且允许 model invocation 的 `/grilling` primitive；它不会调用 user-only 前门，也不会自行写入 GitHub 或启动 Run。
 
 生成的 `propose` 和 `decompose` 能力可以协助准备 Issue。这些是宿主侧操作：宿主预览所有外部写入，使用用户自己的 GitHub 权限，并如实报告部分成功或失败。Run/source core 不获取或发布 GitHub 数据，也不保存凭据；独立的 `doctor` 命令可能调用用户本机的 `gh` 做只读诊断。
 

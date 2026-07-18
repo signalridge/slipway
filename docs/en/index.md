@@ -12,7 +12,7 @@ Slipway wraps an AI coding host in a small, user-controlled workflow. Start with
 
 ## Guides
 
-- [Idea-to-Run workflow](guides/idea-to-run-workflow.md) — autonomously sharpen a rough idea while preserving publication and Run authorization boundaries.
+- [Idea-to-Run workflow](guides/idea-to-run-workflow.md) — route a rough idea, Objective, Change, or existing Run across Slipway's user-owned function boundaries.
 - [GitHub Issues](guides/github-issues.md) — when to use an Objective or Change and how issue-backed Runs work.
 - [Runs, recovery, and privacy](guides/runs-and-recovery.md) — inspect, stop, resume, retain, or remove a Run.
 - [Machine protocol v2 tutorial](guides/machine-protocol-v2.md) — run a complete host integration lifecycle with strict Outcomes.

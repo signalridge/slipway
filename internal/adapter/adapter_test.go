@@ -2,12 +2,14 @@ package adapter
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -25,6 +27,18 @@ func TestRegistryAndInstallGenerateOnlySevenExplicitCapabilitiesForEveryHost(t *
 
 	written := 0
 	clarifyReferences := 0
+	workflowRouteFragments := []string{
+		"| Rough idea, clarified conversation, or non-authoritative planning artifact | Investigate, settle decisions, choose one Change or Objective, and produce its complete draft | `slipway-propose` |",
+		"| Explicit standalone decision-only clarification request, with no draft or materialization desired | Explain the stateless decision-summary boundary without starting the interview here | `slipway-clarify` |",
+		"| Structurally valid Objective | Explain its planning role and the need for self-contained child Changes | `slipway-decompose` |",
+		"| Structurally valid, self-contained `change/v2` Issue with no selected Run | Confirm the source route and state the effective budget | `slipway-run` |",
+		"| Explicit private, tiny, urgent, offline, or deliberately untracked bounded goal | State the sharpened bounded goal and the already-selected no-Issue source route | `slipway-run` for a new ad-hoc Run |",
+		"| Active Run | Report the exact current Action and its submit/skip variants; state that stop uses public `slipway stop` and take-over/reorder first stop and hand control back | `slipway-run` |",
+		"| Paused or stopped Run | Report the exact Run and its structured recovery choice without changing it | `slipway-run` |",
+		"| Failed, partial, or ambiguous Propose/Decompose publication | Preserve and return every available receipt, operation, item, and revision fact; report the exact unresolved state | The originating `slipway-propose` or `slipway-decompose` owner decides same-receipt reconciliation or a contract-required fresh preview and confirmation |",
+		"| Ended Run or advisory Review findings | Explain that ended is terminal and no completion was certified; offer no further action, new tracked scope, or a provenance-correct new Run attempt without making findings a gate | No capability when the user stops; otherwise `slipway-propose` or `slipway-run` after that one genuine choice |",
+		"| Explicit standalone implementation or review request | Explain that it has no Run attribution or pinned source | `slipway-implement` or `slipway-review`, only when the user deliberately wants the standalone path |",
+	}
 	specificFragments := map[string][]string{
 		"slipway-run": {
 			"`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`",
@@ -40,13 +54,18 @@ func TestRegistryAndInstallGenerateOnlySevenExplicitCapabilitiesForEveryHost(t *
 			"cross-host redirects", "exactly 100 children", "exactly 50 blocking dependencies", "exactly 50 blocked-by dependencies", "one confirmed operation", "must not trigger another confirmation", "duplicate marker matches",
 			"`created`, `matched`, `failed`, or `ambiguous`", "public Issue has no private switch",
 		},
-		"slipway-workflow": {
-			"stateless only in the Slipway sense", "self-contained and must work when no Matt Pocock skill is installed",
-			"Never invoke a user-only front door", "`code-review` even when it is model-reachable", "Model-invocable primitives are optional accelerators", "model-invocable `/grilling` primitive", "run the `/grilling` skill", "Artifact-producing primitives", "not a durable wayfinding state machine",
-			"For an Objective, instead produce its distinct planning shape", "not an approved publication plan",
-			"Publication and Run start are two deliberate authorization boundaries", "`budget_exhausted` pause is normal", "`max(initial_budget, 3)`",
-		},
+		"slipway-workflow": append([]string{
+			"stateless only in the Slipway sense", "workflow itself is read-only", "Orchestrate Slipway functions, not installed skills",
+			"Do not discover, rank, or dispatch", "Do not invoke a sibling `slipway-*` capability", "only optional external primitive", "model-invocable `/grilling`",
+			"Choose the shortest valid route",
+		}, workflowRouteFragments...),
 	}
+	specificFragments["slipway-workflow"] = append(specificFragments["slipway-workflow"],
+		"external or unmanaged artifact as non-authoritative planning input", "retains the routing and source authority defined by the contract",
+		"Standalone Clarify is not a mandatory stage", "Only submit and skip are Action variants", "An ended Run is terminal", "No further Slipway action is a valid terminal outcome",
+		"fresh-fetch and attest the canonical Change", "same receipt", "For an Objective, instead produce its distinct planning shape", "not an approved publication plan", "advisory unblocked frontier",
+		"For a new Run", "contract default of `8`", "For resume, preserve the distinct remaining-budget rules below", "no workflow-owned governance gate", "`budget_exhausted` pause is normal", "`max(initial_budget, 3)`",
+	)
 
 	for _, registryHost := range Registry() {
 		host := registryHost
@@ -179,21 +198,22 @@ func TestRegistryReturnsADeepCopy(t *testing.T) {
 func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name    string
-		hostID  string
-		surface string
+		name         string
+		hostID       string
+		surface      string
+		legacyDigest string
 	}{
-		{name: "claude skill", hostID: "claude"},
-		{name: "codex skill and policy", hostID: "codex"},
-		{name: "copilot agent", hostID: "copilot"},
-		{name: "cursor skill", hostID: "cursor"},
-		{name: "kilo command", hostID: "kilo"},
-		{name: "kiro ide steering", hostID: "kiro", surface: "ide"},
-		{name: "kiro cli agent", hostID: "kiro", surface: "cli"},
-		{name: "opencode command", hostID: "opencode"},
-		{name: "pi skill", hostID: "pi"},
-		{name: "qwen skill", hostID: "qwen"},
-		{name: "windsurf workflow", hostID: "windsurf"},
+		{name: "claude skill", hostID: "claude", legacyDigest: "c906f008b22bebcb0ff42752f63dc1f47878fdf9a006d76b97492ff2c696aac7"},
+		{name: "codex skill and policy", hostID: "codex", legacyDigest: "d4077440a2f32ad4aea3071d50135b5652eeeae12d59ab6ed826ff86219b46eb"},
+		{name: "copilot agent", hostID: "copilot", legacyDigest: "64ff9d83b7506821faded56af137d00210e4a511bb96ceee5b43ac6d8dcba7f6"},
+		{name: "cursor skill", hostID: "cursor", legacyDigest: "ba5819588b8832be28e9db52d0a15eeffc302911f3efb29cb180e2e03533fd2c"},
+		{name: "kilo command", hostID: "kilo", legacyDigest: "b242356a22d340ce42329c91fc4cc8783a85831f95eed874e0bfa9b7e46c81b4"},
+		{name: "kiro ide steering", hostID: "kiro", surface: "ide", legacyDigest: "ac8b88d50b916711926bff88f3467cc0b4ad16915900c6ff631082d09c1e0984"},
+		{name: "kiro cli agent", hostID: "kiro", surface: "cli", legacyDigest: "2233184016acd8f76ed7f7359a6cec3c6558c28244fdfdbca2604feac90fcc4d"},
+		{name: "opencode command", hostID: "opencode", legacyDigest: "cc3db454bd456fb7d1275db15a49a894cf025b30ca87a115c2f2375d66c8d860"},
+		{name: "pi skill", hostID: "pi", legacyDigest: "a260c250e64da6a9edaf0d44e8a66417d8f140b7962b65e6126eb6d1e3faa30c"},
+		{name: "qwen skill", hostID: "qwen", legacyDigest: "2dd0a858e1eab6bb6375495cc4c79776ccc313bd45e9c09de933ea9e4dfd3fcd"},
+		{name: "windsurf workflow", hostID: "windsurf", legacyDigest: "59a06181457931900ddf3973f9dd2ecc7fe344fbba30a4ca1df85a58051f9349"},
 	}
 	for _, test := range tests {
 		test := test
@@ -211,6 +231,10 @@ func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) 
 
 			desired, err := generateHostFiles(host)
 			require.NoError(t, err)
+			sort.Slice(desired, func(i, j int) bool {
+				return desired[i].Relative < desired[j].Relative
+			})
+			legacyHasher := sha256.New()
 			legacyBytes := map[string][]byte{}
 			workflowPaths := map[string]bool{}
 			for _, file := range desired {
@@ -220,10 +244,15 @@ func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) 
 					require.NoError(t, os.Remove(path))
 					continue
 				}
+				_, _ = legacyHasher.Write([]byte(file.Relative))
+				_, _ = legacyHasher.Write([]byte{0})
+				_, _ = legacyHasher.Write(file.Data)
+				_, _ = legacyHasher.Write([]byte{0})
 				content, readErr := os.ReadFile(path)
 				require.NoError(t, readErr)
 				legacyBytes[file.Relative] = content
 			}
+			assert.Equal(t, test.legacyDigest, fmt.Sprintf("%x", legacyHasher.Sum(nil)), "six-capability generated bytes changed")
 			require.NotEmpty(t, workflowPaths)
 
 			manifest, found, err := loadManifest(root, host)
@@ -739,6 +768,20 @@ func TestListRequiresEveryGeneratedFileForCapabilityHealth(t *testing.T) {
 			supporting: ".claude/skills/slipway-clarify/references/decision-interview.md",
 		},
 		{
+			name:       "skill-native clarify requires its reference",
+			hostID:     "claude",
+			capability: "slipway-clarify",
+			remove:     ".claude/skills/slipway-clarify/references/decision-interview.md",
+			supporting: ".claude/skills/slipway-clarify/SKILL.md",
+		},
+		{
+			name:       "flat clarify requires its shared reference",
+			hostID:     "copilot",
+			capability: "slipway-clarify",
+			remove:     ".github/agents/references/decision-interview.md",
+			supporting: ".github/agents/slipway-clarify.agent.md",
+		},
+		{
 			name:       "codex policy cannot hide a missing skill",
 			hostID:     "codex",
 			capability: "slipway-workflow",
@@ -760,6 +803,19 @@ func TestListRequiresEveryGeneratedFileForCapabilityHealth(t *testing.T) {
 			assert.True(t, status.NeedsRefresh)
 			assert.NotContains(t, status.Capabilities, test.capability)
 			assert.Len(t, status.Capabilities, len(capabilityNames)-1)
+
+			doctor, err := Doctor(root)
+			require.NoError(t, err)
+			assert.NotEqual(t, "adapter_healthy", doctorCheckForHost(doctor, test.hostID).Code)
+
+			_, err = Install(InstallOptions{Root: root, Tools: []string{test.hostID}, Refresh: true})
+			require.NoError(t, err)
+			status = requireHostStatus(t, root, test.hostID)
+			assert.False(t, status.NeedsRefresh)
+			assert.ElementsMatch(t, capabilityNames, status.Capabilities)
+			doctor, err = Doctor(root)
+			require.NoError(t, err)
+			assert.Equal(t, "adapter_healthy", doctorCheckForHost(doctor, test.hostID).Code)
 		})
 	}
 }

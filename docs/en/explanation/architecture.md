@@ -75,7 +75,7 @@ For issue-backed work, the trusted host fetches the Issue and manifest-reference
 
 Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
 
-The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The base contract in issue #434, later accepted ADRs, and the versioned schemas together define the intended contract; [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) narrowly supersedes every exact-six host-capability statement in the issue and reaffirms the no-router boundary. Runtime tests are executable evidence of the current implementation, not a replacement for those sources.
+The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The base contract in issue #434, later accepted ADRs, and the versioned schemas together define the intended contract. [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) adds the seventh host capability and reaffirms the no-router boundary; [ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) scopes it to lifecycle routing across Slipway's own functions. Runtime tests are executable evidence of the current implementation, not a replacement for those sources.
 
 ## Security boundary
 

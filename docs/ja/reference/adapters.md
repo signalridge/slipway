@@ -7,7 +7,7 @@ slipway-run  slipway-clarify  slipway-propose  slipway-decompose
 slipway-implement  slipway-review  slipway-workflow
 ```
 
-`run` は recoverable Run を駆動します。`clarify` は standalone/stateless な decision 会話です。`propose` と `decompose` は GitHub work item を準備します。`implement` は technical work を行います。`review` は read-only です。`workflow` は粗いアイデアを公開可能な Change または Objective draft へ自律的に編成し、explicit な `propose` と `run` の境界で停止します。
+`run` は recoverable Run を駆動します。`clarify` は standalone/stateless な decision 会話です。`propose` と `decompose` は GitHub work item を準備します。`implement` は technical work を行います。`review` は read-only です。`workflow` はそれらの Issue workflow function を連携し、rough idea、Objective、Change、既存 Run のいずれからでも最短の次の explicit capability を示しますが、自身では呼び出しません。または、明示的な no-further-action outcome を報告します。
 
 ![Slipway ホストアダプター: install が10個の対応host向けnative entry pointを書き込み、各entryが同じ7個のexplicit capabilityを公開する一方、versioned JSONをlocal CLIと交換するのはRun-backed pathだけである。](../../assets/diagrams/tool-adapters.svg)
 

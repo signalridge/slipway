@@ -214,8 +214,9 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 		return nil, fmt.Errorf("load clarification reference: %w", err)
 	}
 	files = append(files, generatedFile{
-		Relative: referencePath(host),
-		Data:     []byte(reference),
+		Relative:   referencePath(host),
+		Data:       []byte(reference),
+		Capability: "slipway-clarify",
 	})
 	return files, nil
 }

@@ -28,7 +28,7 @@ Add `slipway-workflow` as a seventh host capability. This decision replaces #434
 
 ## Consequences
 
-The generated surface, install/list/doctor counts, tests, acceptance harness, and the trilingual docs move from six to seven; skill-native hosts such as `claude` now report eight managed files (seven capabilities plus one shared reference), and a full `--tool all` install writes 135 files rather than 120. Existing six-capability files remain byte-compatible so a refresh is additive and ownership-safe. The live issue #434 text still records six capabilities in §6, §13, §16, §18 scenario 28, and its English summary and should be reconciled when that external contract is edited; until then, readers must apply this accepted narrow supersession instead of treating the disagreement as an implementation accident.
+The generated surface, install/list/doctor counts, tests, acceptance harness, and the trilingual docs move from six to seven; skill-native hosts such as `claude` now report eight managed files (seven capabilities plus one shared reference), and a full `--tool all` install writes 135 files rather than 120. Existing six-capability files remain byte-compatible so a refresh is additive and ownership-safe. At the time this ADR was accepted, live issue #434 still recorded six capabilities in §6, §13, §16, §18 scenario 28, and its English summary. That external contract was reconciled on 2026-07-18 together with ADR-0003's lifecycle-scope refinement.
 
 ## Rejected alternatives
 
