@@ -8,6 +8,7 @@ const legacyEnglishRedirects = {
 	'/': `${BASE}/en/`,
 	'/start-here': `${BASE}/en/start-here/`,
 	'/installation': `${BASE}/en/installation/`,
+	'/guides/idea-to-run-workflow': `${BASE}/en/guides/idea-to-run-workflow/`,
 	'/guides/github-issues': `${BASE}/en/guides/github-issues/`,
 	'/guides/runs-and-recovery': `${BASE}/en/guides/runs-and-recovery/`,
 	'/guides/machine-protocol-v2': `${BASE}/en/guides/machine-protocol-v2/`,
@@ -58,6 +59,7 @@ export default defineConfig({
 					label: 'Guides',
 					translations: { 'zh-CN': '指南', ja: 'ガイド' },
 					items: [
+						{ label: 'Idea-to-Run Workflow', translations: { 'zh-CN': '从想法到 Run', ja: 'アイデアから Run まで' }, slug: 'guides/idea-to-run-workflow' },
 						{ label: 'GitHub Issues', translations: { 'zh-CN': 'GitHub Issues', ja: 'GitHub Issues' }, slug: 'guides/github-issues' },
 						{ label: 'Runs, Recovery, Privacy', translations: { 'zh-CN': 'Run、恢复与隐私', ja: 'Run、復旧、プライバシー' }, slug: 'guides/runs-and-recovery' },
 						{ label: 'Protocol v2 Tutorial', translations: { 'zh-CN': '协议 v2 教程', ja: 'プロトコル v2 チュートリアル' }, slug: 'guides/machine-protocol-v2' },

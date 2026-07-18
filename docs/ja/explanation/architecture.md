@@ -2,7 +2,7 @@
 
 Slipway は制御 loop を local CLI に置き、モデル 固有の作業を生成された ホスト アダプターに置きます。この境界により、CLI は モデルや GitHub 認証情報を持たずに state を検証できます。
 
-![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work を担い、versioned JSON で local CLI と durable Run store に接続する。](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work を担い、Run-backed pathだけがversioned JSONでlocal CLIとdurable Run storeに接続する。](../../assets/diagrams/architecture.svg)
 
 ## Process boundary
 
@@ -75,7 +75,7 @@ Issue-backed work では、trusted ホストが Issue と manifest 参照 commen
 
 Accepted section は content-addressed で、local material reader 経由で利用できます。Action は revision と bounded catalog だけを持ち、大きな requirements が Action context に入らず、offline 復旧も可能です。
 
-設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。issue #434 の完全な契約と versioned schema が規範であり、runtime test は現在の実装に対する executable evidence です。
+Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。issue #434 の base contract、後続の Accepted ADR、versioned schema が一体で intended contract を定義します。[ADR-0002](../../../adr/0002-seventh-capability-workflow.md) は 7 番目の host capability を追加して no-router boundary を再確認し、[ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) はその scope を Slipway 自身の function 間の lifecycle routing に限定します。Runtime test は現在の実装に対する executable evidence であり、それらの代替ではありません。
 
 ## Security boundary
 

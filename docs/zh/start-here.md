@@ -54,6 +54,8 @@
 
 对于 issue-backed Run，请通过生成的 `slipway-run` 能力传入 GitHub Change Issue。宿主负责获取 Issue、构造临时 source envelope，再交给 CLI。除非你正在开发宿主集成，否则不要手写 envelope。
 
+若想在宿主内判断粗略想法、Objective、Change 或已有 Run 的下一步，可调用生成的 `slipway-workflow` 能力。它会先核实当前阶段，再点名最短的下一项显式调用能力，或者明确给出“不再行动”的结果；需要草稿时，同一次调用会调查事实、逐一访谈真正的人类决策，并综合出自包含的 Change 或规划用 Objective。它不会路由通用 skill 目录、调用 user-only 外部 skill、发布 Issue 或启动 Run。详见[从想法到 Run 的工作流](guides/idea-to-run-workflow.md)。
+
 Objective 可以组织多个 Change，但不能启动 Run。发布 managed Issue 前，请阅读 [GitHub Issue 工作流](guides/github-issues.md)。
 
 ## 5. 保持控制

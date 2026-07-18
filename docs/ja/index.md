@@ -12,6 +12,7 @@ Slipway は AIコーディングツールに、小さくユーザー制御され
 
 ## ガイド
 
+- [アイデアから Run までのワークフロー](guides/idea-to-run-workflow.md) — rough idea、Objective、Change、既存 Run を、ユーザーが所有する Slipway function boundary に沿って最短 route へ案内します。
 - [GitHub Issues](guides/github-issues.md) — Objective と Change の使い分け、Issue ベースの Run。
 - [Run、復旧、プライバシー](guides/runs-and-recovery.md) — Run の確認、停止、再開、保持、削除。
 - [マシンプロトコル v2 チュートリアル](guides/machine-protocol-v2.md) — Strict Outcome を使ってホスト統合のライフサイクル を一通り実行します。

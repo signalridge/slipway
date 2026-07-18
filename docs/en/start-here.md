@@ -54,6 +54,8 @@ This command returns the first `orient` Action. The CLI does not edit code by it
 
 For an issue-backed Run, use the generated `slipway-run` capability with a GitHub Change Issue. The host fetches the Issue, builds the temporary source envelope, and passes it to the CLI. Do not hand-author the envelope unless you are implementing a host integration.
 
+To orient a rough idea, Objective, Change, or existing Run without leaving the host, invoke the generated `slipway-workflow` capability. It checks the current stage and names the shortest valid next explicit capability or an explicit no-further-action outcome. When a draft is needed, the same call investigates facts, interviews genuine decisions one at a time, and synthesizes either a self-contained Change or a planning Objective. It never routes the general skill catalog, invokes user-only external skills, publishes an Issue, or starts a Run. See the [Idea-to-Run workflow](guides/idea-to-run-workflow.md).
+
 An Objective can group several Changes, but it cannot start a Run. Read [Using GitHub Issues](guides/github-issues.md) before publishing managed Issues.
 
 ## 5. Stay in control

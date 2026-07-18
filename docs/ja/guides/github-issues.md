@@ -46,6 +46,8 @@ Change body には `slipway-manifest` block も含まれ、accepted section comm
 
 ## Issue の publish
 
+生成された `slipway-workflow` capability は、この手順の前に rough idea を対話的に調査・grill し、Change または Objective draft を作って停止し、`slipway-propose` を次に示します。提供するのは work-item draft であり、approved exact publication plan ではありません。その plan と confirmation は Propose だけが所有します。[アイデアから Run までのワークフロー](idea-to-run-workflow.md)を参照してください。
+
 Generated `slipway-propose` と `slipway-decompose` instruction は ホストに次を指示します。
 
 1. Repository と既存 Issue を確認する。

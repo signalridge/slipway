@@ -1,15 +1,15 @@
 # 宿主适配器
 
-`slipway install` 会为六项明确的能力生成宿主原生入口：
+`slipway install` 会为七项明确的能力生成宿主原生入口：
 
 ```text
-slipway-run  slipway-clarify  slipway-propose
-slipway-decompose  slipway-implement  slipway-review
+slipway-run  slipway-clarify  slipway-propose  slipway-decompose
+slipway-implement  slipway-review  slipway-workflow
 ```
 
-`run` 驱动可恢复 Run；`clarify` 是独立、无状态的决策对话；`propose` 与 `decompose` 准备 GitHub work item；`implement` 执行技术工作；`review` 只读。
+`run` 驱动可恢复 Run；`clarify` 是独立、无状态的决策对话；`propose` 与 `decompose` 准备 GitHub work item；`implement` 执行技术工作；`review` 只读；`workflow` 衔接这些 Issue 工作流功能：无论起点是粗略想法、Objective、Change 还是已有 Run，它都会点名最短的下一项显式调用能力但不替用户调用，或者明确报告“不再行动”的结果。
 
-![Slipway 宿主适配器：install 为十个受支持宿主写入原生入口；每个入口暴露相同的六项明确能力，并通过版本化 JSON 路由到本地 CLI。](../../assets/diagrams/tool-adapters.svg)
+![Slipway 宿主适配器：install 为十个受支持宿主写入原生入口；每个入口暴露相同的七项明确能力，只有 Run-backed 路径会与本地 CLI 交换版本化 JSON。](../../assets/diagrams/tool-adapters.svg)
 
 ## 生成目标
 

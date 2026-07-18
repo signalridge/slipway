@@ -59,7 +59,7 @@ class Link:
 
 
 def repository_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[1]
 
 
 def line_number(text: str, offset: int) -> int:
@@ -288,7 +288,7 @@ def exact_case_exists(path: Path, root: Path) -> bool:
 
 def source_files(root: Path) -> list[Path]:
     files = [root / name for name in sorted(SOURCE_NAMES) if (root / name).is_file()]
-    for base in (root / "docs", root / "adr", root / "tests" / "acceptance"):
+    for base in (root / "docs", root / "adr", root / "acceptance"):
         if base.is_dir():
             files.extend(path for path in base.rglob("*.md") if path.is_file())
     content = root / "website" / "src" / "content" / "docs"
@@ -724,11 +724,12 @@ def self_test() -> None:
         root = Path(directory)
         (root / "docs").mkdir()
         (root / "adr").mkdir()
-        (root / "tests" / "acceptance").mkdir(parents=True)
+        (root / "acceptance").mkdir()
         (root / "website" / "src" / "content" / "docs").mkdir(parents=True)
         (root / "docs" / "index.md").write_text("# Docs\n\n[Guide](guide.md#hello-world)\n")
         (root / "docs" / "guide.md").write_text("# Hello, world!\n")
         (root / "adr" / "README.md").write_text("[Docs](../docs/index.md)\n")
+        (root / "acceptance" / "README.md").write_text("[Guide](../docs/guide.md)\n")
         (root / "README.md").write_text(
             "[root](/docs/guide.md#hello-world) [site](/slipway/guide/#hello-world) "
             "[external](https://example.invalid/x)\n"
@@ -738,7 +739,7 @@ def self_test() -> None:
             "---\ntitle: Home\n---\n\n[Guide](/slipway/guide/)\n"
         )
         files, links, _, problems = check_repository(root, require_site=False)
-        assert files == 5 and links == 6 and not problems, problems
+        assert files == 6 and links == 7 and not problems, problems
 
         (root / "README.md").write_text("[bad](docs/guide.md#missing)\n")
         _, _, _, problems = check_repository(root, require_site=False)

@@ -217,7 +217,7 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "doctorReport"), marshalTestJSON(t, map[string]any{
 		"contract_version": ContractVersion,
 		"checks": []map[string]any{{
-			"code": "adapter_healthy", "status": "ok", "host_id": "claude", "name": "adapter", "detail": "7 managed files",
+			"code": "adapter_healthy", "status": "ok", "host_id": "claude", "name": "adapter", "detail": "8 managed files",
 		}},
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "protocolState"), marshalTestJSON(t, map[string]any{
