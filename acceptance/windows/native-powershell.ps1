@@ -260,14 +260,14 @@ function Invoke-SlipwayViaCmd {
     )
     $safeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded"
     $result = Invoke-ExactNativeProcess -FileName $env:ComSpec -CommandArgs @('/d', '/v:on', '/s', '/c', $safeCommand)
-    $text = $result.Stdout
-    if ($result.Stderr.Length -gt 0) {
-        $text += [Environment]::NewLine + $result.Stderr
-    }
     if ($result.ExitCode -ne 0) {
+        $text = $result.Stdout
+        if ($result.Stderr.Length -gt 0) {
+            $text += [Environment]::NewLine + $result.Stderr
+        }
         Fail "cmd.exe /v:on invocation exited $($result.ExitCode); output: $text"
     }
-    return $text
+    return $result.Stdout
 }
 
 function Invoke-ResolvedArgv {
