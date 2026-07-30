@@ -11,6 +11,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type textInputLimitError struct {
+	limit int
+}
+
+func (err *textInputLimitError) Error() string {
+	if err == nil {
+		return "text input exceeds its byte limit"
+	}
+	return fmt.Sprintf("text input uses more than %d bytes", err.limit)
+}
+
 // mutationEnvelope is the single versioned shape for every successful run mutation.
 // Active runs carry a non-null action plus derived submit/skip next variants;
 // other states retain action when a current Action remains and otherwise omit it.
@@ -32,17 +43,66 @@ type mutationEnvelope struct {
 func makeRunCmd() *cobra.Command {
 	var root string
 	var sourceFile string
+	var goalFile string
+	var goalStdin bool
 	var budget int
 	var noReview bool
 	var jsonOutput bool
 	command := &cobra.Command{
-		Use:   "run [flags] -- <goal>",
+		Use:   "run [flags] [-- <goal>]",
 		Short: "Start a user-controlled soft-autopilot run",
 		Example: "  slipway run --budget 8 --json -- \"<goal>\"\n" +
-			"  slipway run --source-file FILE --budget 8 --json -- \"<bounded goal>\"",
-		Args: cobra.ExactArgs(1),
+			"  slipway run --goal-file GOAL --source-file SOURCE --budget 8 --json",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
-			goal := args[0]
+			goalFileSet := command.Flags().Changed("goal-file")
+			goalStdinSet := command.Flags().Changed("goal-stdin") && goalStdin
+			goalModeCount := len(args)
+			if goalFileSet {
+				goalModeCount++
+			}
+			if goalStdinSet {
+				goalModeCount++
+			}
+			if goalModeCount == 0 {
+				return newUsageError(
+					"goal_required",
+					"exactly one positional goal, goal-file, or goal-stdin input is required",
+					defaultErrorNext(),
+				)
+			}
+			if goalModeCount > 1 {
+				return newUsageError(
+					"goal_mode_conflict",
+					"positional goal, goal-file, and goal-stdin are mutually exclusive",
+					defaultErrorNext(),
+				)
+			}
+			if goalFileSet && strings.TrimSpace(goalFile) == "" {
+				return newUsageError("goal_file_required", "goal-file cannot be empty", defaultErrorNext())
+			}
+
+			goal := ""
+			if len(args) == 1 {
+				goal = args[0]
+			} else {
+				reader, closeReader, readErr := textInputReader(command, goalFile, goalStdinSet, "goal")
+				if readErr != nil {
+					return newUsageError("goal_unavailable", readErr.Error(), defaultErrorNext())
+				}
+				if closeReader != nil {
+					defer func() { _ = closeReader() }()
+				}
+				goal, readErr = readBoundedTextInput(reader)
+				if readErr != nil {
+					code := "invalid_goal"
+					var limitErr *textInputLimitError
+					if errors.As(readErr, &limitErr) {
+						code = "action_too_large"
+					}
+					return newUsageError(code, readErr.Error(), defaultErrorNext())
+				}
+			}
 			if strings.TrimSpace(goal) == "" {
 				return newUsageError("goal_required", "goal cannot be empty", defaultErrorNext())
 			}
@@ -64,7 +124,7 @@ func makeRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			startNext := runStartNext(workspace, goal, budget, noReview, true)
+			startNext := runStartNext(workspace, budget, noReview, true)
 			var pinnedSource *autopilot.PinnedSource
 			if sourceFile != "" {
 				imported, err := autopilot.ImportSourceFile(sourceFile)
@@ -87,19 +147,25 @@ func makeRunCmd() *cobra.Command {
 				return withCLIErrorContext(err, workspace, "")
 			}
 			if jsonOutput {
-				return writeProtocolResult(command, run)
+				return writeCommittedProtocolResult(command, run)
 			}
+			ignoreBrokenPipeSignal()
 			next, err := autopilot.DeriveNext(run)
 			if err != nil {
-				return fmt.Errorf("derive next protocol operation: %w", err)
+				return committedRunOutputError(run, fmt.Errorf("derive next protocol operation: %w", err))
 			}
 			writer := command.OutOrStdout()
 			if err := writeHumanRunStart(writer, run); err != nil {
-				return err
+				return committedRunOutputError(run, err)
 			}
-			return writeHumanNext(writer, next)
+			if err := writeHumanNext(writer, next); err != nil {
+				return committedRunOutputError(run, err)
+			}
+			return nil
 		},
 	}
+	command.Flags().StringVar(&goalFile, "goal-file", "", "read the exact Run goal from a regular non-symlink file")
+	command.Flags().BoolVar(&goalStdin, "goal-stdin", false, "read the exact Run goal from stdin")
 	command.Flags().StringVar(&sourceFile, "source-file", "", "raw GitHub Change source envelope")
 	command.Flags().IntVar(&budget, "budget", autopilot.DefaultBudget, "maximum number of Actions before pausing")
 	command.Flags().BoolVar(&noReview, "no-review", false, "omit the default advisory review")
@@ -146,10 +212,10 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
 			}
 			if fileSet == stdinSet {
-				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", defaultErrorNext())
+				return newUsageError("outcome_mode_required", "exactly one of outcome-file or outcome-stdin is required", recoveryNext)
 			}
 			if fileSet && strings.TrimSpace(outcomeFile) == "" {
-				return newUsageError("outcome_file_required", "outcome-file cannot be empty", defaultErrorNext())
+				return newUsageError("outcome_file_required", "outcome-file cannot be empty", recoveryNext)
 			}
 
 			workspace, err := resolveRoot(*root)
@@ -187,7 +253,7 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 			if err != nil {
 				return withCLIErrorContext(err, workspace, runID)
 			}
-			return writeProtocolResult(command, run)
+			return writeCommittedProtocolResult(command, run)
 		},
 	}
 	command.Flags().StringVar(&runID, "run", "", "run id")
@@ -199,7 +265,8 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 }
 
 func makeRunAnswerCmd(root *string) *cobra.Command {
-	var runID, actionID, text, scopeSHA256 string
+	var runID, actionID, text, textFile, scopeSHA256 string
+	var textStdin bool
 	var confirmDestructive bool
 	command := &cobra.Command{
 		Use:   "answer",
@@ -215,6 +282,55 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 			recoveryNext := statusInspectionNextForRawRoot(*root, runID)
 			if actionID == "" {
 				return newUsageError("action_id_required", "action cannot be empty", recoveryNext)
+			}
+			textSet := command.Flags().Changed("text")
+			textFileSet := command.Flags().Changed("text-file")
+			textStdinSet := command.Flags().Changed("text-stdin") && textStdin
+			textModeCount := 0
+			if textSet {
+				textModeCount++
+			}
+			if textFileSet {
+				textModeCount++
+			}
+			if textStdinSet {
+				textModeCount++
+			}
+			if textModeCount > 1 {
+				return newUsageError(
+					"answer_mode_conflict",
+					"text, text-file, and text-stdin are mutually exclusive",
+					recoveryNext,
+				)
+			}
+			if textFileSet && strings.TrimSpace(textFile) == "" {
+				return newUsageError("answer_file_required", "text-file cannot be empty", recoveryNext)
+			}
+			if textFileSet || textStdinSet {
+				reader, closeReader, readErr := textInputReader(command, textFile, textStdinSet, "answer")
+				if readErr != nil {
+					return newUsageError("answer_unavailable", readErr.Error(), recoveryNext)
+				}
+				if closeReader != nil {
+					defer func() { _ = closeReader() }()
+				}
+				text, readErr = readBoundedTextInput(reader)
+				if readErr != nil {
+					code := "invalid_answer"
+					var limitErr *textInputLimitError
+					if errors.As(readErr, &limitErr) {
+						code = "answer_too_large"
+					}
+					return newUsageError(code, readErr.Error(), recoveryNext)
+				}
+			}
+			if err := autopilot.ValidateAnswerText(text); err != nil {
+				code := "invalid_answer"
+				var limitErr *autopilot.AnswerLimitError
+				if errors.As(err, &limitErr) {
+					code = "answer_too_large"
+				}
+				return newUsageError(code, err.Error(), recoveryNext)
 			}
 			if confirmDestructive != (strings.TrimSpace(scopeSHA256) != "") {
 				return newUsageError(
@@ -236,12 +352,14 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 			if err != nil {
 				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
-			return writeProtocolResult(command, run)
+			return writeCommittedProtocolResult(command, run)
 		},
 	}
 	command.Flags().StringVar(&runID, "run", "", "run id")
 	command.Flags().StringVar(&actionID, "action", "", "waiting action id")
 	command.Flags().StringVar(&text, "text", "", "user answer, decline, or optional confirmation note")
+	command.Flags().StringVar(&textFile, "text-file", "", "read the exact answer or optional confirmation note from a regular non-symlink file")
+	command.Flags().BoolVar(&textStdin, "text-stdin", false, "read the exact answer or optional confirmation note from stdin")
 	command.Flags().BoolVar(&confirmDestructive, "confirm-destructive", false, "attest current user confirmation of the exact destructive scope")
 	command.Flags().StringVar(&scopeSHA256, "scope-sha256", "", "exact current destructive scope digest")
 	_ = command.MarkFlagRequired("run")
@@ -274,7 +392,7 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 			if err != nil {
 				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
-			return writeProtocolResult(command, run)
+			return writeCommittedProtocolResult(command, run)
 		},
 	}
 	command.Flags().StringVar(&runID, "run", "", "run id")
@@ -291,7 +409,7 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 	var candidateID string
 	command := &cobra.Command{
 		Use:   "resume <run-id>",
-		Short: "Resume a paused Run",
+		Short: "Resume a stopped Run or a resumable pause",
 		Example: "  slipway protocol resume RUN [--budget N]\n" +
 			"  slipway protocol resume RUN --source-file FILE [--budget N]\n" +
 			"  slipway protocol resume RUN --use-pinned-source [--budget N]\n" +
@@ -370,7 +488,7 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			if err != nil {
 				return withCLIErrorContext(err, workspace, args[0])
 			}
-			return writeProtocolResult(command, run)
+			return writeCommittedProtocolResult(command, run)
 		},
 	}
 	command.Flags().IntVar(&budget, "budget", 0, "replace remaining Action budget (default: preserve or replenish)")
@@ -423,12 +541,23 @@ func outcomeReader(command *cobra.Command, path string, stdin bool) (io.Reader, 
 	if stdin {
 		return command.InOrStdin(), nil, nil
 	}
+	return regularFileReader(path, "outcome")
+}
+
+func textInputReader(command *cobra.Command, path string, stdin bool, label string) (io.Reader, func() error, error) {
+	if stdin {
+		return command.InOrStdin(), nil, nil
+	}
+	return regularFileReader(path, label)
+}
+
+func regularFileReader(path, label string) (io.Reader, func() error, error) {
 	before, err := os.Lstat(path)
 	if err != nil {
 		return nil, nil, err
 	}
 	if before.Mode()&os.ModeSymlink != 0 || !before.Mode().IsRegular() {
-		return nil, nil, fmt.Errorf("outcome file must be a regular non-symlink file")
+		return nil, nil, fmt.Errorf("%s file must be a regular non-symlink file", label)
 	}
 	file, err := os.Open(path) // #nosec G304 -- user-selected file is Lstat-checked and its opened identity is verified below.
 	if err != nil {
@@ -444,9 +573,20 @@ func outcomeReader(command *cobra.Command, path string, stdin bool) (io.Reader, 
 		if lstatErr != nil {
 			return nil, nil, lstatErr
 		}
-		return nil, nil, fmt.Errorf("outcome file changed while opening")
+		return nil, nil, fmt.Errorf("%s file changed while opening", label)
 	}
 	return file, file.Close, nil
+}
+
+func readBoundedTextInput(reader io.Reader) (string, error) {
+	data, err := io.ReadAll(io.LimitReader(reader, int64(autopilot.MaxTextInputBytes)+1))
+	if err != nil {
+		return "", fmt.Errorf("read text input: %w", err)
+	}
+	if len(data) > autopilot.MaxTextInputBytes {
+		return "", &textInputLimitError{limit: autopilot.MaxTextInputBytes}
+	}
+	return string(data), nil
 }
 
 func sourceImportErrorMessage(err error) string {
@@ -483,17 +623,35 @@ func writeProtocolResult(command *cobra.Command, run autopilot.Run) error {
 	return writeJSON(command.OutOrStdout(), output)
 }
 
-func runStartNext(workspace, goal string, budget int, noReview, sourceRequired bool) autopilot.Next {
+func writeCommittedProtocolResult(command *cobra.Command, run autopilot.Run) error {
+	ignoreBrokenPipeSignal()
+	if err := writeProtocolResult(command, run); err != nil {
+		return committedRunOutputError(run, err)
+	}
+	return nil
+}
+
+func committedRunOutputError(run autopilot.Run, err error) error {
+	if err == nil {
+		return nil
+	}
+	return withCLIErrorContext(&committedOutputError{err: err}, run.Workspace, run.ID)
+}
+
+func runStartNext(workspace string, budget int, noReview, sourceRequired bool) autopilot.Next {
 	base := []string{"slipway", "run", "--budget", fmt.Sprint(budget), "--json", "--root", workspace}
 	if noReview {
 		base = append(base, "--no-review")
 	}
-	base = append(base, "--", goal)
-	inputs := []autopilot.NextInput{}
+	inputs := []autopilot.NextInput{{
+		Name: "goal_file", Type: autopilot.NextInputPath, Flag: "--goal-file", Required: true,
+	}}
 	variantID := "retry-run"
 	if sourceRequired {
 		variantID = "start-with-source"
-		inputs = []autopilot.NextInput{{Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true}}
+		inputs = append(inputs, autopilot.NextInput{
+			Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true,
+		})
 	}
 	return commandNext(workspace, autopilot.NextOperationStart, variantID, base, inputs)
 }
@@ -520,14 +678,21 @@ func submitRetryNext(workspace, runID, actionID string, stdin bool) autopilot.Ne
 
 func resumeSourceNext(workspace, runID string, budget *int) autopilot.Next {
 	base := []string{"slipway", "protocol", "resume", runID, "--root", workspace}
+	inputs := []autopilot.NextInput{{
+		Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true,
+	}}
 	if budget != nil {
 		base = append(base, "--budget", fmt.Sprint(*budget))
+	} else {
+		inputs = append(inputs, autopilot.NextInput{
+			Name: "budget", Type: autopilot.NextInputString, Flag: "--budget", Required: false,
+		})
 	}
 	return commandNext(
 		workspace,
 		autopilot.NextOperationResume,
 		"refresh-source",
 		base,
-		[]autopilot.NextInput{{Name: "source_file", Type: autopilot.NextInputPath, Flag: "--source-file", Required: true}},
+		inputs,
 	)
 }

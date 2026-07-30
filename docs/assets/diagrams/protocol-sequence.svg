@@ -9,7 +9,7 @@ sequenceDiagram
   participant Store as Run store
 
   User->>Host: explicitly invokes slipway-run capability
-  Host->>CLI: slipway run --budget N --json --root ROOT -- GOAL
+  Host->>CLI: slipway run --budget N --json --root ROOT --goal-file GOAL_FILE [--source-file SOURCE_FILE]
   CLI->>Store: create Run · pin workspace identity
   CLI-->>Host: run state + orient Action + next{operation}
 
@@ -24,8 +24,8 @@ sequenceDiagram
 
   alt Outcome status = needs_input
     CLI-->>Host: pause{decision_required | destructive_confirmation_required | environment_unavailable}
-    Host->>CLI: protocol answer --text TEXT
-    Note over Host,CLI: destructive scope needs --confirm-destructive --scope-sha256
+    Host->>CLI: protocol answer --text-file TEXT_FILE
+    Note over Host,CLI: destructive scope needs --confirm-destructive --scope-sha256; note uses optional --text-file
   else user skips
     Host->>CLI: protocol skip --run --action
   end
@@ -163,7 +163,7 @@ sequenceDiagram
   <text class="msg-label" x="128" y="166">explicitly invokes the slipway-run capability</text>
 
   <line class="msg" x1="393" y1="204" x2="719" y2="204" marker-end="url(#ps-arrow)"/>
-  <text class="mono" x="403" y="198">slipway run --budget N --json --root ROOT -- GOAL</text>
+  <text class="mono" x="403" y="198">slipway run … --goal-file GOAL_FILE [--source-file SOURCE_FILE]</text>
 
   <line class="msg" x1="726" y1="234" x2="1055" y2="234" marker-end="url(#ps-arrow)"/>
   <text class="msg-label" x="736" y="228">create Run · pin workspace identity</text>
@@ -200,8 +200,8 @@ sequenceDiagram
   <text class="msg-label" x="410" y="554">pause: decision_required · destructive_confirmation_required · environment_unavailable</text>
 
   <line class="msg-pause" x1="393" y1="590" x2="719" y2="590" marker-end="url(#ps-arrow-pause)"/>
-  <text class="mono" x="403" y="584">protocol answer --text TEXT   ·   protocol skip</text>
-  <text class="tiny" x="403" y="606">destructive scope needs --confirm-destructive --scope-sha256 · “yes” is feedback, not authorization</text>
+  <text class="mono" x="403" y="584">protocol answer --text-file TEXT_FILE   ·   protocol skip</text>
+  <text class="tiny" x="403" y="606">destructive scope needs --confirm-destructive --scope-sha256; note uses optional --text-file</text>
 
   <!-- 4. resume -->
   <line class="msg" x1="393" y1="638" x2="719" y2="638" marker-end="url(#ps-arrow)"/>

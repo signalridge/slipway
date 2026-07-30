@@ -227,7 +227,11 @@ func TestMachineProtocolSchemaUnitFixturesMatchGoContract(t *testing.T) {
 		"contract_version": ContractVersion, "code": "invalid_usage", "message": "invalid", "next": next, "exit_code": 2,
 	}))
 	assertSchemaObjectFixture(t, schemaMap(t, definitions, "statusList"), marshalTestJSON(t, map[string]any{
-		"contract_version": ContractVersion, "runs": []any{}, "unavailable_runs": []any{},
+		"contract_version": ContractVersion,
+		"runs":             []any{},
+		"unavailable_runs": []map[string]any{{
+			"id": "run-1", "code": "run_busy", "detail": "writer still holds the bounded commit lock",
+		}},
 	}))
 	var runObject map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(marshalTestJSON(t, runFixture), &runObject))
@@ -441,18 +445,15 @@ func TestMachineProtocolSchemaEnforcesNextFamiliesAndActiveAction(t *testing.T) 
 	for _, fixture := range invalid {
 		require.Error(t, nextSchema.Validate(machineSchemaValue(t, fixture)))
 	}
-	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
-		"operation": "start", "workspace_identity": workspaceID,
-		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "-leading goal")},
-	})))
-	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
-		"operation": "start", "workspace_identity": workspaceID,
-		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "1000", "--json", "--root", "/workspace", "--", "goal")},
-	})))
-	require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
-		"operation": "start", "workspace_identity": workspaceID,
-		"variants": []any{variant("retry-run", "slipway", "run", "--budget", "4", "--json", "--root", "/workspace", "--", "--")},
-	})))
+	for _, budget := range []string{"4", "1000"} {
+		start := variant("retry-run", "slipway", "run", "--budget", budget, "--json", "--root", "/workspace")
+		start["inputs"] = []any{map[string]any{
+			"name": "goal_file", "type": "path", "flag": "--goal-file", "required": true,
+		}}
+		require.NoError(t, nextSchema.Validate(machineSchemaValue(t, map[string]any{
+			"operation": "start", "workspace_identity": workspaceID, "variants": []any{start},
+		})))
+	}
 	refreshWithBudget := variant(
 		"refresh-source", "slipway", "protocol", "resume", "run-1", "--root", "/workspace", "--budget", "9",
 	)
@@ -664,6 +665,7 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 	)
 	invalid := newSourceCandidate(sourceCandidateForTest(t, invalidEnvelope))
 	require.False(t, invalid.Valid)
+	assert.Empty(t, invalid.Title)
 	require.NoError(t, schema.Validate(machineSchemaValue(t, invalid)))
 
 	validWithoutSnapshot := machineSchemaValue(t, valid).(map[string]any)
@@ -679,6 +681,8 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 	invalidWithValidCode["classification_code"] = SourceClassificationValidChange
 	invalidWithSourceRevision := machineSchemaValue(t, invalid).(map[string]any)
 	invalidWithSourceRevision["source_revision"] = valid.SourceRevision
+	invalidWithTitle := machineSchemaValue(t, invalid).(map[string]any)
+	invalidWithTitle["title"] = "unaccepted refreshed title"
 	invalidWithWhitespaceError := machineSchemaValue(t, invalid).(map[string]any)
 	invalidWithWhitespaceError["classification_error"] = "   "
 	validWithObservation := machineSchemaValue(t, valid).(map[string]any)
@@ -698,6 +702,7 @@ func TestMachineProtocolSourceCandidateSchemaMatchesGoContract(t *testing.T) {
 		{name: "valid with classification error", value: validWithError},
 		{name: "invalid with valid classification code", value: invalidWithValidCode},
 		{name: "invalid with source revision", value: invalidWithSourceRevision},
+		{name: "invalid with title", value: invalidWithTitle},
 		{name: "invalid with whitespace classification error", value: invalidWithWhitespaceError},
 		{name: "valid with observation digest", value: validWithObservation},
 		{name: "missing source revision", value: missingSourceRevision},

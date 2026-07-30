@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -90,7 +89,7 @@ func trimGitOutputTerminator(output string) string {
 }
 
 func runGit(ctx context.Context, root string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal rev-parse arguments; no shell interpretation.
+	cmd := GitCommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

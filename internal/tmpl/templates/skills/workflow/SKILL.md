@@ -24,9 +24,11 @@ Inspect the user's input, repository, Issue identity and marker, and read-only `
 | --- | --- | --- |
 | Rough idea, clarified conversation, or non-authoritative planning artifact | Investigate, settle decisions, choose one Change or Objective, and produce its complete draft | `slipway-propose` |
 | Explicit standalone decision-only clarification request, with no draft or materialization desired | Explain the stateless decision-summary boundary without starting the interview here | `slipway-clarify` |
-| Structurally valid Objective | Explain its planning role and the need for self-contained child Changes | `slipway-decompose` |
+| Structurally valid Objective awaiting initial child Changes | Explain its planning role and the need for self-contained child Changes | `slipway-decompose` |
+| Explicit Objective amendment that may affect open child Changes | Explain that propagation is a user-invoked amendment convenience, not inheritance or background synchronization; require per-child diffs and current publication confirmation | `slipway-decompose` in amendment mode |
 | Structurally valid, self-contained `change/v2` Issue with no selected Run | Confirm the source route and state the effective budget | `slipway-run` |
 | Explicit private, tiny, urgent, offline, or deliberately untracked bounded goal | State the sharpened bounded goal and the already-selected no-Issue source route | `slipway-run` for a new ad-hoc Run |
+| Active issue-backed Run whose user requests a Change amendment | Explain that chat prose cannot revise pinned Requirements; first stop through public `slipway stop`, report the pinned revision, then wait for explicit resume and its refresh/use-pinned/candidate choice | `slipway-run` |
 | Active Run | Report the exact current Action and its submit/skip variants; state that stop uses public `slipway stop` and take-over/reorder first stop and hand control back | `slipway-run` |
 | Paused or stopped Run | Report the exact Run and its structured recovery choice without changing it | `slipway-run` |
 | Failed, partial, or ambiguous Propose/Decompose publication | Preserve and return every available receipt, operation, item, and revision fact; report the exact unresolved state | The originating `slipway-propose` or `slipway-decompose` owner decides same-receipt reconciliation or a contract-required fresh preview and confirmation |

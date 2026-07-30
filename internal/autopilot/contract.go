@@ -23,6 +23,7 @@ const (
 	maxActionBriefBytes          = 8 << 10
 	maxSuggestedActionBriefBytes = 8 << 10
 	maxActionBytes               = 256 << 10
+	MaxTextInputBytes            = maxActionBytes
 	DestructiveScopeVersion      = 1
 )
 
@@ -253,6 +254,20 @@ type GoalLimitError struct {
 	Limit        int
 }
 
+// AnswerLimitError reports answer text that exceeds the bounded persisted-text
+// envelope shared with Run goals.
+type AnswerLimitError struct {
+	EncodedBytes int
+	Limit        int
+}
+
+func (err *AnswerLimitError) Error() string {
+	if err == nil {
+		return "encoded answer exceeds text input limit"
+	}
+	return fmt.Sprintf("encoded answer uses %d bytes and exceeds %d-byte text input limit", err.EncodedBytes, err.Limit)
+}
+
 func (err *GoalLimitError) Error() string {
 	if err == nil {
 		return "encoded goal exceeds Action limit"
@@ -270,6 +285,24 @@ func ValidateGoal(goal string) error {
 	}
 	if encodedSize > maxActionBytes {
 		return &GoalLimitError{EncodedBytes: encodedSize, Limit: maxActionBytes}
+	}
+	return nil
+}
+
+// ValidateAnswerText checks answer bytes before they enter argv-independent
+// input handling or the journal. Empty text is valid for an optional
+// destructive-confirmation note; state-specific operations decide when text is
+// required.
+func ValidateAnswerText(text string) error {
+	if !utf8.ValidString(text) {
+		return errors.New("answer text must be valid utf-8")
+	}
+	encodedSize, err := encodedJSONStringSize(text)
+	if err != nil {
+		return fmt.Errorf("encode answer text: %w", err)
+	}
+	if encodedSize > MaxTextInputBytes {
+		return &AnswerLimitError{EncodedBytes: encodedSize, Limit: MaxTextInputBytes}
 	}
 	return nil
 }

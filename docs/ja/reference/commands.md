@@ -56,20 +56,25 @@ Repository discovery、ホスト アダプター、generated file、Run-storage 
 ## `slipway run`
 
 ```text
-slipway run [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json] -- <goal>
+slipway run [--root ROOT] [--source-file FILE] [--budget N] [--no-review] [--json]
+  (--goal-file FILE | --goal-stdin | -- <goal>)
 ```
 
 Run を作成し、最初の `orient` Action を返します。Action budget はデフォルト 8、範囲は 1–1000 です。`--no-review` は advisory Review を無効にします。それ以外でも、Slipway が Action 後に code change を観測した場合だけ Review を issue します。
 
 `--source-file` 省略時は ad-hoc Run です。指定時、CLI は1つの bounded GitHub Change ソースエンベロープ を開いて検証し、accepted section を pin して file を閉じます。CLI 自体は GitHub を fetch せず、ホスト publication warning を表示しません。これらは generated ホスト instruction が行います。
 
-Canonical machine invocation はすべての flag を `--` の前に置き、goal をその後に置きます。
+Goal input はちょうど1つ必要です。Human caller は1つの positional goal、`--goal-file`、`--goal-stdin` のいずれかを使い、これらは相互排他的です。Generated アダプターは private temporary regular file を使い、exact goal を process list に出さず、platform command-line length の制限も避けます。Canonical machine invocation は次のとおりです。
 
 ```bash
-slipway run --budget 8 --json --root /absolute/リポジトリ -- "small private fix"
 slipway run --budget 8 --json --root /absolute/リポジトリ \
-  --source-file /private/temp/change-envelope.json -- "implement the Change"
+  --goal-file /private/temp/goal.txt
+slipway run --budget 8 --json --root /absolute/リポジトリ \
+  --goal-file /private/temp/goal.txt \
+  --source-file /private/temp/change-envelope.json
 ```
+
+CLI が消費した後、ホストは temporary goal/source file を削除します。直接の `-- <goal>` は便利な human form として残ります。
 
 この コマンドは Action を返すだけで、code 変更を実行しません。
 
@@ -81,7 +86,7 @@ slipway status [run-id] [--root ROOT] [--json]
 
 ID 省略時は Git common directory 内の Run を一覧します。Current worktree の Run は replay され、別 linked worktree の Run は `workspace_foreign` マーク付き read-only header として表示されます。完全な inspect と mutation は owning worktree が必要です。
 
-`status` は filesystem に対して read-only です。Run namespace や lock file の作成、permission の変更、中断した ジャーナル tail の修復は行いません。Replay できない local recovery directory も JSON の `unavailable_runs` に残り、その ID を指定すると `run_ジャーナル_invalid`、存在しない ID なら `run_not_found` を返します。Writer が bounded inspection timeout を超えて commit boundary を保持した場合、targeted/list output は ジャーナル を invalid と誤分類せず `run_busy` を報告します。
+`status` は filesystem に対して read-only です。Run namespace や lock file の作成、permission の変更、中断した ジャーナル tail の修復は行いません。Run ID を指定した場合、存在しなければ `run_not_found`、local Run が壊れていれば `run_journal_invalid`、writer が bounded inspection timeout の間 commit boundary を保持すれば `run_busy` を返します。Repository-wide JSON は読めない local identity を `unavailable_runs` に残し、各 entry の `code` は `run_journal_invalid`、`run_unavailable`、`run_busy` のいずれかです。`run_not_found` は targeted error 専用で、`unavailable_runs[].code` には現れません。
 
 ID 指定時は現在の Run projection と fresh 派生の structured `next` を返します。空リストは有効な出力です。
 
@@ -97,6 +102,4 @@ Run を停止し、ジャーナル を保存します。ID 省略時は list の
 
 Generated アダプターは `protocol` 操作で Outcome 提出、Action の answer/skip、Run resume、pinned material 読み取りを行います。これらは実装詳細ではなく公開された contract であるため top-level help に表示されます。contract を隠すことは、それを偽って伝えることになります。
 
-ただし第2の user ワークフロー ではありません。いずれの操作も、手渡された Action だけが持つ Run と Action を必要とするため、単独では呼び出せません。
-
-Prose から コマンドを組み立てず、CLI が返す structured `next` variant を使ってください。詳細は[マシンプロトコル](machine-protocol.md)を参照してください。
+ただし第2の user ワークフローではありません。各操作は既存の Run だけを対象とし、該当する場合は CLI の structured `next` が示す Action、candidate、またはその他の typed identity を使います。Prose からコマンドを組み立てず、その variant を使ってください。`run` と `status` がそれらの variant を生成する入口です。詳細は[マシンプロトコル](machine-protocol.md)を参照してください。

@@ -208,13 +208,13 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if len(argv) < 9 || argv[0] != "slipway" || argv[1] != "protocol" || argv[2] != "answer" ||
 			argv[3] != "--run" || strings.HasPrefix(argv[4], "--") ||
 			argv[5] != "--action" || strings.HasPrefix(argv[6], "--") || argv[7] != "--root" {
-			return errors.New("operation answer requires exact slipway protocol answer --run RUN --action ACTION --root ROOT [--text TEXT] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
+			return errors.New("operation answer requires exact slipway protocol answer --run RUN --action ACTION --root ROOT [--text-file FILE] [--confirm-destructive] [--scope-sha256 DIGEST] grammar")
 		}
 		baseOptions, inputOptions, err := validateNextOperationOptions(
 			"answer", variant, 9,
-			[]string{"--text", "--scope-sha256"},
+			[]string{"--text", "--text-file", "--scope-sha256"},
 			[]string{"--confirm-destructive"},
-			[]string{"--text", "--scope-sha256"},
+			[]string{"--text-file", "--scope-sha256"},
 		)
 		if err != nil {
 			return err
@@ -231,19 +231,19 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if scopeInInputs && (!scopeInput.Required || scopeInput.Type != NextInputDigest) {
 			return errors.New("operation answer requires --scope-sha256 to be a required digest input")
 		}
-		if textInput, exists := inputOptions["--text"]; exists && textInput.Type != NextInputString {
-			return errors.New("operation answer requires --text to be a string input")
+		if textFileInput, exists := inputOptions["--text-file"]; exists && textFileInput.Type != NextInputPath {
+			return errors.New("operation answer requires --text-file to be a path input")
 		}
 		switch variant.ID {
 		case "answer-decision", "decline-or-feedback":
 			if len(argv) != 9 || confirmDestructive || scopeInBase || scopeInInputs ||
-				!nextInputsExactly(variant.Inputs, NextInput{Name: "text", Type: NextInputString, Flag: "--text", Required: true}) {
-				return fmt.Errorf("%s requires one required --text string input", variant.ID)
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "text_file", Type: NextInputPath, Flag: "--text-file", Required: true}) {
+				return fmt.Errorf("%s requires one required --text-file path input", variant.ID)
 			}
 		case "confirm-destructive":
 			if len(argv) != 12 || !confirmDestructive || !scopeInBase || scopeInInputs ||
-				!nextInputsExactly(variant.Inputs, NextInput{Name: "text", Type: NextInputString, Flag: "--text", Required: false}) {
-				return errors.New("confirm-destructive requires fixed confirmation scope argv and one optional --text string input")
+				!nextInputsExactly(variant.Inputs, NextInput{Name: "text_file", Type: NextInputPath, Flag: "--text-file", Required: false}) {
+				return errors.New("confirm-destructive requires fixed confirmation scope argv and one optional --text-file path input")
 			}
 		default:
 			return fmt.Errorf("operation answer has unsupported variant id %q", variant.ID)
@@ -257,7 +257,7 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 			"resume", variant, 6,
 			[]string{"--budget", "--source-file", "--source-choice", "--candidate"},
 			[]string{"--use-pinned-source"},
-			[]string{"--source-file", "--source-choice", "--candidate"},
+			[]string{"--budget", "--source-file", "--source-choice", "--candidate"},
 		)
 		if err != nil {
 			return err
@@ -267,9 +267,13 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		if sourceFileInInputs && (!sourceFileInput.Required || sourceFileInput.Type != NextInputPath) {
 			return errors.New("operation resume requires --source-file to be a required path input")
 		}
-		budgetValue, budgetPresent := baseOptions["--budget"]
-		if budgetPresent && !canonicalBudgetDecimal(budgetValue) {
+		budgetValue, budgetInBase := baseOptions["--budget"]
+		budgetInput, budgetInInputs := inputOptions["--budget"]
+		if budgetInBase && !canonicalBudgetDecimal(budgetValue) {
 			return errors.New("operation resume requires --budget to be a canonical positive base-10 integer no greater than 1000")
+		}
+		if budgetInInputs && (budgetInput.Required || budgetInput.Type != NextInputString || budgetInput.Name != "budget") {
+			return errors.New("operation resume requires --budget to be an optional string input")
 		}
 		choice, sourceChoiceInBase := baseOptions["--source-choice"]
 		sourceChoiceInput, sourceChoiceInInputs := inputOptions["--source-choice"]
@@ -309,57 +313,74 @@ func validateNextOperationFamily(operation NextOperation, variant NextVariant) e
 		}
 		switch variant.ID {
 		case "resume-ad-hoc":
-			if len(argv) != 6 || modeCount != 0 || len(variant.Inputs) != 0 {
-				return errors.New("resume-ad-hoc requires fixed argv without source mode or inputs")
+			if len(argv) != 6 || modeCount != 0 ||
+				!nextInputsExactly(variant.Inputs, optionalResumeBudgetInput()) {
+				return errors.New("resume-ad-hoc requires fixed source-free argv and one optional --budget input")
 			}
 		case "refresh-source":
-			if (len(argv) != 6 && len(argv) != 8) || (len(argv) == 8 && !budgetPresent) ||
+			expectedInputs := []NextInput{
+				{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true},
+			}
+			if !budgetInBase {
+				expectedInputs = append(expectedInputs, optionalResumeBudgetInput())
+			}
+			if (len(argv) != 6 && len(argv) != 8) || (len(argv) == 8 && !budgetInBase) ||
 				!sourceFileInInputs || sourceFileInBase || modeCount != 1 ||
-				!nextInputsExactly(variant.Inputs, NextInput{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}) {
-				return errors.New("refresh-source requires one required --source-file path input")
+				!nextInputsExactly(variant.Inputs, expectedInputs...) {
+				return errors.New("refresh-source requires one required --source-file path input and, unless fixed in argv, one optional --budget input")
 			}
 		case "use-pinned-source":
-			if len(argv) != 7 || !usePinnedSource || len(variant.Inputs) != 0 {
-				return errors.New("use-pinned-source requires fixed --use-pinned-source argv without inputs")
+			if len(argv) != 7 || !usePinnedSource ||
+				!nextInputsExactly(variant.Inputs, optionalResumeBudgetInput()) {
+				return errors.New("use-pinned-source requires fixed --use-pinned-source argv and one optional --budget input")
 			}
 		case "keep-pinned":
-			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoicePinned) || !candidateInBase || len(variant.Inputs) != 0 {
-				return errors.New("keep-pinned requires fixed pinned source-choice and candidate argv")
+			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoicePinned) || !candidateInBase ||
+				!nextInputsExactly(variant.Inputs, optionalResumeBudgetInput()) {
+				return errors.New("keep-pinned requires fixed pinned source-choice and candidate argv plus one optional --budget input")
 			}
 		case "adopt":
-			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoiceAdopt) || !candidateInBase || len(variant.Inputs) != 0 {
-				return errors.New("adopt requires fixed adopt source-choice and candidate argv")
+			if len(argv) != 10 || !sourceChoiceInBase || choice != string(SourceChoiceAdopt) || !candidateInBase ||
+				!nextInputsExactly(variant.Inputs, optionalResumeBudgetInput()) {
+				return errors.New("adopt requires fixed adopt source-choice and candidate argv plus one optional --budget input")
 			}
 		default:
 			return fmt.Errorf("operation resume has unsupported variant id %q", variant.ID)
 		}
 	case NextOperationStart:
-		validWithoutReview := len(argv) == 9 && argv[0] == "slipway" && argv[2] == "--budget" && argv[4] == "--json" &&
-			argv[5] == "--root" && argv[7] == "--"
-		validWithReviewDisabled := len(argv) == 10 && argv[0] == "slipway" && argv[2] == "--budget" && argv[4] == "--json" &&
-			argv[5] == "--root" && argv[7] == "--no-review" && argv[8] == "--"
+		validWithoutReview := len(argv) == 7 && argv[0] == "slipway" && argv[1] == "run" && argv[2] == "--budget" &&
+			argv[4] == "--json" && argv[5] == "--root"
+		validWithReviewDisabled := len(argv) == 8 && argv[0] == "slipway" && argv[1] == "run" && argv[2] == "--budget" &&
+			argv[4] == "--json" && argv[5] == "--root" && argv[7] == "--no-review"
 		if len(argv) < 2 || argv[1] != "run" || (!validWithoutReview && !validWithReviewDisabled) {
-			return errors.New("operation start requires exact slipway run --budget N --json --root ROOT [--no-review] -- GOAL grammar")
+			return errors.New("operation start requires exact slipway run --budget N --json --root ROOT [--no-review] with typed --goal-file input grammar")
 		}
 		if !canonicalBudgetDecimal(argv[3]) {
 			return errors.New("operation start requires --budget to be a canonical positive base-10 integer no greater than 1000")
 		}
 		for _, input := range variant.Inputs {
-			if input.Flag != "--source-file" {
+			if input.Flag != "--goal-file" && input.Flag != "--source-file" {
 				return fmt.Errorf("operation start inputs contain unsupported flag %q", input.Flag)
 			}
 			if !input.Required || input.Type != NextInputPath {
-				return errors.New("operation start requires --source-file to be a required path input")
+				return errors.New("operation start requires goal/source files to be required path inputs")
 			}
 		}
 		switch variant.ID {
 		case "retry-run":
-			if len(variant.Inputs) != 0 {
-				return errors.New("retry-run cannot require inputs")
+			if !nextInputsExactly(
+				variant.Inputs,
+				NextInput{Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true},
+			) {
+				return errors.New("retry-run requires one required --goal-file path input")
 			}
 		case "start-with-source":
-			if !nextInputsExactly(variant.Inputs, NextInput{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}) {
-				return errors.New("start-with-source requires one required --source-file path input")
+			if !nextInputsExactly(
+				variant.Inputs,
+				NextInput{Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true},
+				NextInput{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true},
+			) {
+				return errors.New("start-with-source requires required --goal-file and --source-file path inputs")
 			}
 		default:
 			return fmt.Errorf("operation start has unsupported variant id %q", variant.ID)
@@ -581,6 +602,9 @@ func (next Next) Resolve(variantID string, values map[string]NextInputValue) ([]
 				return nil, fmt.Errorf("input %q must use lowercase sha256:<64 hex> format", input.Name)
 			}
 		}
+		if input.Flag == "--budget" && !canonicalBudgetDecimal(value.Value) {
+			return nil, fmt.Errorf("input %q must be a canonical positive base-10 integer no greater than 1000", input.Name)
+		}
 		resolvedInputs = append(resolvedInputs, input.Flag, value.Value)
 	}
 
@@ -797,7 +821,7 @@ func decisionNext(run Run) (Next, error) {
 			{
 				ID:       "answer-decision",
 				BaseArgv: []string{"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
-				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
+				Inputs:   []NextInput{{Name: "text_file", Type: NextInputPath, Flag: "--text-file", Required: true}},
 			},
 			skipActionVariant(run),
 		},
@@ -821,12 +845,12 @@ func destructiveNext(run Run) (Next, error) {
 					"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID,
 					"--root", run.Workspace, "--confirm-destructive", "--scope-sha256", request.ScopeSHA256,
 				},
-				Inputs: []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: false}},
+				Inputs: []NextInput{{Name: "text_file", Type: NextInputPath, Flag: "--text-file", Required: false}},
 			},
 			{
 				ID:       "decline-or-feedback",
 				BaseArgv: []string{"slipway", "protocol", "answer", "--run", run.ID, "--action", run.CurrentAction.ActionID, "--root", run.Workspace},
-				Inputs:   []NextInput{{Name: "text", Type: NextInputString, Flag: "--text", Required: true}},
+				Inputs:   []NextInput{{Name: "text_file", Type: NextInputPath, Flag: "--text-file", Required: true}},
 			},
 			skipActionVariant(run),
 		},
@@ -838,18 +862,25 @@ func resumeNext(run Run) (Next, error) {
 	base := []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}
 	next := Next{Operation: NextOperationResume, WorkspaceIdentity: run.WorkspaceIdentity.ID, workspaceRoot: run.Workspace}
 	if run.PinnedSource == nil {
-		next.Variants = []NextVariant{{ID: "resume-ad-hoc", BaseArgv: base, Inputs: []NextInput{}}}
+		next.Variants = []NextVariant{{
+			ID:       "resume-ad-hoc",
+			BaseArgv: base,
+			Inputs:   []NextInput{optionalResumeBudgetInput()},
+		}}
 	} else {
 		next.Variants = []NextVariant{
 			{
 				ID:       "refresh-source",
 				BaseArgv: base,
-				Inputs:   []NextInput{{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}},
+				Inputs: []NextInput{
+					{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true},
+					optionalResumeBudgetInput(),
+				},
 			},
 			{
 				ID:       "use-pinned-source",
 				BaseArgv: append(append([]string(nil), base...), "--use-pinned-source"),
-				Inputs:   []NextInput{},
+				Inputs:   []NextInput{optionalResumeBudgetInput()},
 			},
 		}
 	}
@@ -866,17 +897,21 @@ func sourceCandidateNext(run Run) (Next, error) {
 		Variants: []NextVariant{{
 			ID:       "keep-pinned",
 			BaseArgv: append(append([]string(nil), base...), "--source-choice", "pinned", "--candidate", candidate.CandidateID),
-			Inputs:   []NextInput{},
+			Inputs:   []NextInput{optionalResumeBudgetInput()},
 		}},
 	}
 	if candidate.Valid {
 		next.Variants = append(next.Variants, NextVariant{
 			ID:       "adopt",
 			BaseArgv: append(append([]string(nil), base...), "--source-choice", "adopt", "--candidate", candidate.CandidateID),
-			Inputs:   []NextInput{},
+			Inputs:   []NextInput{optionalResumeBudgetInput()},
 		})
 	}
 	return validatedNext(next)
+}
+
+func optionalResumeBudgetInput() NextInput {
+	return NextInput{Name: "budget", Type: NextInputString, Flag: "--budget", Required: false}
 }
 
 func validatedNext(next Next) (Next, error) {

@@ -31,7 +31,7 @@ func makeUninstallCmd() *cobra.Command {
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), makeChangeReportOutput(report))
 			}
-			return writeChangeReport(cmd, "Uninstalled", report)
+			return writeChangeReport(cmd, "Uninstall result", report)
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "", "workspace root (default: current directory)")

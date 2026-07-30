@@ -75,7 +75,9 @@ For issue-backed work, the trusted host fetches the Issue and manifest-reference
 
 Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
 
-The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The base contract in issue #434, later accepted ADRs, and the versioned schemas together define the intended contract. [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) adds the seventh host capability and reaffirms the no-router boundary; [ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) scopes it to lifecycle routing across Slipway's own functions. Runtime tests are executable evidence of the current implementation, not a replacement for those sources.
+The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). Issue #434 records the original proposal, product goals, design intent, and rationale; it is mutable, and its details may be superseded by later decisions or implementation evolution. Accepted ADRs preserve significant decisions and their rationale rather than governing every bug fix or documentation update. Versioned schemas are authoritative only for the serialization shapes they cover. [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) adds the seventh host capability and reaffirms the no-router boundary; [ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) scopes it to lifecycle routing across Slipway's own functions.
+
+For a given revision, its code, built `--help`, generated capabilities, user documentation, and observable behavior describe the implemented product and must be kept coherent. A tagged release, its release notes, and its actual artifacts state what users can obtain as published behavior. Tests, acceptance runs, and CI are evidence from particular revisions and executions; they do not set product direction or hold merge, readiness, or release authority.
 
 ## Security boundary
 
@@ -84,6 +86,7 @@ The source-bundle rationale and rejected alternatives are recorded in [ADR-0001]
 Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:
 
 - anchors filesystem operations and rejects unsafe symlink traversal;
+- narrows deletion races by relocating entries into a private quarantine and revalidating identity, but does not claim exact-object deletion: a continuously racing same-UID watcher can still replace the final pathname between validation and the pathname-based `unlink` or `rmdir` system call;
 - validates strict JSON, sizes, identities, and digests;
 - keeps credentials out of Slipway storage and GitHub fetch/publication out of the Run core;
 - separates one-shot destructive grants from natural-language answers;

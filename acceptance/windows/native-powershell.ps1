@@ -16,6 +16,7 @@ $OutputEncoding = $Utf8NoBom
 [Console]::InputEncoding = $Utf8NoBom
 [Console]::OutputEncoding = $Utf8NoBom
 $UnicodeProbe = [char]0x754C
+$NativeProcessTimeoutMilliseconds = 120000
 
 function Fail([string]$Message) {
     throw "native Windows acceptance ($Mode) failed: $Message"
@@ -182,7 +183,11 @@ function Invoke-ExactNativeProcess {
             $process.StandardInput.Write($StdinText)
             $process.StandardInput.Close()
         }
-        $process.WaitForExit()
+        if (-not $process.WaitForExit($script:NativeProcessTimeoutMilliseconds)) {
+            try { $process.Kill() } catch {}
+            [void]$process.WaitForExit(5000)
+            Fail "native process timed out after $($script:NativeProcessTimeoutMilliseconds) ms: $FileName"
+        }
         return [pscustomobject]@{
             ExitCode = $process.ExitCode
             Stdout = $stdoutTask.Result
@@ -216,6 +221,8 @@ function Invoke-SlipwayDirect {
 function Invoke-SlipwayViaCmd {
     param([string[]]$CommandArgs)
     $argumentLine = Join-WindowsCommandLine -Values $CommandArgs
+    # Leave the outer cmd.exe watchdog time to collect the inner timeout.
+    $nestedProcessTimeoutMilliseconds = $script:NativeProcessTimeoutMilliseconds - 10000
     $parts = New-Object System.Collections.Generic.List[string]
     $parts.Add('$ErrorActionPreference = ''Stop'';')
     $parts.Add('$innerUtf8NoBom = New-Object System.Text.UTF8Encoding($false);')
@@ -236,7 +243,11 @@ function Invoke-SlipwayViaCmd {
     $parts.Add('if (-not $process.Start()) { exit 1 };')
     $parts.Add('$stdoutTask = $process.StandardOutput.ReadToEndAsync();')
     $parts.Add('$stderrTask = $process.StandardError.ReadToEndAsync();')
-    $parts.Add('$process.WaitForExit();')
+    $parts.Add(
+        'if (-not $process.WaitForExit(' + $nestedProcessTimeoutMilliseconds +
+        ')) { try { $process.Kill() } catch {}; [void]$process.WaitForExit(5000); ' +
+        '[Console]::Error.Write("slipway process timed out"); $process.Dispose(); exit 124 };'
+    )
     $parts.Add('$stdout = $stdoutTask.Result;')
     $parts.Add('$stderr = $stderrTask.Result;')
     $parts.Add('$exitCode = $process.ExitCode;')
@@ -248,11 +259,13 @@ function Invoke-SlipwayViaCmd {
         [Text.Encoding]::Unicode.GetBytes(($parts -join ' '))
     )
     $safeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand $encoded"
-    $output = & $env:ComSpec '/d' '/v:on' '/s' '/c' $safeCommand 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = Join-NativeOutput $output
-    if ($exitCode -ne 0) {
-        Fail "cmd.exe /v:on invocation exited $exitCode; output: $text"
+    $result = Invoke-ExactNativeProcess -FileName $env:ComSpec -CommandArgs @('/d', '/v:on', '/s', '/c', $safeCommand)
+    $text = $result.Stdout
+    if ($result.Stderr.Length -gt 0) {
+        $text += [Environment]::NewLine + $result.Stderr
+    }
+    if ($result.ExitCode -ne 0) {
+        Fail "cmd.exe /v:on invocation exited $($result.ExitCode); output: $text"
     }
     return $text
 }
@@ -454,6 +467,38 @@ $script:Exe = Join-Path $tools 'slipway.exe'
 try {
     New-Item -ItemType Directory -Path $repo -Force | Out-Null
     New-Item -ItemType Directory -Path $tools -Force | Out-Null
+    $isolatedHome = Join-Path $tempRoot 'home'
+    $isolatedXdg = Join-Path $tempRoot 'xdg'
+    $isolatedGh = Join-Path $tempRoot 'gh'
+    New-Item -ItemType Directory -Path $isolatedHome, $isolatedXdg, $isolatedGh -Force | Out-Null
+    # Bind the fixture to its own Git and GitHub CLI state.
+    $inheritedEnvironment = @(
+        'GIT_DIR', 'GIT_WORK_TREE', 'GIT_IMPLICIT_WORK_TREE', 'GIT_COMMON_DIR',
+        'GIT_INDEX_FILE', 'GIT_INDEX_VERSION', 'GIT_OBJECT_DIRECTORY',
+        'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_QUARANTINE_PATH', 'GIT_NAMESPACE',
+        'GIT_REPLACE_REF_BASE', 'GIT_NO_REPLACE_OBJECTS', 'GIT_SHALLOW_FILE',
+        'GIT_GRAFT_FILE', 'GIT_CEILING_DIRECTORIES', 'GIT_DISCOVERY_ACROSS_FILESYSTEM',
+        'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_GLOBAL',
+        'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_TEMPLATE_DIR',
+        'GIT_PREFIX',
+        'GH_CONFIG_DIR', 'GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN',
+        'GITHUB_ENTERPRISE_TOKEN'
+    )
+    foreach ($name in $inheritedEnvironment) {
+        Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction SilentlyContinue
+    }
+    Get-ChildItem Env: |
+        Where-Object { $_.Name -like 'GIT_CONFIG_KEY_*' -or $_.Name -like 'GIT_CONFIG_VALUE_*' } |
+        ForEach-Object { Remove-Item -LiteralPath ('Env:' + $_.Name) -ErrorAction SilentlyContinue }
+    $env:HOME = $isolatedHome
+    $env:USERPROFILE = $isolatedHome
+    $env:XDG_CONFIG_HOME = $isolatedXdg
+    $env:GIT_CONFIG_GLOBAL = Join-Path $tempRoot 'gitconfig'
+    $env:GIT_CONFIG_NOSYSTEM = '1'
+    $env:GIT_TERMINAL_PROMPT = '0'
+    $env:GH_CONFIG_DIR = $isolatedGh
+    Write-Utf8 -Path $env:GIT_CONFIG_GLOBAL -Text ''
+
     Copy-Item -LiteralPath $resolvedExe -Destination $script:Exe -Force
     $env:PATH = $tools + [IO.Path]::PathSeparator + $env:PATH
 
@@ -471,7 +516,9 @@ try {
     Assert-True ($null -ne $doctor.checks) 'doctor checks are missing'
 
     $goal = "spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
-    $startMutation = (Invoke-ResolvedArgv -CommandArgs @('run', $goal, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
+    $goalPath = Join-Path $tempRoot ('goal file % ! & ^ ' + $UnicodeProbe + '.txt')
+    Write-Utf8 $goalPath $goal
+    $startMutation = (Invoke-ResolvedArgv -CommandArgs @('run', '--goal-file', $goalPath, '--root', $repo, '--budget', '12', '--json')) | ConvertFrom-Json
     $start = Get-MutationAction -Envelope $startMutation -ExpectedKind 'orient'
     Assert-TextEqual -Actual ([string]$start.goal) -Expected $goal -Message 'special-character goal did not preserve exact text'
     $startStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
@@ -490,7 +537,9 @@ try {
     Assert-True ($paused.next.operation -eq 'answer') 'decision pause did not return structured answer next'
 
     $specialAnswer = "answer spaces `"double`" and 'single' ${UnicodeProbe}`r`npercent % bang ! amp & caret ^"
-    $orientedText = Invoke-NextVariant -Next $paused.next -VariantId 'answer-decision' -InputValues @{ text = $specialAnswer }
+    $answerPath = Join-Path $tempRoot ('answer file % ! & ^ ' + $UnicodeProbe + '.txt')
+    Write-Utf8 $answerPath $specialAnswer
+    $orientedText = Invoke-NextVariant -Next $paused.next -VariantId 'answer-decision' -InputValues @{ text_file = $answerPath }
     $orientedMutation = $orientedText | ConvertFrom-Json
     $oriented = Get-MutationAction -Envelope $orientedMutation -ExpectedKind 'orient'
     $answeredStatus = (Invoke-ResolvedArgv -CommandArgs @('status', $start.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
@@ -545,6 +594,9 @@ try {
 
     $sourceAmended = New-SourceEnvelope -RequirementText 'Keep the materially amended Windows requirement.' -UpdatedAt '2026-07-12T10:00:00Z' -ParentRequirementsRevision $sourceStart.source.requirements_revision
     Write-Utf8 $sourcePath (($sourceAmended | ConvertTo-Json -Depth 20 -Compress) + "`r`n")
+    $sourceStopped = (Invoke-ResolvedArgv -CommandArgs @('stop', $sourceStart.run_id, '--root', $repo, '--json')) | ConvertFrom-Json
+    Assert-True ($sourceStopped.state -eq 'stopped') 'source Run did not stop before refresh'
+    Assert-True ($sourceStopped.next.operation -eq 'resume') 'stopped source Run did not return resume next'
     $candidate = (Invoke-ResolvedArgv -CommandArgs @('protocol', 'resume', $sourceStart.run_id, '--root', $repo, '--source-file', $sourcePath, '--budget', '20')) | ConvertFrom-Json
     Assert-True ($candidate.state -eq 'paused') 'material source refresh did not pause'
     Assert-True ($candidate.budget_applied -eq $false) 'candidate creation applied replacement budget'

@@ -10,9 +10,11 @@ import (
 )
 
 type generatedFile struct {
-	Relative   string
-	Data       []byte
-	Capability string
+	Relative                 string
+	Data                     []byte
+	Capability               string
+	Callable                 bool
+	ExplicitInvocationPolicy bool
 }
 
 const codexExplicitInvocationPolicy = "policy:\n  allow_implicit_invocation: false\n"
@@ -110,12 +112,14 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 				Relative:   filepath.ToSlash(filepath.Join(capabilityRoot, "SKILL.md")),
 				Data:       []byte(content + "\n" + common),
 				Capability: capability,
+				Callable:   true,
 			})
 			if host.ID == "codex" {
 				files = append(files, generatedFile{
-					Relative:   filepath.ToSlash(filepath.Join(capabilityRoot, "agents", "openai.yaml")),
-					Data:       []byte(codexExplicitInvocationPolicy),
-					Capability: capability,
+					Relative:                 filepath.ToSlash(filepath.Join(capabilityRoot, "agents", "openai.yaml")),
+					Data:                     []byte(codexExplicitInvocationPolicy),
+					Capability:               capability,
+					ExplicitInvocationPolicy: true,
 				})
 			}
 		case "copilot_agent":
@@ -124,6 +128,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 				Relative:   filepath.ToSlash(filepath.Join(".github/agents", capability+".agent.md")),
 				Data:       []byte(content),
 				Capability: capability,
+				Callable:   true,
 			})
 		case "kilo_command":
 			files = append(files,
@@ -131,6 +136,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 					Relative:   filepath.ToSlash(filepath.Join(".kilo/commands", capability+".md")),
 					Data:       fmt.Appendf(nil, "---\ndescription: %q\nsubtask: false\n---\n\n@.kilocode/slipway/capabilities/%s.md\n", description, capability),
 					Capability: capability,
+					Callable:   true,
 				},
 				generatedFile{
 					Relative:   filepath.ToSlash(filepath.Join(".kilocode/slipway/capabilities", capability+".md")),
@@ -144,6 +150,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 					Relative:   filepath.ToSlash(filepath.Join(".kiro/steering", capability+".md")),
 					Data:       fmt.Appendf(nil, "---\ninclusion: manual\n---\n\n#[[file:.kiro/slipway/capabilities/%s.md]]\n", capability),
 					Capability: capability,
+					Callable:   true,
 				},
 				generatedFile{
 					Relative:   filepath.ToSlash(filepath.Join(".kiro/slipway/capabilities", capability+".md")),
@@ -171,6 +178,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 					Relative:   filepath.ToSlash(filepath.Join(".kiro/agents", capability+".json")),
 					Data:       append(agent, '\n'),
 					Capability: capability,
+					Callable:   true,
 				},
 				generatedFile{
 					Relative:   filepath.ToSlash(filepath.Join(".kiro/slipway/capabilities", capability+".md")),
@@ -184,6 +192,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 					Relative:   filepath.ToSlash(filepath.Join(".opencode/commands", capability+".md")),
 					Data:       fmt.Appendf(nil, "---\ndescription: %q\n---\n\n@.opencode/slipway/capabilities/%s.md\n", description, capability),
 					Capability: capability,
+					Callable:   true,
 				},
 				generatedFile{
 					Relative:   filepath.ToSlash(filepath.Join(".opencode/slipway/capabilities", capability+".md")),
@@ -197,6 +206,7 @@ func generateHostFiles(host Host) ([]generatedFile, error) {
 					Relative:   filepath.ToSlash(filepath.Join(".windsurf/workflows", capability+".md")),
 					Data:       fmt.Appendf(nil, "---\ndescription: %q\n---\n\n@.windsurf/slipway/capabilities/%s.md\n", description, capability),
 					Capability: capability,
+					Callable:   true,
 				},
 				generatedFile{
 					Relative:   filepath.ToSlash(filepath.Join(".windsurf/slipway/capabilities", capability+".md")),

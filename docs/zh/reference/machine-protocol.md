@@ -18,10 +18,10 @@ Schema 定义 serialization shape。Runtime 还会验证 JSON Schema 无法完�
 宿主通常在每一步使用 JSON：
 
 ```text
-slipway run --budget N --json --root ROOT [--no-review] [--source-file FILE] -- GOAL
+slipway run --budget N --json --root ROOT [--no-review] --goal-file GOAL_FILE [--source-file SOURCE_FILE]
 slipway protocol submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
-slipway protocol answer --run RUN --action ACTION --root ROOT --text TEXT
-slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway protocol answer --run RUN --action ACTION --root ROOT --text-file TEXT_FILE
+slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text-file TEXT_FILE]
 slipway protocol skip --run RUN --action ACTION --root ROOT
 slipway protocol resume RUN --root ROOT [--budget N]
 slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
@@ -32,13 +32,14 @@ slipway protocol material --run RUN --action ACTION --root ROOT --section KEY
 
 ## 启动 Run
 
-Canonical invocation 将所有 flags 放在一个 `--` separator 前，将 literal goal 放在其后：
+Canonical host invocation 不把 exact goal 放入 argv。宿主将其写入私密临时 regular non-symlink file，并解析 start variant 返回的 required `goal_file` path：
 
 ```bash
-slipway run --budget 8 --json --root /absolute/worktree -- "one goal"
+slipway run --budget 8 --json --root /absolute/worktree \
+  --goal-file /private/temp/goal.txt
 ```
 
-Ad-hoc Run 省略 source field。Issue-backed Run 提供私密临时 `--source-file`；CLI 只消费一次，之后不依赖该文件或 GitHub。
+Ad-hoc Run 省略 source field。Issue-backed Run 另行提供私密临时 `--source-file`。CLI 消费后，宿主删除两个临时文件；Run 此后不依赖这些文件或 GitHub。Human caller 仍可使用一个 positional goal 或 `--goal-stdin`，但 generated adapter 使用 `goal_file`，避免 process list/command trace 泄露和平台 command-line length 限制。
 
 Start response 包含 Run state、初始 `orient` Action 与结构化 `next` operation。
 
@@ -161,6 +162,8 @@ Outcome input 上限 1 MiB，必须是有效 UTF-8，不能含 BOM、duplicate/u
 
 Input type 为 `string`、`path`、`enum` 或 `digest`。Consumer 选择一个 variant，按 schema 顺序将输入值作为独立 argv element 插入；不得解析或拼接 display command。
 
+Start variant 通过 required `goal_file` path input 携带 exact goal，不把 goal text 嵌入 `base_argv`。Decision/feedback variant 同样使用 required `text_file` path；destructive confirmation note 使用 optional `text_file`。宿主创建私密临时 regular file，解析 typed variant，并在消费后删除文件。Direct `--text` 与 stdin mode 仍是 human-facing convenience，不是 generated machine canonical path。
+
 只有所有 required input 已解决的 variant 才能渲染为人类 shell command。POSIX、`cmd.exe` 和 PowerShell rendering 只用于显示；structured argv 才是 machine value。
 
 当 Windows display command 含有 `cmd.exe` 无法安全保真的 expansion-sensitive `%` 或 `!` 值时，renderer 使用 PowerShell UTF-16LE `EncodedCommand` trampoline。这只改变可复制的显示形式；解码后的 process argv 必须与结构化 variant 逐字节等价。
@@ -193,7 +196,11 @@ Issue-backed resume 必须明确执行以下一种操作：
 
 省略 source option 既不表示“unchanged”，也不会触发隐式网络访问。Issue identity 不同或 amendment parent requirements revision 不同会在不修改 Run 的情况下被拒绝。Candidate ID 与 choice 支持 stale-safe idempotency。
 
+版本化 schema 是封闭的 `source_candidate.classification_code`、`resume_operation` 枚举以及 valid/invalid candidate 字段组合的序列化权威。对于 invalid candidate，`observation_sha256` 是对精确被拒 source observation 进行 domain separation 后的 digest，用于确定性比较；它只是 provenance，不是已接受 Requirements，也不能证明宿主确实从 GitHub 获取了内容。
+
 成功 resume 会按需 void stale outstanding work、重新验证 workspace，并通常返回 fresh Orient。省略 `--budget` 时保留大于零的 remaining budget，若为零则补充到 `max(initial_budget, 3)`；明确传入 `--budget N` 会替换为 `N`。Replacement 只在真正 resume Run 的 mutation 上生效。
+
+只有当前 typed `next.operation` 为 `resume` 时才接受 `resume`。在 active Action 或可 answer 的 decision/destructive pause 中调用会被拒绝，并返回当前 typed recovery，避免成功响应丢失后的重试静默作废更新的工作。用户 take-over/reorder 先使用公开 `slipway stop`，之后再单独显式 resume。
 
 ## Workspace 与 Git observation
 
@@ -213,6 +220,8 @@ Git observation 保存 index、porcelain status 和 dirty path 的 hash 与范�
 ## Error 与兼容性
 
 Machine error 包含 `contract_version`、稳定 `code`、human `message`、`exit_code`，并在可恢复时带 structured recovery。Consumer 应按 code/version 分支，不能按 message text 分支。
+
+若 mutation 已 commit，但随后 derive、render 或 write response 失败，`mutation_committed_output_failed` 会报告 `committed: true`、exact Run ID，以及定向的 `slipway status RUN --root ROOT` recovery。不得盲目重放 mutation。
 
 `exit_code` 与进程退出状态一致，只有两个取值：
 

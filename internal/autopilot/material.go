@@ -36,7 +36,7 @@ func (service *Service) ReadActionMaterial(
 		return ActionMaterial{}, &ProtocolError{
 			Code:    "material_section_invalid",
 			Message: "section must be a valid source section key",
-			Next:    NoneNext(service.openIdentity.ID),
+			Next:    materialStatusNext(service.store.RepositoryRoot(), service.openIdentity.ID, runID),
 		}
 	}
 	if _, err := service.validateOpenWorkspace(); err != nil {
@@ -67,7 +67,7 @@ func (service *Service) ReadActionMaterial(
 				return &ProtocolError{
 					Code:    "material_action_not_found",
 					Message: fmt.Sprintf("action %q does not belong to run %q", actionID, runID),
-					Next:    NoneNext(run.WorkspaceIdentity.ID),
+					Next:    materialRecoveryNext(run),
 				}
 			}
 			if run.State == RunStopped || run.State == RunEnded || record.Voided ||
@@ -162,14 +162,17 @@ func (service *Service) ReadActionMaterial(
 }
 
 func materialRecoveryNext(run Run) Next {
-	root := run.Workspace
+	return materialStatusNext(run.Workspace, run.WorkspaceIdentity.ID, run.ID)
+}
+
+func materialStatusNext(root, workspaceIdentity, runID string) Next {
 	return Next{
 		Operation:         NextOperationCommand,
-		WorkspaceIdentity: run.WorkspaceIdentity.ID,
+		WorkspaceIdentity: workspaceIdentity,
 		workspaceRoot:     root,
 		Variants: []NextVariant{{
 			ID:       "inspect-run",
-			BaseArgv: []string{"slipway", "status", "--root", root},
+			BaseArgv: []string{"slipway", "status", runID, "--root", root},
 			Inputs:   []NextInput{},
 		}},
 	}

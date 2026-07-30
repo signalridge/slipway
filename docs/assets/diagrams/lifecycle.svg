@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 690" role="img" aria-labelledby="lifecycle-title lifecycle-desc">
   <title id="lifecycle-title">Slipway Run lifecycle</title>
-  <desc id="lifecycle-desc">A Run begins only after explicit user invocation. The CLI issues one Action, the host performs work and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing another Action, pausing, stopping, or ending. Paused and stopped Runs can resume explicitly. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.</desc>
+  <desc id="lifecycle-desc">A Run begins only after explicit user invocation. The CLI issues one Action, the host performs work and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing another Action, pausing, stopping, or ending. A paused Run continues only through its current typed answer, skip, or resume operation; stopped Runs resume explicitly. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
   User([Explicit user start]) --> Run[Create or resume Run]
@@ -11,7 +11,7 @@ flowchart LR
   Next -->|next Action| Action
   Action -->|skip · no reason required| Validate
   Next -->|four reported reasons: decision (incl. changed source), environment, budget, destructive scope| Paused([Paused])
-  Paused -->|answer or explicit resume| Action
+  Paused -->|current typed answer / skip / resume| Action
   Next -->|stop / reorder / take over| Stopped([Stopped])
   Stopped -->|explicit resume| Action
   Next -->|automatic queue empty| Ended([Ended])
@@ -190,7 +190,7 @@ flowchart LR
   <text class="edge-label" x="656" y="314">skip · no reason required</text>
 
   <rect class="label-bg" x="304" y="426" width="179" height="18" rx="5"/>
-  <text class="edge-label" x="310" y="439">answer / explicit resume</text>
+  <text class="edge-label" x="310" y="439">typed answer · skip · resume</text>
 
   <rect class="label-bg" x="511" y="426" width="125" height="18" rx="5"/>
   <text class="edge-label" x="517" y="439">explicit resume</text>

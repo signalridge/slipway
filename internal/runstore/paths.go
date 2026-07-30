@@ -11,7 +11,6 @@ import (
 	"hash"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -964,7 +963,7 @@ func gitBytes(root string, args ...string) ([]byte, error) {
 func gitBytesContext(parent context.Context, root string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", root}, args...)...) // #nosec G204 -- fixed git executable with internal argument sets; no shell interpretation.
+	cmd := fsutil.GitCommandContext(ctx, "git", append([]string{"-C", root}, args...)...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("prepare git %s stdout: %w", strings.Join(args, " "), err)

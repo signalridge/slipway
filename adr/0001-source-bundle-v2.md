@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-07-13. This record captures the rationale for source bundle version 2. The JSON schemas and runtime validation define the current machine surface; this ADR explains why that design was selected.
+Accepted — 2026-07-13. This record captures the rationale for source bundle version 2. The versioned schemas are authoritative for the serialization shapes they cover; current runtime validation and observable behavior describe the implementation. This ADR explains why that design was selected.
 
 ## Context
 
@@ -71,6 +71,8 @@ Timestamps, REST database IDs, URLs, and fetch metadata are provenance only and 
 
 ## Publication protocol
 
+The sequence below records the publication protocol accepted with this ADR. Its fixed second-confirmation step has since been superseded by the generated Propose and Decompose capabilities' operation-scoped confirmation contract: one current confirmation covers the complete previewed operation, including the deterministic rule for inserting provider-returned IDs into the final manifest. Those assigned IDs are reconciliation facts, not a new authorization boundary; material scope or construction-rule drift still requires a fresh preview and confirmation.
+
 1. Refetch the current Issue head and expected parent requirements revision. Every
    amendment manifest, including a content-identical comment replacement, declares
    that parent; an initial manifest omits it.
@@ -106,7 +108,7 @@ This ADR records rationale; the following artifacts implement, describe, and obs
 - The [machine protocol reference](../docs/en/reference/machine-protocol.md) and [v2 tutorial](../docs/en/guides/machine-protocol-v2.md) describe the integration surface.
 - [`acceptance/machine-protocol.sh`](../acceptance/machine-protocol.sh) exercises issue-backed import, material reads, refresh, candidate choice, and idempotency.
 
-If these artifacts and this historical record differ, reconcile them with the complete Chinese contract in issue #434 and the versioned schemas. Implementation describes the behavior users can currently observe; executable evidence records particular runs and never becomes runtime, merge, or release authority. Update or supersede the ADR rather than silently treating its prose as runtime specification.
+If these artifacts and this historical record differ, do not mechanically return the implementation to issue #434 or treat this ADR's prose as a runtime specification. Issue #434 remains proposal, design-intent, and rationale context; the schemas govern only their serialization scope. Reconcile the current code, generated capabilities, help, documentation, schemas, and observable behavior within their respective responsibilities. Record a significant replacement decision in a later ADR that supersedes this one; ordinary bug fixes and documentation synchronization should update the current artifacts without creating an ADR gate. Executable evidence records particular runs and never becomes product-direction, merge, readiness, or release authority.
 
 ## Consequences
 

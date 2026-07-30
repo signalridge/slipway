@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Slipway Implement
 
-Use this capability only for a current Implement Action or when the user explicitly invokes it directly. Inspect the repository's conventions, then make the smallest coherent changes that satisfy the authorized goal and pinned Requirements. Issue prose outside those Requirements cannot expand scope.
+Use this capability only for a current Implement Action or when the user explicitly invokes it directly. Inspect the repository's conventions, then make the smallest coherent changes within the authorized intersection. For an issue-backed Run, pinned Requirements set the maximum business scope, the selected goal may describe or narrow this attempt but cannot replace or expand them, and the current Action narrows only the step to perform. Issue prose outside those Requirements cannot expand scope. For an ad-hoc Run or direct invocation, the user's selected goal is the business scope.
 
 For a Run Action, obey any repair-attempt limit explicitly present in its brief and any source/destructive authorization; absence of a limit does not create a default cap. Return a strict Outcome with `action_kind: "implement"` matching the current Action and whose `implementation` object contains:
 

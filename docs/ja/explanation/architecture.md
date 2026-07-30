@@ -75,7 +75,9 @@ Issue-backed work では、trusted ホストが Issue と manifest 参照 commen
 
 Accepted section は content-addressed で、local material reader 経由で利用できます。Action は revision と bounded catalog だけを持ち、大きな requirements が Action context に入らず、offline 復旧も可能です。
 
-Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。issue #434 の base contract、後続の Accepted ADR、versioned schema が一体で intended contract を定義します。[ADR-0002](../../../adr/0002-seventh-capability-workflow.md) は 7 番目の host capability を追加して no-router boundary を再確認し、[ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) はその scope を Slipway 自身の function 間の lifecycle routing に限定します。Runtime test は現在の実装に対する executable evidence であり、それらの代替ではありません。
+Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。Issue #434 は当初の提案、製品目標、設計意図、判断理由を記録するものです。本文は変更可能で、具体的な設計詳細は後続の決定や実装の進展によって置き換えられることがあります。Accepted ADR は重要な決定とその理由を履歴として残すものであり、個々の bug fix や documentation update を統制しません。Versioned schema は、それぞれが対象とする serialization shape の範囲でのみ authoritative です。[ADR-0002](../../../adr/0002-seventh-capability-workflow.md) は 7 番目の host capability を追加して no-router boundary を再確認し、[ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) はその scope を Slipway 自身の function 間の lifecycle routing に限定します。
+
+ある revision の code、build された `--help`、生成済み capability、ユーザー向け文書、observable behavior は、その revision で実装されている製品を記述し、相互に整合している必要があります。Tagged release、その release notes、実在する artifact は、ユーザーが取得できる published behavior を示します。Test、acceptance、CI は特定の revision と execution に対する evidence であり、product direction を決定せず、merge、readiness、release の authority も持ちません。
 
 ## Security boundary
 
@@ -84,6 +86,7 @@ Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr
 Slipway は、同じ account の process、root、malware、compromised ホストがその保護を超え得ると仮定します。その境界内で次を行います。
 
 - filesystem operation を anchor し、unsafe symlink traversal を拒否する。
+- 削除対象を private quarantine に移して identity を再検証することで deletion race の window を狭めるが、exact-object deletion は保証しない。継続的に競合する同一 UID の watcher は、最終検証と pathname-based な `unlink` または `rmdir` system call の間で対象 pathname を置き換え得る。
 - strict JSON、size、identity、digest を検証する。
 - 認証情報を Slipway storage に保存せず、GitHub fetch/publication を Run core の外に置く。
 - One-shot destructive grant と自然言語 answer を分離する。

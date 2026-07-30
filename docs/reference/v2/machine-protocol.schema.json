@@ -272,7 +272,7 @@
       "required": [
         "candidate_id", "valid", "classification", "classification_code", "source_version", "parser_version",
         "provider", "host", "repository_id", "issue_id", "issue_number", "canonical_url", "url_aliases",
-        "title", "created_at"
+        "created_at"
       ],
       "properties": {
         "candidate_id": { "type": "string", "minLength": 1 },
@@ -306,7 +306,7 @@
       },
       "oneOf": [
         {
-          "required": ["source_revision", "requirements_revision", "snapshot"],
+          "required": ["source_revision", "requirements_revision", "title", "snapshot"],
           "properties": {
             "valid": { "const": true },
             "classification": { "const": "valid" },
@@ -337,6 +337,7 @@
             "anyOf": [
               { "required": ["source_revision"] },
               { "required": ["requirements_revision"] },
+              { "required": ["title"] },
               { "required": ["snapshot"] }
             ]
           }
@@ -619,7 +620,7 @@
       "required": ["id", "code", "detail"],
       "properties": {
         "id": { "$ref": "#/$defs/nonEmptyPlainText" },
-        "code": { "enum": ["run_journal_invalid", "run_unavailable"] },
+        "code": { "enum": ["run_journal_invalid", "run_unavailable", "run_busy"] },
         "detail": { "$ref": "#/$defs/nonEmptyPlainText" }
       }
     },
@@ -776,6 +777,61 @@
         }
       ]
     },
+    "nextOptionalBudgetInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "const": "budget" },
+        "type": { "const": "string" },
+        "flag": { "const": "--budget" },
+        "required": { "const": false }
+      }
+    },
+    "nextRequiredGoalFileInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "const": "goal_file" },
+        "type": { "const": "path" },
+        "flag": { "const": "--goal-file" },
+        "required": { "const": true }
+      }
+    },
+    "nextRequiredSourceFileInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "const": "source_file" },
+        "type": { "const": "path" },
+        "flag": { "const": "--source-file" },
+        "required": { "const": true }
+      }
+    },
+    "nextRequiredTextFileInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "const": "text_file" },
+        "type": { "const": "path" },
+        "flag": { "const": "--text-file" },
+        "required": { "const": true }
+      }
+    },
+    "nextOptionalTextFileInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "flag", "required"],
+      "properties": {
+        "name": { "const": "text_file" },
+        "type": { "const": "path" },
+        "flag": { "const": "--text-file" },
+        "required": { "const": false }
+      }
+    },
     "nextVariant": {
       "type": "object",
       "additionalProperties": false,
@@ -911,17 +967,7 @@
                 "inputs": {
                   "minItems": 1,
                   "maxItems": 1,
-                  "prefixItems": [{
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["name", "type", "flag", "required"],
-                    "properties": {
-                      "name": { "const": "text" },
-                      "type": { "const": "string" },
-                      "flag": { "const": "--text" },
-                      "required": { "const": true }
-                    }
-                  }],
+                  "prefixItems": [{ "$ref": "#/$defs/nextRequiredTextFileInput" }],
                   "items": false
                 }
               }
@@ -950,17 +996,7 @@
                 "inputs": {
                   "minItems": 1,
                   "maxItems": 1,
-                  "prefixItems": [{
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["name", "type", "flag", "required"],
-                    "properties": {
-                      "name": { "const": "text" },
-                      "type": { "const": "string" },
-                      "flag": { "const": "--text" },
-                      "required": { "const": false }
-                    }
-                  }],
+                  "prefixItems": [{ "$ref": "#/$defs/nextOptionalTextFileInput" }],
                   "items": false
                 }
               }
@@ -987,7 +1023,12 @@
                   ],
                   "items": false
                 },
-                "inputs": { "maxItems": 0 }
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{ "$ref": "#/$defs/nextOptionalBudgetInput" }],
+                  "items": false
+                }
               }
             }
           ]
@@ -996,11 +1037,11 @@
           "allOf": [
             { "$ref": "#/$defs/nextVariant" },
             {
-              "properties": {
-                "id": { "const": "refresh-source" },
-                "base_argv": {
-                  "oneOf": [
-                    {
+              "properties": { "id": { "const": "refresh-source" } },
+              "oneOf": [
+                {
+                  "properties": {
+                    "base_argv": {
                       "minItems": 6,
                       "maxItems": 6,
                       "prefixItems": [
@@ -1009,7 +1050,30 @@
                       ],
                       "items": false
                     },
-                    {
+                    "inputs": {
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "prefixItems": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["name", "type", "flag", "required"],
+                          "properties": {
+                            "name": { "const": "source_file" },
+                            "type": { "const": "path" },
+                            "flag": { "const": "--source-file" },
+                            "required": { "const": true }
+                          }
+                        },
+                        { "$ref": "#/$defs/nextOptionalBudgetInput" }
+                      ],
+                      "items": false
+                    }
+                  }
+                },
+                {
+                  "properties": {
+                    "base_argv": {
                       "minItems": 8,
                       "maxItems": 8,
                       "prefixItems": [
@@ -1018,26 +1082,26 @@
                         { "const": "--budget" }, { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }
                       ],
                       "items": false
+                    },
+                    "inputs": {
+                      "minItems": 1,
+                      "maxItems": 1,
+                      "prefixItems": [{
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "type", "flag", "required"],
+                        "properties": {
+                          "name": { "const": "source_file" },
+                          "type": { "const": "path" },
+                          "flag": { "const": "--source-file" },
+                          "required": { "const": true }
+                        }
+                      }],
+                      "items": false
                     }
-                  ]
-                },
-                "inputs": {
-                  "minItems": 1,
-                  "maxItems": 1,
-                  "prefixItems": [{
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["name", "type", "flag", "required"],
-                    "properties": {
-                      "name": { "const": "source_file" },
-                      "type": { "const": "path" },
-                      "flag": { "const": "--source-file" },
-                      "required": { "const": true }
-                    }
-                  }],
-                  "items": false
+                  }
                 }
-              }
+              ]
             }
           ]
         },
@@ -1057,7 +1121,12 @@
                   ],
                   "items": false
                 },
-                "inputs": { "maxItems": 0 }
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{ "$ref": "#/$defs/nextOptionalBudgetInput" }],
+                  "items": false
+                }
               }
             }
           ]
@@ -1082,7 +1151,12 @@
                   ],
                   "items": false
                 },
-                "inputs": { "maxItems": 0 }
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{ "$ref": "#/$defs/nextOptionalBudgetInput" }],
+                  "items": false
+                }
               }
             }
           ]
@@ -1097,26 +1171,24 @@
             {
               "properties": {
                 "id": { "const": "retry-run" },
-                "inputs": { "maxItems": 0 }
+                "inputs": {
+                  "minItems": 1,
+                  "maxItems": 1,
+                  "prefixItems": [{ "$ref": "#/$defs/nextRequiredGoalFileInput" }],
+                  "items": false
+                }
               }
             },
             {
               "properties": {
                 "id": { "const": "start-with-source" },
                 "inputs": {
-                  "minItems": 1,
-                  "maxItems": 1,
-                  "prefixItems": [{
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["name", "type", "flag", "required"],
-                    "properties": {
-                      "name": { "const": "source_file" },
-                      "type": { "const": "path" },
-                      "flag": { "const": "--source-file" },
-                      "required": { "const": true }
-                    }
-                  }],
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    { "$ref": "#/$defs/nextRequiredGoalFileInput" },
+                    { "$ref": "#/$defs/nextRequiredSourceFileInput" }
+                  ],
                   "items": false
                 }
               }
@@ -1126,24 +1198,23 @@
             "base_argv": {
               "oneOf": [
                 {
-                  "minItems": 9,
-                  "maxItems": 9,
+                  "minItems": 7,
+                  "maxItems": 7,
                   "prefixItems": [
                     { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
                     { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
-                    { "const": "--root" }, { "type": "string", "minLength": 1 },
-                    { "const": "--" }, { "type": "string", "minLength": 1 }
+                    { "const": "--root" }, { "type": "string", "minLength": 1 }
                   ],
                   "items": false
                 },
                 {
-                  "minItems": 10,
-                  "maxItems": 10,
+                  "minItems": 8,
+                  "maxItems": 8,
                   "prefixItems": [
                     { "const": "slipway" }, { "const": "run" }, { "const": "--budget" },
                     { "type": "string", "pattern": "^([1-9][0-9]{0,2}|1000)$" }, { "const": "--json" },
                     { "const": "--root" }, { "type": "string", "minLength": 1 },
-                    { "const": "--no-review" }, { "const": "--" }, { "type": "string", "minLength": 1 }
+                    { "const": "--no-review" }
                   ],
                   "items": false
                 }

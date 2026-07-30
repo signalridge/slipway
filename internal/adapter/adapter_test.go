@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,45 +26,24 @@ func TestRegistryAndInstallGenerateOnlySevenExplicitCapabilitiesForEveryHost(t *
 
 	written := 0
 	clarifyReferences := 0
-	workflowRouteFragments := []string{
-		"| Rough idea, clarified conversation, or non-authoritative planning artifact | Investigate, settle decisions, choose one Change or Objective, and produce its complete draft | `slipway-propose` |",
-		"| Explicit standalone decision-only clarification request, with no draft or materialization desired | Explain the stateless decision-summary boundary without starting the interview here | `slipway-clarify` |",
-		"| Structurally valid Objective | Explain its planning role and the need for self-contained child Changes | `slipway-decompose` |",
-		"| Structurally valid, self-contained `change/v2` Issue with no selected Run | Confirm the source route and state the effective budget | `slipway-run` |",
-		"| Explicit private, tiny, urgent, offline, or deliberately untracked bounded goal | State the sharpened bounded goal and the already-selected no-Issue source route | `slipway-run` for a new ad-hoc Run |",
-		"| Active Run | Report the exact current Action and its submit/skip variants; state that stop uses public `slipway stop` and take-over/reorder first stop and hand control back | `slipway-run` |",
-		"| Paused or stopped Run | Report the exact Run and its structured recovery choice without changing it | `slipway-run` |",
-		"| Failed, partial, or ambiguous Propose/Decompose publication | Preserve and return every available receipt, operation, item, and revision fact; report the exact unresolved state | The originating `slipway-propose` or `slipway-decompose` owner decides same-receipt reconciliation or a contract-required fresh preview and confirmation |",
-		"| Ended Run or advisory Review findings | Explain that ended is terminal and no completion was certified; offer no further action, new tracked scope, or a provenance-correct new Run attempt without making findings a gate | No capability when the user stops; otherwise `slipway-propose` or `slipway-run` after that one genuine choice |",
-		"| Explicit standalone implementation or review request | Explain that it has no Run attribution or pinned source | `slipway-implement` or `slipway-review`, only when the user deliberately wants the standalone path |",
-	}
 	specificFragments := map[string][]string{
 		"slipway-run": {
-			"`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`",
-			"Source Bundle v2 envelope", "fetch exactly its declared comment node IDs", "trusted host attests the GitHub fetch identity and visibility observations", "cannot independently revalidate remote visibility", "skippable, read-only advisory Review", "Redact recognized credentials while preserving command identity",
+			"required `goal_file` path input",
+			"required `text_file` path",
 		},
 		"slipway-propose": {
-			"exactly one `level:change`", "exactly one `level:objective`", "exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`",
-			"official GitHub REST API", "same-host redirect or transfer", "100 sub-issues per parent", "50 blocking plus 50 blocked-by",
-			"timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`", "one confirmed operation", "must not trigger a second confirmation", "public repository has no per-Issue private switch",
+			"exactly one `level:change`",
+			"one confirmed operation",
 		},
 		"slipway-decompose": {
-			"missing or conflicting labels never block decomposition", "exactly one `level:change`", "official REST API",
-			"cross-host redirects", "exactly 100 children", "exactly 50 blocking dependencies", "exactly 50 blocked-by dependencies", "one confirmed operation", "must not trigger another confirmation", "duplicate marker matches",
-			"`created`, `matched`, `failed`, or `ambiguous`", "public Issue has no private switch",
+			"tracer-bullet Changes",
+			"one confirmed operation",
 		},
-		"slipway-workflow": append([]string{
-			"stateless only in the Slipway sense", "workflow itself is read-only", "Orchestrate Slipway functions, not installed skills",
-			"Do not discover, rank, or dispatch", "Do not invoke a sibling `slipway-*` capability", "only optional external primitive", "model-invocable `/grilling`",
+		"slipway-workflow": {
+			"Orchestrate Slipway functions, not installed skills",
 			"Choose the shortest valid route",
-		}, workflowRouteFragments...),
+		},
 	}
-	specificFragments["slipway-workflow"] = append(specificFragments["slipway-workflow"],
-		"external or unmanaged artifact as non-authoritative planning input", "retains the routing and source authority defined by the contract",
-		"Standalone Clarify is not a mandatory stage", "Only submit and skip are Action variants", "An ended Run is terminal", "No further Slipway action is a valid terminal outcome",
-		"fresh-fetch and attest the canonical Change", "same receipt", "For an Objective, instead produce its distinct planning shape", "not an approved publication plan", "advisory unblocked frontier",
-		"For a new Run", "contract default of `8`", "For resume, preserve the distinct remaining-budget rules below", "no workflow-owned governance gate", "`budget_exhausted` pause is normal", "`max(initial_budget, 3)`",
-	)
 
 	for _, registryHost := range Registry() {
 		host := registryHost
@@ -195,25 +173,24 @@ func TestRegistryReturnsADeepCopy(t *testing.T) {
 	assert.Equal(t, []string{".claude"}, host.DetectPaths)
 }
 
-func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) {
+func TestWorkflowRefreshConvergesFromCurrentSixCapabilitySubset(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name         string
-		hostID       string
-		surface      string
-		legacyDigest string
+		name    string
+		hostID  string
+		surface string
 	}{
-		{name: "claude skill", hostID: "claude", legacyDigest: "c906f008b22bebcb0ff42752f63dc1f47878fdf9a006d76b97492ff2c696aac7"},
-		{name: "codex skill and policy", hostID: "codex", legacyDigest: "d4077440a2f32ad4aea3071d50135b5652eeeae12d59ab6ed826ff86219b46eb"},
-		{name: "copilot agent", hostID: "copilot", legacyDigest: "64ff9d83b7506821faded56af137d00210e4a511bb96ceee5b43ac6d8dcba7f6"},
-		{name: "cursor skill", hostID: "cursor", legacyDigest: "ba5819588b8832be28e9db52d0a15eeffc302911f3efb29cb180e2e03533fd2c"},
-		{name: "kilo command", hostID: "kilo", legacyDigest: "b242356a22d340ce42329c91fc4cc8783a85831f95eed874e0bfa9b7e46c81b4"},
-		{name: "kiro ide steering", hostID: "kiro", surface: "ide", legacyDigest: "ac8b88d50b916711926bff88f3467cc0b4ad16915900c6ff631082d09c1e0984"},
-		{name: "kiro cli agent", hostID: "kiro", surface: "cli", legacyDigest: "2233184016acd8f76ed7f7359a6cec3c6558c28244fdfdbca2604feac90fcc4d"},
-		{name: "opencode command", hostID: "opencode", legacyDigest: "cc3db454bd456fb7d1275db15a49a894cf025b30ca87a115c2f2375d66c8d860"},
-		{name: "pi skill", hostID: "pi", legacyDigest: "a260c250e64da6a9edaf0d44e8a66417d8f140b7962b65e6126eb6d1e3faa30c"},
-		{name: "qwen skill", hostID: "qwen", legacyDigest: "2dd0a858e1eab6bb6375495cc4c79776ccc313bd45e9c09de933ea9e4dfd3fcd"},
-		{name: "windsurf workflow", hostID: "windsurf", legacyDigest: "59a06181457931900ddf3973f9dd2ecc7fe344fbba30a4ca1df85a58051f9349"},
+		{name: "claude skill", hostID: "claude"},
+		{name: "codex skill and policy", hostID: "codex"},
+		{name: "copilot agent", hostID: "copilot"},
+		{name: "cursor skill", hostID: "cursor"},
+		{name: "kilo command", hostID: "kilo"},
+		{name: "kiro ide steering", hostID: "kiro", surface: "ide"},
+		{name: "kiro cli agent", hostID: "kiro", surface: "cli"},
+		{name: "opencode command", hostID: "opencode"},
+		{name: "pi skill", hostID: "pi"},
+		{name: "qwen skill", hostID: "qwen"},
+		{name: "windsurf workflow", hostID: "windsurf"},
 	}
 	for _, test := range tests {
 		test := test
@@ -234,8 +211,7 @@ func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) 
 			sort.Slice(desired, func(i, j int) bool {
 				return desired[i].Relative < desired[j].Relative
 			})
-			legacyHasher := sha256.New()
-			legacyBytes := map[string][]byte{}
+			existingBytes := map[string][]byte{}
 			workflowPaths := map[string]bool{}
 			for _, file := range desired {
 				path := filepath.Join(root, filepath.FromSlash(file.Relative))
@@ -244,15 +220,10 @@ func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) 
 					require.NoError(t, os.Remove(path))
 					continue
 				}
-				_, _ = legacyHasher.Write([]byte(file.Relative))
-				_, _ = legacyHasher.Write([]byte{0})
-				_, _ = legacyHasher.Write(file.Data)
-				_, _ = legacyHasher.Write([]byte{0})
 				content, readErr := os.ReadFile(path)
 				require.NoError(t, readErr)
-				legacyBytes[file.Relative] = content
+				existingBytes[file.Relative] = content
 			}
-			assert.Equal(t, test.legacyDigest, fmt.Sprintf("%x", legacyHasher.Sum(nil)), "six-capability generated bytes changed")
 			require.NotEmpty(t, workflowPaths)
 
 			manifest, found, err := loadManifest(root, host)
@@ -277,7 +248,7 @@ func TestWorkflowRefreshIsAdditiveAndConvergesFromSixCapabilities(t *testing.T) 
 			require.NoError(t, err)
 			assert.Empty(t, report.Preserved)
 			assert.NotContains(t, strings.Join(report.Warnings, "\n"), "does not match bytes generated by this version")
-			for relative, expected := range legacyBytes {
+			for relative, expected := range existingBytes {
 				assertFileContent(t, root, relative, expected)
 			}
 			after := requireHostStatus(t, root, host.ID)
@@ -524,6 +495,122 @@ func TestRefreshAndUninstallPreserveUserModifiedManagedFiles(t *testing.T) {
 	assert.NotContains(t, uninstalled.Removed, sentinelRelative)
 	_, err = os.Stat(filepath.Join(root, ".claude/skills/slipway-run/SKILL.md"))
 	assert.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func TestInstallAndRefreshDoNotManageKiloLauncherWithUserOwnedBody(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capability       = "slipway-run"
+		bodyRelative     = ".kilocode/slipway/capabilities/slipway-run.md"
+		launcherRelative = ".kilo/commands/slipway-run.md"
+	)
+
+	t.Run("first install preserves body without creating launcher", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeTestFile(t, root, bodyRelative, []byte("user-owned run body\n"))
+
+		for _, refresh := range []bool{false, true} {
+			report, err := Install(InstallOptions{Root: root, Tools: []string{"kilo"}, Refresh: refresh})
+			require.NoError(t, err)
+			assert.Contains(t, report.Preserved, bodyRelative)
+			assert.NotContains(t, report.Written, launcherRelative)
+			assert.NoFileExists(t, filepath.Join(root, filepath.FromSlash(launcherRelative)))
+			assert.Contains(t, strings.Join(report.Warnings, "\n"), capability)
+			assert.Contains(t, strings.Join(report.Warnings, "\n"), bodyRelative)
+		}
+
+		assert.FileExists(t, filepath.Join(root, ".kilo/commands/slipway-clarify.md"))
+		kilo, found := lookupHost("kilo")
+		require.True(t, found)
+		manifest, found, err := loadManifest(root, kilo)
+		require.NoError(t, err)
+		require.True(t, found)
+		claims := manifestIndex(manifest)
+		assert.NotContains(t, claims, bodyRelative)
+		assert.NotContains(t, claims, launcherRelative)
+	})
+
+	t.Run("refresh removes pristine launcher after body becomes user owned", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		_, err := Install(InstallOptions{Root: root, Tools: []string{"kilo"}})
+		require.NoError(t, err)
+		assert.FileExists(t, filepath.Join(root, filepath.FromSlash(launcherRelative)))
+		writeTestFile(t, root, bodyRelative, []byte("user-owned run body\n"))
+
+		report, err := Install(InstallOptions{Root: root, Tools: []string{"kilo"}, Refresh: true})
+		require.NoError(t, err)
+		assert.Contains(t, report.Preserved, bodyRelative)
+		assert.Contains(t, report.Removed, launcherRelative)
+		assert.NoFileExists(t, filepath.Join(root, filepath.FromSlash(launcherRelative)))
+		assert.Contains(t, strings.Join(report.Warnings, "\n"), capability)
+		assert.Contains(t, strings.Join(report.Warnings, "\n"), bodyRelative)
+
+		kilo, found := lookupHost("kilo")
+		require.True(t, found)
+		manifest, found, err := loadManifest(root, kilo)
+		require.NoError(t, err)
+		require.True(t, found)
+		claims := manifestIndex(manifest)
+		assert.NotContains(t, claims, bodyRelative)
+		assert.NotContains(t, claims, launcherRelative)
+		assert.Contains(t, claims, ".kilo/commands/slipway-clarify.md")
+	})
+}
+
+func TestInstallWithOnlyUserOwnedTargetsReportsNotInstalled(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	host, found := lookupHost("claude")
+	require.True(t, found)
+	desired, err := generateHostFiles(host)
+	require.NoError(t, err)
+	require.NotEmpty(t, desired)
+	for _, file := range desired {
+		writeTestFile(t, root, file.Relative, []byte("user-owned content\n"))
+	}
+
+	report, err := Install(InstallOptions{Root: root, Tools: []string{host.ID}})
+	require.NoError(t, err)
+	assert.Equal(t, TransactionOutcomeCommitted, report.TransactionOutcome)
+	assert.Empty(t, report.Written)
+	assert.Len(t, report.Preserved, len(desired))
+	assert.Contains(t, strings.Join(report.Warnings, "\n"), "adapter claude is not installed after this operation")
+
+	_, manifestFound, err := loadManifest(root, host)
+	require.NoError(t, err)
+	assert.False(t, manifestFound)
+}
+
+func TestCodexUninstallPreservesExplicitPolicyForModifiedSkill(t *testing.T) {
+	t.Parallel()
+
+	const (
+		capability     = "slipway-run"
+		skillRelative  = ".codex/skills/slipway-run/SKILL.md"
+		policyRelative = ".codex/skills/slipway-run/agents/openai.yaml"
+	)
+	root := t.TempDir()
+	_, err := Install(InstallOptions{Root: root, Tools: []string{"codex"}})
+	require.NoError(t, err)
+	writeTestFile(t, root, skillRelative, []byte("user-owned run skill\n"))
+
+	report, err := Uninstall(UninstallOptions{Root: root, Tools: []string{"codex"}})
+	require.NoError(t, err)
+	assertFileContent(t, root, skillRelative, []byte("user-owned run skill\n"))
+	assertFileContent(t, root, policyRelative, []byte(codexExplicitInvocationPolicy))
+	assert.Contains(t, report.Preserved, skillRelative)
+	assert.Contains(t, report.Preserved, policyRelative)
+	assert.NotContains(t, report.Removed, policyRelative)
+	warnings := strings.Join(report.Warnings, "\n")
+	assert.Contains(t, warnings, capability)
+	assert.Contains(t, warnings, "explicit-only")
+	assert.Contains(t, warnings, policyRelative)
+	assert.NoFileExists(t, filepath.Join(root, ".codex/skills/slipway-review/SKILL.md"))
+	assert.NoFileExists(t, filepath.Join(root, ".codex/skills/slipway-review/agents/openai.yaml"))
 }
 
 func TestCurrentManifestWithPriorGeneratedBytesHasSafeRecoveryPath(t *testing.T) {

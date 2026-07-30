@@ -28,6 +28,24 @@ trap cleanup 0
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Bind the fixture to its own Git and GitHub CLI state.
+unset GIT_DIR GIT_WORK_TREE GIT_IMPLICIT_WORK_TREE GIT_COMMON_DIR
+unset GIT_INDEX_FILE GIT_INDEX_VERSION GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+unset GIT_QUARANTINE_PATH GIT_NAMESPACE GIT_REPLACE_REF_BASE GIT_NO_REPLACE_OBJECTS
+unset GIT_SHALLOW_FILE GIT_GRAFT_FILE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
+unset GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_PREFIX
+unset GIT_TEMPLATE_DIR GH_CONFIG_DIR GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
+mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/xdg" "$TMP_ROOT/gh"
+: > "$TMP_ROOT/gitconfig"
+HOME="$TMP_ROOT/home"
+XDG_CONFIG_HOME="$TMP_ROOT/xdg"
+GIT_CONFIG_GLOBAL="$TMP_ROOT/gitconfig"
+GIT_CONFIG_NOSYSTEM=1
+GIT_TERMINAL_PROMPT=0
+GH_CONFIG_DIR="$TMP_ROOT/gh"
+export HOME XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_TERMINAL_PROMPT GH_CONFIG_DIR
+
 REPO="$TMP_ROOT/repository"
 mkdir -p "$REPO"
 git -C "$REPO" init -q
@@ -267,23 +285,11 @@ roots = {
     "opencode": ".opencode", "pi": ".pi", "qwen": ".qwen", "windsurf": ".windsurf",
 }
 capabilities = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review", "slipway-workflow"]
-workflow_routes = [
-    "| Rough idea, clarified conversation, or non-authoritative planning artifact | Investigate, settle decisions, choose one Change or Objective, and produce its complete draft | `slipway-propose` |",
-    "| Explicit standalone decision-only clarification request, with no draft or materialization desired | Explain the stateless decision-summary boundary without starting the interview here | `slipway-clarify` |",
-    "| Structurally valid Objective | Explain its planning role and the need for self-contained child Changes | `slipway-decompose` |",
-    "| Structurally valid, self-contained `change/v2` Issue with no selected Run | Confirm the source route and state the effective budget | `slipway-run` |",
-    "| Explicit private, tiny, urgent, offline, or deliberately untracked bounded goal | State the sharpened bounded goal and the already-selected no-Issue source route | `slipway-run` for a new ad-hoc Run |",
-    "| Active Run | Report the exact current Action and its submit/skip variants; state that stop uses public `slipway stop` and take-over/reorder first stop and hand control back | `slipway-run` |",
-    "| Paused or stopped Run | Report the exact Run and its structured recovery choice without changing it | `slipway-run` |",
-    "| Failed, partial, or ambiguous Propose/Decompose publication | Preserve and return every available receipt, operation, item, and revision fact; report the exact unresolved state | The originating `slipway-propose` or `slipway-decompose` owner decides same-receipt reconciliation or a contract-required fresh preview and confirmation |",
-    "| Ended Run or advisory Review findings | Explain that ended is terminal and no completion was certified; offer no further action, new tracked scope, or a provenance-correct new Run attempt without making findings a gate | No capability when the user stops; otherwise `slipway-propose` or `slipway-run` after that one genuine choice |",
-    "| Explicit standalone implementation or review request | Explain that it has no Run attribution or pinned source | `slipway-implement` or `slipway-review`, only when the user deliberately wants the standalone path |",
-]
 specific = {
-    "slipway-run": ["`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`", "Source Bundle v2 envelope", "fetch exactly its declared comment node IDs", "Redact recognized credentials while preserving command identity"],
-    "slipway-propose": ["exactly one `level:change`", "exactly one `level:objective`", "official GitHub REST API", "same-host redirect or transfer", "100 sub-issues per parent", "timeout-after-success", "`created`, `matched`, `failed`, or `ambiguous`"],
-    "slipway-decompose": ["missing or conflicting labels never block decomposition", "exactly one `level:change`", "official REST API", "cross-host redirects", "exactly 100 children", "duplicate marker matches"],
-    "slipway-workflow": ["stateless only in the Slipway sense", "workflow itself is read-only", "external or unmanaged artifact as non-authoritative planning input", "retains the routing and source authority defined by the contract", "Orchestrate Slipway functions, not installed skills", "Do not discover, rank, or dispatch", "Do not invoke a sibling `slipway-*` capability", "only optional external primitive", "model-invocable `/grilling`", "Choose the shortest valid route"] + workflow_routes + ["Standalone Clarify is not a mandatory stage", "Only submit and skip are Action variants", "An ended Run is terminal", "No further Slipway action is a valid terminal outcome", "fresh-fetch and attest the canonical Change", "same receipt", "For an Objective, instead produce its distinct planning shape", "not an approved publication plan", "advisory unblocked frontier", "For a new Run", "contract default of `8`", "For resume, preserve the distinct remaining-budget rules below", "no workflow-owned governance gate", "`budget_exhausted` pause is normal", "`max(initial_budget, 3)`"],
+    "slipway-run": ["required `goal_file` path input", "required `text_file` path"],
+    "slipway-propose": ["exactly one `level:change`", "one confirmed operation"],
+    "slipway-decompose": ["tracer-bullet Changes", "one confirmed operation"],
+    "slipway-workflow": ["Orchestrate Slipway functions, not installed skills", "Choose the shortest valid route"],
 }
 def canonical(host, capability):
     if host in {"claude", "codex", "cursor", "pi", "qwen"}:
@@ -352,22 +358,22 @@ actual_files = {path.relative_to(repo).as_posix() for path in repo.rglob("*") if
 assert actual_files == expected_files, {"missing": sorted(expected_files - actual_files), "unexpected": sorted(actual_files - expected_files)}
 PY
 
-# Exercise an actual current-binary refresh from a six-capability ownership
-# surface. Go contract tests pin these pre-workflow paths and bytes to the real
-# six-capability baseline; this Shell layer proves CLI planning, preservation,
-# reporting, and convergence over the resulting on-disk state.
-UPGRADE_REPO="$TMP_ROOT/six-to-seven-repository"
-UPGRADE_SNAPSHOT="$TMP_ROOT/six-to-seven-snapshot.json"
-mkdir -p "$UPGRADE_REPO"
-git -C "$UPGRADE_REPO" init -q
-git -C "$UPGRADE_REPO" config user.email acceptance@example.invalid
-git -C "$UPGRADE_REPO" config user.name 'Slipway Acceptance'
-printf '# Six to seven adapter acceptance\n' > "$UPGRADE_REPO/README.md"
-git -C "$UPGRADE_REPO" add README.md
-git -C "$UPGRADE_REPO" commit -qm initial
-"$BIN" install --root "$UPGRADE_REPO" --tool claude --tool codex --tool copilot --tool cursor --tool kilo --tool opencode --tool pi --tool qwen --tool windsurf --json > "$TMP_ROOT/six-to-seven-non-kiro.json"
-"$BIN" install --root "$UPGRADE_REPO" --tool kiro --surface ide --json > "$TMP_ROOT/six-to-seven-kiro.json"
-python3 -I - "$UPGRADE_REPO" "$UPGRADE_SNAPSHOT" <<'PY'
+# Exercise current-binary refresh from a managed surface whose Workflow files
+# and claims are missing. This is intentionally a current-generated subset, not
+# a historical-generator fixture. The Shell layer proves CLI planning,
+# preservation, reporting, and convergence over that on-disk state.
+CURRENT_SUBSET_REPO="$TMP_ROOT/missing-workflow-repository"
+CURRENT_SUBSET_SNAPSHOT="$TMP_ROOT/missing-workflow-snapshot.json"
+mkdir -p "$CURRENT_SUBSET_REPO"
+git -C "$CURRENT_SUBSET_REPO" init -q
+git -C "$CURRENT_SUBSET_REPO" config user.email acceptance@example.invalid
+git -C "$CURRENT_SUBSET_REPO" config user.name 'Slipway Acceptance'
+printf '# Missing Workflow adapter acceptance\n' > "$CURRENT_SUBSET_REPO/README.md"
+git -C "$CURRENT_SUBSET_REPO" add README.md
+git -C "$CURRENT_SUBSET_REPO" commit -qm initial
+"$BIN" install --root "$CURRENT_SUBSET_REPO" --tool claude --tool codex --tool copilot --tool cursor --tool kilo --tool opencode --tool pi --tool qwen --tool windsurf --json > "$TMP_ROOT/missing-workflow-non-kiro.json"
+"$BIN" install --root "$CURRENT_SUBSET_REPO" --tool kiro --surface ide --json > "$TMP_ROOT/missing-workflow-kiro.json"
+python3 -I - "$CURRENT_SUBSET_REPO" "$CURRENT_SUBSET_SNAPSHOT" <<'PY'
 import hashlib
 import json
 from pathlib import Path
@@ -401,7 +407,7 @@ for host, root in roots.items():
     manifest_path.write_text(json.dumps(manifest, separators=(",", ":")) + "\n", encoding="utf-8")
 
 modified_relative = ".claude/skills/slipway-review/SKILL.md"
-modified = b"user-modified six-capability review\n"
+modified = b"user-modified review capability\n"
 (repo / modified_relative).write_bytes(modified)
 expected[modified_relative] = hashlib.sha256(modified).hexdigest()
 snapshot_path.write_text(
@@ -416,25 +422,25 @@ snapshot_path.write_text(
     encoding="utf-8",
 )
 PY
-"$BIN" list --root "$UPGRADE_REPO" --json > "$TMP_ROOT/six-to-seven-before.json"
-python3 -I - "$TMP_ROOT/six-to-seven-before.json" <<'PY'
+"$BIN" list --root "$CURRENT_SUBSET_REPO" --json > "$TMP_ROOT/missing-workflow-before.json"
+python3 -I - "$TMP_ROOT/missing-workflow-before.json" <<'PY'
 import json
 import sys
 
-six = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review"]
+without_workflow = ["slipway-run", "slipway-clarify", "slipway-propose", "slipway-decompose", "slipway-implement", "slipway-review"]
 with open(sys.argv[1], encoding="utf-8") as stream:
     report = json.load(stream)
 for item in report["hosts"]:
     assert item["installed"] is True and item["needs_refresh"] is True, item
     assert "slipway-workflow" not in item["capabilities"], item
     if item["id"] == "claude":
-        assert item["capabilities"] == [capability for capability in six if capability != "slipway-review"], item
+        assert item["capabilities"] == [capability for capability in without_workflow if capability != "slipway-review"], item
     else:
-        assert item["capabilities"] == six, item
+        assert item["capabilities"] == without_workflow, item
 PY
-"$BIN" install --root "$UPGRADE_REPO" --tool all --refresh --json > "$TMP_ROOT/six-to-seven-refresh.json"
-"$BIN" list --root "$UPGRADE_REPO" --json > "$TMP_ROOT/six-to-seven-after.json"
-python3 -I - "$UPGRADE_REPO" "$UPGRADE_SNAPSHOT" "$TMP_ROOT/six-to-seven-refresh.json" "$TMP_ROOT/six-to-seven-after.json" <<'PY'
+"$BIN" install --root "$CURRENT_SUBSET_REPO" --tool all --refresh --json > "$TMP_ROOT/missing-workflow-refresh.json"
+"$BIN" list --root "$CURRENT_SUBSET_REPO" --json > "$TMP_ROOT/missing-workflow-after.json"
+python3 -I - "$CURRENT_SUBSET_REPO" "$CURRENT_SUBSET_SNAPSHOT" "$TMP_ROOT/missing-workflow-refresh.json" "$TMP_ROOT/missing-workflow-after.json" <<'PY'
 import hashlib
 import json
 from pathlib import Path
@@ -649,6 +655,11 @@ with open(sys.argv[1], encoding="utf-8") as stream:
 assert report["transaction_outcome"] == "committed", report
 assert report["hosts"] == hosts, report
 expected_preserved = {capability(host, "implement") for host in hosts}
+codex_policies = {
+    ".codex/skills/slipway-review/agents/openai.yaml",
+    ".codex/skills/slipway-implement/agents/openai.yaml",
+}
+expected_preserved.update(codex_policies)
 assert set(report["preserved"]) == expected_preserved, report
 expected_files = {"README.md", ".pi/settings.json"}
 for host in hosts:
@@ -662,6 +673,9 @@ for host in hosts:
     assert (repo / roots[host] / "user.keep").read_text(encoding="utf-8") == f"user file for {host}\n"
     assert (repo / roots[host] / "slipway/user.keep").read_text(encoding="utf-8") == f"unknown ownership file for {host}\n"
     expected_files.update({f"{roots[host]}/user.keep", f"{roots[host]}/slipway/user.keep", capability(host, "review"), capability(host, "implement")})
+for relative in codex_policies:
+    assert (repo / relative).read_text(encoding="utf-8") == "policy:\n  allow_implicit_invocation: false\n", relative
+expected_files.update(codex_policies)
 actual_files = {path.relative_to(repo).as_posix() for path in repo.rglob("*") if path.is_file() and ".git" not in path.relative_to(repo).parts}
 assert actual_files == expected_files, {"missing": sorted(expected_files - actual_files), "unexpected": sorted(actual_files - expected_files)}
 PY

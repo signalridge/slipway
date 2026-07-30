@@ -649,8 +649,13 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 	// The answer text is an uninterpreted value (issue #434 §9.6). Preserve
 	// and digest the caller's valid UTF-8 bytes verbatim. Trimming is limited
 	// to the non-empty validation below.
-	if !utf8.ValidString(options.Text) {
-		return Run{}, &ProtocolError{Code: "invalid_answer", Message: "answer text must be valid utf-8", Next: NoneNext(service.store.RepositoryRoot())}
+	if err := ValidateAnswerText(options.Text); err != nil {
+		code := "invalid_answer"
+		var limitErr *AnswerLimitError
+		if errors.As(err, &limitErr) {
+			code = "answer_too_large"
+		}
+		return Run{}, &ProtocolError{Code: code, Message: err.Error(), Next: NoneNext(service.store.RepositoryRoot())}
 	}
 	payloadSHA256, err := answerPayloadSHA256(actionID, options)
 	if err != nil {
@@ -893,6 +898,17 @@ func (service *Service) Resume(runID string, options ResumeOptions) (Run, error)
 		}
 		if run.State == RunEnded {
 			return runstore.UpdateResult{}, protocolRunError(run, "run_already_ended", "ended run cannot be resumed")
+		}
+		currentNext, nextErr := DeriveNext(run)
+		if nextErr != nil {
+			return runstore.UpdateResult{}, fmt.Errorf("derive current resume eligibility: %w", nextErr)
+		}
+		if currentNext.Operation != NextOperationResume {
+			return runstore.UpdateResult{}, protocolRunError(
+				run,
+				"run_not_resumable",
+				"run cannot be resumed while its current typed next operation is "+string(currentNext.Operation),
+			)
 		}
 
 		materials := []runstore.Material(nil)
@@ -2964,7 +2980,7 @@ func mustDeriveResumeNext(run Run) Next {
 	return NoneNext(run.WorkspaceIdentity.ID)
 }
 
-func startRunNext(workspace, goal string, budget int, reviewEnabled, sourceRequired bool) Next {
+func startRunNext(workspace, _ string, budget int, reviewEnabled, sourceRequired bool) Next {
 	if ValidateBudget(budget) != nil {
 		budget = DefaultBudget
 	}
@@ -2972,12 +2988,15 @@ func startRunNext(workspace, goal string, budget int, reviewEnabled, sourceRequi
 	if !reviewEnabled {
 		base = append(base, "--no-review")
 	}
-	base = append(base, "--", goal)
-	inputs := []NextInput{}
+	inputs := []NextInput{{
+		Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true,
+	}}
 	variantID := "retry-run"
 	if sourceRequired {
 		variantID = "start-with-source"
-		inputs = []NextInput{{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true}}
+		inputs = append(inputs, NextInput{
+			Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true,
+		})
 	}
 	next, err := NewCommandNext(NextOperationStart, workspace, variantID, base, inputs)
 	if err != nil {

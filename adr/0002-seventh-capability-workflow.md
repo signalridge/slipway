@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted — 2026-07-18. This record explains why the previously closed six-capability set was deliberately expanded to seven. For repository behavior after this decision, this ADR narrowly supersedes every exact-six statement in issue #434: §6, §13 (including the Copilot count), §16, §18 scenario 28, and the non-normative English summary. It clarifies §6.1 only by keeping external workflows out of Clarify while adding this distinct Slipway-owned capability. It reaffirms §15's exclusion of launchers and global routers. The versioned machine protocol, Run model, and all other #434 boundaries are unchanged.
+Accepted — 2026-07-18. This record explains why the previously closed six-capability set was deliberately expanded to seven. For repository behavior after this decision, this ADR narrowly supersedes every exact-six statement in issue #434: §6, §13 (including the Copilot count), §16, §18 scenario 28, and the non-normative English summary. It clarifies §6.1 only by keeping external workflows out of Clarify while adding this distinct Slipway-owned capability. It reaffirms §15's exclusion of launchers and global routers. Adding Workflow itself did not require changing the versioned machine protocol, Run model, or the other #434 boundaries.
 
 ## Context
 
@@ -28,7 +28,22 @@ Add `slipway-workflow` as a seventh host capability. This decision replaces #434
 
 ## Consequences
 
-The generated surface, install/list/doctor counts, tests, acceptance harness, and the trilingual docs move from six to seven; skill-native hosts such as `claude` now report eight managed files (seven capabilities plus one shared reference), and a full `--tool all` install writes 135 files rather than 120. Existing six-capability files remain byte-compatible so a refresh is additive and ownership-safe. At the time this ADR was accepted, live issue #434 still recorded six capabilities in §6, §13, §16, §18 scenario 28, and its English summary. That external contract was reconciled on 2026-07-18 together with ADR-0003's lifecycle-scope refinement.
+The generated surface, install/list/doctor counts, tests, acceptance harness, and the trilingual docs move from six to seven; skill-native hosts such as `claude` now report eight managed files (seven capabilities plus one shared reference), and a full `--tool all` install writes 135 files rather than 120. In the initial 2026-07-18 implementation, the six pre-existing capability files remained byte-compatible so that specific refresh was additive and ownership-safe. At the time this ADR was accepted, live issue #434 still recorded six capabilities in §6, §13, §16, §18 scenario 28, and its English summary. That external contract was reconciled on 2026-07-18 together with ADR-0003's lifecycle-scope refinement.
+
+## Implementation evolution
+
+The protocol-unchanged and byte-compatible statements above describe the initial
+Workflow addition, not a permanent freeze on Slipway's other contracts. Later
+direction-preserving fixes changed machine-protocol recovery and privacy inputs
+and corrected wording in pre-existing capability templates. Those changes do
+not alter this ADR's accepted product decision: Workflow remains the seventh
+explicit, host-side navigator; it is not a router or a second runtime.
+
+Adapter ownership remains current-generator-only and fail-closed. Bytes claimed
+by an earlier generator are preserved with a warning rather than treated as
+automatically replaceable historical bytes. Slipway does not maintain a
+historical-digest allowlist or infer ownership from a reconstructed
+six-capability fixture.
 
 ## Rejected alternatives
 

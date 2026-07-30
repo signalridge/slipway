@@ -5,10 +5,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/adapter"
 	"github.com/signalridge/slipway/internal/autopilot"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -129,6 +131,23 @@ func TestInstallSurfaceValidationIsAUsageError(t *testing.T) {
 			assert.Equal(t, []string{"ide", "cli"}, cliErr.Next.Variants[0].Inputs[0].Choices)
 		})
 	}
+}
+
+func TestWriteChangeReportUsesNeutralResultHeading(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	command := &cobra.Command{}
+	command.SetOut(&output)
+	report := adapter.ChangeReport{
+		Hosts:              []string{"claude"},
+		TransactionOutcome: adapter.TransactionOutcomeCommitted,
+		Warnings:           []string{"adapter claude is not installed after this operation"},
+	}
+
+	require.NoError(t, writeChangeReport(command, "Install result", report))
+	assert.Contains(t, output.String(), "Install result for: claude\n")
+	assert.NotContains(t, output.String(), "Installed capabilities")
 }
 
 func snapshotCLIWorkspace(t *testing.T, root string) map[string]string {

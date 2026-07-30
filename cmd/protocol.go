@@ -65,7 +65,11 @@ func makeProtocolMaterialCmd(root *string) *cobra.Command {
 				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			if err := writeJSON(command.OutOrStdout(), material); err != nil {
-				return errors.New("write action material: " + err.Error())
+				return withCLIErrorContext(
+					errors.New("write action material: "+err.Error()),
+					service.RepositoryRoot(),
+					runID,
+				)
 			}
 			return nil
 		},

@@ -60,16 +60,20 @@ func makeStopCmd() *cobra.Command {
 				return withCLIErrorContext(err, service.RepositoryRoot(), runID)
 			}
 			if jsonOutput {
-				return writeProtocolResult(command, run)
+				return writeCommittedProtocolResult(command, run)
 			}
+			ignoreBrokenPipeSignal()
 			if _, err := fmt.Fprintf(command.OutOrStdout(), "Stopped run %s.\n", run.ID); err != nil {
-				return err
+				return committedRunOutputError(run, err)
 			}
 			next, err := autopilot.DeriveNext(run)
 			if err != nil {
-				return err
+				return committedRunOutputError(run, err)
 			}
-			return writeHumanNext(command.OutOrStdout(), next)
+			if err := writeHumanNext(command.OutOrStdout(), next); err != nil {
+				return committedRunOutputError(run, err)
+			}
+			return nil
 		},
 	}
 	command.Flags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")

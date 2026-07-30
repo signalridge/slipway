@@ -1,6 +1,8 @@
 # 安装
 
-仓库当前接口与各安装渠道中的最新软件包不一定同步。阅读其余文档前，请确认 `slipway --help` 包含 `install`、`uninstall`、`list`、`doctor`、`run`、`status` 和 `stop` 七个命令。
+仓库当前接口与各安装渠道中的最新软件包不一定同步。阅读其余文档前，请确认 `slipway --help` 包含 `install`、`uninstall`、`list`、`doctor`、`run`、`status` 和 `stop` 七个用户命令，以及供生成 adapter 使用的公开 `protocol` 机器接口组。`protocol` 是已发布的结构化接口，不是第八个用户工作流。
+
+对于尚未发布的 checkout，应以其代码、刚构建 binary 的 `--help` 和可观察行为确认当前实现事实。对于 tag 版本，应以该 tag 的 release notes 与实际附带的 artifact 确认已发布行为。Test、acceptance 与 CI 只是特定 revision 和特定执行的验证证据，不是契约权威、readiness 判定或 artifact 已发布的证明。
 
 ## 构建当前 checkout
 
@@ -15,7 +17,7 @@ go build -o ./slipway .
 
 ## Tag 版本
 
-请选择 release notes 已包含七命令辅助自动化接口的 tag。核心产物发布在 [GitHub Releases](https://github.com/signalridge/slipway/releases)：
+请选择 release notes 已包含七个用户命令和公开 `protocol` 组的辅助自动化接口的 tag。核心产物发布在 [GitHub Releases](https://github.com/signalridge/slipway/releases)：
 
 - Linux 和 macOS 的 `.tar.gz`；
 - Windows 的 `.zip`；

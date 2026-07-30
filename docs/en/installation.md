@@ -1,6 +1,8 @@
 # Installation
 
-The current repository interface and the latest package in every channel may not be the same. Before following the rest of the documentation, verify that `slipway --help` lists the seven commands `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`.
+The current repository interface and the latest package in every channel may not be the same. Before following the rest of the documentation, verify that `slipway --help` lists the seven user commands `install`, `uninstall`, `list`, `doctor`, `run`, `status`, and `stop`, plus the public `protocol` machine-interface group used by generated adapters. `protocol` is a published structured interface, not an eighth user workflow.
+
+For an unreleased checkout, its code, a freshly built binary's `--help`, and observable behavior establish the current implementation facts. For a tagged release, use its release notes and the artifacts actually attached to that tag to establish published behavior. Tests, acceptance runs, and CI are verification evidence for a particular revision and execution, not contract authority, a readiness verdict, or proof that an artifact was released.
 
 ## Build the current checkout
 
@@ -15,7 +17,7 @@ This is the reliable way to evaluate an unreleased repository revision.
 
 ## Tagged releases
 
-Choose a tag whose release notes include the seven-command soft-autopilot interface. Core release artifacts are published on [GitHub Releases](https://github.com/signalridge/slipway/releases):
+Choose a tag whose release notes include the seven-user-command soft-autopilot interface and public `protocol` group. Core release artifacts are published on [GitHub Releases](https://github.com/signalridge/slipway/releases):
 
 - `.tar.gz` archives for Linux and macOS;
 - `.zip` archives for Windows;

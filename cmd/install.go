@@ -65,7 +65,7 @@ func makeInstallCmd() *cobra.Command {
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), makeChangeReportOutput(report))
 			}
-			return writeChangeReport(cmd, "Installed", report)
+			return writeChangeReport(cmd, "Install result", report)
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "", "workspace root (default: current directory)")
@@ -132,9 +132,9 @@ func adapterMutationError(code string, err error, root string, report adapter.Ch
 	)
 }
 
-func writeChangeReport(cmd *cobra.Command, verb string, report adapter.ChangeReport) error {
+func writeChangeReport(cmd *cobra.Command, heading string, report adapter.ChangeReport) error {
 	w := cmd.OutOrStdout()
-	if _, err := fmt.Fprintf(w, "%s capabilities for: %s\n", verb, strings.Join(report.Hosts, ", ")); err != nil {
+	if _, err := fmt.Fprintf(w, "%s for: %s\n", heading, strings.Join(report.Hosts, ", ")); err != nil {
 		return err
 	}
 	for _, path := range report.Written {
