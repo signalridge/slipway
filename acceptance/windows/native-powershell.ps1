@@ -296,7 +296,10 @@ function Invoke-NextVariant {
     }
     foreach ($input in $variant.inputs) {
         $inputName = [string]$input.name
-        Assert-True ($InputValues.ContainsKey($inputName)) "missing typed value for $inputName"
+        if (-not $InputValues.ContainsKey($inputName)) {
+            Assert-True (-not [bool]$input.required) "missing typed value for $inputName"
+            continue
+        }
         $resolved.Add([string]$input.flag)
         $resolved.Add([string]$InputValues[$inputName])
     }
