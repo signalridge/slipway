@@ -284,7 +284,9 @@ func TestInterviewDisciplineIsSharedAndUnforked(t *testing.T) {
 		"❓ **Q1**",
 		"➡️",
 		"Ask zero questions when the request already determines the work",
-		"no decision is left that the work would otherwise silently assume",
+		"cannot be settled by talking",
+		"Do not build that prototype, write files, run an experiment, or add a capability",
+		"been reported as one you cannot settle here",
 		"Stop immediately when the user asks to wrap up",
 	} {
 		assert.Contains(t, discipline, fragment)
