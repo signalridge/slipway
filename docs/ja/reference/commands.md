@@ -96,7 +96,7 @@ ID 指定時は現在の Run projection と fresh 派生の structured `next` �
 slipway stop [run-id] [--root ROOT] [--json]
 ```
 
-Run を停止し、ジャーナル を保存します。ID 省略時は list の active/paused entry を数え、1つだけの場合に進みます。読めない local recovery directory が1つでもあれば、無視せず explicit ID を要求します。Active/paused `workspace_foreign` stub は暗黙に選択しません。Stopped Run は resume できます。Ended Run はできません。
+Run を停止し、ジャーナル を保存します。Stop は現在の Action を取り下げるため、stopped Run は `current_action` も destructive authorization も報告しません。ジャーナル には発行した Action がすべて残ります。Resume は常に新しい Orient を発行します。ID 省略時は list の active/paused entry を数え、1つだけの場合に進みます。読めない local recovery directory が1つでもあれば、無視せず explicit ID を要求します。Active/paused `workspace_foreign` stub は暗黙に選択しません。Stopped Run は resume できます。Ended Run はできません。
 
 ## Machine protocol 操作
 

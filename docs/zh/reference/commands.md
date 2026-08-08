@@ -96,7 +96,7 @@ slipway status [run-id] [--root ROOT] [--json]
 slipway stop [run-id] [--root ROOT] [--json]
 ```
 
-停止 Run 并保留 journal。省略 ID 时会扫描列出的 active/paused entry，且只有计数为一时才继续；只要存在无法读取的本地 recovery directory，也必须明确指定 ID，不能忽略。Active/paused `workspace_foreign` stub 不会被隐式选中。Stopped Run 可以 resume；ended Run 不可以。
+停止 Run 并保留 journal。Stop 会撤回当前 Action，因此 stopped Run 不再报告 `current_action`，也不再报告 destructive authorization；journal 仍记录它签发过的每个 Action。Resume 总是签发新的 Orient。省略 ID 时会扫描列出的 active/paused entry，且只有计数为一时才继续；只要存在无法读取的本地 recovery directory，也必须明确指定 ID，不能忽略。Active/paused `workspace_foreign` stub 不会被隐式选中。Stopped Run 可以 resume；ended Run 不可以。
 
 ## 机器协议操作
 

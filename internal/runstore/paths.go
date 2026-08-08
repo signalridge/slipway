@@ -11,6 +11,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -25,6 +26,10 @@ const (
 	journalFileName    = "journal.jsonl"
 	projectionFileName = "run.json"
 	lockFileName       = "run.lock"
+
+	// unbornHead is the recorded HEAD of a repository whose checked-out branch
+	// has no commit yet. It is never used to stand in for an unreadable HEAD.
+	unbornHead = "unborn"
 
 	// WorkspaceIdentityVersion is the serialized workspace identity contract.
 	WorkspaceIdentityVersion = 1
@@ -312,9 +317,12 @@ func observeGitWithContentBudget(root string, byteLimit int64, timeout time.Dura
 	}
 	root = identity.WorktreeRoot
 
-	head, err := gitOutput(root, "rev-parse", "--verify", "HEAD")
+	head, err := gitOutput(root, "rev-parse", "--verify", "--quiet", "HEAD")
 	if err != nil {
-		head = "unborn"
+		if !isUnbornHeadError(err) {
+			return GitObservation{}, fmt.Errorf("observe HEAD: %w", err)
+		}
+		head = unbornHead
 	}
 	index, err := gitBytes(root, "ls-files", "--stage", "-z")
 	if err != nil {
@@ -954,6 +962,33 @@ func gitObservationContextError(cause error) error {
 	return fmt.Errorf("git observation canceled: %w", cause)
 }
 
+// GitCommandError reports a git subprocess that ran to completion with a
+// non-zero status. It preserves the exit code and diagnostic so a caller can
+// tell an expected repository state from an actual observation failure instead
+// of collapsing both into one opaque error.
+type GitCommandError struct {
+	Args     []string
+	ExitCode int
+	Stderr   string
+}
+
+func (err *GitCommandError) Error() string {
+	detail := err.Stderr
+	if detail == "" {
+		detail = "exit status " + strconv.Itoa(err.ExitCode)
+	}
+	return fmt.Sprintf("git %s: %s", strings.Join(err.Args, " "), detail)
+}
+
+// isUnbornHeadError reports the single `rev-parse` failure that is a normal
+// repository state rather than a broken observation: with `--verify --quiet`,
+// a checked-out branch that has no commit yet exits 1 and prints no diagnostic,
+// while a damaged or unreadable repository exits 128 with one.
+func isUnbornHeadError(err error) bool {
+	var commandErr *GitCommandError
+	return errors.As(err, &commandErr) && commandErr.ExitCode == 1 && commandErr.Stderr == ""
+}
+
 func gitBytes(root string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
 	defer cancel()
@@ -1022,6 +1057,14 @@ func gitBytesContext(parent context.Context, root string, args ...string) ([]byt
 	}
 	if waitErr != nil {
 		detail := strings.TrimSpace(string(stderrResult.output))
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			return nil, &GitCommandError{
+				Args:     append([]string(nil), args...),
+				ExitCode: exitErr.ExitCode(),
+				Stderr:   detail,
+			}
+		}
 		if detail == "" {
 			detail = waitErr.Error()
 		}

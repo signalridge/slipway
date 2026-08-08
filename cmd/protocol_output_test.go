@@ -103,8 +103,11 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 	stopJSON, stderr, err := executeForTest(t, "stop", decodedAction.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
 	assertMachineSchemaOutput(t, "protocolState", stopJSON)
-	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "action", "next")
+	// A stopped Run withdraws its Action, so the envelope carries no `action`.
+	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "next")
 	assertContractVersion(t, stop)
+	assertJSONString(t, stop, "state")
+	assert.Equal(t, `"stopped"`, string(stop["state"]))
 
 	issueRepository := newCLIRepository(t)
 	sourcePath := writeCLISource(t, cliSourceEnvelope())

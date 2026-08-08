@@ -466,9 +466,13 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			}
 			var refreshedSource *autopilot.SourceCandidateInput
 			if sourceFileSet {
-				imported, err := autopilot.ImportSourceCandidateFile(sourceFile)
-				if err != nil {
-					return newUsageError("invalid_source_candidate", sourceImportErrorMessage(err), resumeSourceNext(workspace, args[0], replacementBudget))
+				imported, importErr := autopilot.ImportSourceCandidateFile(sourceFile)
+				if importErr != nil {
+					return newUsageError(
+						"invalid_source_candidate",
+						sourceImportErrorMessage(importErr),
+						resumeSourceRecoveryNext(workspace, args[0], replacementBudget),
+					)
 				}
 				refreshedSource = &imported
 			}
@@ -674,6 +678,29 @@ func submitRetryNext(workspace, runID, actionID string, stdin bool) autopilot.Ne
 		base,
 		[]autopilot.NextInput{{Name: "outcome_file", Type: autopilot.NextInputPath, Flag: "--outcome-file", Required: true}},
 	)
+}
+
+// resumeSourceRecoveryNext derives the retry command from the Run itself so an
+// ad-hoc Run — which never accepts a refreshed source — is not handed a
+// source-refresh variant it can only reject again. The Run is read without
+// creating or repairing the run namespace, so a rejected envelope still leaves
+// no durable state behind; the static source route remains the fallback for a
+// Run that cannot be read at all.
+func resumeSourceRecoveryNext(workspace, runID string, budget *int) autopilot.Next {
+	service, err := autopilot.OpenServiceReadOnly(workspace)
+	if err != nil {
+		return resumeSourceNext(workspace, runID, budget)
+	}
+	defer func() { _ = service.Close() }()
+	run, err := service.Load(runID)
+	if err != nil {
+		return resumeSourceNext(workspace, runID, budget)
+	}
+	next, err := autopilot.DeriveResumeNext(run)
+	if err != nil {
+		return resumeSourceNext(workspace, runID, budget)
+	}
+	return next
 }
 
 func resumeSourceNext(workspace, runID string, budget *int) autopilot.Next {

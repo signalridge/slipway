@@ -593,19 +593,29 @@ func (service *Service) Submit(runID, actionID string, outcome Outcome) (Run, er
 		if err := service.validateRunWorkspace(run); err != nil {
 			return nil, nil, err
 		}
+		// An Action that already carries an outcome answers for itself, in every
+		// run state: an exact retry replays, a different payload conflicts, and
+		// an invalidated Action refuses both.
 		record := findActionRecord(&run, actionID)
-		if record != nil && record.Voided {
-			return nil, nil, protocolRunError(run, "stale_action", "action_id was voided by resume")
-		}
 		if record != nil && record.Outcome != nil {
-			if record.OutcomePayloadSHA256 == payloadSHA256 {
+			switch {
+			case record.Voided:
+				return nil, nil, protocolRunError(run, "stale_action", "action_id was voided and can no longer accept an outcome")
+			case record.OutcomePayloadSHA256 == payloadSHA256:
 				result = run
 				return nil, run, nil
+			default:
+				return nil, nil, protocolRunError(run, "outcome_conflict", "this action already has a different outcome payload")
 			}
-			return nil, nil, protocolRunError(run, "outcome_conflict", "this action already has a different outcome payload")
 		}
+		// For an Action with no outcome, a stopped or ended Run reports its own
+		// state first: it withdrew every outstanding Action, so "that Action is
+		// stale" would name a consequence rather than the fact to act on.
 		if run.State == RunStopped || run.State == RunEnded {
 			return nil, nil, protocolRunError(run, "run_not_active", "run is not accepting outcomes while "+string(run.State))
+		}
+		if record != nil && record.Voided {
+			return nil, nil, protocolRunError(run, "stale_action", "action_id was voided and can no longer accept an outcome")
 		}
 		if run.State != RunActive {
 			return nil, nil, protocolRunError(run, "run_not_active", "run is not accepting outcomes while "+string(run.State))
@@ -780,7 +790,7 @@ func (service *Service) Answer(runID, actionID string, options AnswerOptions) (R
 			// decline-or-feedback branch above.
 			receipt.Active = false
 			run.Answers = append(run.Answers, receipt)
-			run.PendingActions = nil
+			discardPendingActions(&run, "when the structured destructive confirmation issued the authorized Implement Action")
 			run.PendingDestructiveRequest = cloneDestructiveRequest(&request)
 			run.DestructiveGrant = cloneDestructiveAuthorization(&authorization)
 			if run.RemainingBudget < 1 {
@@ -827,7 +837,7 @@ func (service *Service) Skip(runID, actionID string) (Run, error) {
 		}
 		durableRun := runBeforeMutation(*run)
 		kind := run.CurrentAction.Kind
-		run.PendingActions = nil
+		discardPendingActions(run, "when the user skipped the current Action")
 		if record := findActionRecord(run, actionID); record != nil {
 			record.Skipped = true
 			if kind == ActionReview {
@@ -850,6 +860,14 @@ func (service *Service) Stop(runID string) (Run, error) {
 			return protocolRunError(*run, "run_already_ended", "ended run cannot be stopped")
 		}
 		clearDestructiveState(run)
+		// A stopped Run has no current Action: it cannot be submitted, skipped,
+		// or read for material, and resume always issues a fresh Orient instead.
+		// Voiding it here rather than at resume stops the Run from publishing an
+		// Action nothing can execute — and, after a destructive confirmation, the
+		// spent authorization embedded in it. The issued Action itself stays in
+		// the journal, so what was requested and confirmed remains auditable.
+		voidCurrentAction(run)
+		run.CurrentAction = nil
 		if run.State == RunStopped {
 			return nil
 		}
@@ -1640,6 +1658,22 @@ func mergeRefreshedProjection(current PinnedSource, refreshed SourceCandidateInp
 	return projected, refreshed
 }
 
+// discardPendingActions empties the host-suggested queue and records exactly
+// what was dropped. Use it wherever no fresh Orient follows: the run would
+// otherwise reach its Summary without ever naming a suggested decision it never
+// asked, which reads as if nothing was outstanding.
+func discardPendingActions(run *Run, reason string) {
+	for _, pending := range run.PendingActions {
+		run.Uncertainties = appendUniqueString(run.Uncertainties, fmt.Sprintf(
+			"unresolved_suggestion: a queued %s suggestion was dropped %s and was never dispatched: %s",
+			pending.Kind,
+			reason,
+			pending.Brief,
+		))
+	}
+	run.PendingActions = nil
+}
+
 func appendUniqueString(values []string, value string) []string {
 	for _, existing := range values {
 		if existing == value {
@@ -1784,7 +1818,9 @@ func transitionFrom(run *Run, durableRun Run, kind ActionKind, outcome Outcome) 
 	if transition.Next == ActionReview && run.ReviewPending {
 		// A newly observed revision is a safety override, not a detour through a
 		// host-selected queue. Review it, then follow the normal Summary route.
-		run.PendingActions = nil
+		// The override still reports every suggestion it drops, because Review
+		// routes to Summary and never returns to the queue.
+		discardPendingActions(run, "when a newly observed revision preempted the queue with advisory Review")
 	}
 	if transition.PauseReason != "" {
 		clearDestructiveState(run)
@@ -2808,6 +2844,13 @@ func validateCurrentActionState(run Run) error {
 	if run.CurrentAction == nil {
 		return nil
 	}
+	if run.State == RunStopped || run.State == RunEnded {
+		// Neither state can execute, skip, or read material for an Action, and
+		// an issued Action is immutable, so publishing one here would advertise
+		// work — including a spent destructive authorization — that the CLI will
+		// never honor.
+		return errors.New("a stopped or ended run cannot publish a current action")
+	}
 	if err := run.CurrentAction.Validate(); err != nil {
 		return fmt.Errorf("current action is invalid: %w", err)
 	}
@@ -2918,7 +2961,7 @@ func transitionAfterSkip(run *Run, durableRun Run, kind ActionKind) error {
 		changedSinceStart := recordGitObservation(run, current)
 		run.ReviewPending = run.ReviewEnabled && changedSinceStart
 		if run.ReviewPending {
-			run.PendingActions = nil
+			// Skip already emptied and reported the queue; nothing is left to drop.
 			return issueAction(run, durableRun, ActionReview, "Review the complete observed start-to-current Git difference after the prior Action was skipped; report findings only.")
 		}
 		return issueAction(run, durableRun, ActionSummarize, "Summarize observed facts after the prior Action was skipped.")

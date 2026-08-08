@@ -1170,3 +1170,48 @@ func writeCLISource(t *testing.T, envelope autopilot.RawSourceEnvelope) string {
 	require.NoError(t, os.WriteFile(path, raw, 0o400))
 	return path
 }
+
+// TestAdHocResumeSourceRecoveryNamesAnExecutableRetry pins the rule that a
+// rejected source envelope must not hand an ad-hoc Run a --source-file retry it
+// can only reject again. The rejection still leaves the Run untouched.
+func TestAdHocResumeSourceRecoveryNamesAnExecutableRetry(t *testing.T) {
+	repository := newCLIRepository(t)
+	canonicalRepository, err := resolveRoot(repository)
+	require.NoError(t, err)
+	stdout, stderr, err := executeForTest(t, "run", "tidy the parser", "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+	action := decodeMutationAction(t, stdout)
+
+	_, stderr, err = executeForTest(t, "stop", action.RunID, "--root", repository, "--json")
+	require.NoError(t, err, stderr)
+
+	invalidSource := filepath.Join(t.TempDir(), "invalid-source.json")
+	require.NoError(t, os.WriteFile(invalidSource, []byte("{}\n"), 0o600))
+	stdout, stderr, err = executeForTest(
+		t,
+		"protocol", "resume", action.RunID, "--budget", "9", "--source-file", invalidSource,
+		"--root", repository,
+	)
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	var cliErr CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &cliErr))
+	assert.Equal(t, "invalid_source_candidate", cliErr.Code)
+	assert.Equal(t, autopilot.NextOperationResume, cliErr.Next.Operation)
+	require.Len(t, cliErr.Next.Variants, 1)
+	assert.Equal(t, "resume-ad-hoc", cliErr.Next.Variants[0].ID)
+	for _, input := range cliErr.Next.Variants[0].Inputs {
+		assert.NotEqual(t, "source_file", input.Name, "an ad-hoc Run never accepts a refreshed source")
+	}
+
+	// The named retry has to actually work.
+	resolved, resolveErr := cliErr.Next.Resolve("resume-ad-hoc", map[string]autopilot.NextInputValue{
+		"budget": {Type: autopilot.NextInputString, Value: "9"},
+	})
+	require.NoError(t, resolveErr)
+	assert.Equal(t, []string{
+		"slipway", "protocol", "resume", action.RunID, "--root", canonicalRepository, "--budget", "9",
+	}, resolved)
+	_, stderr, err = executeForTest(t, "protocol", "resume", action.RunID, "--budget", "9", "--root", repository)
+	require.NoError(t, err, stderr)
+}

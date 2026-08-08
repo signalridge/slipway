@@ -96,7 +96,7 @@ With an ID, returns the current Run projection and a freshly derived structured 
 slipway stop [run-id] [--root ROOT] [--json]
 ```
 
-Stops a Run and preserves its journal. Omitting the ID scans listed active or paused entries and proceeds only when that count is one; any unreadable local recovery directory also requires an explicit ID rather than being ignored. An active or paused `workspace_foreign` stub is not selected implicitly. A stopped Run can resume; an ended Run cannot.
+Stops a Run and preserves its journal. Stopping withdraws the current Action, so a stopped Run reports no `current_action` and no destructive authorization; the journal still records every Action it issued. Resume always issues a fresh Orient. Omitting the ID scans listed active or paused entries and proceeds only when that count is one; any unreadable local recovery directory also requires an explicit ID rather than being ignored. An active or paused `workspace_foreign` stub is not selected implicitly. A stopped Run can resume; an ended Run cannot.
 
 ## Machine protocol operations
 
