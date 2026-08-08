@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 下位 package は コマンド や host-policy layer を逆 import しません。GitHub publication は core 内の network provider にはならず、generated ホスト instruction に残ります。
 
+製品コードを持たず リポジトリ 全体の不変条件だけを検証する package が3つあります。`internal/architecture` は上記の依存方向を、`internal/testlint` は source text や wall-clock 時間に依存するテストを、`internal/releasepolicy` は release と release 自動化 workflow を検証します。いずれも通常のテストであり、`go test` 以外の gate にはなりません。
+
 ## Run 開始と リポジトリ 観測
 
 新規 Run は worktree root、per-worktree Git directory、Git common directory の3つの canonical path を発見します。それらの framed identifier が Run をその worktree に紐付けます。Slipway は worktree を作成・切替・削除しませんが、別 worktree identity からの Run 変更は拒否します。

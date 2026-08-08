@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 底层 package 不反向 import command 或 host-policy layer。GitHub publication 保留在 生成的宿主指令 中，不成为 core 内的 network provider。
 
+还有三个 package 不含产品代码，只用于断言仓库级不变量：`internal/architecture` 检查上述依赖方向，`internal/testlint` 报告断言源码文本或 wall-clock 时间的测试，`internal/releasepolicy` 检查 release 与 release 自动化 workflow。它们只是普通测试，除 `go test` 外不构成任何 gate。
+
 ## Run 启动与仓库观察
 
 新 Run 会发现三个 canonical path：worktree root、per-worktree Git directory 与 Git common directory。它们组成的 ID 将 Run 绑定到该 worktree。Slipway 不创建、切换或删除 worktree，但会拒绝从其他 worktree identity 修改 Run。

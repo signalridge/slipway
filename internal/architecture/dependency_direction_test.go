@@ -25,6 +25,10 @@ func TestProductionDependenciesFollowSoftAutopilotArchitecture(t *testing.T) {
 		"tmpl":        {},
 		"fsutil":      {},
 		"jsonstrict":  {},
+		// Test-only packages that assert repository-wide invariants. They carry
+		// no production code, and must not grow any that depends on the product.
+		"architecture":  {},
+		"releasepolicy": {},
 	}
 	for source, allowed := range allowedInternal {
 		directory := filepath.Join(root, source)

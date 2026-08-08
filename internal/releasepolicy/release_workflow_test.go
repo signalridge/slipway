@@ -1,4 +1,4 @@
-package cmd
+package releasepolicy
 
 import (
 	"errors"
@@ -25,14 +25,6 @@ func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
 	assert.Equal(t, "ubuntu-latest", workflowString(t, validateJob, "runs-on"))
 	assert.Equal(t, "read", workflowString(t, workflowMap(t, validateJob, "permissions"), "contents"))
 	assertNotContainsWorkflowValues(t, validateJob, "secrets.", "validate-tag must not expose secrets")
-
-	validateRun := firstStepRun(t, validateJob, "Validate release tag syntax")
-	assert.Contains(t, validateRun, "core='(0|[1-9][0-9]*)'")
-	assert.Contains(t, validateRun, "prerelease_id=")
-	assert.Contains(t, validateRun, "[[:cntrl:]]")
-	assert.NotContains(t, validateRun, "grep")
-	assert.Contains(t, validateRun, "printf 'tag_name=%s\\n'")
-	assert.Contains(t, validateRun, ">> \"$GITHUB_OUTPUT\"")
 
 	testJob := workflowMap(t, jobs, "test")
 	assertWorkflowNeeds(t, testJob, "validate-tag")
@@ -177,7 +169,75 @@ func TestReleasePleaseReconciliationStepFailsClosed(t *testing.T) {
 	}
 }
 
+// TestReleaseTagValidationAcceptsOnlyCanonicalSemVer executes the validation
+// step instead of reading it. The property that matters is which tags reach the
+// job that holds the publishing secrets, and asserting on the step's regex
+// literals or on it not calling `grep` froze one implementation of that
+// property without ever checking the property itself.
+func TestReleaseTagValidationAcceptsOnlyCanonicalSemVer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the release tag validation step runs on an Ubuntu runner")
+	}
+	workflow := readWorkflowYAML(t, ".github/workflows/release.yaml")
+	validateRun := firstStepRun(t, workflowMap(t, workflowMap(t, workflow, "jobs"), "validate-tag"), "Validate release tag syntax")
+
+	for _, tag := range []string{
+		"v0.0.0", "v1.2.3", "v10.20.30", "v1.0.0-rc.1", "v1.2.3-alpha", "v1.2.3-alpha.1",
+		"v1.2.3-0.3.7", "v1.2.3-x-y-z", "v0.41.1",
+	} {
+		tag := tag
+		t.Run("accepts "+tag, func(t *testing.T) {
+			output, stderr, err := runReleaseTagValidationStep(t, validateRun, tag, "unused-ref")
+			require.NoError(t, err, stderr)
+			assert.Equal(t, "tag_name="+tag+"\n", output)
+		})
+	}
+
+	for _, test := range []struct{ name, tag string }{
+		{name: "missing v prefix", tag: "1.2.3"},
+		{name: "uppercase prefix", tag: "V1.2.3"},
+		{name: "doubled prefix", tag: "vv1.2.3"},
+		{name: "two components", tag: "v1.2"},
+		{name: "four components", tag: "v1.2.3.4"},
+		{name: "leading zero major", tag: "v01.2.3"},
+		{name: "leading zero patch", tag: "v1.2.03"},
+		{name: "build metadata", tag: "v1.2.3+build.5"},
+		{name: "numeric prerelease leading zero", tag: "v1.2.3-01"},
+		{name: "empty prerelease", tag: "v1.2.3-"},
+		{name: "empty prerelease component", tag: "v1.2.3-alpha..1"},
+		{name: "negative major", tag: "v-1.2.3"},
+		{name: "trailing space", tag: "v1.2.3 "},
+		{name: "shell substitution", tag: "v1.2.$(id).3"},
+		{name: "path traversal", tag: "../v1.2.3"},
+		{name: "ref path", tag: "refs/tags/v1.2.3"},
+	} {
+		test := test
+		t.Run("rejects "+test.name, func(t *testing.T) {
+			// REF_NAME is a valid tag, so a rejected INPUT_TAG cannot quietly
+			// fall through to publishing a different revision.
+			output, stderr, err := runReleaseTagValidationStep(t, validateRun, test.tag, "v1.2.3")
+			require.Error(t, err, stderr)
+			assert.Empty(t, output, "an invalid tag must fail before writing GITHUB_OUTPUT")
+		})
+	}
+
+	t.Run("falls back to the ref name", func(t *testing.T) {
+		output, stderr, err := runReleaseTagValidationStep(t, validateRun, "", "v4.5.6")
+		require.NoError(t, err, stderr)
+		assert.Equal(t, "tag_name=v4.5.6\n", output)
+	})
+
+	t.Run("rejects an empty tag and ref", func(t *testing.T) {
+		output, stderr, err := runReleaseTagValidationStep(t, validateRun, "", "")
+		require.Error(t, err, stderr)
+		assert.Empty(t, output)
+	})
+}
+
 func TestReleaseWorkflowRejectsOutputInjectionTags(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the release tag validation step runs on an Ubuntu runner")
+	}
 	workflow := readWorkflowYAML(t, ".github/workflows/release.yaml")
 	validateRun := firstStepRun(t, workflowMap(t, workflowMap(t, workflow, "jobs"), "validate-tag"), "Validate release tag syntax")
 

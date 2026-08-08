@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 Lower layers do not import command or host-policy layers. GitHub publication remains in generated host instructions rather than becoming a network provider inside the core.
 
+Three packages hold no product code and exist only to assert repository-wide invariants: `internal/architecture` checks that dependency direction, `internal/testlint` reports tests that assert on source text or wall-clock time, and `internal/releasepolicy` checks the release and release-automation workflows. They are ordinary tests and gate nothing beyond `go test`.
+
 ## Run start and repository observation
 
 A new Run discovers three canonical paths: the worktree root, the per-worktree Git directory, and the Git common directory. Their framed identifier binds the Run to that worktree. Slipway does not create, switch, or delete worktrees, but it refuses to mutate a Run from another worktree identity.
