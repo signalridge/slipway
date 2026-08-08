@@ -1650,3 +1650,58 @@ func assertFileContent(t *testing.T, root, relative string, expected []byte) {
 	require.NoError(t, err)
 	assert.Equal(t, expected, content)
 }
+
+// TestDoctorNamesCapabilityFilesLeftOutsideADeletedOwnershipRoot covers the
+// adapters whose capability files live outside their ownership root. Deleting
+// that root by hand removes the manifest and the marker but not those files,
+// and neither uninstall nor refresh can reach them afterwards, so the warning
+// has to name them instead of only reporting that a manifest is missing.
+func TestDoctorNamesCapabilityFilesLeftOutsideADeletedOwnershipRoot(t *testing.T) {
+	for _, test := range []struct {
+		hostID        string
+		ownershipRoot string
+		orphan        string
+		userFile      string
+	}{
+		{hostID: "copilot", ownershipRoot: ".github/copilot", orphan: ".github/agents/slipway-run.agent.md", userFile: ".github/agents/my-helper.agent.md"},
+		{hostID: "kilo", ownershipRoot: ".kilocode", orphan: ".kilo/commands/slipway-run.md", userFile: ".kilo/commands/my-helper.md"},
+	} {
+		test := test
+		t.Run(test.hostID, func(t *testing.T) {
+			root := t.TempDir()
+			_, err := Install(InstallOptions{Root: root, Tools: []string{test.hostID}})
+			require.NoError(t, err)
+			require.FileExists(t, filepath.Join(root, filepath.FromSlash(test.orphan)))
+			require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(test.userFile)), []byte("mine\n"), 0o600))
+			require.NoError(t, os.RemoveAll(filepath.Join(root, filepath.FromSlash(test.ownershipRoot))))
+
+			report, err := Doctor(root)
+			require.NoError(t, err)
+			check := doctorCheckForHost(report, test.hostID)
+			assert.Equal(t, "adapter_not_installed", check.Code)
+			assert.Equal(t, "warning", check.Status, "an unowned capability file is advisory and never blocks")
+			assert.Contains(t, check.Detail, "remain unowned")
+			assert.Contains(t, check.Detail, test.orphan)
+			assert.Contains(t, check.Detail, "Uninstall cannot remove them")
+			assert.Contains(t, check.Detail, "slipway install --tool "+test.hostID)
+			assert.NotContains(t, check.Detail, test.userFile,
+				"only paths this version generates may be named")
+
+			// Nothing is deleted, migrated, or adopted by reporting it.
+			assert.FileExists(t, filepath.Join(root, filepath.FromSlash(test.orphan)))
+			assert.FileExists(t, filepath.Join(root, filepath.FromSlash(test.userFile)))
+		})
+	}
+}
+
+func TestDoctorReportsNoUnownedFilesForAHostThatWasNeverInstalled(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".github", "agents"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".github", "agents", "my-helper.agent.md"), []byte("mine\n"), 0o600))
+
+	report, err := Doctor(root)
+	require.NoError(t, err)
+	check := doctorCheckForHost(report, "copilot")
+	assert.Equal(t, "adapter_not_installed", check.Code)
+	assert.Equal(t, "detected, current ownership manifest is missing", check.Detail)
+}

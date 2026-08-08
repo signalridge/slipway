@@ -447,6 +447,9 @@ func doctorWithInspector(
 		}
 		if !found {
 			detail := "detected, current ownership manifest is missing"
+			if unowned := unownedCapabilityDetail(root, host); unowned != "" {
+				detail = unowned
+			}
 			if markerOnlyOwnershipState(root, host) {
 				detail = currentOwnershipMissingWarning(host)
 			}
@@ -1061,15 +1064,11 @@ func markerOnlyOwnershipState(root string, host Host) bool {
 
 func currentOwnershipMissingWarning(host Host) string {
 	sentinel := filepath.ToSlash(filepath.Join(host.OwnershipRoot, "slipway", sentinelFileName))
-	installInstruction := "slipway install --tool " + host.ID
-	if host.ID == "kiro" {
-		installInstruction = "slipway install --tool kiro --surface ide or slipway install --tool kiro --surface cli"
-	}
 	return fmt.Sprintf(
 		"current ownership manifest is missing for %s; marker-only state does not establish file ownership. Back up and inspect the host surface, move aside %q and only generated-looking managed files that you want Slipway to recreate, then rerun %s. Files left in place remain preserved and are never adopted; Slipway does not reconstruct or automatically migrate a missing manifest",
 		host.ID,
 		sentinel,
-		installInstruction,
+		"slipway install "+installInstruction(host),
 	)
 }
 
