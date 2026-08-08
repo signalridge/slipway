@@ -10,6 +10,7 @@ Run は stop や resume が可能ですが、ジャーナル は secret vault �
 slipway status
 slipway status <run-id>
 slipway status <run-id> --json
+slipway status <run-id> --section requirements
 ```
 
 ID 省略時、`status` は リポジトリ の Git common directory を走査します。Current worktree の Run は完全に replay されます。別の linked worktree が作成した Run は `workspace_foreign` マーク付きの read-only header stub として表示され、完全な内容は owning worktree で確認・復旧します。
@@ -17,6 +18,8 @@ ID 省略時、`status` は リポジトリ の Git common directory を走査�
 Inspect は recovery directory や lock を作成せず、ジャーナル byte も修復しません。Local Run を安全に replay できない場合、上記の `status` の一覧形式はそれを隠さず、`unavailable_runs` に ID と診断を保持します。Mutation の前に ジャーナル を確認または復旧してください。
 
 ID を指定すると、status には現在の state と fresh 派生の structured `next` operation が含まれます。Generated ホストは表示用 shell コマンドを parse せず、この object に従います。
+
+`--section KEY` は Run が pin した source の chapter を1つ、所属する revision とともに表示します。上記の projection は pin された chapter を列挙済みで、ここではその本文を表示します。Run が `stopped` や `ended` になった後も利用でき、その Run が何を根拠に作業していたかを知りたいのは通常そのときです。これは read-only な inspect で、いかなる権限も与えず何も書き込みません。Ad-hoc Run には表示できる pinned source がありません。
 
 ## Stop、skip、resume
 

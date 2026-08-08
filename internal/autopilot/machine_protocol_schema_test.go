@@ -75,12 +75,12 @@ func TestMachineProtocolSchemaDeclaresStrictDraft202012Unions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &schema))
 	assert.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema["$schema"])
 	assert.Equal(t, "https://signalridge.github.io/slipway/reference/v2/machine-protocol.schema.json", schema["$id"])
-	require.Len(t, schemaSlice(t, schema, "oneOf"), 11)
+	require.Len(t, schemaSlice(t, schema, "oneOf"), 12)
 
 	definitions := schemaMap(t, schema, "$defs")
 	for _, name := range []string{
-		"action", "actionMaterial", "rawSourceEnvelope", "outcome", "protocolState", "cliError",
-		"changeReport", "listReport", "doctorReport", "runStatus", "statusList",
+		"action", "actionMaterial", "pinnedMaterial", "rawSourceEnvelope", "outcome", "protocolState",
+		"cliError", "changeReport", "listReport", "doctorReport", "runStatus", "statusList",
 	} {
 		definition := schemaMap(t, definitions, name)
 		assert.False(t, definition["additionalProperties"].(bool), name)

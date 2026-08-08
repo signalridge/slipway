@@ -7,6 +7,19 @@ import (
 	"github.com/signalridge/slipway/internal/runstore"
 )
 
+// PinnedMaterial is the versioned result of reading one pinned chapter for
+// inspection rather than execution. It deliberately carries no action_id: it
+// reports what the Run has pinned, in any state, and authorizes nothing.
+type PinnedMaterial struct {
+	ContractVersion      int                   `json:"contract_version"`
+	MessageType          string                `json:"message_type"`
+	RunID                string                `json:"run_id"`
+	RunState             RunState              `json:"run_state"`
+	SourceRevision       string                `json:"source_revision"`
+	RequirementsRevision string                `json:"requirements_revision"`
+	Section              ActionMaterialSection `json:"section"`
+}
+
 // ActionMaterial is the versioned result of one local chapter read.
 type ActionMaterial struct {
 	ContractVersion      int                   `json:"contract_version"`
@@ -159,6 +172,131 @@ func (service *Service) ReadActionMaterial(
 			Markdown:        markdown,
 		},
 	}, nil
+}
+
+// ReadPinnedMaterial reads one currently pinned chapter for inspection. Unlike
+// ReadActionMaterial it accepts any run state and needs no current Action: a
+// user who stopped or ended a Run can still read exactly what it pinned, which
+// the catalog in `status` identifies but does not contain. It takes no lock,
+// writes nothing, and confers no execution or publication authority.
+func (service *Service) ReadPinnedMaterial(runID, sectionKey string) (PinnedMaterial, error) {
+	if !validSourceSectionKey(sectionKey) {
+		return PinnedMaterial{}, &ProtocolError{
+			Code:    "material_section_invalid",
+			Message: "section must be a valid source section key",
+			Next:    materialStatusNext(service.store.RepositoryRoot(), service.openIdentity.ID, runID),
+		}
+	}
+	if _, err := service.validateOpenWorkspace(); err != nil {
+		return PinnedMaterial{}, err
+	}
+	if _, err := service.loadOwnedRunHeader(runID); err != nil {
+		return PinnedMaterial{}, err
+	}
+
+	var run Run
+	var section PinnedSourceSection
+	var data []byte
+	err := service.store.VisitWithMaterialReader(
+		runID,
+		func(event runstore.Event) error {
+			return replayRunProjectionEvent(&run, event)
+		},
+		func(readMaterial runstore.MaterialReader) error {
+			if run.ID != runID {
+				return errors.New("run journal identity mismatch")
+			}
+			if err := service.validateRunWorkspace(run); err != nil {
+				return err
+			}
+			if run.PinnedSource == nil {
+				return &ProtocolError{
+					Code:    "material_unavailable",
+					Message: "ad-hoc run has no pinned source",
+					Next:    materialRecoveryNext(run),
+				}
+			}
+			found := false
+			for _, candidate := range run.PinnedSource.Sections {
+				if candidate.Key == sectionKey {
+					section = candidate
+					found = true
+					break
+				}
+			}
+			if !found {
+				return &ProtocolError{
+					Code:    "material_section_not_found",
+					Message: fmt.Sprintf("section %q is not pinned by run %q", sectionKey, runID),
+					Next:    materialRecoveryNext(run),
+				}
+			}
+			if !validSHA256(section.MaterialSHA256) {
+				return &ProtocolError{
+					Code:    "material_unavailable",
+					Message: "pinned section has no valid material reference",
+					Next:    materialRecoveryNext(run),
+				}
+			}
+			read, err := readMaterial(section.MaterialSHA256)
+			if err != nil {
+				return &ProtocolError{
+					Code:    "material_unavailable",
+					Message: "pinned material cannot be read or verified: " + err.Error(),
+					Next:    materialRecoveryNext(run),
+				}
+			}
+			data = read
+			return nil
+		},
+	)
+	if err != nil {
+		return PinnedMaterial{}, err
+	}
+	markdown := string(data)
+	if err := verifyPinnedMaterial(run, section, markdown, len(data)); err != nil {
+		return PinnedMaterial{}, err
+	}
+	return PinnedMaterial{
+		ContractVersion:      ContractVersion,
+		MessageType:          "pinned_material",
+		RunID:                runID,
+		RunState:             run.State,
+		SourceRevision:       run.PinnedSource.SourceRevision,
+		RequirementsRevision: run.PinnedSource.RequirementsRevision,
+		Section: ActionMaterialSection{
+			Key:             section.Key,
+			Role:            section.Role,
+			Title:           section.Title,
+			SectionRevision: section.SectionRevision,
+			Markdown:        markdown,
+		},
+	}, nil
+}
+
+// verifyPinnedMaterial repeats the execution path's byte, material, and section
+// checks. Inspection reads the same bytes an Action would, so it must refuse to
+// display material that no longer matches the catalog rather than presenting
+// corrupt content as the pinned requirement.
+func verifyPinnedMaterial(run Run, section PinnedSourceSection, markdown string, size int) error {
+	if size != section.Bytes {
+		return &ProtocolError{
+			Code:    "material_corrupt",
+			Message: "pinned material byte count does not match the source catalog",
+			Next:    materialRecoveryNext(run),
+		}
+	}
+	if materialRevision(markdown) != section.MaterialSHA256 {
+		return errors.New("material digest validation disagrees with runstore")
+	}
+	if sectionRevision(section.Key, section.Role, section.Title, markdown) != section.SectionRevision {
+		return &ProtocolError{
+			Code:    "material_corrupt",
+			Message: "pinned material does not match the pinned section revision",
+			Next:    materialRecoveryNext(run),
+		}
+	}
+	return nil
 }
 
 func materialRecoveryNext(run Run) Next {

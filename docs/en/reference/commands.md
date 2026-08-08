@@ -81,7 +81,7 @@ The command returns an Action; it does not execute the requested code change.
 ## `slipway status`
 
 ```text
-slipway status [run-id] [--root ROOT] [--json]
+slipway status [run-id] [--section KEY] [--root ROOT] [--json]
 ```
 
 Without an ID, lists Runs in the repository's Git common directory. Current-worktree Runs are replayed; another linked worktree's Run appears only as a read-only header marked `workspace_foreign`. Full inspection and mutation require the owning worktree.
@@ -89,6 +89,10 @@ Without an ID, lists Runs in the repository's Git common directory. Current-work
 `status` is filesystem-read-only: it does not create the run namespace or lock files, change permissions, or repair an interrupted journal tail. Targeted inspection uses `run_not_found` for an absent ID, `run_journal_invalid` for a corrupt local Run, and `run_busy` when a writer holds the commit boundary through the bounded inspection timeout. Repository-wide JSON keeps unreadable local identities in `unavailable_runs`; each entry's `code` is `run_journal_invalid`, `run_unavailable`, or `run_busy`. `run_not_found` is targeted-only and never an `unavailable_runs[].code`.
 
 With an ID, returns the current Run projection and a freshly derived structured `next` operation. Empty list output is valid.
+
+`--section KEY` returns one currently pinned source chapter as a `pinned_material` message: the same bytes an Action would read, plus the section and requirements revisions they belong to. It requires a Run ID, works in every state including `stopped` and `ended`, and reports `material_unavailable` for an ad-hoc Run, which pins no source. The `status --json` projection already names the pinned chapters; this returns their text.
+
+This is inspection, not the execution path. `protocol material` remains the only route an Action reads material through, because it additionally binds the read to the current non-void Action. Reading a chapter here confers no implementation, publication, or Run authority, appends no journal event, and reports the currently pinned revision rather than a historical one.
 
 ## `slipway stop`
 

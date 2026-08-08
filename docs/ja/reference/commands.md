@@ -81,7 +81,7 @@ CLI が消費した後、ホストは temporary goal/source file を削除しま
 ## `slipway status`
 
 ```text
-slipway status [run-id] [--root ROOT] [--json]
+slipway status [run-id] [--section KEY] [--root ROOT] [--json]
 ```
 
 ID 省略時は Git common directory 内の Run を一覧します。Current worktree の Run は replay され、別 linked worktree の Run は `workspace_foreign` マーク付き read-only header として表示されます。完全な inspect と mutation は owning worktree が必要です。
@@ -89,6 +89,10 @@ ID 省略時は Git common directory 内の Run を一覧します。Current wor
 `status` は filesystem に対して read-only です。Run namespace や lock file の作成、permission の変更、中断した ジャーナル tail の修復は行いません。Run ID を指定した場合、存在しなければ `run_not_found`、local Run が壊れていれば `run_journal_invalid`、writer が bounded inspection timeout の間 commit boundary を保持すれば `run_busy` を返します。Repository-wide JSON は読めない local identity を `unavailable_runs` に残し、各 entry の `code` は `run_journal_invalid`、`run_unavailable`、`run_busy` のいずれかです。`run_not_found` は targeted error 専用で、`unavailable_runs[].code` には現れません。
 
 ID 指定時は現在の Run projection と fresh 派生の structured `next` を返します。空リストは有効な出力です。
+
+`--section KEY` は現在 pin されている source chapter を1つ `pinned_material` メッセージとして返します。Action が読むのと同じ バイト に加え、その section revision と requirements revision を含みます。Run ID が必要で、`stopped` と `ended` を含む全 state で利用でき、pinned source を持たない ad-hoc Run では `material_unavailable` を返します。`status --json` の projection は pin された chapter を列挙済みで、ここではその本文を返します。
+
+これは inspect であり execution path ではありません。Action が material を読む経路は引き続き `protocol material` だけです。あちらは読み取りを現在の non-void Action に束縛するためです。ここでの読み取りは implementation・publication・Run のいかなる権限も与えず、ジャーナル event も追加せず、履歴ではなく現在 pin されている revision を返します。
 
 ## `slipway stop`
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/signalridge/slipway/internal/autopilot"
@@ -42,14 +43,34 @@ type statusListOutput struct {
 func makeStatusCmd() *cobra.Command {
 	var root string
 	var jsonOutput bool
+	var section string
 	command := &cobra.Command{
-		Use:   "status [run-id]",
+		Use:   "status [run-id] [--section KEY]",
 		Short: "Show soft-autopilot run journals",
-		Args:  cobra.MaximumNArgs(1),
+		Example: "  slipway status\n" +
+			"  slipway status RUN --json\n" +
+			"  slipway status RUN --section requirements",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				if validationErr := validateRunIDArgument(root, args[0]); validationErr != nil {
 					return validationErr
+				}
+			}
+			if command.Flags().Changed("section") {
+				if len(args) != 1 {
+					return newUsageError(
+						"run_id_required",
+						"reading a pinned section requires one run id",
+						statusInspectionNextForRawRoot(root, ""),
+					)
+				}
+				if section == "" {
+					return newUsageError(
+						"material_section_required",
+						"section cannot be empty",
+						statusInspectionNextForRawRoot(root, args[0]),
+					)
 				}
 			}
 			service, err := openAutopilotReadOnly(root)
@@ -57,6 +78,16 @@ func makeStatusCmd() *cobra.Command {
 				return err
 			}
 			defer func() { _ = service.Close() }()
+			if section != "" {
+				material, err := service.ReadPinnedMaterial(args[0], section)
+				if err != nil {
+					return withCLIErrorContext(err, service.RepositoryRoot(), args[0])
+				}
+				if jsonOutput {
+					return writeJSON(command.OutOrStdout(), material)
+				}
+				return writeHumanPinnedMaterial(command.OutOrStdout(), material)
+			}
 			if len(args) == 1 {
 				run, err := service.Load(args[0])
 				if err != nil {
@@ -115,7 +146,33 @@ func makeStatusCmd() *cobra.Command {
 	}
 	command.Flags().StringVar(&root, "root", "", "workspace root (default: current Git worktree)")
 	command.Flags().BoolVar(&jsonOutput, "json", false, "emit JSON")
+	command.Flags().StringVar(&section, "section", "", "read one pinned source chapter of the given Run")
 	return command
+}
+
+// writeHumanPinnedMaterial prints the chapter and says plainly what it is. A
+// reader has to be able to tell an inspection of pinned text from an Action
+// that authorizes work.
+func writeHumanPinnedMaterial(writer io.Writer, material autopilot.PinnedMaterial) error {
+	_, err := fmt.Fprintf(
+		writer,
+		"Run %s (%s) pinned chapter %q as %s.\nSection revision: %s\nRequirements revision: %s\nThis is the pinned text only; it authorizes no work.\n\n# %s\n\n%s",
+		material.RunID,
+		material.RunState,
+		material.Section.Key,
+		material.Section.Role,
+		material.Section.SectionRevision,
+		material.RequirementsRevision,
+		material.Section.Title,
+		material.Section.Markdown,
+	)
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(material.Section.Markdown, "\n") {
+		_, err = fmt.Fprintln(writer)
+	}
+	return err
 }
 
 func targetedStatusLoadError(repositoryRoot, runID string, err error) error {

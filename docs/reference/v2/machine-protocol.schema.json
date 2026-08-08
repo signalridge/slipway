@@ -6,6 +6,7 @@
   "oneOf": [
     { "$ref": "#/$defs/action" },
     { "$ref": "#/$defs/actionMaterial" },
+    { "$ref": "#/$defs/pinnedMaterial" },
     { "$ref": "#/$defs/rawSourceEnvelope" },
     { "$ref": "#/$defs/outcome" },
     { "$ref": "#/$defs/protocolState" },
@@ -1532,6 +1533,24 @@
         "message_type": { "const": "action_material" },
         "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
         "action_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "section": { "$ref": "#/$defs/actionMaterialSection" }
+      }
+    },
+    "pinnedMaterial": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One pinned source chapter read for inspection. It carries no action_id because it authorizes nothing and is readable in any run state.",
+      "required": [
+        "contract_version", "message_type", "run_id", "run_state",
+        "source_revision", "requirements_revision", "section"
+      ],
+      "properties": {
+        "contract_version": { "const": 2 },
+        "message_type": { "const": "pinned_material" },
+        "run_id": { "$ref": "#/$defs/nonEmptyPlainText" },
+        "run_state": { "enum": ["active", "paused", "stopped", "ended"] },
+        "source_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "requirements_revision": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
         "section": { "$ref": "#/$defs/actionMaterialSection" }
       }

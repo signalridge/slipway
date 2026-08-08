@@ -81,7 +81,7 @@ CLI 消费后，宿主会删除临时 goal/source file。直接使用 `-- <goal>
 ## `slipway status`
 
 ```text
-slipway status [run-id] [--root ROOT] [--json]
+slipway status [run-id] [--section KEY] [--root ROOT] [--json]
 ```
 
 省略 ID 时列出 Git common directory 中的 Run。当前 worktree 的 Run 会 replay；其他 linked worktree 的 Run 只显示标记为 `workspace_foreign` 的只读 header。完整检查和 mutation 必须在 owning worktree 中执行。
@@ -89,6 +89,10 @@ slipway status [run-id] [--root ROOT] [--json]
 `status` 对文件系统是只读的：不会创建 Run namespace 或 lock file，不会修改权限，也不会修复中断的 journal tail。指定 Run ID 时，不存在返回 `run_not_found`，本地 Run 损坏返回 `run_journal_invalid`，writer 在范围明确检查时限内持续持有 commit boundary 则返回 `run_busy`。Repository-wide JSON 会把无法读取的本地 identity 保留在 `unavailable_runs`；其中每个 entry 的 `code` 只能是 `run_journal_invalid`、`run_unavailable` 或 `run_busy`。`run_not_found` 只属于 targeted error，不会出现在 `unavailable_runs[].code`。
 
 指定 ID 时返回当前 Run projection 和实时派生的结构化 `next`。空列表是合法输出。
+
+`--section KEY` 以 `pinned_material` 消息返回当前钉住的一个 source chapter：与 Action 读到的字节完全相同，并附带其 section 与 requirements revision。它需要 Run ID，在包括 `stopped` 与 `ended` 在内的所有状态下都可用；ad-hoc Run 没有 pinned source，返回 `material_unavailable`。`status --json` 的 projection 已列出被钉住的 chapter，此处返回它们的正文。
+
+这是检查而非执行路径。Action 读取 material 仍然只能走 `protocol material`，因为它额外把读取绑定到当前非 void 的 Action。在此读取 chapter 不授予任何实现、发布或 Run 权限，不追加 journal event，返回的是当前钉住的 revision 而非历史 revision。
 
 ## `slipway stop`
 

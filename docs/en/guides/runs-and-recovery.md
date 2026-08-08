@@ -10,6 +10,7 @@ A Run is durable enough to stop and resume, but its journal is not a secret vaul
 slipway status
 slipway status <run-id>
 slipway status <run-id> --json
+slipway status <run-id> --section requirements
 ```
 
 Without an ID, `status` scans the repository's Git common directory. Runs owned by the current worktree are replayed fully. Runs created by another linked worktree appear as read-only header stubs marked `workspace_foreign`; inspect or resume them from their owning worktree.
@@ -17,6 +18,8 @@ Without an ID, `status` scans the repository's Git common directory. Runs owned 
 Inspection never creates recovery directories or locks and never repairs journal bytes. If a local Run cannot be replayed safely, the listing form of `status` above preserves its ID and diagnostic in `unavailable_runs` instead of hiding it; inspect or restore the journal before attempting mutation.
 
 With an ID, the status includes the current state and a freshly derived structured `next` operation. Generated hosts follow that object instead of parsing a displayed shell command.
+
+`--section KEY` prints one chapter of the source the Run pinned, with the revisions it belongs to. The projection above already names the pinned chapters; this shows their text, and it keeps working after the Run is `stopped` or `ended` — which is usually when you want to know what the Run was working from. It is read-only inspection: it grants no authority and writes nothing, and an ad-hoc Run has no pinned source to show.
 
 ## Stop, skip, and resume
 
