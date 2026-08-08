@@ -2844,13 +2844,12 @@ func validateCurrentActionState(run Run) error {
 	if run.CurrentAction == nil {
 		return nil
 	}
-	if run.State == RunStopped || run.State == RunEnded {
-		// Neither state can execute, skip, or read material for an Action, and
-		// an issued Action is immutable, so publishing one here would advertise
-		// work — including a spent destructive authorization — that the CLI will
-		// never honor.
-		return errors.New("a stopped or ended run cannot publish a current action")
-	}
+	// A stopped or ended Run publishing a current Action is deliberately not an
+	// invariant here. Stop withdraws the Action, so this version cannot produce
+	// that state, but these validators also run during replay: rejecting it
+	// would strand every Run an earlier version stopped, reporting it as an
+	// invalid journal that can never be resumed. Stranding a user's Run is a
+	// worse outcome than replaying one stale Action that the next resume voids.
 	if err := run.CurrentAction.Validate(); err != nil {
 		return fmt.Errorf("current action is invalid: %w", err)
 	}
