@@ -5,6 +5,42 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/signalridge/slipway/compare/v0.41.1...v1.0.0) (2026-08-10)
+
+
+### Features
+
+* **adapter:** add AI-guided workflow capability ([fefcfa5](https://github.com/signalridge/slipway/commit/fefcfa5e182381de3be59a68c18163b7ec7b09b5))
+* **adapter:** add AI-guided workflow capability ([#447](https://github.com/signalridge/slipway/issues/447)) ([7bb5d80](https://github.com/signalridge/slipway/commit/7bb5d80d1d0962f4881ba7b2f48f45aac6be9f72))
+* **status:** let a user read back what a Run pinned ([38687b3](https://github.com/signalridge/slipway/commit/38687b394453b1a25aa876e99eec1b8b91b9f062))
+* **tmpl:** stop the interview when talking cannot settle a question ([cdbf7a4](https://github.com/signalridge/slipway/commit/cdbf7a4550bb0042c0aff614ac6af270c6b5b1f7))
+* **workflow:** scope slipway-workflow to full Slipway lifecycle ([c7a7b55](https://github.com/signalridge/slipway/commit/c7a7b557791161d4073352b7c9161868e7974a5a))
+
+
+### Bug Fixes
+
+* **adapter:** name the capability files a deleted ownership root leaves behind ([24b390c](https://github.com/signalridge/slipway/commit/24b390c91da478a3d2a9f156fbd7039679b6df6d))
+* align recovery ownership and machine contracts ([e1ca170](https://github.com/signalridge/slipway/commit/e1ca17097708e8b29eefdc1bf6e1933d184bc4dc))
+* **autopilot:** keep a Run stopped by an earlier version replayable ([d5b7b1d](https://github.com/signalridge/slipway/commit/d5b7b1d16b72f936cad25d8cb1fe41803ac644f2))
+* **ci:** make release validation and status tests portable ([048d4b4](https://github.com/signalridge/slipway/commit/048d4b4089e34db1b884e371084f4eeb1ad60fbd))
+* harden workflow protocol and release integrity ([0a80b8d](https://github.com/signalridge/slipway/commit/0a80b8d75b94a67d6f57da8c2cce1e8a52f2d9a7))
+* **nix:** refresh Go module vendor hash ([7dc4c2d](https://github.com/signalridge/slipway/commit/7dc4c2d16daae87e49797d546edc9740588b1378))
+* stop publishing authority and facts a Run cannot honor ([ff81dfd](https://github.com/signalridge/slipway/commit/ff81dfd5e8d31cabe9a6751e7c14aeaeb8a7035b))
+
+
+### Refactoring
+
+* **autopilot:** split service.go along its existing seams ([249009c](https://github.com/signalridge/slipway/commit/249009c80b0f6ca9c88735c15a2a2bfef68020eb))
+* move CI-policy tests out of cmd and split the protocol commands ([c7de566](https://github.com/signalridge/slipway/commit/c7de566f63e05a5465c74c08dc31c92251fd0911))
+* **tmpl:** share one interview discipline and unfreeze prompt prose ([70d26da](https://github.com/signalridge/slipway/commit/70d26da075f687a51f1ad9aed2ffaf4e29f1172c))
+
+
+### Dependencies
+
+* **actions:** bump the actions group across 1 directory with 11 updates ([d9d523d](https://github.com/signalridge/slipway/commit/d9d523d891281443f64b2e4b796917d90ca507ad))
+* **docker:** bump alpine from 3.23.3 to 3.24.1 ([8a2bae2](https://github.com/signalridge/slipway/commit/8a2bae28c9b10aca90560ee5d99facaf3fa89608))
+* **go:** bump the go-minor group across 1 directory with 3 updates ([e5bec74](https://github.com/signalridge/slipway/commit/e5bec74ab10d9b894de0834067207ce3746dcfb2))
+
 ## [0.41.1](https://github.com/signalridge/slipway/compare/v0.41.0...v0.41.1) (2026-07-07)
 
 
