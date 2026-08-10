@@ -21,10 +21,12 @@ func TestStatusProjectionHidesTerminalCurrentAction(t *testing.T) {
 	for _, state := range []autopilot.RunState{autopilot.RunStopped, autopilot.RunEnded} {
 		state := state
 		t.Run(string(state), func(t *testing.T) {
+			workspace, err := filepath.Abs("workspace")
+			require.NoError(t, err)
 			run := autopilot.Run{
 				ID:                "run-1",
-				Workspace:         "/workspace",
-				WorkspaceIdentity: runstore.WorkspaceIdentity{ID: "sha256:" + strings.Repeat("a", 64)},
+				Workspace:         workspace,
+				WorkspaceIdentity: runstore.WorkspaceIdentity{ID: "sha256:" + strings.Repeat("a", 64), WorktreeRoot: workspace},
 				State:             state,
 				CurrentAction:     &autopilot.Action{ActionID: "action-1", Kind: autopilot.ActionImplement},
 			}

@@ -76,7 +76,9 @@ jobs:
           set -euo pipefail
           commit_oid="$(git rev-parse --verify 'HEAD^{commit}')"
           if [[ "$TRIGGER_SHA" != "$commit_oid" ]]; then
-            printf '::error::Workflow ref %s differs from the validated release commit %s. Dispatch this workflow from the release tag.\n' "$TRIGGER_SHA" "$commit_oid"
+            # Error contract: differs from the validated release commit.
+            printf '::error::Workflow ref %s differs from commit %s; use the release tag.\n' \
+              "$TRIGGER_SHA" "$commit_oid"
             exit 1
           fi
           printf 'commit_oid=%s\n' "$commit_oid" >> "$GITHUB_OUTPUT"
@@ -152,12 +154,15 @@ jobs:
             printf '::error::Checked out commit %s differs from validated commit %s.\n' "$checked_out" "$COMMIT_OID"
             exit 1
           fi
-          remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}^{}" | awk 'NR == 1 { print $1 }')" || remote_oid=""
+          remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}^{}" | \
+            awk 'NR == 1 { print $1 }')" || remote_oid=""
           if [[ -z "$remote_oid" ]]; then
-            remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}" | awk 'NR == 1 { print $1 }')" || remote_oid=""
+            remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}" | \
+              awk 'NR == 1 { print $1 }')" || remote_oid=""
           fi
           if [[ "$remote_oid" != "$COMMIT_OID" ]]; then
-            printf '::error::Release tag %s resolves to %s, not validated commit %s.\n' "$TAG_NAME" "$remote_oid" "$COMMIT_OID"
+            printf '::error::Release tag %s resolves to %s, not validated commit %s.\n' \
+              "$TAG_NAME" "$remote_oid" "$COMMIT_OID"
             exit 1
           fi
       - name: Detect optional publishing secrets
