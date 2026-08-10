@@ -13,7 +13,7 @@ func makeStopCmd() *cobra.Command {
 	command := &cobra.Command{
 		Use:   "stop [run-id]",
 		Short: "Stop an autopilot run without deleting its journal",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  usageMaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				if validationErr := validateRunIDArgument(root, args[0]); validationErr != nil {

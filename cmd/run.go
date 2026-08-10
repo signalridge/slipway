@@ -53,7 +53,7 @@ func makeRunCmd() *cobra.Command {
 		Short: "Start a user-controlled soft-autopilot run",
 		Example: "  slipway run --budget 8 --json -- \"<goal>\"\n" +
 			"  slipway run --goal-file GOAL --source-file SOURCE --budget 8 --json",
-		Args: cobra.MaximumNArgs(1),
+		Args: usageMaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			goalFileSet := command.Flags().Changed("goal-file")
 			goalStdinSet := command.Flags().Changed("goal-stdin") && goalStdin

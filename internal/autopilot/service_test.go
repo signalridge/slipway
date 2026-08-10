@@ -267,7 +267,7 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 	assert.Empty(t, runs)
 }
 
-func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
+func TestServiceSubmitActionFailureUsesCurrentActionNext(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -291,11 +291,18 @@ func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
 	assertProtocolError(t, err, "action_too_large")
 	var protocolErr *ProtocolError
 	require.ErrorAs(t, err, &protocolErr)
-	assert.Equal(t, NextOperationResume, protocolErr.Next.Operation)
-	require.Len(t, protocolErr.Next.Variants, 1)
+	assert.Equal(t, NextOperationAction, protocolErr.Next.Operation)
+	require.Len(t, protocolErr.Next.Variants, 3)
 	variant := protocolErr.Next.Variants[0]
-	assert.Equal(t, "resume-ad-hoc", variant.ID)
-	assert.Equal(t, []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}, variant.BaseArgv)
+	assert.Equal(t, "submit-outcome-file", variant.ID)
+	assert.Equal(t, []string{"slipway", "protocol", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}, variant.BaseArgv)
+	assert.Equal(t, "submit-outcome-stdin", protocolErr.Next.Variants[1].ID)
+	assert.Equal(t, "skip-action", protocolErr.Next.Variants[2].ID)
+	resolved, resolveErr := protocolErr.Next.Resolve("submit-outcome-file", map[string]NextInputValue{
+		"outcome_file": {Type: NextInputPath, Value: filepath.Join(run.Workspace, "outcome.json")},
+	})
+	require.NoError(t, resolveErr)
+	assert.Equal(t, append(append([]string(nil), variant.BaseArgv...), "--outcome-file", filepath.Join(run.Workspace, "outcome.json")), resolved)
 
 	persisted, loadErr := service.Load(run.ID)
 	require.NoError(t, loadErr)

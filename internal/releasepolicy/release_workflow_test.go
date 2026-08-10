@@ -25,17 +25,26 @@ func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
 	assert.Equal(t, "ubuntu-latest", workflowString(t, validateJob, "runs-on"))
 	assert.Equal(t, "read", workflowString(t, workflowMap(t, validateJob, "permissions"), "contents"))
 	assertNotContainsWorkflowValues(t, validateJob, "secrets.", "validate-tag must not expose secrets")
+	validateOutputs := workflowMap(t, validateJob, "outputs")
+	assert.Contains(t, workflowString(t, validateOutputs, "commit_oid"), "steps.revision.outputs.commit_oid")
+	revisionRun := firstStepRun(t, validateJob, "Record validated release commit")
+	assert.Contains(t, revisionRun, "git rev-parse --verify 'HEAD^{commit}'")
+	assert.Contains(t, revisionRun, "TRIGGER_SHA")
+	assert.Contains(t, revisionRun, "differs from the validated release commit")
 
 	testJob := workflowMap(t, jobs, "test")
 	assertWorkflowNeeds(t, testJob, "validate-tag")
 	assert.Equal(t, "read", workflowString(t, workflowMap(t, testJob, "permissions"), "contents"))
 	assert.Equal(
 		t,
-		"${{ needs.validate-tag.outputs.tag_name }}",
+		"${{ needs.validate-tag.outputs.commit_oid }}",
 		firstStepWithUses(t, testJob, "actions/checkout@")["with"].(map[string]any)["ref"],
 	)
 	assertNotContainsWorkflowValues(t, testJob, "secrets.", "test must not expose release secrets")
 	assertNotContainsWorkflowValues(t, testJob, "inputs.tag", "test must consume the validated tag output")
+	buildStep := firstNamedStep(t, testJob, "Build and verify release metadata")
+	assert.Equal(t, "${{ needs.validate-tag.outputs.commit_oid }}", workflowMap(t, buildStep, "env")["COMMIT_SHA"])
+	assertNotContainsWorkflowValues(t, buildStep, "GITHUB_SHA", "release metadata must use the validated commit")
 
 	releaseJob := workflowMap(t, jobs, "release")
 	assertWorkflowNeeds(t, releaseJob, "validate-tag")
@@ -47,10 +56,16 @@ func TestReleaseWorkflowValidatesTagBeforeSecretExposure(t *testing.T) {
 	assert.Equal(t, "write", workflowString(t, releasePerms, "attestations"))
 	assert.Equal(
 		t,
-		"${{ needs.validate-tag.outputs.tag_name }}",
+		"${{ needs.validate-tag.outputs.commit_oid }}",
 		firstStepWithUses(t, releaseJob, "actions/checkout@")["with"].(map[string]any)["ref"],
 	)
 	assert.Contains(t, workflowString(t, workflowMap(t, releaseJob, "outputs"), "tag_name"), "needs.validate-tag.outputs.tag_name")
+	assert.Contains(t, workflowString(t, workflowMap(t, releaseJob, "outputs"), "commit_oid"), "needs.validate-tag.outputs.commit_oid")
+	goreleaser := firstNamedStep(t, releaseJob, "Run GoReleaser")
+	assert.Equal(t, "${{ needs.validate-tag.outputs.tag_name }}", workflowString(t, workflowMap(t, goreleaser, "env"), "GORELEASER_CURRENT_TAG"))
+	provenanceJob := workflowMap(t, jobs, "provenance")
+	assertWorkflowNeeds(t, provenanceJob, "release")
+	assert.Equal(t, "${{ needs.release.outputs.tag_name }}", workflowString(t, workflowMap(t, provenanceJob, "with"), "upload-tag-name"))
 	assertNotContainsWorkflowValues(t, releaseJob, "inputs.tag", "release must consume the validated tag output")
 }
 

@@ -16,7 +16,7 @@ func makeDoctorCmdWithRunner(runner doctorCommandRunner) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose host installation and runtime availability",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resolved, err := resolveRoot(root)
 			if err != nil {

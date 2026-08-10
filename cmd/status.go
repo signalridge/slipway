@@ -50,7 +50,7 @@ func makeStatusCmd() *cobra.Command {
 		Example: "  slipway status\n" +
 			"  slipway status RUN --json\n" +
 			"  slipway status RUN --section requirements",
-		Args: cobra.MaximumNArgs(1),
+		Args: usageMaximumNArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				if validationErr := validateRunIDArgument(root, args[0]); validationErr != nil {
@@ -81,7 +81,7 @@ func makeStatusCmd() *cobra.Command {
 			if section != "" {
 				material, err := service.ReadPinnedMaterial(args[0], section)
 				if err != nil {
-					return withCLIErrorContext(err, service.RepositoryRoot(), args[0])
+					return targetedStatusLoadError(service.RepositoryRoot(), args[0], err)
 				}
 				if jsonOutput {
 					return writeJSON(command.OutOrStdout(), material)
@@ -199,7 +199,15 @@ func targetedStatusLoadError(repositoryRoot, runID string, err error) error {
 	)
 }
 
+func projectStatusRun(run autopilot.Run) autopilot.Run {
+	if run.State == autopilot.RunStopped || run.State == autopilot.RunEnded {
+		run.CurrentAction = nil
+	}
+	return run
+}
+
 func makeRunStatusOutput(run autopilot.Run) (runStatusOutput, error) {
+	run = projectStatusRun(run)
 	if run.WorkspaceForeign {
 		// Journal replay already rejects a Run whose pinned identity is
 		// unusable, so the owning worktree is addressed from that identity
@@ -243,6 +251,7 @@ func pendingQuestionText(run autopilot.Run) string {
 }
 
 func writeRunStatus(command *cobra.Command, run autopilot.Run) error {
+	run = projectStatusRun(run)
 	writer := command.OutOrStdout()
 	if _, err := fmt.Fprintf(writer, "Run: %s\nState: %s\nGoal: %s\nBudget remaining: %d\n", run.ID, run.State, run.Goal, run.RemainingBudget); err != nil {
 		return err

@@ -293,7 +293,7 @@ func TestStorageErrorEmitterUsesExplicitRunRecoveryAndMatchesSchema(t *testing.T
 				Use:           "slipway",
 				SilenceUsage:  true,
 				SilenceErrors: true,
-				Args:          cobra.NoArgs,
+				Args:          usageNoArgs,
 				RunE: func(*cobra.Command, []string) error {
 					resolved, resolveErr := resolveRoot(rootFlag)
 					if resolveErr != nil {

@@ -56,7 +56,7 @@ func (service *Service) ReadActionMaterial(
 		return ActionMaterial{}, err
 	}
 	if _, err := service.loadOwnedRunHeader(runID); err != nil {
-		return ActionMaterial{}, err
+		return ActionMaterial{}, service.normalizeRunLoadError(err)
 	}
 
 	var run Run
@@ -191,7 +191,7 @@ func (service *Service) ReadPinnedMaterial(runID, sectionKey string) (PinnedMate
 		return PinnedMaterial{}, err
 	}
 	if _, err := service.loadOwnedRunHeader(runID); err != nil {
-		return PinnedMaterial{}, err
+		return PinnedMaterial{}, service.normalizeRunLoadError(err)
 	}
 
 	var run Run

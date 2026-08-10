@@ -140,13 +140,16 @@ func TestWriteChangeReportUsesNeutralResultHeading(t *testing.T) {
 	command := &cobra.Command{}
 	command.SetOut(&output)
 	report := adapter.ChangeReport{
-		Hosts:              []string{"claude"},
+		Hosts:              []string{"codex"},
 		TransactionOutcome: adapter.TransactionOutcomeCommitted,
-		Warnings:           []string{"adapter claude is not installed after this operation"},
+		Preserved:          []string{".codex/skills/slipway-run/agents/openai.yaml"},
+		Warnings:           []string{"explicit-only invocation policy was preserved"},
 	}
 
 	require.NoError(t, writeChangeReport(command, "Install result", report))
-	assert.Contains(t, output.String(), "Install result for: claude\n")
+	assert.Contains(t, output.String(), "Install result for: codex\n")
+	assert.Contains(t, output.String(), "preserved .codex/skills/slipway-run/agents/openai.yaml")
+	assert.NotContains(t, output.String(), "user-modified")
 	assert.NotContains(t, output.String(), "Installed capabilities")
 }
 

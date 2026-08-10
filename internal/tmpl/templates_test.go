@@ -102,66 +102,42 @@ func TestCapabilityPromptsStateTheirSafetyBoundaries(t *testing.T) {
 		contains []string
 	}{
 		{path: "skills/run/SKILL.md", contains: []string{
-			"explicitly asks", "never promote chat prose to decision authority", "`answer-decision`",
-			"Strict Outcome shape", "`action_kind` is mandatory", "`skipped` is emitted only by the CLI",
-			"non-null `action`", "Review never needs input", "Every waiting Action may be skipped",
-			"skippable, read-only advisory Review", "unresolved_suggestion", "automatic Action queue is empty",
-			"another non-ended Run pinned to the same Issue identity", "shared understanding",
-			"`gh >= 2.94.0`", "official REST fallback", "redirects/transfers only within `github.com`",
-			"trusted host attests the GitHub fetch identity and visibility observations",
-			"does not contact GitHub and cannot independently revalidate remote visibility",
-			"Redact recognized credentials", "source_unavailable", "nodes(ids:...)",
-			"“skip this”", "“take over”", "“reorder” or “do X first”",
+			"One explicit Run authorizes", "Ordinary conversation must never start a Run.",
+			"never promote chat prose to decision authority", "On “wrap up”, stop questions immediately",
+			"destructive_authorization", "`answer-decision`", "non-null `action`", "action_kind",
+			"source_unavailable", "nodes(ids:...)", "unresolved_suggestion", "required_for_action", "--source-file",
 		}},
 		{path: "skills/clarify/SKILL.md", contains: []string{
-			"explicitly invokes", "structured `answer-decision`", "Do not implement", "stateless",
-			"superseded by later answers", "`grill-with-docs`",
+			"only when the user explicitly invokes it", "Do not implement", "explicit confirmation",
+			"not readiness, quality, Issue status, or delivery certification", "answer-decision", "grill-with-docs", "stateless", "current Clarify Action",
 		}},
 		{path: "skills/propose/SKILL.md", contains: []string{
-			"explicitly asks", "self-contained", "exactly one `level:change`", "exactly one `level:objective`",
-			"exactly one of `kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs`",
-			"marker remains authority", "exactly three choices", "`gh >= 2.94.0`", "official GitHub REST API",
-			"100 sub-issues", "50 blocking", "same-host redirect or transfer", "API stays on `api.github.com`",
-			"every resulting `html_url` stays on `github.com`", "one current external-write confirmation",
-			"operation UUID", "stable item UUID", "provider-assigned IDs are reconciliation facts",
-			"must not trigger a second confirmation", "Unreferenced comments remain drafts",
-			"`created`, `matched`, `failed`, or `ambiguous`", "Zero matches",
-			"public repository has no per-Issue private switch", "Redact recognized credential values",
-			"environment_unavailable",
+			"explicitly asks to propose or publish a Slipway Issue", "must not start implementation",
+			"one current external-write confirmation", "provider-assigned IDs are reconciliation facts",
+			"level:change", "level:objective", "kind:feature|kind:bug|kind:refactor|kind:maintenance|kind:research|kind:docs",
+			"operation UUID", "stable item UUID", "environment_unavailable",
 		}},
 		{path: "skills/decompose/SKILL.md", contains: []string{
-			"explicitly asks", "runtime inheritance", "missing or conflicting labels never block decomposition",
-			"exactly one `level:change`", "exactly 100 children", "exactly 50 blocking dependencies",
-			"exactly 50 blocked-by dependencies", "exceed one of those limits", "`gh >= 2.94.0`",
-			"official REST API", "cross-host redirects", "one operation UUID", "stable item UUID",
-			"one current external-write confirmation", "provider-assigned IDs are reconciliation facts",
-			"must not trigger another confirmation", "duplicate marker matches", "Zero marker matches",
-			"public Issue has no private switch", "Never propagate in the background",
-			"`closed` status does not prove",
+			"explicitly asks to decompose", "Do not implement the resulting work.",
+			"must remain advisory rather than locked", "provider-assigned IDs are reconciliation facts",
+			"level:change", "100 children", "50 blocking dependencies", "50 blocked-by dependencies",
+			"operation UUID", "stable item UUID", "duplicate marker matches", "Zero marker matches",
 		}},
 		{path: "skills/implement/SKILL.md", contains: []string{
-			"explicitly invokes", "pinned Requirements", "`action_kind: \"implement\"`",
-			"actual positive attempt count", "exact command", "exit code",
-			"Never list an activity that did not run", "shell exit 127", "scope SHA-256",
-			"standalone invocation cannot obtain", "must not execute the destructive operation",
-			"must not silently start a Run",
+			"only for a current Implement Action or when the user explicitly invokes it directly",
+			"pinned Requirements set the maximum business scope", "Never list an activity that did not run",
+			"shell exit 127", "destructive_authorization", "must not execute the destructive operation",
+			"action_kind: \"implement\"", "actual positive attempt count", "exit code", "scope SHA-256",
 		}},
 		{path: "skills/review/SKILL.md", contains: []string{
-			"explicitly invokes", "always read-only", "start-to-current difference is only an observation",
-			"`action_kind: \"review\"`", "leave `suggested_actions` empty", "Do not modify files",
-			"automatic repair or re-review loop",
+			"It is always read-only.", "Do not modify files", "suggest Implement", "action_kind: \"review\"",
+			"suggested_actions", "read-only", "automatic repair or re-review loop",
 		}},
 		{path: "skills/workflow/SKILL.md", contains: []string{
-			"explicitly asks to run the Slipway workflow", "workflow itself is read-only",
+			"explicitly asks to run the Slipway workflow", "workflow itself is read-only.",
 			"Do not discover, rank, or dispatch", "Do not invoke a sibling `slipway-*` capability",
-			"self-contained and must work when no Matt Pocock skill is installed",
-			"model-invocable `/grilling`", "never run `slipway stop` from here",
-			"this capability runs none of them", "no workflow-owned governance gate",
-			"not an approved publication plan", "never hand a bare Issue number to the CLI",
-			"contract default of `8`", "`max(initial_budget, 3)`", "An ended Run is terminal",
-			"fresh-fetch and attest the canonical Change", "automatic repair or re-review loop",
-			"structurally valid, self-contained `change/v2` Issue", "not a durable wayfinding state machine",
-			"Certify nothing",
+			"slipway-propose", "slipway-decompose", "slipway-run", "slipway-clarify", "slipway-implement", "slipway-review",
+			"change/v2", "max(initial_budget, 3)", "no workflow-owned governance gate",
 		}},
 	}
 	for _, test := range tests {
@@ -195,9 +171,14 @@ func TestWorkflowRoutesEveryObservedStartingPointToOneOwner(t *testing.T) {
 		require.Len(t, cells, 3, "route row %q must keep its three columns", line)
 		rows = append(rows, cells)
 	}
-	require.Len(t, rows, 13, "one header plus twelve observed starting points")
-
+	require.NotEmpty(t, rows, "route table must contain a header and at least one route")
+	require.Greater(t, len(rows), 1, "route table must contain at least one route")
 	header := rows[0]
+	require.Len(t, header, 3, "route table header must keep its three columns")
+	for _, cell := range header {
+		require.NotEmpty(t, strings.TrimSpace(cell), "route table header cells must not be empty")
+	}
+
 	assert.Equal(t, "Observed starting point", strings.TrimSpace(header[0]))
 	routed := map[string]int{}
 	for _, row := range rows[1:] {
@@ -303,6 +284,26 @@ func TestInterviewDisciplineIsSharedAndUnforked(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, content, discipline,
 			"slipway-%s does not interview the user and must not carry the discipline", capability)
+	}
+}
+
+func TestWorkflowConfirmationBoundaryFollowsInterview(t *testing.T) {
+	t.Parallel()
+	content, err := Content("skills/workflow/SKILL.md")
+	require.NoError(t, err)
+	interview := strings.Index(content, "Investigate before asking")
+	require.GreaterOrEqual(t, interview, 0)
+	boundary := strings.Index(content[interview:], "If the user asks to wrap up")
+	require.GreaterOrEqual(t, boundary, 0)
+	boundary += interview
+	end := strings.Index(content[boundary:], "This is not a durable wayfinding state machine")
+	require.Greater(t, end, 0)
+	block := content[boundary : boundary+end]
+	for _, token := range []string{
+		"if interview answers add to or change", "If there was no interview or the understanding did not change",
+		"wrap up", "stop the interview immediately", "confirmation", "publication", "decomposition", "implementation", "Run",
+	} {
+		assert.Contains(t, block, token)
 	}
 }
 

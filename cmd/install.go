@@ -43,7 +43,7 @@ func makeInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install Slipway capabilities for detected AI coding hosts",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resolved, err := resolveRoot(root)
 			if err != nil {
@@ -148,7 +148,7 @@ func writeChangeReport(cmd *cobra.Command, heading string, report adapter.Change
 		}
 	}
 	for _, path := range report.Preserved {
-		if _, err := fmt.Fprintf(w, "  preserved user-modified %s\n", path); err != nil {
+		if _, err := fmt.Fprintf(w, "  preserved %s\n", path); err != nil {
 			return err
 		}
 	}

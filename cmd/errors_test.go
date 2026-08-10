@@ -135,6 +135,20 @@ func TestAsCLIErrorGenericKnownRunUsesTargetedStatusRecovery(t *testing.T) {
 	)
 }
 
+func TestAsCLIErrorDoesNotGuessUsageFromMessage(t *testing.T) {
+	t.Parallel()
+	for _, message := range []string{
+		"unknown command was observed in a repository note",
+		"the operation requires a fresh source",
+		"the adapter accepts no more input",
+		"required flag text was stored in a journal",
+	} {
+		actual := asCLIError(errors.New(message))
+		require.NotNil(t, actual)
+		assert.Equal(t, "runtime_error", actual.Code, message)
+	}
+}
+
 // TestAsCLIErrorJournalRecordLimitOffersRecoverableNext covers issue #434 §1.3:
 // a journal-record-limit failure on Submit does not kill the persistent Run,
 // so the error must offer a recoverable read-only inspection command rather

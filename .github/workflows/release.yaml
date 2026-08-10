@@ -30,6 +30,7 @@ jobs:
       contents: read
     outputs:
       tag_name: ${{ steps.tag.outputs.tag_name }}
+      commit_oid: ${{ steps.revision.outputs.commit_oid }}
     steps:
       - name: Validate release tag syntax
         id: tag
@@ -66,6 +67,19 @@ jobs:
               "$TAG_NAME" "$manifest_version"
             exit 1
           fi
+      - name: Record validated release commit
+        id: revision
+        shell: bash
+        env:
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          commit_oid="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [[ "$TRIGGER_SHA" != "$commit_oid" ]]; then
+            printf '::error::Workflow ref %s differs from the validated release commit %s. Dispatch this workflow from the release tag.\n' "$TRIGGER_SHA" "$commit_oid"
+            exit 1
+          fi
+          printf 'commit_oid=%s\n' "$commit_oid" >> "$GITHUB_OUTPUT"
 
   test:
     name: Test
@@ -76,7 +90,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ needs.validate-tag.outputs.tag_name }}
+          ref: ${{ needs.validate-tag.outputs.commit_oid }}
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -87,13 +101,14 @@ jobs:
       - name: Build and verify release metadata
         env:
           TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
+          COMMIT_SHA: ${{ needs.validate-tag.outputs.commit_oid }}
         run: |
           VERSION="${TAG_NAME#v}"
           mkdir -p bin
           go build \
             -ldflags="-s -w \
             -X github.com/signalridge/slipway/cmd.version=${VERSION} \
-            -X github.com/signalridge/slipway/cmd.commit=${GITHUB_SHA::12} \
+            -X github.com/signalridge/slipway/cmd.commit=${COMMIT_SHA::12} \
             -X github.com/signalridge/slipway/cmd.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o bin/slipway .
           ./bin/slipway --version
@@ -113,6 +128,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       hashes: ${{ steps.hash.outputs.hashes }}
       tag_name: ${{ needs.validate-tag.outputs.tag_name }}
+      commit_oid: ${{ needs.validate-tag.outputs.commit_oid }}
       gh_pat_available: ${{ steps.optional-secrets.outputs.gh_pat_available }}
       aur_key_available: ${{ steps.optional-secrets.outputs.aur_key_available }}
       binary_matrix: ${{ steps.smoke.outputs.binary_matrix }}
@@ -123,7 +139,27 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
-          ref: ${{ needs.validate-tag.outputs.tag_name }}
+          ref: ${{ needs.validate-tag.outputs.commit_oid }}
+      - name: Reconfirm validated tag identity
+        shell: bash
+        env:
+          TAG_NAME: ${{ needs.validate-tag.outputs.tag_name }}
+          COMMIT_OID: ${{ needs.validate-tag.outputs.commit_oid }}
+        run: |
+          set -euo pipefail
+          checked_out="$(git rev-parse --verify 'HEAD^{commit}')"
+          if [[ "$checked_out" != "$COMMIT_OID" ]]; then
+            printf '::error::Checked out commit %s differs from validated commit %s.\n' "$checked_out" "$COMMIT_OID"
+            exit 1
+          fi
+          remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}^{}" | awk 'NR == 1 { print $1 }')" || remote_oid=""
+          if [[ -z "$remote_oid" ]]; then
+            remote_oid="$(git ls-remote --exit-code origin "refs/tags/${TAG_NAME}" | awk 'NR == 1 { print $1 }')" || remote_oid=""
+          fi
+          if [[ "$remote_oid" != "$COMMIT_OID" ]]; then
+            printf '::error::Release tag %s resolves to %s, not validated commit %s.\n' "$TAG_NAME" "$remote_oid" "$COMMIT_OID"
+            exit 1
+          fi
       - name: Detect optional publishing secrets
         id: optional-secrets
         env:
@@ -179,6 +215,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COSIGN_EXPERIMENTAL: "1"
           OPTIONAL_PUBLISH_ONLY: "false"
+          GORELEASER_CURRENT_TAG: ${{ needs.validate-tag.outputs.tag_name }}
       # Everything below observes or prepares independent downstream evidence.
       # It must not turn an already-created core release into a channel gate.
       - name: Observe release artifacts
@@ -283,7 +320,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
-          ref: ${{ needs.release.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.commit_oid }}
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -299,6 +336,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
           OPTIONAL_PUBLISH_ONLY: "true"
+          GORELEASER_CURRENT_TAG: ${{ needs.release.outputs.tag_name }}
       - name: Verify rebuilt archives match core release
         env:
           OPTIONAL_PUBLISH_ONLY: "true"
@@ -341,7 +379,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
-          ref: ${{ needs.release.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.commit_oid }}
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -357,6 +395,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
           OPTIONAL_PUBLISH_ONLY: "true"
+          GORELEASER_CURRENT_TAG: ${{ needs.release.outputs.tag_name }}
       - name: Verify rebuilt archives match core release
         env:
           OPTIONAL_PUBLISH_ONLY: "true"
@@ -398,7 +437,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
-          ref: ${{ needs.release.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.commit_oid }}
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
@@ -426,6 +465,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPTIONAL_PUBLISH_ONLY: "true"
+          GORELEASER_CURRENT_TAG: ${{ needs.release.outputs.tag_name }}
       - name: Verify rebuilt archives match core release
         env:
           OPTIONAL_PUBLISH_ONLY: "true"
@@ -463,6 +503,7 @@ jobs:
     with:
       base64-subjects: ${{ needs.release.outputs.hashes }}
       upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.tag_name }}
       compile-generator: true
 
   verify-nix:
@@ -472,7 +513,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ needs.release.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.commit_oid }}
       - name: Install Nix
         uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31
       - name: Build package
@@ -502,7 +543,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          ref: ${{ needs.release.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.commit_oid }}
       - name: Login to GitHub Container Registry
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:

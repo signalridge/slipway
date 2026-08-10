@@ -176,6 +176,32 @@ func TestFileTransactionPreconditionsPreservePlannedUserPaths(t *testing.T) {
 	assert.Equal(t, "user edit", string(content))
 }
 
+func TestVerifyFileTransactionAssertionIsReadOnlyAndRechecked(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.txt")
+	target := filepath.Join(dir, "policy.yaml")
+	require.NoError(t, os.WriteFile(first, []byte("first-before"), 0o600))
+	require.NoError(t, os.WriteFile(target, []byte("explicit-only"), 0o600))
+	hash := testSHA256([]byte("explicit-only"))
+
+	err := applyFileTransactionWithHooksForTest([]FileTransactionOp{
+		RemoveFileTransactionOp(first).WithExpectedSHA256(testSHA256([]byte("first-before"))),
+		VerifyFileTransactionOp(target).WithExpectedSHA256(hash),
+	}, fileTransactionHooks{
+		AfterPreflight: func(path, _ string) error {
+			if path == target {
+				return os.WriteFile(target, []byte("implicit"), 0o600)
+			}
+			return nil
+		},
+	})
+	require.ErrorIs(t, err, ErrFileTransactionPrecondition)
+	assert.FileExists(t, first, "a failed final assertion must roll back earlier mutations")
+	content, readErr := os.ReadFile(target)
+	require.NoError(t, readErr)
+	assert.Equal(t, "implicit", string(content))
+}
+
 func TestFileTransactionPreflightsAllOperationsBeforeFirstMutation(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.txt")

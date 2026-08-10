@@ -20,7 +20,7 @@ func makeProtocolCmd() *cobra.Command {
 		// generated adapter rather than a person: each needs a Run and Action it
 		// can only learn from the Action it was handed, and every response
 		// already carries the exact next command to run.
-		Args: cobra.NoArgs,
+		Args: usageNoArgs,
 		RunE: func(*cobra.Command, []string) error {
 			return newUsageError("protocol_operation_required", "a protocol operation is required", defaultErrorNext())
 		},
@@ -43,7 +43,7 @@ func makeProtocolMaterialCmd(root *string) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "material",
 		Short: "Read one locally pinned Action source chapter",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", statusInspectionNextForRawRoot(*root, ""))
@@ -89,7 +89,7 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "submit",
 		Short: "Report one Action Outcome and receive the next Action",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			fileSet := command.Flags().Changed("outcome-file")
 			stdinSet := command.Flags().Changed("outcome-stdin") && outcomeStdin
@@ -152,7 +152,6 @@ func makeRunSubmitCmd(root *string) *cobra.Command {
 	command.Flags().StringVar(&actionID, "action", "", "current action id")
 	command.Flags().StringVar(&outcomeFile, "outcome-file", "", "Outcome JSON file")
 	command.Flags().BoolVar(&outcomeStdin, "outcome-stdin", false, "read one Outcome JSON value from stdin")
-	_ = command.MarkFlagRequired("run")
 	return command
 }
 
@@ -163,7 +162,7 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "answer",
 		Short: "Answer a Clarify Action, or confirm an authorized destructive scope",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
@@ -254,7 +253,6 @@ func makeRunAnswerCmd(root *string) *cobra.Command {
 	command.Flags().BoolVar(&textStdin, "text-stdin", false, "read the exact answer or optional confirmation note from stdin")
 	command.Flags().BoolVar(&confirmDestructive, "confirm-destructive", false, "attest current user confirmation of the exact destructive scope")
 	command.Flags().StringVar(&scopeSHA256, "scope-sha256", "", "exact current destructive scope digest")
-	_ = command.MarkFlagRequired("run")
 	return command
 }
 
@@ -263,7 +261,7 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "skip",
 		Short: "Skip the current Action and receive the next one",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(command *cobra.Command, _ []string) error {
 			if runID == "" {
 				return newUsageError("run_id_required", "run cannot be empty", defaultErrorNext())
@@ -289,7 +287,6 @@ func makeRunSkipCmd(root *string) *cobra.Command {
 	}
 	command.Flags().StringVar(&runID, "run", "", "run id")
 	command.Flags().StringVar(&actionID, "action", "", "current action id")
-	_ = command.MarkFlagRequired("run")
 	return command
 }
 
@@ -306,7 +303,7 @@ func makeRunResumeCmd(root *string) *cobra.Command {
 			"  slipway protocol resume RUN --source-file FILE [--budget N]\n" +
 			"  slipway protocol resume RUN --use-pinned-source [--budget N]\n" +
 			"  slipway protocol resume RUN --source-choice pinned|adopt --candidate CANDIDATE [--budget N]",
-		Args: cobra.ExactArgs(1),
+		Args: usageExactArgs(1),
 		RunE: func(command *cobra.Command, args []string) error {
 			budgetSet := command.Flags().Changed("budget")
 			sourceFileSet := command.Flags().Changed("source-file")

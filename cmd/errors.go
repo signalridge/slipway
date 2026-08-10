@@ -211,14 +211,6 @@ func asCLIErrorWithContext(err error, context cliErrorContext) *CLIError {
 	if strings.TrimSpace(context.RunID) != "" {
 		next = storageRecoveryNext(context)
 	}
-	lower := strings.ToLower(message)
-	if strings.Contains(lower, "unknown command") ||
-		strings.Contains(lower, "unknown flag") ||
-		strings.Contains(lower, "requires") ||
-		strings.Contains(lower, "accepts") ||
-		strings.Contains(lower, "required flag") {
-		return newUsageError("invalid_usage", message, next)
-	}
 	return newRuntimeError("runtime_error", message, next, nil)
 }
 

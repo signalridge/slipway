@@ -751,10 +751,15 @@ func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, ho
 			return plan, err
 		}
 		generatedByPath := make(map[string]generatedFile, len(desired))
+		explicitPolicies := make(map[string]generatedFile)
 		survivingCallables := map[string]string{}
+		policyAssertions := make([]fsutil.FileTransactionOp, 0)
 		manifestByPath := manifestIndex(manifest)
 		for _, file := range desired {
 			generatedByPath[file.Relative] = file
+			if file.ExplicitInvocationPolicy {
+				explicitPolicies[file.Capability] = file
+			}
 			if !file.Callable {
 				continue
 			}
@@ -780,6 +785,29 @@ func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, ho
 			}
 			if classification == "modified" {
 				survivingCallables[file.Capability] = file.Relative
+			}
+		}
+
+		for capability, callable := range survivingCallables {
+			policy, ok := explicitPolicies[capability]
+			if !ok {
+				continue
+			}
+			policyPath, err := safeManifestPath(root, host, policy.Relative)
+			if err != nil {
+				return plan, err
+			}
+			classification, err := classifyFileWithFilesystem(filesystem, policyPath, hashBytes(policy.Data))
+			if err != nil {
+				return plan, err
+			}
+			if classification != "pristine" {
+				return plan, fmt.Errorf("cannot safely uninstall adapter %s: callable %s remains but explicit-only invocation policy %s is %s; restore the generated policy before retrying", host.ID, callable, policy.Relative, classification)
+			}
+			policyAssertions = append(policyAssertions, fsutil.VerifyFileTransactionOp(policyPath).WithExpectedSHA256(hashBytes(policy.Data)))
+			if _, claimed := manifestByPath[policy.Relative]; !claimed {
+				plan.preserved = append(plan.preserved, policy.Relative)
+				plan.warnings = append(plan.warnings, fmt.Sprintf("adapter %s preserved explicit-only invocation policy %s because callable %s remains", host.ID, policy.Relative, callable))
 			}
 		}
 		for _, record := range manifest.Files {
@@ -848,6 +876,7 @@ func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, ho
 		case "modified":
 			plan.preserved = append(plan.preserved, relativeToRoot(root, sentinelPath))
 		}
+		plan.ops = append(plan.ops, policyAssertions...)
 	} else {
 		_, sentinelPath, err := ownershipPaths(root, host)
 		if err != nil {

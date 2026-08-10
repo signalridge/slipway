@@ -26,6 +26,17 @@ func Execute() error {
 func executeRootCommand(root *cobra.Command, args ...string) error {
 	root.SetArgs(args)
 	errorRoot := rootForEarlyError(args)
+	if _, _, findErr := root.Find(args); findErr != nil {
+		next := defaultErrorNext()
+		if errorRoot != "" {
+			next = autopilot.NoneNext(errorRoot)
+		}
+		cliErr := newUsageError("invalid_usage", findErr.Error(), next)
+		if emitErr := writeJSON(root.ErrOrStderr(), cliErr); emitErr != nil {
+			return emitErr
+		}
+		return cliErr
+	}
 	if err := root.Execute(); err != nil {
 		cliErr := asCLIErrorWithContext(err, cliErrorContext{WorkspaceRoot: errorRoot})
 		if errorRoot != "" && cliErr.Next.Operation == autopilot.NextOperationNone {

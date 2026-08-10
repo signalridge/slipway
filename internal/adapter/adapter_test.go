@@ -613,6 +613,60 @@ func TestCodexUninstallPreservesExplicitPolicyForModifiedSkill(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(root, ".codex/skills/slipway-review/agents/openai.yaml"))
 }
 
+func TestCodexUninstallFailsClosedWhenExplicitPolicyMissingOrModified(t *testing.T) {
+	t.Parallel()
+
+	const (
+		skillRelative  = ".codex/skills/slipway-run/SKILL.md"
+		policyRelative = ".codex/skills/slipway-run/agents/openai.yaml"
+	)
+	for _, test := range []struct {
+		name       string
+		policyBody []byte
+		remove     bool
+	}{
+		{name: "missing", remove: true},
+		{name: "modified", policyBody: []byte("policy:\n  allow_implicit_invocation: true\n")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			_, err := Install(InstallOptions{Root: root, Tools: []string{"codex"}})
+			require.NoError(t, err)
+			writeTestFile(t, root, skillRelative, []byte("user-owned run skill\n"))
+			if test.remove {
+				require.NoError(t, os.Remove(filepath.Join(root, filepath.FromSlash(policyRelative))))
+			} else {
+				writeTestFile(t, root, policyRelative, test.policyBody)
+			}
+			beforeManifest, found, err := loadManifest(root, mustHost(t, "codex"))
+			require.NoError(t, err)
+			require.True(t, found)
+			require.NotEmpty(t, beforeManifest.Files)
+
+			_, err = Uninstall(UninstallOptions{Root: root, Tools: []string{"codex"}})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "explicit-only invocation policy")
+			assertFileContent(t, root, skillRelative, []byte("user-owned run skill\n"))
+			if test.remove {
+				assert.NoFileExists(t, filepath.Join(root, filepath.FromSlash(policyRelative)))
+			} else {
+				assertFileContent(t, root, policyRelative, test.policyBody)
+			}
+			afterManifest, found, manifestErr := loadManifest(root, mustHost(t, "codex"))
+			require.NoError(t, manifestErr)
+			require.True(t, found)
+			assert.Equal(t, beforeManifest, afterManifest, "failed-closed uninstall must not remove ownership")
+		})
+	}
+}
+
+func mustHost(t *testing.T, id string) Host {
+	t.Helper()
+	host, found := lookupHost(id)
+	require.True(t, found)
+	return host
+}
+
 func TestCurrentManifestWithPriorGeneratedBytesHasSafeRecoveryPath(t *testing.T) {
 	host, ok := lookupHost("claude")
 	require.True(t, ok)

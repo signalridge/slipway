@@ -394,35 +394,7 @@ func (service *Service) Load(runID string) (Run, error) {
 		return Run{}, err
 	}
 	if _, err := service.loadOwnedRunHeader(runID); err != nil {
-		var invalidID *runstore.InvalidRunIDError
-		if errors.As(err, &invalidID) {
-			next, nextErr := NewCommandNext(
-				NextOperationCommand,
-				service.store.RepositoryRoot(),
-				"list-runs",
-				[]string{"slipway", "status", "--root", service.store.RepositoryRoot()},
-				nil,
-			)
-			if nextErr != nil {
-				next = NoneNext(service.store.RepositoryRoot())
-			}
-			return Run{}, &ProtocolError{Code: "invalid_run_id", Message: err.Error(), Next: next}
-		}
-		var notFound *runstore.RunNotFoundError
-		if errors.As(err, &notFound) {
-			next, nextErr := NewCommandNext(
-				NextOperationCommand,
-				service.store.RepositoryRoot(),
-				"list-runs",
-				[]string{"slipway", "status", "--root", service.store.RepositoryRoot()},
-				nil,
-			)
-			if nextErr != nil {
-				next = NoneNext(service.store.RepositoryRoot())
-			}
-			return Run{}, &ProtocolError{Code: "run_not_found", Message: err.Error(), Next: next}
-		}
-		return Run{}, err
+		return Run{}, service.normalizeRunLoadError(err)
 	}
 	var run Run
 	if err := service.store.Visit(runID, func(event runstore.Event) error {
@@ -437,6 +409,31 @@ func (service *Service) Load(runID string) (Run, error) {
 		return Run{}, err
 	}
 	return run, nil
+}
+
+func (service *Service) normalizeRunLoadError(err error) error {
+	if err == nil {
+		return nil
+	}
+	next, nextErr := NewCommandNext(
+		NextOperationCommand,
+		service.store.RepositoryRoot(),
+		"list-runs",
+		[]string{"slipway", "status", "--root", service.store.RepositoryRoot()},
+		nil,
+	)
+	if nextErr != nil {
+		next = NoneNext(service.store.RepositoryRoot())
+	}
+	var invalidID *runstore.InvalidRunIDError
+	if errors.As(err, &invalidID) {
+		return &ProtocolError{Code: "invalid_run_id", Message: err.Error(), Next: next}
+	}
+	var notFound *runstore.RunNotFoundError
+	if errors.As(err, &notFound) {
+		return &ProtocolError{Code: "run_not_found", Message: err.Error(), Next: next}
+	}
+	return err
 }
 
 func (service *Service) loadRunHeader(runID string) (Run, error) {
@@ -1330,7 +1327,7 @@ func issueAction(run *Run, durableRun Run, kind ActionKind, brief string) error 
 	if run.DestructiveGrant != nil && kind == ActionImplement && run.PendingDestructiveRequest != nil {
 		if err := validateDestructiveGrant(*run.DestructiveGrant, *run.PendingDestructiveRequest, run.DestructiveGrant.OriginatingActionID); err != nil {
 			clearDestructiveState(run)
-			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
+			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveNext(durableRun)}
 		}
 		authorization = cloneDestructiveAuthorization(run.DestructiveGrant)
 	} else {
@@ -1387,7 +1384,7 @@ func issueAction(run *Run, durableRun Run, kind ActionKind, brief string) error 
 	if authorization != nil {
 		if err := validateDestructiveGrant(*authorization, *run.PendingDestructiveRequest, authorization.OriginatingActionID); err != nil {
 			clearDestructiveState(run)
-			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
+			return &ProtocolError{Code: "invalid_destructive_grant", Message: err.Error(), Next: mustDeriveNext(durableRun)}
 		}
 	}
 	run.RemainingBudget = remaining
@@ -1403,7 +1400,7 @@ func actionProtocolError(durableRun Run, err error) *ProtocolError {
 	if errors.Is(err, errActionTooLarge) {
 		code = "action_too_large"
 	}
-	return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveResumeNext(durableRun)}
+	return &ProtocolError{Code: code, Message: err.Error(), Next: mustDeriveNext(durableRun)}
 }
 
 func actionRequirements(workspace, runID, actionID string, source PinnedSource) ActionRequirements {
