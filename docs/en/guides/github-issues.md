@@ -46,6 +46,8 @@ Repository labels such as `level:change`, `level:objective`, `kind:bug`, or `kin
 
 ## Publishing Issues
 
+The generated `slipway-workflow` capability can interactively investigate, grill, and draft a Change or Objective from a rough idea before this step, then stop and name `slipway-propose`. It supplies a work-item draft, not the exact approved publication plan; Propose owns that plan and its confirmation. See the [Idea-to-Run workflow](idea-to-run-workflow.md).
+
 The generated `slipway-propose` and `slipway-decompose` instructions direct the host to:
 
 1. inspect the repository and existing Issues;

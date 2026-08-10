@@ -448,6 +448,14 @@ func applyRunEvent(run *Run, event runstore.Event) error {
 			if delta.SourceCandidate.CandidateID == "" || delta.SourceCandidate.CreatedAt.IsZero() {
 				return errors.New("invalid source candidate delta")
 			}
+			// Earlier contract-v2 writers retained the Issue title even when the
+			// refreshed source was structurally invalid. It was never accepted
+			// execution authority, so minimize it during replay without rewriting
+			// the append-only journal. Current writers and public projections omit
+			// it, while existing Runs remain readable.
+			if !delta.SourceCandidate.Valid {
+				delta.SourceCandidate.Title = ""
+			}
 			if err := validateSourceCandidateInput(delta.SourceCandidate.SourceCandidateInput); err != nil {
 				return fmt.Errorf("invalid source candidate delta: %w", err)
 			}

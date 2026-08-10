@@ -18,10 +18,10 @@ Schema は serialization shape を定義します。Runtime は JSON Schema で�
 ホストは通常、各 step で JSON を使います。
 
 ```text
-slipway run --budget N --json --root ROOT [--no-review] [--source-file FILE] -- GOAL
+slipway run --budget N --json --root ROOT [--no-review] --goal-file GOAL_FILE [--source-file SOURCE_FILE]
 slipway protocol submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
-slipway protocol answer --run RUN --action ACTION --root ROOT --text TEXT
-slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway protocol answer --run RUN --action ACTION --root ROOT --text-file TEXT_FILE
+slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text-file TEXT_FILE]
 slipway protocol skip --run RUN --action ACTION --root ROOT
 slipway protocol resume RUN --root ROOT [--budget N]
 slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
@@ -32,13 +32,14 @@ Protocol 操作は versioned ホスト interface です。Documented であり h
 
 ## Run の開始
 
-Canonical invocation はすべての flag を1つの `--` separator の前に置き、literal goal をその後に置きます。
+Canonical host invocation は exact goal を argv に入れません。Private temporary regular non-symlink file に書き、返された start variant の required `goal_file` path を解決します。
 
 ```bash
-slipway run --budget 8 --json --root /absolute/worktree -- "one goal"
+slipway run --budget 8 --json --root /absolute/worktree \
+  --goal-file /private/temp/goal.txt
 ```
 
-Ad-hoc Run は ソースフィールド を省略します。Issue-backed Run は private temporary `--source-file` を指定します。CLI は1度だけ消費し、その後 file や GitHub に依存しません。
+Ad-hoc Run は ソースフィールド を省略します。Issue-backed Run は別の private temporary `--source-file` を指定します。CLI が消費した後、ホストは両方の temporary file を削除します。Run はその後 file や GitHub に依存しません。Human caller は1つの positional goal または `--goal-stdin` も使えますが、generated アダプターは process list/command trace の disclosure と platform command-line length 制限を避けるため `goal_file` を使います。
 
 Start response には Run state、初期 `orient` Action、structured `next` operation が含まれます。
 
@@ -161,6 +162,8 @@ Outcome input は上限 1 MiB、有効 UTF-8 で、BOM、duplicate/unknown field
 
 Input type は `string`、`path`、`enum`、`digest` です。Consumer は1つの variant を選び、入力値を schema 順に独立 argv element として挿入します。Display コマンドを parse/連結してはなりません。
 
+Start variant は exact goal を required `goal_file` path input として持ち、goal text を `base_argv` に埋め込みません。Decision/feedback variant も required `text_file` path を使い、destructive confirmation note は optional `text_file` を使います。ホストは private temporary regular file を作成し、typed variant を解決し、消費後に file を削除します。Direct `--text` と stdin mode は human-facing convenience として残りますが、generated machine canonical path ではありません。
+
 すべての required input が解決された variant だけが human shell コマンドに render できます。POSIX、`cmd.exe`、PowerShell rendering は presentation であり、machine value は structured argv です。
 
 Windows display コマンドに `cmd.exe` では安全に保持できない expansion-sensitive な `%` または `!` が含まれる場合、renderer は PowerShell UTF-16LE `EncodedCommand` trampoline を使用します。これは copyable display form だけを変え、decode 後の process argv は structured variant と byte-for-byte で等価でなければなりません。
@@ -193,7 +196,11 @@ Issue-backed resume は次のいずれかを明示的に行います。
 
 Source option 省略は「unchanged」でも暗黙の network access でもありません。別 Issue identity や異なる parent requirements revision の amendment は Run を変更せずに拒否されます。Candidate ID と choice は stale-safe idempotency を持ちます。
 
+Versioned schema は closed な `source_candidate.classification_code`、`resume_operation` enum と、valid/invalid candidate の field combination に対する serialization authority です。Invalid candidate の `observation_sha256` は、deterministic comparison に使う exact rejected source observation の domain-separated digest です。これは provenance であり、accepted Requirements でも、ホストが GitHub から取得したことの証明でもありません。
+
 成功した resume は必要に応じて stale outstanding work を無効化し、workspace を再検証し、通常は fresh Orient を返します。`--budget` 省略時は正の remaining budget を保持し、0なら `max(initial_budget, 3)` まで補充します。明示的な `--budget N` は `N` に置き換えます。Replacement は実際に Run を resume する mutation でのみ適用されます。
+
+`resume` は current typed `next.operation` が `resume` のときだけ受け付けます。Active Action または answer 可能な decision/destructive pause で呼ぶと current typed recovery とともに拒否されるため、失われた success response の retry が新しい work を暗黙に void することはありません。User take-over/reorder は public `slipway stop` を先に使い、その後に別の explicit resume を行います。
 
 ## Workspace と Git 観測
 
@@ -214,6 +221,8 @@ Git observation は index、porcelain status、dirty path の hash と bounded m
 
 Machine error には `contract_version`、stable `code`、human `message`、`exit_code` が含まれ、回復可能なら structured recovery も付きます。Consumer は code/version で分岐し、message text で分岐してはなりません。
 
+Mutation が commit 済みでも、その後の derive、render、write response が失敗した場合、`mutation_committed_output_failed` は `committed: true`、exact Run ID、targeted `slipway status RUN --root ROOT` recovery を報告します。Mutation を blind replay してはいけません。
+
 `exit_code` は process の exit status と一致し、2つの値のいずれかです:
 
 | 値 | 意味 |
@@ -223,6 +232,6 @@ Machine error には `contract_version`、stable `code`、human `message`、`exi
 
 Structured CLI error を生成せずに失敗した process は `1` で終了し、JSON body を出力しません。`1` は protocol の結果ではなく、defect または environment failure として扱ってください。
 
-`ジャーナル_record_too_large` は厳密な `context`、`size`、`limit` detail field を持ち、Run ID が既知ならその Run への read-only `status` recovery variant も持ちます。Oversized record の拒否は persistent Run を終了させず、無効にもしません。
+`journal_record_too_large` は厳密な `context`、`size`、`limit` detail field を持ち、Run ID が既知ならその Run への read-only `status` recovery variant も持ちます。Oversized record の拒否は persistent Run を終了させず、無効にもしません。
 
 未知の contract version と field は拒否されます。Version 2 は、それ以前の未公開開発 format との互換性を約束しません。将来の非互換変更は新しい明示的な version を使うべきで、暗黙の alias を加えてはなりません。

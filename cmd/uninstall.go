@@ -12,7 +12,7 @@ func makeUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove pristine Slipway-managed host capabilities",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resolved, err := resolveRoot(root)
 			if err != nil {
@@ -31,7 +31,7 @@ func makeUninstallCmd() *cobra.Command {
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), makeChangeReportOutput(report))
 			}
-			return writeChangeReport(cmd, "Uninstalled", report)
+			return writeChangeReport(cmd, "Uninstall result", report)
 		},
 	}
 	cmd.Flags().StringVar(&root, "root", "", "workspace root (default: current directory)")

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -58,6 +59,35 @@ func TestSystemDoctorRunnerRejectsUnexpectedExecutables(t *testing.T) {
 	_, err := (systemDoctorRunner{}).Run(t.Context(), "sh", "-c", "echo unexpected")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "doctor executable")
+}
+
+func TestSystemDoctorRunnerIsolatesGitRepositoryEnvironment(t *testing.T) {
+	repository := t.TempDir()
+	foreign := t.TempDir()
+	runCLIGit(t, repository, "init", "--quiet")
+	runCLIGit(t, foreign, "init", "--quiet")
+
+	t.Setenv("GIT_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_WORK_TREE", foreign)
+	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(foreign, ".git", "index"))
+	t.Setenv("GIT_OBJECT_DIRECTORY", filepath.Join(foreign, ".git", "objects"))
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.bare")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+
+	output, err := (systemDoctorRunner{}).Run(
+		t.Context(),
+		"git",
+		"-C", repository,
+		"rev-parse", "--path-format=absolute", "--git-dir",
+	)
+	require.NoError(t, err)
+	got, err := filepath.EvalSymlinks(strings.TrimSpace(string(output)))
+	require.NoError(t, err)
+	want, err := filepath.EvalSymlinks(filepath.Join(repository, ".git"))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(want), filepath.Clean(got))
 }
 
 func TestGitHubDoctorChecksUseStableCodesAndBoundedArgv(t *testing.T) {

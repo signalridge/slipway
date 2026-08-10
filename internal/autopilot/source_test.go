@@ -552,6 +552,7 @@ func TestParseSourceCandidateAllowsEmptyCommentsForInvalidHead(t *testing.T) {
 			assert.Equal(t, test.classificationCode, candidate.ClassificationCode)
 			assert.Empty(t, candidate.SourceRevision)
 			assert.True(t, validSHA256(candidate.ObservationSHA256))
+			assert.Empty(t, candidate.Title)
 			assert.Nil(t, candidate.Snapshot)
 		})
 	}
@@ -568,10 +569,12 @@ func TestParseSourceCandidateClassifiesBundleFailuresWithoutPersistingRawData(t 
 	require.Error(t, bodyErr)
 	assert.False(t, candidate.Valid)
 	assert.Equal(t, SourceClassificationSectionMinimized, candidate.ClassificationCode)
+	assert.Empty(t, candidate.Title)
 	assert.Nil(t, candidate.Snapshot)
 	encoded, err := json.Marshal(candidate)
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "Deliver **value**")
+	assert.NotContains(t, string(encoded), envelope.Title)
 }
 
 func FuzzParseSourceDeterministic(f *testing.F) {

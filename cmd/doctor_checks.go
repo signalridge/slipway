@@ -49,7 +49,12 @@ func (systemDoctorRunner) Run(ctx context.Context, name string, args ...string) 
 	if base != "gh" && base != "gh.exe" && base != "git" && base != "git.exe" {
 		return nil, fmt.Errorf("doctor executable %q is not allowed", name)
 	}
-	command := exec.CommandContext(ctx, name, args...) // #nosec G204 -- executable is restricted above to gh or git and arguments are passed without a shell.
+	var command *exec.Cmd
+	if base == "git" || base == "git.exe" {
+		command = adapter.RepositoryGitCommandContext(ctx, name, args...)
+	} else {
+		command = exec.CommandContext(ctx, name, args...) // #nosec G204 -- executable is restricted above to gh and arguments are passed without a shell.
+	}
 	stdout := &boundedDoctorBuffer{limit: doctorOutputLimit}
 	command.Stdout = stdout
 	command.Stderr = io.Discard

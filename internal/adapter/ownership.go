@@ -136,6 +136,17 @@ type hostPlan struct {
 	warnings  []string
 }
 
+type generatedInstallPlan struct {
+	file             generatedFile
+	absolute         string
+	desiredSHA256    string
+	write            bool
+	preserve         bool
+	ownedPristine    bool
+	writeExpectation plannedFileExpectation
+	warning          string
+}
+
 func selectedSurfaceKind(surface string) (string, bool) {
 	switch surface {
 	case "ide", "cli":
@@ -390,7 +401,15 @@ func List(root string) ([]HostStatus, error) {
 					inspection.StaleClaims,
 				)
 			}
-			status.Capabilities = healthyCapabilities(host, manifest, inspection.HealthyFiles)
+			capabilities, err := healthyCapabilities(host, manifest, inspection.HealthyFiles)
+			if err != nil {
+				if status.Warning != "" {
+					status.Warning += "; "
+				}
+				status.Warning += "managed capabilities could not be classified: " + err.Error()
+			} else {
+				status.Capabilities = capabilities
+			}
 		}
 		statuses = append(statuses, status)
 	}
@@ -428,6 +447,9 @@ func doctorWithInspector(
 		}
 		if !found {
 			detail := "detected, current ownership manifest is missing"
+			if unowned := unownedCapabilityDetail(root, host); unowned != "" {
+				detail = unowned
+			}
 			if markerOnlyOwnershipState(root, host) {
 				detail = currentOwnershipMissingWarning(host)
 			}
@@ -493,6 +515,69 @@ func planInstall(root string, host Host, refresh bool) (hostPlan, error) {
 	return planInstallWithFilesystem(pathOwnershipFilesystem{}, root, host, refresh)
 }
 
+func inspectGeneratedInstallFile(
+	filesystem ownershipFilesystem,
+	root string,
+	host Host,
+	file generatedFile,
+	previous map[string]manifestFile,
+	manifestFound bool,
+) (generatedInstallPlan, error) {
+	planned := generatedInstallPlan{
+		file:          file,
+		desiredSHA256: hashBytes(file.Data),
+	}
+	absolute, err := safeManifestPath(root, host, file.Relative)
+	if err != nil {
+		return planned, err
+	}
+	planned.absolute = absolute
+
+	staleClaim := false
+	if manifestFound {
+		if record, managed := previous[file.Relative]; managed {
+			if record.SHA256 != planned.desiredSHA256 {
+				// A current-version manifest can outlive generated template bytes.
+				// Its old digest is indistinguishable from a forged self-reported
+				// digest, so it may identify a path to preserve but never authorize
+				// overwriting that path.
+				staleClaim = true
+			} else {
+				classification, err := classifyFileWithFilesystem(filesystem, absolute, record.SHA256)
+				if err != nil {
+					return planned, err
+				}
+				if classification == "modified" {
+					planned.preserve = true
+					return planned, nil
+				}
+				planned.write = true
+				planned.ownedPristine = classification == "pristine"
+				planned.writeExpectation = plannedFileExpectation{
+					missing: classification == "missing",
+					sha256:  record.SHA256,
+				}
+				return planned, nil
+			}
+		}
+	}
+
+	_, err = filesystem.Lstat(absolute)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		planned.write = true
+		planned.writeExpectation = plannedFileExpectation{missing: true}
+	case err != nil:
+		return planned, err
+	default:
+		planned.preserve = true
+		if staleClaim {
+			planned.warning = staleOwnershipClaimWarning(host, file.Relative)
+		}
+	}
+	return planned, nil
+}
+
 func planInstallWithFilesystem(filesystem ownershipFilesystem, root string, host Host, refresh bool) (hostPlan, error) {
 	var plan hostPlan
 	manifest, found, err := loadManifestWithFilesystem(filesystem, root, host)
@@ -553,62 +638,72 @@ func planInstallWithFilesystem(filesystem ownershipFilesystem, root string, host
 
 	previous := manifestIndex(manifest)
 	claimed := map[string]manifestFile{}
-
+	generatedPlans := make([]generatedInstallPlan, 0, len(desired))
+	unavailableSupport := map[string][]string{}
 	for _, file := range desired {
-		absolute, err := safeManifestPath(root, host, file.Relative)
+		generatedPlan, err := inspectGeneratedInstallFile(filesystem, root, host, file, previous, found)
 		if err != nil {
 			return plan, err
 		}
-		desiredHash := hashBytes(file.Data)
-		allowWrite := false
-		staleClaim := false
-		var writeExpectation plannedFileExpectation
-		if found {
-			if record, managed := previous[file.Relative]; managed {
-				if record.SHA256 != desiredHash {
-					// A current-version manifest can outlive generated template bytes.
-					// Its old digest is indistinguishable from a forged self-reported
-					// digest, so it may identify a path to preserve but never authorize
-					// overwriting that path.
-					staleClaim = true
-				} else {
-					classification, err := classifyFileWithFilesystem(filesystem, absolute, record.SHA256)
-					if err != nil {
-						return plan, err
-					}
-					if classification == "modified" {
-						plan.preserved = append(plan.preserved, file.Relative)
-						continue
-					}
-					allowWrite = true
-					writeExpectation = plannedFileExpectation{missing: classification == "missing", sha256: record.SHA256}
-				}
-			}
+		generatedPlans = append(generatedPlans, generatedPlan)
+		if !file.Callable && !generatedPlan.write {
+			unavailableSupport[file.Capability] = append(unavailableSupport[file.Capability], file.Relative)
 		}
-		if !allowWrite {
-			_, err := filesystem.Lstat(absolute)
-			if errors.Is(err, os.ErrNotExist) {
-				allowWrite = true
-				writeExpectation = plannedFileExpectation{missing: true}
-			} else if err != nil {
-				return plan, err
-			} else {
+	}
+
+	// Supporting files are committed before the host-visible entrypoint.
+	for _, callablePhase := range []bool{false, true} {
+		for _, generatedPlan := range generatedPlans {
+			file := generatedPlan.file
+			if file.Callable != callablePhase {
+				continue
+			}
+			if file.Callable && len(unavailableSupport[file.Capability]) > 0 {
+				switch {
+				case generatedPlan.ownedPristine:
+					plan.ops = append(
+						plan.ops,
+						fsutil.RemoveFileTransactionOp(generatedPlan.absolute).
+							WithExpectedSHA256(generatedPlan.desiredSHA256),
+					)
+					plan.removed = append(plan.removed, file.Relative)
+				case generatedPlan.preserve:
+					plan.preserved = append(plan.preserved, file.Relative)
+				}
+				if generatedPlan.warning != "" {
+					plan.warnings = append(plan.warnings, generatedPlan.warning)
+				}
+				plan.warnings = append(plan.warnings, fmt.Sprintf(
+					"adapter %s did not manage callable entrypoint %s for capability %s because required files are not safely managed by Slipway: %s",
+					host.ID,
+					file.Relative,
+					file.Capability,
+					strings.Join(unavailableSupport[file.Capability], ", "),
+				))
+				continue
+			}
+
+			if generatedPlan.preserve {
 				plan.preserved = append(plan.preserved, file.Relative)
-				if staleClaim {
-					plan.warnings = append(plan.warnings, staleOwnershipClaimWarning(host, file.Relative))
+				if generatedPlan.warning != "" {
+					plan.warnings = append(plan.warnings, generatedPlan.warning)
 				}
 				continue
 			}
-		}
-		if allowWrite {
-			op := fsutil.WriteFileTransactionOp(absolute, file.Data, 0o644)
-			plan.ops = append(plan.ops, writeExpectation.guard(op))
-			plan.written = append(plan.written, file.Relative)
-			claimed[file.Relative] = manifestFile{Path: file.Relative, SHA256: desiredHash}
+			if generatedPlan.write {
+				op := fsutil.WriteFileTransactionOp(generatedPlan.absolute, file.Data, 0o644)
+				plan.ops = append(plan.ops, generatedPlan.writeExpectation.guard(op))
+				plan.written = append(plan.written, file.Relative)
+				claimed[file.Relative] = manifestFile{Path: file.Relative, SHA256: generatedPlan.desiredSHA256}
+			}
 		}
 	}
 
 	if len(claimed) == 0 {
+		plan.warnings = append(plan.warnings, fmt.Sprintf(
+			"adapter %s is not installed after this operation because no generated file is safely claimed; preserved paths remain user-owned",
+			host.ID,
+		))
 		if found {
 			plan.ops = append(plan.ops, manifestExpectation.guard(fsutil.RemoveFileTransactionOp(manifestPath)))
 			plan.removed = append(plan.removed, relativeToRoot(root, manifestPath))
@@ -651,10 +746,94 @@ func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, ho
 		if err != nil {
 			return plan, err
 		}
+		desired, err := generateHostFiles(host)
+		if err != nil {
+			return plan, err
+		}
+		generatedByPath := make(map[string]generatedFile, len(desired))
+		explicitPolicies := make(map[string]generatedFile)
+		survivingCallables := map[string]string{}
+		policyAssertions := make([]fsutil.FileTransactionOp, 0)
+		manifestByPath := manifestIndex(manifest)
+		for _, file := range desired {
+			generatedByPath[file.Relative] = file
+			if file.ExplicitInvocationPolicy {
+				explicitPolicies[file.Capability] = file
+			}
+			if !file.Callable {
+				continue
+			}
+			absolute, err := safeManifestPath(root, host, file.Relative)
+			if err != nil {
+				return plan, err
+			}
+			record, claimed := manifestByPath[file.Relative]
+			if !claimed || currentClaims[file.Relative] != record.SHA256 {
+				_, err := filesystem.Lstat(absolute)
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				if err != nil {
+					return plan, err
+				}
+				survivingCallables[file.Capability] = file.Relative
+				continue
+			}
+			classification, err := classifyFileWithFilesystem(filesystem, absolute, record.SHA256)
+			if err != nil {
+				return plan, err
+			}
+			if classification == "modified" {
+				survivingCallables[file.Capability] = file.Relative
+			}
+		}
+
+		for capability, callable := range survivingCallables {
+			policy, ok := explicitPolicies[capability]
+			if !ok {
+				continue
+			}
+			policyPath, err := safeManifestPath(root, host, policy.Relative)
+			if err != nil {
+				return plan, err
+			}
+			classification, err := classifyFileWithFilesystem(filesystem, policyPath, hashBytes(policy.Data))
+			if err != nil {
+				return plan, err
+			}
+			if classification != "pristine" {
+				return plan, fmt.Errorf("cannot safely uninstall adapter %s: callable %s remains but explicit-only invocation policy %s is %s; restore the generated policy before retrying", host.ID, callable, policy.Relative, classification)
+			}
+			policyAssertions = append(policyAssertions, fsutil.VerifyFileTransactionOp(policyPath).WithExpectedSHA256(hashBytes(policy.Data)))
+			if _, claimed := manifestByPath[policy.Relative]; !claimed {
+				plan.preserved = append(plan.preserved, policy.Relative)
+				plan.warnings = append(plan.warnings, fmt.Sprintf("adapter %s preserved explicit-only invocation policy %s because callable %s remains", host.ID, policy.Relative, callable))
+			}
+		}
 		for _, record := range manifest.Files {
 			absolute, err := safeManifestPath(root, host, record.Path)
 			if err != nil {
 				return plan, err
+			}
+			generated := generatedByPath[record.Path]
+			if generated.ExplicitInvocationPolicy {
+				if callable, survives := survivingCallables[generated.Capability]; survives {
+					classification, err := classifyFileWithFilesystem(filesystem, absolute, currentClaims[record.Path])
+					if err != nil {
+						return plan, err
+					}
+					if classification == "pristine" {
+						plan.preserved = append(plan.preserved, record.Path)
+						plan.warnings = append(plan.warnings, fmt.Sprintf(
+							"adapter %s did not fully uninstall capability %s: callable %s remains, so its explicit-only invocation policy %s was preserved",
+							host.ID,
+							generated.Capability,
+							callable,
+							record.Path,
+						))
+						continue
+					}
+				}
 			}
 			if currentClaims[record.Path] != record.SHA256 {
 				_, err := filesystem.Lstat(absolute)
@@ -697,6 +876,7 @@ func planUninstallWithFilesystem(filesystem ownershipFilesystem, root string, ho
 		case "modified":
 			plan.preserved = append(plan.preserved, relativeToRoot(root, sentinelPath))
 		}
+		plan.ops = append(plan.ops, policyAssertions...)
 	} else {
 		_, sentinelPath, err := ownershipPaths(root, host)
 		if err != nil {
@@ -913,15 +1093,11 @@ func markerOnlyOwnershipState(root string, host Host) bool {
 
 func currentOwnershipMissingWarning(host Host) string {
 	sentinel := filepath.ToSlash(filepath.Join(host.OwnershipRoot, "slipway", sentinelFileName))
-	installInstruction := "slipway install --tool " + host.ID
-	if host.ID == "kiro" {
-		installInstruction = "slipway install --tool kiro --surface ide or slipway install --tool kiro --surface cli"
-	}
 	return fmt.Sprintf(
 		"current ownership manifest is missing for %s; marker-only state does not establish file ownership. Back up and inspect the host surface, move aside %q and only generated-looking managed files that you want Slipway to recreate, then rerun %s. Files left in place remain preserved and are never adopted; Slipway does not reconstruct or automatically migrate a missing manifest",
 		host.ID,
 		sentinel,
-		installInstruction,
+		"slipway install "+installInstruction(host),
 	)
 }
 
@@ -1158,17 +1334,23 @@ func inspectManagedSurface(root string, host Host, manifest ownershipManifest) (
 	return inspection, nil
 }
 
-func healthyCapabilities(_ Host, manifest ownershipManifest, healthyFiles map[string]bool) []string {
+func healthyCapabilities(host Host, manifest ownershipManifest, healthyFiles map[string]bool) ([]string, error) {
+	desired, err := generateHostFiles(host)
+	if err != nil {
+		return nil, err
+	}
+	manifestFiles := manifestIndex(manifest)
 	capabilities := make([]string, 0, len(capabilityNames))
 	for _, capability := range capabilityNames {
 		found := false
 		healthy := true
-		for _, file := range manifest.Files {
-			if !strings.Contains(file.Path, capability) {
+		for _, file := range desired {
+			if file.Capability != capability {
 				continue
 			}
 			found = true
-			if !healthyFiles[file.Path] {
+			record, claimed := manifestFiles[file.Relative]
+			if !claimed || record.SHA256 != hashBytes(file.Data) || !healthyFiles[file.Relative] {
 				healthy = false
 			}
 		}
@@ -1176,7 +1358,7 @@ func healthyCapabilities(_ Host, manifest ownershipManifest, healthyFiles map[st
 			capabilities = append(capabilities, capability)
 		}
 	}
-	return capabilities
+	return capabilities, nil
 }
 
 func managedSurfaceComplete(host Host, manifest ownershipManifest) (bool, error) {

@@ -2,7 +2,7 @@
 
 Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning model or GitHub credentials.
 
-![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while versioned JSON connects it to the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while only Run-backed paths exchange versioned JSON with the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
 
 ## Process boundaries
 
@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 Lower layers do not import command or host-policy layers. GitHub publication remains in generated host instructions rather than becoming a network provider inside the core.
 
+Three packages hold no product code and exist only to assert repository-wide invariants: `internal/architecture` checks that dependency direction, `internal/testlint` reports tests that assert on source text or wall-clock time, and `internal/releasepolicy` checks the release and release-automation workflows. They are ordinary tests and gate nothing beyond `go test`.
+
 ## Run start and repository observation
 
 A new Run discovers three canonical paths: the worktree root, the per-worktree Git directory, and the Git common directory. Their framed identifier binds the Run to that worktree. Slipway does not create, switch, or delete worktrees, but it refuses to mutate a Run from another worktree identity.
@@ -75,7 +77,9 @@ For issue-backed work, the trusted host fetches the Issue and manifest-reference
 
 Accepted sections are content-addressed and available through a local material reader. Actions carry only revisions and a bounded catalog, keeping large requirements out of Action context and allowing offline recovery.
 
-The design rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). The complete contract in issue #434 and the versioned schemas are normative; runtime tests are executable evidence of the current implementation.
+The source-bundle rationale and rejected alternatives are recorded in [ADR-0001](../../../adr/0001-source-bundle-v2.md). Issue #434 records the original proposal, product goals, design intent, and rationale; it is mutable, and its details may be superseded by later decisions or implementation evolution. Accepted ADRs preserve significant decisions and their rationale rather than governing every bug fix or documentation update. Versioned schemas are authoritative only for the serialization shapes they cover. [ADR-0002](../../../adr/0002-seventh-capability-workflow.md) adds the seventh host capability and reaffirms the no-router boundary; [ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) scopes it to lifecycle routing across Slipway's own functions.
+
+For a given revision, its code, built `--help`, generated capabilities, user documentation, and observable behavior describe the implemented product and must be kept coherent. A tagged release, its release notes, and its actual artifacts state what users can obtain as published behavior. Tests, acceptance runs, and CI are evidence from particular revisions and executions; they do not set product direction or hold merge, readiness, or release authority.
 
 ## Security boundary
 
@@ -84,6 +88,7 @@ The design rationale and rejected alternatives are recorded in [ADR-0001](../../
 Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:
 
 - anchors filesystem operations and rejects unsafe symlink traversal;
+- narrows deletion races by relocating entries into a private quarantine and revalidating identity, but does not claim exact-object deletion: a continuously racing same-UID watcher can still replace the final pathname between validation and the pathname-based `unlink` or `rmdir` system call;
 - validates strict JSON, sizes, identities, and digests;
 - keeps credentials out of Slipway storage and GitHub fetch/publication out of the Run core;
 - separates one-shot destructive grants from natural-language answers;

@@ -204,7 +204,7 @@ type SourceCandidateInput struct {
 	ObservationSHA256    string               `json:"observation_sha256,omitempty"`
 	SourceRevision       string               `json:"source_revision,omitempty"`
 	RequirementsRevision string               `json:"requirements_revision,omitempty"`
-	Title                string               `json:"title"`
+	Title                string               `json:"title,omitempty"`
 	Parent               *SourceParent        `json:"parent,omitempty"`
 	Snapshot             *PinnedSource        `json:"snapshot,omitempty"`
 }
@@ -301,6 +301,7 @@ func parseSourceCandidate(raw []byte) (SourceCandidateInput, error, error) {
 	candidate.Classification = SourceClassificationValid
 	candidate.ClassificationCode = SourceClassificationValidChange
 	candidate.RequirementsRevision = snapshot.RequirementsRevision
+	candidate.Title = snapshot.Title
 	candidate.Snapshot = clonePinnedSource(&snapshot)
 	return candidate, nil, nil
 }
@@ -318,7 +319,6 @@ func sourceCandidateIdentity(envelope RawSourceEnvelope, normalizedBody string) 
 		CanonicalURL:      envelope.CanonicalURL,
 		URLAliases:        make([]string, 0),
 		ObservationSHA256: sourceObservationSHA256(envelope, normalizedBody),
-		Title:             envelope.Title,
 		Parent:            cloneSourceParent(envelope.Parent),
 	}
 }
@@ -419,6 +419,7 @@ func validatePinnedSource(source PinnedSource) error {
 		source.SourceRevision,
 		source.Title,
 		source.Parent,
+		true,
 	); err != nil {
 		return err
 	}
@@ -520,6 +521,7 @@ func validateSourceCandidateInput(input SourceCandidateInput) error {
 		projectionDigest,
 		input.Title,
 		input.Parent,
+		input.Valid,
 	); err != nil {
 		return err
 	}
@@ -561,7 +563,21 @@ func validateSourceCandidateInput(input SourceCandidateInput) error {
 	return nil
 }
 
-func validatePersistedSourceProjection(sourceVersion, parserVersion int, provider, host, repositoryID, issueID string, issueNumber int, canonicalURL string, aliases []string, sourceRevision, title string, parent *SourceParent) error {
+func validatePersistedSourceProjection(
+	sourceVersion,
+	parserVersion int,
+	provider,
+	host,
+	repositoryID,
+	issueID string,
+	issueNumber int,
+	canonicalURL string,
+	aliases []string,
+	sourceRevision,
+	title string,
+	parent *SourceParent,
+	titleRequired bool,
+) error {
 	if sourceVersion != SourceVersion {
 		return fmt.Errorf("source_version must be %d", SourceVersion)
 	}
@@ -612,11 +628,15 @@ func validatePersistedSourceProjection(sourceVersion, parserVersion int, provide
 	if !validSHA256(sourceRevision) {
 		return errors.New("source_revision must use lowercase sha256:<64 hex> format")
 	}
-	if err := validateTextControls("title", title, false); err != nil {
-		return err
-	}
-	if strings.TrimSpace(title) == "" {
-		return errors.New("title must be nonempty")
+	if titleRequired {
+		if err := validateTextControls("title", title, false); err != nil {
+			return err
+		}
+		if strings.TrimSpace(title) == "" {
+			return errors.New("title must be nonempty")
+		}
+	} else if title != "" {
+		return errors.New("invalid source candidate must omit title")
 	}
 	if parent != nil {
 		if err := validateGitHubNodeID("parent.repository_id", parent.RepositoryID); err != nil {

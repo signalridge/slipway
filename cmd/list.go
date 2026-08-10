@@ -25,7 +25,7 @@ func makeListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List host adapters and their installation state",
-		Args:  cobra.NoArgs,
+		Args:  usageNoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			resolved, err := resolveRoot(root)
 			if err != nil {

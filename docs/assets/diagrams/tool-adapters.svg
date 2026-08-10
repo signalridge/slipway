@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 900" role="img" aria-labelledby="adapters-title adapters-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 900" role="img" aria-labelledby="adapters-title adapters-desc">
   <title id="adapters-title">Slipway host adapters</title>
-  <desc id="adapters-desc">The slipway install command writes host-native entry points for ten supported AI coding hosts. Every adapter exposes the same six explicitly invoked capabilities: run, clarify, propose, decompose, implement, and review. Once invoked by the user, the host performs model and repository work while exchanging versioned JSON with the local Slipway CLI.</desc>
+  <desc id="adapters-desc">The slipway install command writes host-native entry points for ten supported AI coding hosts. Every adapter exposes the same seven explicitly invoked capabilities: run, clarify, propose, decompose, implement, review, and workflow. The host performs model and repository work; Run capabilities exchange versioned JSON with the local Slipway CLI, while planning and publication capabilities may remain host-side.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart TB
   Install[slipway install --tool <host>] --> Adapters
@@ -16,9 +16,9 @@ flowchart TB
     Qwen[Qwen · skills]
     Windsurf[Windsurf · workflows]
   end
-  Adapters --> Capabilities[run · clarify · propose · decompose · implement · review]
+  Adapters --> Capabilities[run · clarify · propose · decompose · implement · review · workflow]
   Capabilities -->|explicit user invocation| Host[AI coding host]
-  Host <-->|versioned JSON| CLI[Slipway CLI]
+  Host <-->|Run-backed versioned JSON| CLI[Slipway CLI]
 ]]></metadata>
   <defs>
     <style>
@@ -175,8 +175,8 @@ flowchart TB
   <text class="tiny" x="900" y="417">thin native workflows</text>
 
   <!-- shared capability set -->
-  <rect class="band" x="100" y="515" width="920" height="135" rx="16"/>
-  <text class="tag" x="120" y="540">SIX EXPLICIT CAPABILITIES · IDENTICAL SEMANTICS ACROSS HOSTS</text>
+  <rect class="band" x="100" y="515" width="1060" height="135" rx="16"/>
+  <text class="tag" x="120" y="540">SEVEN EXPLICIT CAPABILITIES · IDENTICAL SEMANTICS ACROSS HOSTS</text>
 
   <rect class="entry" x="120" y="562" width="130" height="58" rx="10"/>
   <text class="mono" x="185" y="588" text-anchor="middle">slipway-run</text>
@@ -202,6 +202,10 @@ flowchart TB
   <text class="mono" x="935" y="588" text-anchor="middle">slipway-review</text>
   <text class="tiny" x="935" y="606" text-anchor="middle">read-only findings</text>
 
+  <rect class="violet" x="1020" y="562" width="130" height="58" rx="10"/>
+  <text class="mono" x="1085" y="588" text-anchor="middle">slipway-workflow</text>
+  <text class="tiny" x="1085" y="606" text-anchor="middle">lifecycle routing</text>
+
   <!-- explicit runtime path -->
   <rect class="card" x="70" y="715" width="210" height="70" rx="14"/>
   <circle cx="92" cy="740" r="5" fill="var(--entry-stroke)"/>
@@ -218,12 +222,12 @@ flowchart TB
   <text class="sub" x="920" y="758" text-anchor="middle">validation · scheduling · Run state</text>
   <text class="tiny" x="920" y="779" text-anchor="middle">no model or GitHub credentials</text>
 
-  <rect class="label-bg" x="684" y="724" width="83" height="38" rx="6"/>
-  <text class="edge-label" x="690" y="739">Action / Outcome</text>
-  <text class="edge-label" x="690" y="753">versioned JSON</text>
+  <rect class="label-bg" x="666" y="724" width="118" height="38" rx="6"/>
+  <text class="edge-label" x="672" y="739">Run Action / Outcome</text>
+  <text class="edge-label" x="672" y="753">versioned JSON</text>
 
   <rect class="note" x="40" y="835" width="1040" height="43" rx="11"/>
-  <text class="sub" x="560" y="861" text-anchor="middle">Generated files adapt host-native invocation only; the CLI remains the single Run-state authority, and all entry points require explicit user intent.</text>
+  <text class="sub" x="560" y="861" text-anchor="middle">Generated files adapt host-native invocation; only Run-backed paths call the CLI, which remains the single Run-state authority.</text>
 
   <text class="title-big" x="40" y="36">Slipway · host adapters</text>
   <text class="sub" x="40" y="58">one shared capability contract · ten host adapters · no ambient invocation</text>

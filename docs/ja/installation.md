@@ -1,6 +1,8 @@
 # インストール
 
-Current リポジトリ interface と各 channel の最新 package は一致しない場合があります。他の documentation を読む前に、`slipway --help` が `install`、`uninstall`、`list`、`doctor`、`run`、`status`、`stop` の7 コマンドを表示することを確認してください。
+Current リポジトリ interface と各 channel の最新 package は一致しない場合があります。他の documentation を読む前に、`slipway --help` が `install`、`uninstall`、`list`、`doctor`、`run`、`status`、`stop` の7つの user コマンドと、generated アダプターが使う public `protocol` machine-interface group を表示することを確認してください。`protocol` は published structured interface であり、8番目の user workflow ではありません。
+
+Unreleased checkout では、その code、fresh build した binary の `--help`、observable behavior が current implementation fact を示します。Tagged release では、その release notes と実際に添付された artifact が published behavior を示します。Test、acceptance、CI は特定の revision と execution に対する verification evidence であり、contract authority、readiness verdict、artifact が release されたことの証明ではありません。
 
 ## Current checkout を build する
 
@@ -15,7 +17,7 @@ Unreleased リポジトリ revision を評価する最も確実な方法です�
 
 ## Tagged release
 
-Release notes に7-コマンド soft-autopilot interface が含まれる tag を選びます。Core artifact は [GitHub Releases](https://github.com/signalridge/slipway/releases) に公開されます。
+Release notes に7つの user コマンドと public `protocol` group の soft-autopilot interface が含まれる tag を選びます。Core artifact は [GitHub Releases](https://github.com/signalridge/slipway/releases) に公開されます。
 
 - Linux/macOS: `.tar.gz`
 - Windows: `.zip`

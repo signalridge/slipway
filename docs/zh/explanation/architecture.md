@@ -2,7 +2,7 @@
 
 Slipway 将控制循环放在本地 CLI，将模型相关工作放在生成的宿主 adapter 中。这样 CLI 可以验证状态，而无需持有模型或 GitHub 凭据。
 
-![Slipway 进程架构：用户主动调用 AI 编程工具中的生成能力；宿主负责模型、仓库和经授权的 GitHub 工作，并通过版本化 JSON 连接本地 CLI 与持久 Run store。](../../assets/diagrams/architecture.svg)
+![Slipway 进程架构：用户主动调用 AI 编程工具中的生成能力；宿主负责模型、仓库和经授权的 GitHub 工作，只有 Run-backed 路径会通过版本化 JSON 连接本地 CLI 与持久 Run store。](../../assets/diagrams/architecture.svg)
 
 ## 进程边界
 
@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 底层 package 不反向 import command 或 host-policy layer。GitHub publication 保留在 生成的宿主指令 中，不成为 core 内的 network provider。
 
+还有三个 package 不含产品代码，只用于断言仓库级不变量：`internal/architecture` 检查上述依赖方向，`internal/testlint` 报告断言源码文本或 wall-clock 时间的测试，`internal/releasepolicy` 检查 release 与 release 自动化 workflow。它们只是普通测试，除 `go test` 外不构成任何 gate。
+
 ## Run 启动与仓库观察
 
 新 Run 会发现三个 canonical path：worktree root、per-worktree Git directory 与 Git common directory。它们组成的 ID 将 Run 绑定到该 worktree。Slipway 不创建、切换或删除 worktree，但会拒绝从其他 worktree identity 修改 Run。
@@ -75,7 +77,9 @@ Issue-backed 工作中，trusted host 获取 Issue 和 manifest 引用 comments�
 
 Accepted section 按内容寻址，并通过本地 material reader 提供。Action 只带 revision 和范围明确 catalog，使大型 requirements 不进入 Action context，也支持离线恢复。
 
-设计理由与被拒方案记录在 [ADR-0001](../../../adr/0001-source-bundle-v2.md)；issue #434 中的完整契约与版本化 schema 是规范依据，runtime test 只是当前实现行为的可执行证据。
+Source Bundle 的设计理由与被拒方案记录在 [ADR-0001](../../../adr/0001-source-bundle-v2.md)。Issue #434 记录最初的方案、产品目标、设计意图与理由；它是可变的，其中的具体细节也可能被后续决策或实现演进取代。Accepted ADR 用于保留重要决策及其理由，而不治理每一项 bug 修复或文档更新。版本化 schema 只在自身覆盖的序列化结构范围内具有权威性。[ADR-0002](../../../adr/0002-seventh-capability-workflow.md) 加入第七项宿主能力并重申不引入 router 的边界，[ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) 将其范围限定为 Slipway 自有功能之间的生命周期路由。
+
+对于某个 revision，其代码、构建出的 `--help`、生成的 capability、用户文档与可观察行为共同描述当前实现，并应保持一致。带 tag 的 release、对应 release notes 与实际 artifact 说明用户能够获得的已发布行为。Test、acceptance 与 CI 只是特定 revision 和特定执行的验证证据；它们不决定产品方向，也不拥有 merge、readiness 或 release 权威。
 
 ## 安全边界
 
@@ -84,6 +88,7 @@ Accepted section 按内容寻址，并通过本地 material reader 提供。Acti
 Slipway 假设同账号进程、root、malware 或 compromised host 可以越过其保护。在该边界内，它会：
 
 - anchor filesystem operation 并拒绝 unsafe symlink traversal；
+- 将待删除项移动到 private quarantine 并重新校验 identity，以收窄删除竞态窗口，但不声称实现 exact-object deletion：持续竞争的同 UID watcher 仍可能在最终校验与基于 pathname 的 `unlink` 或 `rmdir` 系统调用之间替换该路径；
 - 验证 strict JSON、size、identity 与 digest；
 - 不在 Slipway storage 中保存凭据，并让 GitHub 获取/发布留在 Run core 之外；
 - 将一次性 destructive grant 与自然语言 answer 分离；

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ var capabilityNames = []string{
 	"slipway-decompose",
 	"slipway-implement",
 	"slipway-review",
+	"slipway-workflow",
 }
 
 type Host struct {
@@ -57,8 +59,10 @@ var hosts = []Host{
 }
 
 func Registry() []Host {
-	result := make([]Host, len(hosts))
-	copy(result, hosts)
+	result := slices.Clone(hosts)
+	for index := range result {
+		result[index].DetectPaths = slices.Clone(result[index].DetectPaths)
+	}
 	return result
 }
 

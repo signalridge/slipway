@@ -28,6 +28,24 @@ trap cleanup 0
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Bind the fixture to its own Git and GitHub CLI state.
+unset GIT_DIR GIT_WORK_TREE GIT_IMPLICIT_WORK_TREE GIT_COMMON_DIR
+unset GIT_INDEX_FILE GIT_INDEX_VERSION GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+unset GIT_QUARANTINE_PATH GIT_NAMESPACE GIT_REPLACE_REF_BASE GIT_NO_REPLACE_OBJECTS
+unset GIT_SHALLOW_FILE GIT_GRAFT_FILE GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
+unset GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_NOSYSTEM GIT_PREFIX
+unset GIT_TEMPLATE_DIR GH_CONFIG_DIR GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
+mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/xdg" "$TMP_ROOT/gh"
+: > "$TMP_ROOT/gitconfig"
+HOME="$TMP_ROOT/home"
+XDG_CONFIG_HOME="$TMP_ROOT/xdg"
+GIT_CONFIG_GLOBAL="$TMP_ROOT/gitconfig"
+GIT_CONFIG_NOSYSTEM=1
+GIT_TERMINAL_PROMPT=0
+GH_CONFIG_DIR="$TMP_ROOT/gh"
+export HOME XDG_CONFIG_HOME GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM GIT_TERMINAL_PROMPT GH_CONFIG_DIR
+
 ERROR_STDOUT="$TMP_ROOT/error.stdout"
 ERROR_STDERR="$TMP_ROOT/error.stderr"
 
@@ -217,6 +235,20 @@ for variant in next_value["variants"]:
         assert input_value["type"] in {"string", "path", "enum", "digest"}, input_value
         if input_value["type"] == "enum":
             assert isinstance(input_value.get("choices"), list) and input_value["choices"], input_value
+    if variant["id"] == "answer-decision":
+        assert variant["inputs"] == [{
+            "name": "text_file",
+            "type": "path",
+            "flag": "--text-file",
+            "required": True,
+        }], variant
+    if variant["id"] == "confirm-destructive":
+        assert variant["inputs"] == [{
+            "name": "text_file",
+            "type": "path",
+            "flag": "--text-file",
+            "required": False,
+        }], variant
     ids.append(variant["id"])
 if next_value["variants"]:
     assert len(workspace_roots) == 1, workspace_roots
@@ -327,6 +359,29 @@ assert next_value["workspace_identity"].startswith("sha256:") and len(next_value
 assert all(character in "0123456789abcdef" for character in next_value["workspace_identity"][7:]), next_value
 assert isinstance(next_value["variants"], list), next_value
 ids = [variant["id"] for variant in next_value["variants"]]
+for variant in next_value["variants"]:
+    if variant["id"] == "retry-run":
+        assert variant["inputs"] == [{
+            "name": "goal_file",
+            "type": "path",
+            "flag": "--goal-file",
+            "required": True,
+        }], variant
+    if variant["id"] == "start-with-source":
+        assert variant["inputs"] == [
+            {
+                "name": "goal_file",
+                "type": "path",
+                "flag": "--goal-file",
+                "required": True,
+            },
+            {
+                "name": "source_file",
+                "type": "path",
+                "flag": "--source-file",
+                "required": True,
+            },
+        ], variant
 if sys.argv[4] == "none":
     assert next_value["operation"] == "none" and ids == [], next_value
 else:
@@ -354,8 +409,12 @@ assert report["runs"] == [], report
 assert report["unavailable_runs"] == [], report
 PY
 START="$TMP_ROOT/start.json"
-"$BIN" run 'acceptance lifecycle' --root "$REPO" --budget 12 --json > "$START"
+GOAL_FILE="$TMP_ROOT/lifecycle-goal.txt"
+printf '%s' 'acceptance lifecycle' > "$GOAL_FILE"
+chmod 600 "$GOAL_FILE"
+"$BIN" run --goal-file "$GOAL_FILE" --root "$REPO" --budget 12 --json > "$START"
 assert_action "$START" orient
+[ "$(json_get "$START" action.goal)" = 'acceptance lifecycle' ] || fail 'private goal file did not preserve exact text'
 RUN_ID=$(json_get "$START" run_id)
 RUN_DIR="$REPO/.git/slipway/runs/$RUN_ID"
 [ -f "$RUN_DIR/journal.jsonl" ] || fail 'authoritative journal.jsonl was not created'
@@ -382,7 +441,10 @@ PAUSED="$TMP_ROOT/paused.json"
 "$BIN" protocol submit --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --outcome-file "$CLARIFY_OUTCOME" > "$PAUSED"
 assert_state "$PAUSED" paused decision_required answer-decision
 IMPLEMENT="$TMP_ROOT/implement.json"
-"$BIN" protocol answer --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --text stable > "$IMPLEMENT"
+ANSWER_FILE="$TMP_ROOT/decision-answer.txt"
+printf '%s' stable > "$ANSWER_FILE"
+chmod 600 "$ANSWER_FILE"
+"$BIN" protocol answer --root "$REPO" --run "$RUN_ID" --action "$CLARIFY_ID" --text-file "$ANSWER_FILE" > "$IMPLEMENT"
 assert_action "$IMPLEMENT" orient
 OLD_IMPLEMENT_ID=$(json_get "$IMPLEMENT" action.action_id)
 
@@ -820,7 +882,10 @@ assert material["contract_version"] == 2, material
 assert material["message_type"] == "action_material", material
 assert "original accepted requirement" in material["section"]["markdown"], material
 PY
-expect_error 3 source_mode_required use-pinned-source "$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO"
+expect_error 3 run_not_resumable skip-action "$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO"
+SOURCE_STOPPED="$TMP_ROOT/source-stopped.json"
+"$BIN" stop "$SOURCE_RUN" --root "$SOURCE_REPO" --json > "$SOURCE_STOPPED"
+assert_state "$SOURCE_STOPPED" stopped "" use-pinned-source
 SOURCE_PINNED="$TMP_ROOT/source-pinned.json"
 "$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --use-pinned-source > "$SOURCE_PINNED"
 assert_issue_action "$SOURCE_PINNED" orient
@@ -864,6 +929,9 @@ with open(path, "w", encoding="utf-8") as stream:
     json.dump(data, stream, separators=(",", ":"), sort_keys=True)
     stream.write("\n")
 PY
+SOURCE_STOPPED_FOR_REFRESH="$TMP_ROOT/source-stopped-for-refresh.json"
+"$BIN" stop "$SOURCE_RUN" --root "$SOURCE_REPO" --json > "$SOURCE_STOPPED_FOR_REFRESH"
+assert_state "$SOURCE_STOPPED_FOR_REFRESH" stopped "" refresh-source
 SOURCE_CANDIDATE="$TMP_ROOT/source-candidate.json"
 "$BIN" protocol resume "$SOURCE_RUN" --root "$SOURCE_REPO" --source-file "$SOURCE_FILE" --budget 20 > "$SOURCE_CANDIDATE"
 CANDIDATE_ID=$(json_get "$SOURCE_CANDIDATE" source_candidate.candidate_id)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -102,8 +103,11 @@ func TestPublicMachineSuccessEnvelopesHaveExactVersionedShapes(t *testing.T) {
 	stopJSON, stderr, err := executeForTest(t, "stop", decodedAction.RunID, "--root", repository, "--json")
 	require.NoError(t, err, stderr)
 	assertMachineSchemaOutput(t, "protocolState", stopJSON)
-	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "action", "next")
+	// A stopped Run withdraws its Action, so the envelope carries no `action`.
+	stop := exactJSONObject(t, stopJSON, "contract_version", "run_id", "state", "next")
 	assertContractVersion(t, stop)
+	assertJSONString(t, stop, "state")
+	assert.Equal(t, `"stopped"`, string(stop["state"]))
 
 	issueRepository := newCLIRepository(t)
 	sourcePath := writeCLISource(t, cliSourceEnvelope())
@@ -134,6 +138,97 @@ func TestProtocolResultRejectsActiveStateWithoutAction(t *testing.T) {
 	t.Parallel()
 	err := writeProtocolResult(&cobra.Command{}, autopilot.Run{State: autopilot.RunActive})
 	assert.EqualError(t, err, "active protocol result requires a current action")
+}
+
+type failingOutputWriter struct {
+	err error
+}
+
+func (writer failingOutputWriter) Write([]byte) (int, error) {
+	return 0, writer.err
+}
+
+func TestRunOutputFailureReportsCommittedRunAndExactRecovery(t *testing.T) {
+	for _, args := range [][]string{
+		{"run", "committed JSON output", "--json"},
+		{"run", "committed human output"},
+	} {
+		args := args
+		t.Run(args[1], func(t *testing.T) {
+			repository := newCLIRepository(t)
+			root := newRootCmd()
+			var stderr bytes.Buffer
+			root.SetOut(failingOutputWriter{err: io.ErrClosedPipe})
+			root.SetErr(&stderr)
+			root.SetIn(bytes.NewReader(nil))
+			fullArgs := append(append([]string(nil), args...), "--root", repository)
+
+			err := executeRootCommand(root, fullArgs...)
+			require.Error(t, err)
+			assertMachineSchemaOutput(t, "cliError", stderr.String())
+
+			var emitted CLIError
+			require.NoError(t, json.Unmarshal(stderr.Bytes(), &emitted))
+			assert.Equal(t, "mutation_committed_output_failed", emitted.Code)
+			assert.Equal(t, true, emitted.Details["committed"])
+			assert.Equal(t, "response_output", emitted.Details["phase"])
+			assert.Equal(t, autopilot.NextOperationCommand, emitted.Next.Operation)
+			require.Len(t, emitted.Next.Variants, 1)
+			assert.Equal(t, "inspect-run", emitted.Next.Variants[0].ID)
+			recovery := emitted.Next.Variants[0].BaseArgv
+			require.Len(t, recovery, 5)
+			runID := recovery[2]
+
+			statusJSON, statusStderr, statusErr := executeForTest(
+				t,
+				"status", runID, "--root", repository, "--json",
+			)
+			require.NoError(t, statusErr, statusStderr)
+			var status runStatusOutput
+			require.NoError(t, json.Unmarshal([]byte(statusJSON), &status))
+			assert.Equal(t, runID, status.ID)
+			assert.Equal(t, autopilot.RunActive, status.State)
+			require.NotNil(t, status.CurrentAction)
+		})
+	}
+}
+
+func TestMaterialOutputFailureReportsKnownRunRecovery(t *testing.T) {
+	repository := newCLIRepository(t)
+	sourcePath := writeCLISource(t, cliSourceEnvelope())
+	startJSON, startStderr, err := executeForTest(
+		t,
+		"run", "material output recovery", "--root", repository,
+		"--source-file", sourcePath, "--json",
+	)
+	require.NoError(t, err, startStderr)
+	action := decodeMutationAction(t, startJSON)
+
+	root := newRootCmd()
+	var stderr bytes.Buffer
+	root.SetOut(failingOutputWriter{err: io.ErrClosedPipe})
+	root.SetErr(&stderr)
+	root.SetIn(bytes.NewReader(nil))
+	err = executeRootCommand(
+		root,
+		"protocol", "material", "--root", repository,
+		"--run", action.RunID, "--action", action.ActionID, "--section", "requirements",
+	)
+	require.Error(t, err)
+
+	var emitted CLIError
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &emitted))
+	assert.Equal(t, "runtime_error", emitted.Code)
+	assert.Equal(t, autopilot.NextOperationCommand, emitted.Next.Operation)
+	require.Len(t, emitted.Next.Variants, 1)
+	assert.Equal(t, "inspect-run", emitted.Next.Variants[0].ID)
+	canonicalRepository, resolveErr := resolveRoot(repository)
+	require.NoError(t, resolveErr)
+	assert.Equal(
+		t,
+		[]string{"slipway", "status", action.RunID, "--root", canonicalRepository},
+		emitted.Next.Variants[0].BaseArgv,
+	)
 }
 
 func TestMachineErrorsHaveExactVersionedShape(t *testing.T) {
@@ -198,7 +293,7 @@ func TestStorageErrorEmitterUsesExplicitRunRecoveryAndMatchesSchema(t *testing.T
 				Use:           "slipway",
 				SilenceUsage:  true,
 				SilenceErrors: true,
-				Args:          cobra.NoArgs,
+				Args:          usageNoArgs,
 				RunE: func(*cobra.Command, []string) error {
 					resolved, resolveErr := resolveRoot(rootFlag)
 					if resolveErr != nil {

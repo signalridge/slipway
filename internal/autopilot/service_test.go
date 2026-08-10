@@ -256,14 +256,18 @@ func TestServiceRejectsOversizeActionBeforeJournalCreation(t *testing.T) {
 	require.GreaterOrEqual(t, budgetIndex, 0)
 	assert.Equal(t, "4", argv[budgetIndex+1])
 	assert.Contains(t, argv, "--no-review")
-	assert.Equal(t, []string{"--", strings.Repeat("g", maxActionBytes)}, argv[len(argv)-2:])
+	assert.NotContains(t, argv, strings.Repeat("g", maxActionBytes))
+	assert.NotContains(t, argv, "--")
+	assert.Equal(t, []NextInput{
+		{Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true},
+	}, protocolErr.Next.Variants[0].Inputs)
 
 	runs, listErr := service.List()
 	require.NoError(t, listErr)
 	assert.Empty(t, runs)
 }
 
-func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
+func TestServiceSubmitActionFailureUsesCurrentActionNext(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -287,11 +291,18 @@ func TestServiceSubmitActionFailureUsesDurableResumeNext(t *testing.T) {
 	assertProtocolError(t, err, "action_too_large")
 	var protocolErr *ProtocolError
 	require.ErrorAs(t, err, &protocolErr)
-	assert.Equal(t, NextOperationResume, protocolErr.Next.Operation)
-	require.Len(t, protocolErr.Next.Variants, 1)
+	assert.Equal(t, NextOperationAction, protocolErr.Next.Operation)
+	require.Len(t, protocolErr.Next.Variants, 3)
 	variant := protocolErr.Next.Variants[0]
-	assert.Equal(t, "resume-ad-hoc", variant.ID)
-	assert.Equal(t, []string{"slipway", "protocol", "resume", run.ID, "--root", run.Workspace}, variant.BaseArgv)
+	assert.Equal(t, "submit-outcome-file", variant.ID)
+	assert.Equal(t, []string{"slipway", "protocol", "submit", "--run", run.ID, "--action", actionID, "--root", run.Workspace}, variant.BaseArgv)
+	assert.Equal(t, "submit-outcome-stdin", protocolErr.Next.Variants[1].ID)
+	assert.Equal(t, "skip-action", protocolErr.Next.Variants[2].ID)
+	resolved, resolveErr := protocolErr.Next.Resolve("submit-outcome-file", map[string]NextInputValue{
+		"outcome_file": {Type: NextInputPath, Value: filepath.Join(run.Workspace, "outcome.json")},
+	})
+	require.NoError(t, resolveErr)
+	assert.Equal(t, append(append([]string(nil), variant.BaseArgv...), "--outcome-file", filepath.Join(run.Workspace, "outcome.json")), resolved)
 
 	persisted, loadErr := service.Load(run.ID)
 	require.NoError(t, loadErr)
@@ -674,7 +685,7 @@ func TestServiceSkipStopResumeAndStaleActionRejection(t *testing.T) {
 	assert.Equal(t, ActionSummarize, skipped.CurrentAction.Kind)
 }
 
-func TestServiceResumeVoidsSuggestedActionAndStartsFreshOrient(t *testing.T) {
+func TestServiceResumeRejectsActiveActionWithoutVoidingIt(t *testing.T) {
 	t.Parallel()
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
@@ -688,19 +699,16 @@ func TestServiceResumeVoidsSuggestedActionAndStartsFreshOrient(t *testing.T) {
 	oldActionID := run.CurrentAction.ActionID
 	assert.Equal(t, ActionClarify, run.CurrentAction.Kind)
 
-	resumed, err := service.Resume(run.ID, ResumeOptions{})
-	require.NoError(t, err)
-	require.NotNil(t, resumed.CurrentAction)
-	assert.Equal(t, ActionOrient, resumed.CurrentAction.Kind)
-	assert.NotEqual(t, oldActionID, resumed.CurrentAction.ActionID)
-	oldRecord := findActionRecord(&resumed, oldActionID)
-	require.NotNil(t, oldRecord)
-	assert.True(t, oldRecord.Voided)
-	assert.Empty(t, resumed.PendingActions)
+	_, err := service.Resume(run.ID, ResumeOptions{})
+	assertProtocolError(t, err, "run_not_resumable")
 
-	resumed = submitCurrent(t, service, resumed, Outcome{Status: OutcomeCompleted, Summary: "fresh facts; no work remains", SuggestedActions: []SuggestedAction{}})
-	require.NotNil(t, resumed.CurrentAction)
-	assert.Equal(t, ActionSummarize, resumed.CurrentAction.Kind)
+	unchanged, err := service.Load(run.ID)
+	require.NoError(t, err)
+	require.NotNil(t, unchanged.CurrentAction)
+	assert.Equal(t, oldActionID, unchanged.CurrentAction.ActionID)
+	oldRecord := findActionRecord(&unchanged, oldActionID)
+	require.NotNil(t, oldRecord)
+	assert.False(t, oldRecord.Voided)
 }
 
 func TestServiceSkipReviewRecordsSkippedWorkAndEnds(t *testing.T) {
@@ -865,6 +873,7 @@ func TestServiceDuplicateSubmitReplayAcrossTerminalStates(t *testing.T) {
 		waiting := withEnvelope(actionID, ActionOrient, Outcome{Status: OutcomeNeedsInput, Summary: "choose", Pause: pauseReport(PauseDecisionRequired, "host question", nil)})
 		run, err := service.Submit(run.ID, actionID, waiting)
 		require.NoError(t, err)
+		stopRunForResume(t, service, run)
 		_, err = service.Resume(run.ID, ResumeOptions{})
 		require.NoError(t, err)
 		_, err = service.Submit(run.ID, actionID, waiting)
@@ -1566,7 +1575,7 @@ func TestServiceAnswerUsesExactUTF8BytesForIdempotency(t *testing.T) {
 	assert.Equal(t, journalBefore, journalAfter, "retries and conflicts must not append journal events")
 }
 
-func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T) {
+func TestServiceDestructiveGrantClearsOnInvalidatingOperationsAndSurvivesRejectedResume(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
@@ -1612,14 +1621,6 @@ func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T)
 				return updated
 			},
 		},
-		{
-			name: "resume",
-			mutate: func(t *testing.T, service *Service, run Run) Run {
-				updated, err := service.Resume(run.ID, ResumeOptions{})
-				require.NoError(t, err)
-				return updated
-			},
-		},
 	}
 
 	for _, test := range tests {
@@ -1639,34 +1640,60 @@ func TestServiceDestructiveGrantClearsOnEveryInvalidatingOperation(t *testing.T)
 		})
 	}
 
-	t.Run("issue source resume", func(t *testing.T) {
+	t.Run("active ad hoc resume", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
-		authorized := authorizeDestructiveRunForTest(t, service, true)
-		resumed, err := service.Resume(authorized.ID, ResumeOptions{UsePinnedSource: true})
+		authorized := authorizeDestructiveRunForTest(t, service, false)
+		actionID := authorized.CurrentAction.ActionID
+		grant := *authorized.DestructiveGrant
+
+		_, err := service.Resume(authorized.ID, ResumeOptions{})
+		assertProtocolError(t, err, "run_not_resumable")
+		unchanged, err := service.Load(authorized.ID)
 		require.NoError(t, err)
-		assert.Nil(t, resumed.DestructiveGrant)
-		assert.Nil(t, resumed.PendingDestructiveRequest)
+		require.NotNil(t, unchanged.CurrentAction)
+		require.NotNil(t, unchanged.DestructiveGrant)
+		assert.Equal(t, actionID, unchanged.CurrentAction.ActionID)
+		assert.Equal(t, grant, *unchanged.DestructiveGrant)
 	})
 
-	t.Run("source amendment resume", func(t *testing.T) {
+	t.Run("active issue source resume", func(t *testing.T) {
 		repository := newTestRepository(t)
 		service := openTestService(t, repository)
 		authorized := authorizeDestructiveRunForTest(t, service, true)
+		actionID := authorized.CurrentAction.ActionID
+		grant := *authorized.DestructiveGrant
+
+		_, err := service.Resume(authorized.ID, ResumeOptions{UsePinnedSource: true})
+		assertProtocolError(t, err, "run_not_resumable")
+		unchanged, err := service.Load(authorized.ID)
+		require.NoError(t, err)
+		require.NotNil(t, unchanged.CurrentAction)
+		require.NotNil(t, unchanged.DestructiveGrant)
+		assert.Equal(t, actionID, unchanged.CurrentAction.ActionID)
+		assert.Equal(t, grant, *unchanged.DestructiveGrant)
+	})
+
+	t.Run("active source amendment resume", func(t *testing.T) {
+		repository := newTestRepository(t)
+		service := openTestService(t, repository)
+		authorized := authorizeDestructiveRunForTest(t, service, true)
+		actionID := authorized.CurrentAction.ActionID
+		grant := *authorized.DestructiveGrant
 		envelope := validSourceEnvelope()
 		setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Adopt amended requirements.\n")
 		setEnvelopeParentRequirementsRevision(t, &envelope, authorized.PinnedSource.RequirementsRevision)
 		candidate := sourceCandidateForTest(t, envelope)
 
-		paused, err := service.Resume(authorized.ID, ResumeOptions{RefreshedSource: &candidate})
+		_, err := service.Resume(authorized.ID, ResumeOptions{RefreshedSource: &candidate})
+		assertProtocolError(t, err, "run_not_resumable")
+		unchanged, err := service.Load(authorized.ID)
 		require.NoError(t, err)
-		require.NotNil(t, paused.SourceCandidate)
-		assert.Nil(t, paused.DestructiveGrant)
-		assert.Nil(t, paused.PendingDestructiveRequest)
-		replayed, err := service.Load(paused.ID)
-		require.NoError(t, err)
-		assert.Nil(t, replayed.DestructiveGrant)
-		assert.Nil(t, replayed.PendingDestructiveRequest)
+		require.NotNil(t, unchanged.CurrentAction)
+		require.NotNil(t, unchanged.DestructiveGrant)
+		assert.Equal(t, actionID, unchanged.CurrentAction.ActionID)
+		assert.Equal(t, grant, *unchanged.DestructiveGrant)
+		assert.Nil(t, unchanged.SourceCandidate)
 	})
 }
 
@@ -1784,6 +1811,16 @@ func startTestRun(t *testing.T, service *Service, budget int, review bool) Run {
 	return run
 }
 
+func stopRunForResume(t *testing.T, service *Service, run Run) Run {
+	t.Helper()
+	stopped, err := service.Stop(run.ID)
+	require.NoError(t, err)
+	next, err := DeriveNext(stopped)
+	require.NoError(t, err)
+	require.Equal(t, NextOperationResume, next.Operation)
+	return stopped
+}
+
 func submitCurrent(t *testing.T, service *Service, run Run, outcome Outcome) Run {
 	t.Helper()
 	require.NotNil(t, run.CurrentAction)
@@ -1885,7 +1922,17 @@ func TestServiceReadsOnlyCurrentPinnedActionMaterial(t *testing.T) {
 	assert.Equal(t, run.WorkspaceIdentity.ID, materialErr.Next.WorkspaceIdentity)
 	require.Len(t, materialErr.Next.Variants, 1)
 	assert.Equal(t, "inspect-run", materialErr.Next.Variants[0].ID)
-	assert.Equal(t, []string{"slipway", "status", "--root", run.Workspace}, materialErr.Next.Variants[0].BaseArgv)
+	assert.Equal(t, []string{"slipway", "status", run.ID, "--root", run.Workspace}, materialErr.Next.Variants[0].BaseArgv)
+
+	_, err = service.ReadActionMaterial(run.ID, currentActionID, "invalid key")
+	assertProtocolError(t, err, "material_section_invalid")
+	require.ErrorAs(t, err, &materialErr)
+	assert.Equal(t, []string{"slipway", "status", run.ID, "--root", run.Workspace}, materialErr.Next.Variants[0].BaseArgv)
+
+	_, err = service.ReadActionMaterial(run.ID, "missing-action", "requirements")
+	assertProtocolError(t, err, "material_action_not_found")
+	require.ErrorAs(t, err, &materialErr)
+	assert.Equal(t, []string{"slipway", "status", run.ID, "--root", run.Workspace}, materialErr.Next.Variants[0].BaseArgv)
 
 	completed := withEnvelope(currentActionID, ActionOrient, Outcome{
 		Status:           OutcomeCompleted,
@@ -1992,11 +2039,12 @@ func TestServiceResumeModesSeparateAdHocAndIssueBoundRuns(t *testing.T) {
 
 	adHoc := startTestRun(t, service, 5, false)
 	candidate := sourceCandidateForTest(t, validSourceEnvelope())
+	stoppedAdHoc := stopRunForResume(t, service, adHoc)
 	_, err := service.Resume(adHoc.ID, ResumeOptions{RefreshedSource: &candidate})
 	assertProtocolError(t, err, "source_mode_not_allowed")
 	unchangedAdHoc, err := service.Load(adHoc.ID)
 	require.NoError(t, err)
-	assert.Equal(t, adHoc.CurrentAction.ActionID, unchangedAdHoc.CurrentAction.ActionID)
+	assert.Equal(t, stoppedAdHoc, unchangedAdHoc)
 
 	adHocResumed, err := service.Resume(adHoc.ID, ResumeOptions{})
 	require.NoError(t, err)
@@ -2007,11 +2055,12 @@ func TestServiceResumeModesSeparateAdHocAndIssueBoundRuns(t *testing.T) {
 
 	issueRun := startIssueTestRun(t, service, 8)
 	issueActionID := issueRun.CurrentAction.ActionID
+	stoppedIssue := stopRunForResume(t, service, issueRun)
 	_, err = service.Resume(issueRun.ID, ResumeOptions{})
 	assertProtocolError(t, err, "source_mode_required")
 	unchangedIssue, err := service.Load(issueRun.ID)
 	require.NoError(t, err)
-	assert.Equal(t, issueActionID, unchangedIssue.CurrentAction.ActionID)
+	assert.Equal(t, stoppedIssue, unchangedIssue)
 
 	replacement := 5
 	resumed, err := service.Resume(issueRun.ID, ResumeOptions{UsePinnedSource: true, Budget: &replacement})
@@ -2073,6 +2122,7 @@ func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
 			}
 			candidate := sourceCandidateForTest(t, envelope)
 			replacement := 6
+			stopRunForResume(t, service, run)
 			resumed, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate, Budget: &replacement})
 			require.NoError(t, err)
 			require.NotNil(t, resumed.CurrentAction)
@@ -2091,6 +2141,7 @@ func TestServiceNonMaterialSourceRefreshesIssueFreshOrient(t *testing.T) {
 			if test.projectionDrift {
 				assert.Equal(t, envelope.CanonicalURL, resumed.PinnedSource.CanonicalURL)
 				assert.Equal(t, []string{original.CanonicalURL}, resumed.PinnedSource.URLAliases)
+				stopRunForResume(t, service, resumed)
 				second, secondErr := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 				require.NoError(t, secondErr)
 				assert.Equal(t, []string{original.CanonicalURL}, second.PinnedSource.URLAliases)
@@ -2127,6 +2178,7 @@ func TestServiceRejectsInPlaceSectionAmendment(t *testing.T) {
 	rebuildSourceManifestBody(t, &envelope)
 	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
 	candidate := sourceCandidateForTest(t, envelope)
+	stopRunForResume(t, service, run)
 	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	assertProtocolError(t, err, "source_history_in_place_edit")
 }
@@ -2151,6 +2203,7 @@ func TestServiceRejectsAcceptedCommentDatabaseIdentityRebind(t *testing.T) {
 	assert.NotEqual(t, run.PinnedSource.ManifestRevision, candidate.Snapshot.ManifestRevision)
 	assert.Equal(t, run.PinnedSource.RequirementsRevision, candidate.Snapshot.RequirementsRevision)
 
+	stopRunForResume(t, service, run)
 	_, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	assertProtocolError(t, err, "source_history_in_place_edit")
 }
@@ -2183,6 +2236,7 @@ func TestServiceManifestOnlyReplacementRequiresExplicitAdoption(t *testing.T) {
 	candidate := sourceCandidateForTest(t, envelope)
 	require.Equal(t, originalRequirements, candidate.RequirementsRevision)
 
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
@@ -2208,9 +2262,7 @@ func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := authorizeDestructiveRunForTest(t, service, true)
-	actionID := run.CurrentAction.ActionID
-	budget := run.RemainingBudget
-	grant := cloneDestructiveAuthorization(run.DestructiveGrant)
+	stopped := stopRunForResume(t, service, run)
 	journalPath := filepath.Join(service.store.CommonDir(), "slipway", "runs", run.ID, "journal.jsonl")
 	journalBefore, err := os.ReadFile(journalPath)
 	require.NoError(t, err)
@@ -2225,19 +2277,19 @@ func TestServiceRejectsAmendmentWithStaleManifestParent(t *testing.T) {
 	assert.Equal(t, NextOperationStart, protocolErr.Next.Operation)
 	require.Len(t, protocolErr.Next.Variants, 1)
 	assert.Equal(t, "start-with-source", protocolErr.Next.Variants[0].ID)
-	require.Len(t, protocolErr.Next.Variants[0].Inputs, 1)
-	assert.Equal(t, NextInputPath, protocolErr.Next.Variants[0].Inputs[0].Type)
-	assert.True(t, protocolErr.Next.Variants[0].Inputs[0].Required)
+	assert.Equal(t, []NextInput{
+		{Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true},
+		{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true},
+	}, protocolErr.Next.Variants[0].Inputs)
+	assert.NotContains(t, protocolErr.Next.Variants[0].BaseArgv, run.Goal)
+	assert.NotContains(t, protocolErr.Next.Variants[0].BaseArgv, "--")
 
 	journalAfter, err := os.ReadFile(journalPath)
 	require.NoError(t, err)
 	assert.Equal(t, journalBefore, journalAfter)
 	loaded, err := service.Load(run.ID)
 	require.NoError(t, err)
-	require.NotNil(t, loaded.CurrentAction)
-	assert.Equal(t, actionID, loaded.CurrentAction.ActionID)
-	assert.Equal(t, budget, loaded.RemainingBudget)
-	assert.Equal(t, grant, loaded.DestructiveGrant)
+	assert.Equal(t, stopped, loaded)
 	assert.Nil(t, loaded.SourceCandidate)
 }
 
@@ -2266,6 +2318,7 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 	setEnvelopeParentRequirementsRevision(t, &envelope, oldRequirementsRevision)
 	candidateInput := sourceCandidateForTest(t, envelope)
 	replacementNotYetApplied := 100
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{
 		RefreshedSource: &candidateInput,
 		Budget:          &replacementNotYetApplied,
@@ -2334,6 +2387,7 @@ func TestServiceMaterialCandidateDefersBudgetAndAdoptDeactivatesAnswers(t *testi
 
 	_, err = service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoicePinned, CandidateID: candidateID})
 	assertProtocolError(t, err, "source_choice_conflict")
+	stopRunForResume(t, service, retried)
 	_, err = service.Resume(run.ID, ResumeOptions{SourceChoice: SourceChoiceAdopt, CandidateID: "stale-candidate-id"})
 	assertProtocolError(t, err, "stale_source_candidate")
 
@@ -2364,6 +2418,7 @@ func TestServiceSourceChoiceExactReplayAfterRunEnded(t *testing.T) {
 	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Preserve source-choice receipts after completion.\n")
 	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
 	candidate := sourceCandidateForTest(t, envelope)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
@@ -2421,6 +2476,7 @@ func TestServiceSourceChoiceReplayUsesAppendOnlyHistory(t *testing.T) {
 	setEnvelopeSection(t, &firstEnvelope, "requirements", "\n# Requirements\n\n- First candidate.\n")
 	setEnvelopeParentRequirementsRevision(t, &firstEnvelope, run.PinnedSource.RequirementsRevision)
 	firstCandidate := sourceCandidateForTest(t, firstEnvelope)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &firstCandidate})
 	require.NoError(t, err)
 	firstID := paused.SourceCandidate.CandidateID
@@ -2433,6 +2489,7 @@ func TestServiceSourceChoiceReplayUsesAppendOnlyHistory(t *testing.T) {
 	setEnvelopeSection(t, &secondEnvelope, "requirements", "\n# Requirements\n\n- Second candidate.\n")
 	setEnvelopeParentRequirementsRevision(t, &secondEnvelope, first.PinnedSource.RequirementsRevision)
 	secondCandidate := sourceCandidateForTest(t, secondEnvelope)
+	stopRunForResume(t, service, first)
 	paused, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &secondCandidate})
 	require.NoError(t, err)
 	secondID := paused.SourceCandidate.CandidateID
@@ -2480,6 +2537,7 @@ func TestServiceCandidatePinnedRetainsSourceAndActiveAnswers(t *testing.T) {
 	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Replace the ordering rule.\n")
 	setEnvelopeParentRequirementsRevision(t, &envelope, oldSource.RequirementsRevision)
 	candidate := sourceCandidateForTest(t, envelope)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
 	candidateID := paused.SourceCandidate.CandidateID
@@ -2535,6 +2593,7 @@ func TestServiceInvalidCandidateAllowsOnlyPinnedChoice(t *testing.T) {
 			candidateInput := sourceCandidateForTest(t, envelope)
 			replacement := 20
 
+			stopRunForResume(t, service, run)
 			paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidateInput, Budget: &replacement})
 			require.NoError(t, err)
 			require.NotNil(t, paused.SourceCandidate)
@@ -2587,7 +2646,6 @@ func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
 		PinnedSource:  &source,
 	})
 	require.NoError(t, err)
-	actionID := run.CurrentAction.ActionID
 
 	envelope := validSourceEnvelope()
 	envelope.RepositoryID = "R_kgDOTransferredAtLimit"
@@ -2597,6 +2655,7 @@ func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
 		envelope.Comments[index].URL = envelope.CanonicalURL + "#issuecomment-" + jsonNumber(envelope.Comments[index].DatabaseID)
 	}
 	candidate := sourceCandidateForTest(t, envelope)
+	stopped := stopRunForResume(t, service, run)
 	_, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	assertProtocolError(t, err, "source_alias_limit")
 	var protocolErr *ProtocolError
@@ -2608,11 +2667,17 @@ func TestServiceRejectsTransferBeyondURLAliasLimit(t *testing.T) {
 	require.GreaterOrEqual(t, budgetIndex, 0)
 	assert.Equal(t, "6", argv[budgetIndex+1])
 	assert.Contains(t, argv, "--no-review")
-	assert.Equal(t, []string{"--", run.Goal}, argv[len(argv)-2:])
+	assert.Equal(t, []string{"slipway", "run", "--budget", "6", "--json", "--root", run.Workspace, "--no-review"}, argv)
+	assert.NotContains(t, argv, run.Goal)
+	assert.NotContains(t, argv, "--")
+	assert.Equal(t, []NextInput{
+		{Name: "goal_file", Type: NextInputPath, Flag: "--goal-file", Required: true},
+		{Name: "source_file", Type: NextInputPath, Flag: "--source-file", Required: true},
+	}, protocolErr.Next.Variants[0].Inputs)
 
 	unchanged, err := service.Load(run.ID)
 	require.NoError(t, err)
-	assert.Equal(t, actionID, unchanged.CurrentAction.ActionID)
+	assert.Equal(t, stopped, unchanged)
 	assert.Equal(t, source.URLAliases, unchanged.PinnedSource.URLAliases)
 }
 
@@ -2621,7 +2686,8 @@ func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *test
 	repository := newTestRepository(t)
 	service := openTestService(t, repository)
 	run := startIssueTestRun(t, service, 10)
-	before, err := json.Marshal(run)
+	stopped := stopRunForResume(t, service, run)
+	before, err := json.Marshal(stopped)
 	require.NoError(t, err)
 
 	crossIssueEnvelope := validSourceEnvelope()
@@ -2658,6 +2724,7 @@ func TestServiceRefreshRejectsCrossIssueWithoutMutationAndTracksTransfer(t *test
 	setEnvelopeSection(t, &transferEnvelope, "requirements", "\n# Requirements\n\n- Use transferred requirements.\n")
 	setEnvelopeParentRequirementsRevision(t, &transferEnvelope, transferRun.PinnedSource.RequirementsRevision)
 	transferred := sourceCandidateForTest(t, transferEnvelope)
+	stopRunForResume(t, service, transferRun)
 	paused, err := service.Resume(transferRun.ID, ResumeOptions{RefreshedSource: &transferred})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
@@ -2690,6 +2757,7 @@ func TestServicePinnedTransferChoiceKeepsRequirementsAndUpdatesProjection(t *tes
 	setEnvelopeSection(t, &transferEnvelope, "requirements", "\n# Requirements\n\n- Candidate requirements that remain unadopted.\n")
 	setEnvelopeParentRequirementsRevision(t, &transferEnvelope, original.RequirementsRevision)
 	candidate := sourceCandidateForTest(t, transferEnvelope)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
@@ -2729,6 +2797,7 @@ func TestServiceResumeUsesImportedSourceAfterEphemeralFileRemoval(t *testing.T) 
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(path))
 
+	stopRunForResume(t, service, run)
 	resumed, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &candidate})
 	require.NoError(t, err)
 	require.NotNil(t, resumed.CurrentAction)

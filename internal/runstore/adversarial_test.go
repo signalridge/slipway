@@ -3,6 +3,7 @@ package runstore
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,12 +11,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 var errInjectedRunstoreFault = errors.New("injected runstore fault")
+
+const adversarialSynchronizationTimeout = 15 * time.Second
 
 func TestStoreUsesOnlyAuthoritativeJournalFilename(t *testing.T) {
 	store, paths := createAdversarialRun(t, "00000000-0000-4000-8000-000000000301")
@@ -222,8 +226,7 @@ func TestLockReplacementBeforeCallbackPreventsMutation(t *testing.T) {
 	runID := "00000000-0000-4000-8000-000000000306"
 	store, paths := createAdversarialRun(t, runID)
 	installOneShotHook(store, faultLockBeforeCallback, func() error {
-		replaceLeaf(t, paths.LockFile, []byte("replacement lock"))
-		return nil
+		return replaceLeaf(paths.LockFile, []byte("replacement lock"))
 	})
 	called := false
 	err := updateAdversarialRun(store, runID, &called)
@@ -250,18 +253,32 @@ func TestRunWriterGuardSurvivesRunLockReplacement(t *testing.T) {
 	require.NoError(t, err)
 	defer runB.Close()
 
-	aEntered := make(chan struct{})
+	aEntered := make(chan error, 1)
 	releaseA := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseFirstWriter := func() { releaseOnce.Do(func() { close(releaseA) }) }
+	defer releaseFirstWriter()
 	aResult := make(chan error, 1)
 	go func() {
 		aResult <- withRunLock(runA, nil, func(*runTransaction) error {
-			replaceLeaf(t, paths.LockFile, []byte("replacement lock"))
-			close(aEntered)
+			err := replaceLeaf(paths.LockFile, []byte("replacement lock"))
+			aEntered <- err
+			if err != nil {
+				return err
+			}
 			<-releaseA
 			return nil
 		})
 	}()
-	<-aEntered
+	select {
+	case err := <-aEntered:
+		require.NoError(t, err, "first writer could not replace run.lock")
+	case err := <-aResult:
+		require.NoError(t, err, "first writer returned before entering its callback")
+		t.Fatal("first writer returned before entering its callback")
+	case <-time.After(adversarialSynchronizationTimeout):
+		t.Fatal("timed out waiting for the first writer to enter")
+	}
 
 	bWaiting := make(chan struct{})
 	var waitOnce sync.Once
@@ -274,15 +291,34 @@ func TestRunWriterGuardSurvivesRunLockReplacement(t *testing.T) {
 			return nil
 		})
 	}()
-	<-bWaiting
+	select {
+	case <-bWaiting:
+	case <-bEntered:
+		t.Fatal("replacement run.lock bypassed the run writer guard")
+	case err := <-bResult:
+		require.NoError(t, err, "second writer returned before waiting for the writer guard")
+		t.Fatal("second writer returned before waiting for the writer guard")
+	case <-time.After(adversarialSynchronizationTimeout):
+		t.Fatal("timed out waiting for the second writer to contend on the writer guard")
+	}
 	select {
 	case <-bEntered:
 		t.Fatal("replacement run.lock bypassed the run writer guard")
 	default:
 	}
-	close(releaseA)
-	require.Error(t, <-aResult)
-	require.NoError(t, <-bResult)
+	releaseFirstWriter()
+	select {
+	case err := <-aResult:
+		require.Error(t, err)
+	case <-time.After(adversarialSynchronizationTimeout):
+		t.Fatal("timed out waiting for the first writer to report lock replacement")
+	}
+	select {
+	case err := <-bResult:
+		require.NoError(t, err)
+	case <-time.After(adversarialSynchronizationTimeout):
+		t.Fatal("timed out waiting for the second writer to acquire the released writer guard")
+	}
 	select {
 	case <-bEntered:
 	default:
@@ -297,8 +333,7 @@ func TestLockReplacementAfterJournalSyncReportsCommittedStale(t *testing.T) {
 	runID := "00000000-0000-4000-8000-000000000307"
 	store, paths := createAdversarialRun(t, runID)
 	installOneShotHook(store, faultJournalAfterSync, func() error {
-		replaceLeaf(t, paths.LockFile, []byte("replacement lock"))
-		return nil
+		return replaceLeaf(paths.LockFile, []byte("replacement lock"))
 	})
 
 	err := updateAdversarialRun(store, runID, nil)
@@ -316,8 +351,7 @@ func TestProjectionReplacementAfterJournalCommitReportsStale(t *testing.T) {
 	runID := "00000000-0000-4000-8000-000000000308"
 	store, paths := createAdversarialRun(t, runID)
 	installOneShotHook(store, faultProjectionPreRename, func() error {
-		replaceLeaf(t, paths.RunFile, []byte("replacement projection"))
-		return nil
+		return replaceLeaf(paths.RunFile, []byte("replacement projection"))
 	})
 
 	err := updateAdversarialRun(store, runID, nil)
@@ -693,10 +727,14 @@ func requireMutationError(t *testing.T, err error) *MutationError {
 	return mutationErr
 }
 
-func replaceLeaf(t *testing.T, path string, content []byte) {
-	t.Helper()
-	require.NoError(t, os.Rename(path, path+".detached"))
-	require.NoError(t, os.WriteFile(path, content, 0o600))
+func replaceLeaf(path string, content []byte) error {
+	if err := os.Rename(path, path+".detached"); err != nil {
+		return fmt.Errorf("detach %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		return fmt.Errorf("write replacement %s: %w", path, err)
+	}
+	return nil
 }
 
 func assertReplayContainsOneUpdate(t *testing.T, store *Store, runID string) {

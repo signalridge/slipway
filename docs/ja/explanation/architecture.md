@@ -2,7 +2,7 @@
 
 Slipway は制御 loop を local CLI に置き、モデル 固有の作業を生成された ホスト アダプターに置きます。この境界により、CLI は モデルや GitHub 認証情報を持たずに state を検証できます。
 
-![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work を担い、versioned JSON で local CLI と durable Run store に接続する。](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work を担い、Run-backed pathだけがversioned JSONでlocal CLIとdurable Run storeに接続する。](../../assets/diagrams/architecture.svg)
 
 ## Process boundary
 
@@ -49,6 +49,8 @@ cmd ───────────────→ adapter
 
 下位 package は コマンド や host-policy layer を逆 import しません。GitHub publication は core 内の network provider にはならず、generated ホスト instruction に残ります。
 
+製品コードを持たず リポジトリ 全体の不変条件だけを検証する package が3つあります。`internal/architecture` は上記の依存方向を、`internal/testlint` は source text や wall-clock 時間に依存するテストを、`internal/releasepolicy` は release と release 自動化 workflow を検証します。いずれも通常のテストであり、`go test` 以外の gate にはなりません。
+
 ## Run 開始と リポジトリ 観測
 
 新規 Run は worktree root、per-worktree Git directory、Git common directory の3つの canonical path を発見します。それらの framed identifier が Run をその worktree に紐付けます。Slipway は worktree を作成・切替・削除しませんが、別 worktree identity からの Run 変更は拒否します。
@@ -75,7 +77,9 @@ Issue-backed work では、trusted ホストが Issue と manifest 参照 commen
 
 Accepted section は content-addressed で、local material reader 経由で利用できます。Action は revision と bounded catalog だけを持ち、大きな requirements が Action context に入らず、offline 復旧も可能です。
 
-設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。issue #434 の完全な契約と versioned schema が規範であり、runtime test は現在の実装に対する executable evidence です。
+Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr/0001-source-bundle-v2.md) に記録されています。Issue #434 は当初の提案、製品目標、設計意図、判断理由を記録するものです。本文は変更可能で、具体的な設計詳細は後続の決定や実装の進展によって置き換えられることがあります。Accepted ADR は重要な決定とその理由を履歴として残すものであり、個々の bug fix や documentation update を統制しません。Versioned schema は、それぞれが対象とする serialization shape の範囲でのみ authoritative です。[ADR-0002](../../../adr/0002-seventh-capability-workflow.md) は 7 番目の host capability を追加して no-router boundary を再確認し、[ADR-0003](../../../adr/0003-scope-workflow-to-slipway-functions.md) はその scope を Slipway 自身の function 間の lifecycle routing に限定します。
+
+ある revision の code、build された `--help`、生成済み capability、ユーザー向け文書、observable behavior は、その revision で実装されている製品を記述し、相互に整合している必要があります。Tagged release、その release notes、実在する artifact は、ユーザーが取得できる published behavior を示します。Test、acceptance、CI は特定の revision と execution に対する evidence であり、product direction を決定せず、merge、readiness、release の authority も持ちません。
 
 ## Security boundary
 
@@ -84,6 +88,7 @@ Accepted section は content-addressed で、local material reader 経由で利�
 Slipway は、同じ account の process、root、malware、compromised ホストがその保護を超え得ると仮定します。その境界内で次を行います。
 
 - filesystem operation を anchor し、unsafe symlink traversal を拒否する。
+- 削除対象を private quarantine に移して identity を再検証することで deletion race の window を狭めるが、exact-object deletion は保証しない。継続的に競合する同一 UID の watcher は、最終検証と pathname-based な `unlink` または `rmdir` system call の間で対象 pathname を置き換え得る。
 - strict JSON、size、identity、digest を検証する。
 - 認証情報を Slipway storage に保存せず、GitHub fetch/publication を Run core の外に置く。
 - One-shot destructive grant と自然言語 answer を分離する。

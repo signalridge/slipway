@@ -16,6 +16,7 @@ type fileTransactionOpKind string
 const (
 	fileTransactionOpWrite  fileTransactionOpKind = "write"
 	fileTransactionOpRemove fileTransactionOpKind = "remove"
+	fileTransactionOpVerify fileTransactionOpKind = "verify"
 )
 
 type fileTransactionPrecondition string
@@ -64,7 +65,7 @@ func (err *FileTransactionSnapshotLimitError) Error() string {
 	return fmt.Sprintf("managed file exceeds %d-byte limit (observed %d bytes)", err.Limit, err.Size)
 }
 
-// FileTransactionOp describes one ordered file mutation in a file transaction.
+// FileTransactionOp describes one ordered file transaction operation.
 type FileTransactionOp struct {
 	kind           fileTransactionOpKind
 	path           string
@@ -84,6 +85,13 @@ func WriteFileTransactionOp(path string, data []byte, perm os.FileMode) FileTran
 // or an exactly restorable symbolic link when it exists.
 func RemoveFileTransactionOp(path string) FileTransactionOp {
 	return FileTransactionOp{kind: fileTransactionOpRemove, path: path}
+}
+
+// VerifyFileTransactionOp adds a read-only assertion to a transaction. Its
+// precondition is checked again at its position in the mutation sequence; it
+// never quarantines or changes the asserted path.
+func VerifyFileTransactionOp(path string) FileTransactionOp {
+	return FileTransactionOp{kind: fileTransactionOpVerify, path: path}
 }
 
 // WithExpectedMissing requires the path to still be absent when the operation
@@ -307,6 +315,9 @@ func applyFileTransactionWithFilesystem(ops []FileTransactionOp, filesystem *tra
 			return transactionFailure(errors.Join(err, guardLease.close()), applied, filesystem)
 		}
 		identityLease.absorb(guardLease)
+		if op.kind == fileTransactionOpVerify {
+			continue
+		}
 		item := &appliedFileTransactionOp{op: op, before: before, after: expectedPostTransactionSnapshot(op)}
 		applied = append(applied, item)
 		if err := callFileTransactionHook(filesystem.hooks.BeforeMutation, op.path, ""); err != nil {
@@ -569,7 +580,7 @@ func validateFileTransactionOps(ops []FileTransactionOp) error {
 			return errors.New("file transaction path is required")
 		}
 		switch op.kind {
-		case fileTransactionOpWrite, fileTransactionOpRemove:
+		case fileTransactionOpWrite, fileTransactionOpRemove, fileTransactionOpVerify:
 		default:
 			return fmt.Errorf("unknown file transaction operation %q for %s", op.kind, op.path)
 		}

@@ -30,7 +30,7 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	variant := state.Next.Variants[0]
 	assert.Equal(t, "answer-decision", variant.ID)
 	assert.NotEmpty(t, state.Next.WorkspaceIdentity)
-	assert.Equal(t, []autopilot.NextInput{{Name: "text", Type: autopilot.NextInputString, Flag: "--text", Required: true}}, variant.Inputs)
+	assert.Equal(t, []autopilot.NextInput{{Name: "text_file", Type: autopilot.NextInputPath, Flag: "--text-file", Required: true}}, variant.Inputs)
 	assert.Equal(t, "skip-action", state.Next.Variants[1].ID)
 	canonicalRepository, err := filepath.EvalSymlinks(repository)
 	require.NoError(t, err)
@@ -42,15 +42,26 @@ func TestMachineProtocolDecisionAnswerUsesStructuredNext(t *testing.T) {
 	human, humanStderr, err := executeForTest(t, "status", action.RunID, "--root", repository)
 	require.NoError(t, err, humanStderr)
 	assert.Contains(t, human, "Pending question: Which channel?")
-	assert.Contains(t, human, "answer-decision: requires text (string via --text)")
+	assert.Contains(t, human, "answer-decision: requires text_file (path via --text-file)")
 	assert.NotContains(t, human, "<answer>")
 
-	stdout, stderr, err = executeForTest(t, "protocol", "answer", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--text", "stable")
+	answerFile := filepath.Join(t.TempDir(), "answer.txt")
+	require.NoError(t, os.WriteFile(answerFile, []byte("stable"), 0o600))
+	stdout, stderr, err = executeForTest(
+		t,
+		"protocol", "answer", "--root", repository, "--run", action.RunID,
+		"--action", action.ActionID, "--text-file", answerFile,
+	)
 	require.NoError(t, err, stderr)
 	reoriented := decodeMutationAction(t, stdout)
 	assert.Equal(t, autopilot.ActionOrient, reoriented.Kind)
 
-	stdout, stderr, err = executeForTest(t, "protocol", "answer", "--root", repository, "--run", action.RunID, "--action", action.ActionID, "--text", "stable")
+	stdout, stderr, err = executeForTestWithInput(
+		t,
+		"stable",
+		"protocol", "answer", "--root", repository, "--run", action.RunID,
+		"--action", action.ActionID, "--text-stdin",
+	)
 	require.NoError(t, err, stderr)
 	retried := decodeMutationAction(t, stdout)
 	assert.Equal(t, reoriented.ActionID, retried.ActionID)
@@ -119,7 +130,7 @@ func TestMachineProtocolStructuredDestructiveConfirmationIssuesExactGrant(t *tes
 	assert.Equal(t, "confirm-destructive", confirm.ID)
 	assert.Contains(t, confirm.BaseArgv, "--confirm-destructive")
 	assert.Contains(t, confirm.BaseArgv, digest)
-	assert.Equal(t, []autopilot.NextInput{{Name: "text", Type: autopilot.NextInputString, Flag: "--text", Required: false}}, confirm.Inputs)
+	assert.Equal(t, []autopilot.NextInput{{Name: "text_file", Type: autopilot.NextInputPath, Flag: "--text-file", Required: false}}, confirm.Inputs)
 	assert.Equal(t, "decline-or-feedback", state.Next.Variants[1].ID)
 	assert.Equal(t, "skip-action", state.Next.Variants[2].ID)
 	assert.NotContains(t, stdout, "next_command")

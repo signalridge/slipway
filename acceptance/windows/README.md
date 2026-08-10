@@ -5,14 +5,14 @@ These scripts are the native Windows entry points used by the `windows-latest` C
 Build `slipway.exe`, then run both commands from the repository root:
 
 ```powershell
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests\acceptance\windows\native-powershell.ps1 -SlipwayExe .\slipway.exe
-cmd.exe /d /v:on /c tests\acceptance\windows\native-cmd.cmd .\slipway.exe
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File acceptance\windows\native-powershell.ps1 -SlipwayExe .\slipway.exe
+cmd.exe /d /v:on /c acceptance\windows\native-cmd.cmd .\slipway.exe
 ```
 
 Both modes create a disposable Git repository whose path contains spaces, Unicode, `%`, `!`, `&`, and `^`. They exercise:
 
 - versioned `doctor` output and initial Orient;
-- exact goal/answer argv containing spaces, quotes, Unicode, CRLF, `%`, `!`, `&`, and `^`;
+- exact goal/answer file payloads containing spaces, quotes, Unicode, CRLF, `%`, `!`, `&`, and `^`, with special-character file paths crossing the native argv boundary;
 - structured `answer-decision` resolution;
 - Outcome file in both modes and Outcome stdin in PowerShell;
 - stop and inputless ad-hoc resume through Slipway's rendered recovery command;

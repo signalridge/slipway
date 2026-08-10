@@ -1,15 +1,15 @@
 # Host adapters
 
-`slipway install` generates host-native entry points for six explicit capabilities:
+`slipway install` generates host-native entry points for seven explicit capabilities:
 
 ```text
-slipway-run  slipway-clarify  slipway-propose
-slipway-decompose  slipway-implement  slipway-review
+slipway-run  slipway-clarify  slipway-propose  slipway-decompose
+slipway-implement  slipway-review  slipway-workflow
 ```
 
-`run` drives a recoverable Run. `clarify` is a standalone, stateless decision conversation. `propose` and `decompose` prepare GitHub work items. `implement` performs technical work. `review` is read-only.
+`run` drives a recoverable Run. `clarify` is a standalone, stateless decision conversation. `propose` and `decompose` prepare GitHub work items. `implement` performs technical work. `review` is read-only. `workflow` coordinates those Issue-workflow functions: from a rough idea, Objective, Change, or existing Run it names the shortest valid next explicit capability without invoking it, or reports an explicit no-further-action outcome.
 
-![Slipway host adapters: install writes host-native entry points for ten supported hosts; each exposes the same six explicitly invoked capabilities and routes versioned JSON to the local CLI.](../../assets/diagrams/tool-adapters.svg)
+![Slipway host adapters: install writes host-native entry points for ten supported hosts; each exposes the same seven explicitly invoked capabilities, while only Run-backed paths exchange versioned JSON with the local CLI.](../../assets/diagrams/tool-adapters.svg)
 
 ## Generated targets
 

@@ -102,3 +102,41 @@ func TestApplyRunEventValidatesStatePauseReasonAndBudget(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyRunEventMinimizesLegacyInvalidCandidateTitle(t *testing.T) {
+	repository := newTestRepository(t)
+	service := openTestService(t, repository)
+	run := startIssueTestRun(t, service, 6)
+	stopped := stopRunForResume(t, service, run)
+
+	envelope := validSourceEnvelope()
+	envelope.Body = "<!-- slipway-level: objective/v1 -->\n"
+	raw, err := json.Marshal(envelope)
+	require.NoError(t, err)
+	candidateInput, err := ParseSourceCandidate(raw)
+	require.NoError(t, err)
+	require.False(t, candidateInput.Valid)
+	require.Empty(t, candidateInput.Title)
+
+	paused, err := service.Resume(
+		run.ID,
+		ResumeOptions{RefreshedSource: &candidateInput},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, paused.SourceCandidate)
+
+	event, err := newRunEvent(ResumeOperationSourceCandidate, stopped, paused)
+	require.NoError(t, err)
+	var legacyDelta runDelta
+	require.NoError(t, json.Unmarshal(event.Data, &legacyDelta))
+	require.NotNil(t, legacyDelta.SourceCandidate)
+	legacyDelta.SourceCandidate.Title = envelope.Title
+	event.Data, err = json.Marshal(legacyDelta)
+	require.NoError(t, err)
+
+	replayed := runBeforeMutation(stopped)
+	require.NoError(t, applyRunEvent(&replayed, event))
+	require.Equal(t, paused, replayed)
+	require.NotNil(t, replayed.SourceCandidate)
+	require.Empty(t, replayed.SourceCandidate.Title)
+}

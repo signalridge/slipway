@@ -1,6 +1,6 @@
 # Host prompt scenarios
 
-These twelve prompt-level evaluations cover host behavior that deterministic core tests cannot establish alone. Run them against the primary supported hosts and sample the remaining adapters. They complement, rather than replace, the [acceptance matrix](../README.md).
+These thirteen prompt-level evaluations cover host behavior that deterministic core tests cannot establish alone. Run them against the primary supported hosts and sample the remaining adapters. They complement, rather than replace, the [acceptance matrix](../README.md).
 
 For every collected scenario, record the binary revision, host and version, generated capability digest, fixture revision, sanitized transcript location, observed Actions, exact submitted Outcome JSON, and evaluator notes. Never infer an activity from prose; compare the Outcome and journal. Do not fabricate an uncollected transcript.
 
@@ -20,3 +20,4 @@ All scenarios use the same baseline: explicit invocation only; repository facts 
 | [10](10-no-implicit-materialization.md) | Clarification never materializes docs implicitly |
 | [11](11-destructive-confirmation.md) | Destructive work requires exact structured authorization |
 | [12](12-activity-truth.md) | An unstarted activity is never reported as run |
+| [13](13-workflow-orchestration.md) | Workflow routes every #434 function and lifecycle provenance class without becoming a skill router or crossing explicit capability boundaries |

@@ -228,6 +228,7 @@ func TestServiceRejectsEditingRetiredAcceptedCommentIdentity(t *testing.T) {
 	setEnvelopeSection(t, &firstAmendment, "requirements", "\n# Requirements\n\n- Use the first replacement identity.\n")
 	setEnvelopeParentRequirementsRevision(t, &firstAmendment, run.PinnedSource.RequirementsRevision)
 	firstCandidate := sourceCandidateForTest(t, firstAmendment)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &firstCandidate})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)
@@ -252,6 +253,7 @@ func TestServiceRejectsEditingRetiredAcceptedCommentIdentity(t *testing.T) {
 		adopted.PinnedSource.RequirementsRevision,
 	)
 	secondCandidate := sourceCandidateForTest(t, reusedRetiredIdentity)
+	stopRunForResume(t, service, adopted)
 	_, err = service.Resume(run.ID, ResumeOptions{RefreshedSource: &secondCandidate})
 	assertProtocolError(t, err, "source_history_in_place_edit")
 
@@ -309,6 +311,7 @@ func TestCandidateResolutionRequiresFreshOrientRecord(t *testing.T) {
 	setEnvelopeSection(t, &envelope, "requirements", "\n# Requirements\n\n- Create a candidate.\n")
 	setEnvelopeParentRequirementsRevision(t, &envelope, run.PinnedSource.RequirementsRevision)
 	input := sourceCandidateForTest(t, envelope)
+	stopRunForResume(t, service, run)
 	paused, err := service.Resume(run.ID, ResumeOptions{RefreshedSource: &input})
 	require.NoError(t, err)
 	require.NotNil(t, paused.SourceCandidate)

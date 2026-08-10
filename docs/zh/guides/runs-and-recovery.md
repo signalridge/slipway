@@ -10,6 +10,7 @@ Run 可以停止并恢复，但 journal 不是秘密保险箱，也不是完成�
 slipway status
 slipway status <run-id>
 slipway status <run-id> --json
+slipway status <run-id> --section requirements
 ```
 
 省略 ID 时，`status` 扫描仓库的 Git common directory。属于当前 worktree 的 Run 会完整 replay；由另一个 linked worktree 创建的 Run 只显示标记为 `workspace_foreign` 的只读 header stub，必须回到其 owning worktree 才能检查或恢复完整内容。
@@ -17,6 +18,8 @@ slipway status <run-id> --json
 检查不会创建 recovery directory 或 lock，也不会修复 journal byte。若本地 Run 无法安全 replay，上面 `status` 的列表形式会在 `unavailable_runs` 中保留其 ID 和诊断，而不是将其隐藏；应先检查或恢复 journal，再尝试 mutation。
 
 指定 ID 后，status 包含当前状态和实时派生的结构化 `next` 操作。生成的宿主遵循该对象，而不是解析显示用 shell command。
+
+`--section KEY` 打印该 Run 钉住的 source 中的一个 chapter，并附带它所属的 revision。上面的 projection 已经列出被钉住的 chapter，这里显示它们的正文；Run 变为 `stopped` 或 `ended` 之后依然可用——而那通常正是你想知道这次 Run 到底依据什么工作的时刻。它是只读检查：不授予任何权限、不写入任何内容；ad-hoc Run 没有 pinned source 可显示。
 
 ## Stop、skip 与 resume
 

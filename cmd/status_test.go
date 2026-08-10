@@ -6,12 +6,44 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/signalridge/slipway/internal/autopilot"
+	"github.com/signalridge/slipway/internal/runstore"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStatusProjectionHidesTerminalCurrentAction(t *testing.T) {
+	t.Parallel()
+	for _, state := range []autopilot.RunState{autopilot.RunStopped, autopilot.RunEnded} {
+		state := state
+		t.Run(string(state), func(t *testing.T) {
+			workspace, err := filepath.Abs("workspace")
+			require.NoError(t, err)
+			run := autopilot.Run{
+				ID:                "run-1",
+				Workspace:         workspace,
+				WorkspaceIdentity: runstore.WorkspaceIdentity{ID: "sha256:" + strings.Repeat("a", 64), WorktreeRoot: workspace},
+				State:             state,
+				CurrentAction:     &autopilot.Action{ActionID: "action-1", Kind: autopilot.ActionImplement},
+			}
+			output, err := makeRunStatusOutput(run)
+			require.NoError(t, err)
+			encoded, err := json.Marshal(output)
+			require.NoError(t, err)
+			assert.NotContains(t, string(encoded), "current_action")
+
+			var human bytes.Buffer
+			command := &cobra.Command{}
+			command.SetOut(&human)
+			require.NoError(t, writeRunStatus(command, run))
+			assert.NotContains(t, human.String(), "Current action:")
+		})
+	}
+}
 
 func TestStatusDoesNotCreateRunstoreNamespace(t *testing.T) {
 	repository := newCLIRepository(t)
@@ -65,6 +97,12 @@ func TestStatusDistinguishesMissingAndCorruptRuns(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stderr), &missing))
 	assert.Equal(t, "run_not_found", missing.Code)
 
+	_, stderr, err = executeForTest(t, "status", "missing-run", "--section", "requirements", "--root", repository, "--json")
+	require.Error(t, err)
+	var missingSection CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &missingSection))
+	assert.Equal(t, "run_not_found", missingSection.Code)
+
 	_, stderr, err = executeForTest(t, "status", "../bad", "--root", repository, "--json")
 	require.Error(t, err)
 	var invalid CLIError
@@ -89,6 +127,12 @@ func TestStatusDistinguishesMissingAndCorruptRuns(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stderr), &corrupt))
 	assert.Equal(t, "run_journal_invalid", corrupt.Code)
 	assert.Equal(t, autopilot.NextOperationCommand, corrupt.Next.Operation)
+
+	_, stderr, err = executeForTest(t, "status", started.RunID, "--section", "requirements", "--root", repository, "--json")
+	require.Error(t, err)
+	var corruptSection CLIError
+	require.NoError(t, json.Unmarshal([]byte(stderr), &corruptSection))
+	assert.Equal(t, "run_journal_invalid", corruptSection.Code)
 
 	stdout, stderr, err = executeForTest(t, "status", "--root", repository, "--json")
 	require.NoError(t, err, stderr)

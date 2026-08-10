@@ -32,6 +32,27 @@ type journalRecordLimitError interface {
 	JournalRecordLimit() int
 }
 
+// committedOutputError means the Run mutation returned successfully, but the
+// response could not be derived or written. The durable Run is the recovery
+// authority; callers must inspect it instead of retrying the mutation blindly.
+type committedOutputError struct {
+	err error
+}
+
+func (err *committedOutputError) Error() string {
+	if err == nil || err.err == nil {
+		return "mutation committed, but its response could not be emitted; do not retry blindly"
+	}
+	return "mutation committed, but its response could not be emitted; do not retry blindly: " + err.err.Error()
+}
+
+func (err *committedOutputError) Unwrap() error {
+	if err == nil {
+		return nil
+	}
+	return err.err
+}
+
 type CLIError struct {
 	ContractVersion int            `json:"contract_version"`
 	Code            string         `json:"code"`
@@ -129,6 +150,35 @@ func asCLIErrorWithContext(err error, context cliErrorContext) *CLIError {
 			"limit":   recordLimitErr.JournalRecordLimit(),
 		})
 	}
+	var outputErr *committedOutputError
+	if errors.As(err, &outputErr) {
+		return newRuntimeError(
+			"mutation_committed_output_failed",
+			outputErr.Error(),
+			storageRecoveryNext(context),
+			map[string]any{
+				"phase":              "response_output",
+				"committed":          true,
+				"projection_stale":   false,
+				"namespace_detached": false,
+				"ambiguous":          false,
+			},
+		)
+	}
+	if errors.Is(err, autopilot.ErrRunBusy) {
+		details := map[string]any(nil)
+		var mutationErr storageMutationError
+		if errors.As(err, &mutationErr) {
+			details = map[string]any{
+				"phase":              mutationErr.StorageMutationPhase(),
+				"committed":          mutationErr.StorageMutationCommitted(),
+				"projection_stale":   mutationErr.StorageMutationProjectionStale(),
+				"namespace_detached": mutationErr.StorageMutationNamespaceDetached(),
+				"ambiguous":          mutationErr.StorageMutationAmbiguous(),
+			}
+		}
+		return newRuntimeError("run_busy", err.Error(), storageRecoveryNext(context), details)
+	}
 	var mutationErr storageMutationError
 	if errors.As(err, &mutationErr) {
 		committed := mutationErr.StorageMutationCommitted()
@@ -158,13 +208,8 @@ func asCLIErrorWithContext(err error, context cliErrorContext) *CLIError {
 	}
 	message := strings.TrimSpace(err.Error())
 	next := defaultErrorNext()
-	lower := strings.ToLower(message)
-	if strings.Contains(lower, "unknown command") ||
-		strings.Contains(lower, "unknown flag") ||
-		strings.Contains(lower, "requires") ||
-		strings.Contains(lower, "accepts") ||
-		strings.Contains(lower, "required flag") {
-		return newUsageError("invalid_usage", message, next)
+	if strings.TrimSpace(context.RunID) != "" {
+		next = storageRecoveryNext(context)
 	}
 	return newRuntimeError("runtime_error", message, next, nil)
 }

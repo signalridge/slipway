@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -79,6 +80,72 @@ func TestAsCLIErrorReportsMutationCommitStateWithoutRetry(t *testing.T) {
 				assert.Contains(t, actual.Message, "do not retry blindly")
 			}
 		})
+	}
+}
+
+func TestAsCLIErrorClassifiesWriterLockTimeoutAsRunBusy(t *testing.T) {
+	t.Parallel()
+	repository := t.TempDir()
+	const runID = "00000000-0000-4000-8000-000000000001"
+	err := &runstore.MutationError{
+		Phase: runstore.PhaseLockOpen,
+		Err:   fmt.Errorf("acquire run writer lock: %w", runstore.ErrRunLockTimeout),
+	}
+
+	actual := asCLIErrorWithContext(
+		withCLIErrorContext(err, repository, runID),
+		cliErrorContext{},
+	)
+	require.NotNil(t, actual)
+	assert.Equal(t, "run_busy", actual.Code)
+	assert.Equal(t, exitCodeRuntime, actual.ExitCode)
+	assert.Equal(t, false, actual.Details["committed"])
+	assert.Equal(t, string(runstore.PhaseLockOpen), actual.Details["phase"])
+	assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation)
+	require.Len(t, actual.Next.Variants, 1)
+	assert.Equal(t, "inspect-run", actual.Next.Variants[0].ID)
+	assert.Equal(
+		t,
+		[]string{"slipway", "status", runID, "--root", repository},
+		actual.Next.Variants[0].BaseArgv,
+	)
+}
+
+func TestAsCLIErrorGenericKnownRunUsesTargetedStatusRecovery(t *testing.T) {
+	t.Parallel()
+	repository := t.TempDir()
+	const runID = "00000000-0000-4000-8000-000000000001"
+
+	actual := asCLIError(withCLIErrorContext(
+		errors.New("material digest validation disagrees with runstore"),
+		repository,
+		runID,
+	))
+
+	require.NotNil(t, actual)
+	assert.Equal(t, "runtime_error", actual.Code)
+	assert.Equal(t, exitCodeRuntime, actual.ExitCode)
+	assert.Equal(t, autopilot.NextOperationCommand, actual.Next.Operation)
+	require.Len(t, actual.Next.Variants, 1)
+	assert.Equal(t, "inspect-run", actual.Next.Variants[0].ID)
+	assert.Equal(
+		t,
+		[]string{"slipway", "status", runID, "--root", repository},
+		actual.Next.Variants[0].BaseArgv,
+	)
+}
+
+func TestAsCLIErrorDoesNotGuessUsageFromMessage(t *testing.T) {
+	t.Parallel()
+	for _, message := range []string{
+		"unknown command was observed in a repository note",
+		"the operation requires a fresh source",
+		"the adapter accepts no more input",
+		"required flag text was stored in a journal",
+	} {
+		actual := asCLIError(errors.New(message))
+		require.NotNil(t, actual)
+		assert.Equal(t, "runtime_error", actual.Code, message)
 	}
 }
 

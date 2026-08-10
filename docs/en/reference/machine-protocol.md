@@ -18,10 +18,10 @@ The host calls the model, reads the repository, runs tools, and—when requested
 A host normally uses JSON on every step:
 
 ```text
-slipway run --budget N --json --root ROOT [--no-review] [--source-file FILE] -- GOAL
+slipway run --budget N --json --root ROOT [--no-review] --goal-file GOAL_FILE [--source-file SOURCE_FILE]
 slipway protocol submit --run RUN --action ACTION --root ROOT (--outcome-file FILE | --outcome-stdin)
-slipway protocol answer --run RUN --action ACTION --root ROOT --text TEXT
-slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text TEXT]
+slipway protocol answer --run RUN --action ACTION --root ROOT --text-file TEXT_FILE
+slipway protocol answer --run RUN --action ACTION --root ROOT --confirm-destructive --scope-sha256 DIGEST [--text-file TEXT_FILE]
 slipway protocol skip --run RUN --action ACTION --root ROOT
 slipway protocol resume RUN --root ROOT [--budget N]
 slipway protocol resume RUN --root ROOT (--source-file FILE | --use-pinned-source | --source-choice pinned|adopt --candidate CANDIDATE) [--budget N]
@@ -32,13 +32,14 @@ The protocol operations are versioned host interfaces. They are documented and v
 
 ## Start a Run
 
-Canonical invocation places all flags before one `--` separator and the literal goal after it:
+Canonical host invocation keeps the exact goal out of argv. Write it to a private temporary regular non-symlink file and resolve the returned start variant's required `goal_file` path:
 
 ```bash
-slipway run --budget 8 --json --root /absolute/worktree -- "one goal"
+slipway run --budget 8 --json --root /absolute/worktree \
+  --goal-file /private/temp/goal.txt
 ```
 
-An ad-hoc Run omits source fields. An issue-backed Run supplies a private temporary `--source-file`; the CLI consumes it once and does not depend on the file or GitHub afterward.
+An ad-hoc Run omits source fields. An issue-backed Run supplies a separate private temporary `--source-file`. Remove both temporary files after the CLI consumes them; the Run does not depend on either file or GitHub afterward. Human callers may still use one positional goal or `--goal-stdin`, but generated adapters use `goal_file` to avoid process-list/command-trace disclosure and platform command-line limits.
 
 The start response contains the Run state, the initial `orient` Action, and a structured `next` operation.
 
@@ -161,6 +162,8 @@ Every success or error that can continue contains a typed `next` object. It has:
 
 Input types are `string`, `path`, `enum`, and `digest`. A consumer selects one variant and inserts supplied values as separate argv elements in schema order. It must not parse or concatenate a display command.
 
+Start variants carry the exact goal as a required `goal_file` path input rather than embedding goal text in `base_argv`. Decision and feedback variants likewise use required `text_file` paths; the destructive-confirmation note uses an optional `text_file`. Hosts create private temporary regular files, resolve the typed variants, and remove the files after consumption. Direct `--text` and stdin modes remain human-facing conveniences, not the generated machine canonical path.
+
 Only a fully resolved, inputless variant may be rendered for a human shell. POSIX, `cmd.exe`, and PowerShell rendering is presentation only; structured argv is the machine value.
 
 When a Windows display command contains expansion-sensitive `%` or `!` values that `cmd.exe` cannot preserve safely, the renderer uses a PowerShell UTF-16LE `EncodedCommand` trampoline. This changes only the copyable display form; the decoded process argv must remain byte-for-byte equivalent to the structured variant.
@@ -193,7 +196,11 @@ An issue-backed resume explicitly does one of the following:
 
 No source option means neither “unchanged” nor implicit network access. A different Issue identity and an amendment based on another parent requirements revision are rejected without changing the Run. Candidate IDs and choices are stale-safe and idempotent.
 
+The versioned schema is the serialization authority for the closed `source_candidate.classification_code` and `resume_operation` enums and for the valid/invalid candidate field combinations. For an invalid candidate, `observation_sha256` is a domain-separated digest of the exact rejected source observation used for deterministic comparison; it is provenance, not accepted Requirements or proof that the host fetched from GitHub.
+
 A successful resume voids stale outstanding work as required, revalidates the workspace, and normally returns a fresh Orient. If `--budget` is omitted, a positive remaining budget is preserved and zero is replenished to `max(initial_budget, 3)`; an explicit `--budget N` replaces it with `N`. A replacement is applied only on the mutation that actually resumes the Run.
+
+`resume` is accepted only while the current typed `next.operation` is `resume`. Calling it during an active Action or an answerable decision/destructive pause is rejected with that current typed recovery, so a lost response cannot be retried by silently voiding newer work. User take-over or reordering uses public `slipway stop` first, followed by a separately explicit resume.
 
 ## Workspace and Git observation
 
@@ -213,6 +220,8 @@ Git observations record hashes and bounded metadata for the index, porcelain sta
 ## Errors and compatibility
 
 Machine errors include `contract_version`, a stable `code`, human `message`, `exit_code`, and structured recovery where available. Preserve all fields and branch on code/version, not message text.
+
+If a mutation commits but deriving, rendering, or writing its response then fails, `mutation_committed_output_failed` reports `committed: true`, the exact Run ID, and a targeted `slipway status RUN --root ROOT` recovery. Do not blindly replay the mutation.
 
 `exit_code` mirrors the process exit status and is one of two values:
 

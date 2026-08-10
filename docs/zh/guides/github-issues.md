@@ -46,6 +46,8 @@ Change body 还包含一个 `slipway-manifest` block，列出已接受的 sectio
 
 ## 发布 Issue
 
+生成的 `slipway-workflow` 能力可以先对粗略想法进行交互式调查与追问，形成 Change 或 Objective 草稿，然后停止并点名 `slipway-propose`。它提供的是 work-item 草稿，不是获确认的精确发布计划；该计划及其确认只由 Propose 拥有。详见[从想法到 Run 的工作流](idea-to-run-workflow.md)。
+
 生成的 `slipway-propose` 与 `slipway-decompose` 指令要求宿主：
 
 1. 检查仓库和现有 Issue；

@@ -39,6 +39,35 @@ func TestDiscoverWorkspaceIdentityIsCanonicalDeterministicAndWorktreeSpecific(t 
 	assert.NotEqual(t, identity.ID, linkedIdentity.ID)
 }
 
+func TestWorkspaceDiscoveryAndObservationIgnoreRepositoryRedirectingEnvironment(t *testing.T) {
+	repository := createRepository(t)
+	foreign := createRepository(t)
+	expectedIdentity, err := DiscoverWorkspaceIdentity(repository)
+	require.NoError(t, err)
+	expectedObservation, err := ObserveGit(repository)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(foreign, "README.md"), []byte("foreign change\n"), 0o600))
+	runGitCommand(t, foreign, "add", "README.md")
+
+	t.Setenv("GIT_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_WORK_TREE", foreign)
+	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreign, ".git"))
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(foreign, ".git", "index"))
+	t.Setenv("GIT_OBJECT_DIRECTORY", filepath.Join(foreign, ".git", "objects"))
+	t.Setenv("GIT_CONFIG_COUNT", "1")
+	t.Setenv("GIT_CONFIG_KEY_0", "core.bare")
+	t.Setenv("GIT_CONFIG_VALUE_0", "true")
+
+	identity, err := DiscoverWorkspaceIdentity(repository)
+	require.NoError(t, err)
+	assert.Equal(t, expectedIdentity, identity)
+
+	observation, err := ObserveGit(repository)
+	require.NoError(t, err)
+	assert.Equal(t, expectedObservation, observation)
+}
+
 func TestWorkspaceIdentityValidationBindsDigestToEveryCanonicalPath(t *testing.T) {
 	t.Parallel()
 	repository := createRepository(t)
