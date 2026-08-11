@@ -1,8 +1,8 @@
 # アーキテクチャ
 
-Slipway は制御 loop を local CLI に置き、モデル 固有の作業を生成された ホスト アダプターに置きます。この境界により、CLI は モデルや GitHub 認証情報を持たずに state を検証できます。
+Slipway は制御 loop を local CLI に置き、モデル 固有の作業を生成された ホスト アダプターに置きます。この境界により、CLI は model-provider や GitHub 認証情報を所有・管理せずに state を検証できます。Slipway はこれらの認証情報を意図的には収集しません。
 
-![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work を担い、Run-backed pathだけがversioned JSONでlocal CLIとdurable Run storeに接続する。](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: ユーザーが AIコーディングツール の generated capability を明示的に呼び出し、ホストが model、repository、認可済み GitHub work と使用する認証情報を担います。Slipway はそれらを意図的には収集・管理せず、Run store には host/user が提供した機微な goal、answer、Outcome、command text が保存され得ますが、environment dump は意図的に収集しません。](../../assets/diagrams/architecture.svg)
 
 ## Process boundary
 
@@ -83,14 +83,14 @@ Source Bundle の設計理由と却下した代替案は [ADR-0001](../../../adr
 
 ## Security boundary
 
-![Slipway の trust boundary: Issue content と working tree は untrusted data であり、shell 権限の付与、認証情報 の開示、confirmation の回避、destructive scope の拡大はできません。AIコーディングツール は行為を託され、すべての 認証情報を保持します。Local CLI は厳密な JSON・サイズ・identity・digest を検証しますが 認証情報 は一切持たず、ホストが GitHub を誠実に fetch したことは証明できません。](../../assets/diagrams/trust-boundary.svg)
+![Slipway の trust boundary: Issue content と working tree は untrusted data であり、shell 権限の付与、認証情報 の開示、confirmation の回避、destructive scope の拡大はできません。AIコーディングツール は行為を託され、provider 認証情報を保持・使用します。Slipway はそれらを意図的には収集・管理せず、Local CLI は provider 認証情報を所有・管理せずに厳密な JSON・サイズ・identity・digest を検証します。goal、answer、Outcome、command text は機微になり得て保存されますが、environment dump は意図的に収集しません。](../../assets/diagrams/trust-boundary.svg)
 
 Slipway は、同じ account の process、root、malware、compromised ホストがその保護を超え得ると仮定します。その境界内で次を行います。
 
 - filesystem operation を anchor し、unsafe symlink traversal を拒否する。
 - 削除対象を private quarantine に移して identity を再検証することで deletion race の window を狭めるが、exact-object deletion は保証しない。継続的に競合する同一 UID の watcher は、最終検証と pathname-based な `unlink` または `rmdir` system call の間で対象 pathname を置き換え得る。
 - strict JSON、size、identity、digest を検証する。
-- 認証情報を Slipway storage に保存せず、GitHub fetch/publication を Run core の外に置く。
+- model-provider や GitHub 認証情報を意図的には収集・管理しない。host/user が提供する goal、answer、Outcome、command text は機微になり得て保存されるが、environment dump は意図的に収集しない。
 - One-shot destructive grant と自然言語 answer を分離する。
 - user-modified な generated file を保持する。
 - platform durability limitation を報告する。

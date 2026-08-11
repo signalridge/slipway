@@ -2,7 +2,7 @@
 
 Run は stop や resume が可能ですが、ジャーナル は secret vault や completion certificate ではありません。この guide はユーザーが inspect し retention できる内容を説明します。
 
-![Slipway Run の状態: 明示的な start で Run は active になります。Pause する reason は4つだけで、人間の decision、environment の unavailable、budget の exhaustion、destructive scope の confirmation です。Answer・confirm・skip で active に戻り、stop は pending work を無効化しつつ ジャーナル を残して resume でき、ended は終端です。](../../assets/diagrams/run-states.svg)
+![Slipway Run の状態: 明示的な start で Run は Active になります。人間の decision、environment unavailable、budget exhaustion、destructive confirmation で pause し、answer・confirm・skip は新しい Active Action を生む場合も budget exhaustion で Paused のままの場合もあります。source refresh は選択待ちの paused source candidate を作る場合があり、stop は paused Run を Stopped にできます。stop 後または current typed next.operation = resume のときだけ resume が認可され、結果は Active または Paused になり得ます。Ended は終端で、証明ではありません。](../../assets/diagrams/run-states.svg)
 
 ## Run を inspect する
 

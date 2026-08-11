@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-labelledby="architecture-title architecture-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">Slipway process architecture</title>
-  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work. Workflow navigation plus propose and decompose activity stays host-side; workflow may hand off to a new Run or back to an existing Run, but only slipway-run exchanges the runtime protocol. When a Run-backed capability is active, the host submits one strict Outcome through versioned JSON and the local Slipway CLI returns one Action at a time. The CLI validates and schedules Run work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. The CLI never calls a model or a GitHub API, and credentials stay with the host.</desc>
+  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work, and holds and uses the provider credentials needed for that work. Workflow navigation plus propose and decompose activity stays host-side; workflow may hand off to a new Run or back to an existing Run, but only slipway-run exchanges the runtime protocol. When a Run-backed capability is active, the host submits one strict Outcome through versioned JSON and the local Slipway CLI returns one Action at a time. The CLI validates and schedules Run work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. Slipway does not intentionally collect or manage model or GitHub credentials, while host- or user-provided goal, answer, Outcome, and command text may be sensitive and can be persisted; environment dumps are not intentionally collected. The CLI does not own or manage provider credentials and never calls a model or a GitHub API.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
   User([Human operator]) -->|explicit invocation| Capability[Generated host capability]
@@ -12,7 +12,7 @@ flowchart LR
   end
   subgraph Core[Slipway core · local deterministic state]
     CLI[slipway CLI · Run state engine]
-    Store[(Run store · journal / projection / materials)]
+    Store[(Run store · journal / projection / materials\nhost/user text may be sensitive · no environment dumps intentionally collected)]
     CLI --> Store
   end
   Agent -->|Run-backed Outcome · strict JSON| CLI
@@ -81,7 +81,13 @@ flowchart LR
       .flow-core { fill: none; stroke: var(--core-stroke); stroke-width: 2.2; }
       .flow-host { fill: none; stroke: var(--host-stroke); stroke-width: 2; }
       .edge-label { fill: var(--muted); font-size: 9.5px; font-style: italic; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .flow,
+      .flow-core,
+      .flow-host {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .dot-host { fill: var(--host-stroke); }
       .dot-core { fill: var(--core-stroke); }
       .dot-store { fill: var(--store-stroke); }
@@ -102,18 +108,18 @@ flowchart LR
   <text class="sub" x="40" y="58">explicit user intent · host-owned execution · deterministic local Run state</text>
 
   <!-- region boundaries -->
-  <rect class="band" x="250" y="86" width="530" height="480" rx="18"/>
-  <rect class="band" x="860" y="86" width="300" height="480" rx="18"/>
+  <rect class="band" x="250" y="86" width="530" height="500" rx="18"/>
+  <rect class="band" x="860" y="86" width="300" height="500" rx="18"/>
 
   <!-- connections: painted before cards -->
-  <path class="flow-host" d="M230 300 H246 V172 H263" marker-end="url(#arrow-host)"/>
-  <line class="flow-host" x1="515" y1="212" x2="515" y2="243" marker-end="url(#arrow-host)"/>
+  <path class="flow-host" d="M230 300 H246 V175 H263" marker-end="url(#arrow-host)"/>
+  <line class="flow-host" x1="515" y1="222" x2="515" y2="243" marker-end="url(#arrow-host)"/>
   <line class="flow" x1="346" y1="350" x2="346" y2="393" marker-end="url(#arrow)"/>
   <line class="flow" x1="514" y1="350" x2="514" y2="393" marker-end="url(#arrow)"/>
   <line class="flow" x1="682" y1="350" x2="682" y2="393" marker-end="url(#arrow)"/>
   <line class="flow-core" x1="760" y1="282" x2="873" y2="282" marker-end="url(#arrow-core)"/>
   <line class="flow-core" x1="873" y1="318" x2="767" y2="318" marker-end="url(#arrow-core)"/>
-  <path class="flow-core" d="M873 345 H790 V430 H766" marker-end="url(#arrow-core)"/>
+  <path class="flow-core" d="M873 352 H790 V430 H766" marker-end="url(#arrow-core)"/>
   <line class="flow-core" x1="1010" y1="360" x2="1010" y2="389" marker-end="url(#arrow-core)"/>
 
   <!-- actor -->
@@ -126,12 +132,12 @@ flowchart LR
   <!-- host execution region -->
   <text class="tag" x="270" y="112">AI CODING HOST · TRUSTED EXECUTOR</text>
 
-  <rect class="capability" x="270" y="132" width="490" height="80" rx="13"/>
-  <circle cx="292" cy="157" r="5" fill="var(--capability-stroke)"/>
-  <text class="title" x="308" y="162">Generated host capability</text>
-  <text class="mono" x="515" y="174" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
-  <text class="mono" x="515" y="190" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
-  <text class="mono" x="515" y="206" text-anchor="middle">slipway-workflow</text>
+  <rect class="capability" x="270" y="128" width="490" height="94" rx="13"/>
+  <circle cx="292" cy="152" r="5" fill="var(--capability-stroke)"/>
+  <text class="title" x="308" y="157">Generated host capability</text>
+  <text class="mono" x="515" y="181" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
+  <text class="mono" x="515" y="197" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
+  <text class="mono" x="515" y="213" text-anchor="middle">slipway-workflow</text>
 
   <rect class="host" x="270" y="250" width="490" height="100" rx="15"/>
   <text class="title-big" x="515" y="285" text-anchor="middle">AI coding host</text>
@@ -157,9 +163,11 @@ flowchart LR
   <text class="tiny" x="626" y="453">host reads and</text>
   <text class="tiny" x="626" y="470">changes files</text>
 
-  <rect class="note" x="270" y="508" width="490" height="42" rx="10"/>
-  <text class="tiny" x="515" y="526" text-anchor="middle">Issue content is untrusted data, never instruction authority.</text>
-  <text class="tiny" x="515" y="542" text-anchor="middle">Model and GitHub credentials stay here and never reach Slipway.</text>
+  <rect class="note" x="270" y="498" width="490" height="84" rx="10"/>
+  <text class="tiny" x="515" y="516" text-anchor="middle">Issue content is untrusted data, never instruction authority.</text>
+  <text class="tiny" x="515" y="534" text-anchor="middle">Host holds/uses model and GitHub credentials; Slipway does not intentionally collect or manage them.</text>
+  <text class="tiny" x="515" y="552" text-anchor="middle">Goal, answer, Outcome, and command text may be sensitive and can persist;</text>
+  <text class="tiny" x="515" y="570" text-anchor="middle">no environment dumps are intentionally collected.</text>
 
   <!-- Slipway core region -->
   <text class="tag" x="880" y="112">SLIPWAY CORE · LOCAL STATE</text>
@@ -173,18 +181,19 @@ flowchart LR
   <text class="tiny" x="900" y="308">pins workspace identity</text>
   <text class="tiny" x="900" y="330">never calls a model or GitHub</text>
 
-  <rect class="store" x="880" y="389" width="260" height="161" rx="16"/>
+  <rect class="store" x="880" y="389" width="260" height="177" rx="16"/>
   <text class="title" x="1010" y="418" text-anchor="middle">Run store</text>
   <text class="mono" x="1010" y="439" text-anchor="middle">&lt;git-common-dir&gt;/slipway/runs</text>
   <line x1="900" y1="455" x2="1120" y2="455" stroke="var(--store-stroke)" stroke-opacity="0.45"/>
   <text class="sub" x="900" y="477">journal.jsonl · append-only</text>
   <text class="sub" x="900" y="497">run.json · replaceable projection</text>
   <text class="sub" x="900" y="517">materials · content-addressed</text>
-  <text class="tiny" x="900" y="539">owner-only permissions · no credentials</text>
+  <text class="tiny" x="900" y="535">owner-only permissions · text may be sensitive</text>
+  <text class="tiny" x="900" y="550">no environment dumps intentionally collected</text>
 
   <!-- edge labels last -->
-  <rect class="label-bg" x="150" y="238" width="104" height="17" rx="5"/>
-  <text class="edge-label" x="156" y="251">explicit invocation</text>
+  <rect class="label-bg" x="140" y="238" width="100" height="17" rx="5"/>
+  <text class="edge-label" x="146" y="251">explicit invocation</text>
 
   <rect class="label-bg" x="768" y="258" width="104" height="17" rx="5"/>
   <text class="edge-label" x="774" y="271">Run Outcome</text>
@@ -195,9 +204,9 @@ flowchart LR
   <rect class="label-bg" x="768" y="326" width="104" height="17" rx="5"/>
   <text class="edge-label" x="774" y="339">one Run Action</text>
 
-  <rect class="label-bg" x="786" y="404" width="70" height="17" rx="5"/>
-  <text class="edge-label" x="792" y="417">observes Git</text>
+  <rect class="label-bg" x="800" y="404" width="70" height="17" rx="5"/>
+  <text class="edge-label" x="806" y="417">observes Git</text>
 
-  <rect class="note" x="40" y="578" width="1120" height="30" rx="10"/>
-  <text class="sub" x="600" y="598" text-anchor="middle">Only Run-backed paths exchange Action/Outcome JSON · planning remains host-side · the CLI never calls a model or GitHub API</text>
+  <rect class="note" x="40" y="590" width="1120" height="30" rx="10"/>
+  <text class="sub" x="600" y="610" text-anchor="middle">Only Run-backed paths exchange Action/Outcome JSON · planning remains host-side · the CLI never calls a model or GitHub API</text>
 </svg>

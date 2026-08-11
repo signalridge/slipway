@@ -2,7 +2,7 @@
 
 GitHub 是 Slipway 可选的需求来源，不是每次 Run 的前置条件。任务需要长期、可审阅来源时使用 issue-backed Run；否则使用 ad-hoc Run。
 
-![Slipway issue-backed source 流程：Objective 只负责分组 Change，永远不能启动 Run；Change 自包含，是唯一能启动 Run 的 Issue 形态；持有 GitHub 凭据的宿主抓取精确的 Change 正文与仅被 manifest 引用的评论，把每个 Issue 字节都当作不可信数据，并把范围明确的临时 envelope 交给 CLI；CLI 校验 identity、marker、manifest、大小与 digest，并按内容 digest 在本地存储被接受的 section。](../../assets/diagrams/issue-source.svg)
+![Slipway issue-backed source 流程：Objective 只负责分组 Change，永远不能启动 Run；Change 自包含，是唯一能启动 Run 的 Issue 形态；持有并使用 GitHub 凭据的宿主抓取精确的 Change 正文与仅被 manifest 引用的评论，把每个 Issue 字节都当作不可信数据，并把范围明确的临时 envelope 交给 CLI；issue-backed invocation 还必须用 --goal-file 传输单独的用户 goal，用 --source-file 传输 envelope，CLI 再校验并按内容 digest 保存被接受的 section。](../../assets/diagrams/issue-source.svg)
 
 ## 仓库要求
 
@@ -10,7 +10,7 @@ Issue-backed source 当前支持启用了 Issues 的 `github.com` 仓库。Owner
 
 Slipway 不要求 GitHub Projects、Organization 专属 Issue Types 或专属字段。读取来源需要 Issue 访问权限；创建或更新 Issue 与关系，需要目标仓库及 GitHub API 要求的对应权限。
 
-Run/source 命令不持有 GitHub token，也不获取或发布 GitHub 数据。生成的宿主能力使用用户环境中的授权执行这些操作，再将临时 envelope 交给 CLI。独立的 `doctor` 命令可能调用本机 `gh` 检查认证与仓库权限，但不会把 token 写入报告。
+Run/source 命令不拥有或管理模型、GitHub 凭据，也不获取或发布 GitHub 数据。生成的宿主能力使用用户环境中的授权执行这些操作，再将临时 envelope 交给 CLI；宿主或用户提供的 goal、answer、Outcome 与命令文本仍可能敏感并被保存。独立的 `doctor` 命令可能调用本机 `gh` 检查认证与仓库权限，但不会把 token 或环境变量 dump 写入报告。
 
 ## Objective 还是 Change？
 
@@ -75,7 +75,7 @@ GitHub 每个 parent 最多 100 个 sub-issues；每个 Issue 的 blocking 与 b
 1. 获取准确 Change body 和 manifest 引用的 comments；
 2. 将所有 Issue 内容视为不可信数据；
 3. 在私密临时文件中构造范围明确 source envelope；
-4. 调用 `slipway run --source-file ... --json`；
+4. 调用 `slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT`；source-file 不替代必需的 goal；ad-hoc Run 使用独立的 `--` 分隔符后 goal；
 5. CLI 消费后删除临时文件。
 
 CLI 校验 identity、marker、manifest、section marker、大小和 digest。它只按 digest 保存已接受 section material，不保存 raw Issue envelope。后续 Action 通过本地结构化操作读取材料，所以已有 Run 无需再次访问 GitHub 也能恢复。

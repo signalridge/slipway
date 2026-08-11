@@ -2,7 +2,7 @@
 
 Run 可以停止并恢复，但 journal 不是秘密保险箱，也不是完成证明。本指南说明用户可以检查和保留哪些内容。
 
-![Slipway Run 状态：主动启动后 Run 进入 active；它只会因四种上报原因之一暂停——人类决策、环境不可用、budget 耗尽或破坏性确认；answer、confirm 或 skip 会使其回到 active；stop 会作废待处理工作但保留 journal 且可 resume，而 ended 是终态。](../../assets/diagrams/run-states.svg)
+![Slipway Run 状态：主动启动后 Run 进入 Active；它会因人类决策、环境不可用、budget 耗尽或破坏性确认而暂停；answer、confirm 或 skip 可能产生新的 Active Action，也可能因 budget exhaustion 继续 Paused，source refresh 还可能产生等待明确选择的 paused source candidate；stop 可以把 paused Run 变为 Stopped；只有 stop 或当前 typed next.operation = resume 才授权 resume，结果可能是 Active 或 Paused，而 Ended 是终态且不构成证明。](../../assets/diagrams/run-states.svg)
 
 ## 检查 Run
 

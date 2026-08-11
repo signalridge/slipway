@@ -4,7 +4,7 @@
 
 规范契约是带版本路径的 [machine protocol schema](../../reference/v2/machine-protocol.schema.json) 与 [source envelope schema](../../reference/v2/source-envelope.schema.json)。URL 中的版本必须与 JSON 的 `contract_version` 或 `source_version` 同步；项目有意不发布无版本兼容别名。
 
-![Slipway machine protocol 交换：宿主启动 Run 并收到第一个 orient Action 与结构化 next；每个 Action 由宿主执行并提交一份严格 Outcome，CLI 校验后追加 journal 事件、独立观察 Git，再返回下一个 Action；needs_input 会使 Run 暂停，直到宿主 answer 或 skip；主动 resume 会重新校验 workspace identity 并作废过期工作。](../../assets/diagrams/protocol-sequence.svg)
+![Slipway machine protocol 交换：宿主启动 Run 并收到第一个 orient Action 与结构化 next；每个 Action 提交一份严格 Outcome 后，CLI 依次校验、独立观察 Git 并推导下一操作、构建并追加 journal 事件、替换 projection，最后返回下一个 Action；可回答的 decision 或 destructive pause 使用 answer 或 skip，只有 stop 之后或当前 typed next.operation 为 resume variant 时才授权 resume，结果可能是 Active 或 Paused，包括等待选择的 paused source candidate。](../../assets/diagrams/protocol-sequence.svg)
 
 ## 前置条件
 

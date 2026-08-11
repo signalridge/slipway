@@ -83,4 +83,4 @@ Documentation rules:
 
 ## Product constraints
 
-Changes must preserve explicit invocation, user control, facts-before-questions, truthful activity reporting, read-only Review, recoverable journals, ownership-aware generated files, and a network/credential-free core. If a public surface changes, update code, schemas, generated capabilities, tests, and all three documentation locales together.
+Changes must preserve explicit invocation, user control, facts-before-questions, truthful activity reporting, read-only Review, recoverable journals, ownership-aware generated files, and a Run/source core that does not access the network, own or manage provider credentials, or intentionally collect them. If a public surface changes, update code, schemas, generated capabilities, tests, and all three documentation locales together.

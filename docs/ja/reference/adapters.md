@@ -74,10 +74,12 @@ slipway uninstall --tool claude
 
 ## Ownership safety
 
-![Slipway の アダプター install と ownership safety: install は host-local な capability file だけを書き、その path と SHA-256 を ホスト ごとの ownership manifest に記録します。この manifest だけが以後の managed file 変更を authorize します。Refresh と uninstall は記録された各 file を hash によって pristine・missing・modified に再分類し、pristine と missing だけを変更し、modified・unknown・unsafe なものは理由を報告して保全または拒否します。](../../assets/diagrams/install-ownership.svg)
+![Slipway の アダプター install と ownership safety: install は host-local な capability file だけを書き、その path と SHA-256 を ホスト ごとの ownership manifest に記録します。この manifest だけが以後の managed file 変更を authorize します。Refresh と uninstall は各 claim を pristine・missing・ordinary user-modified・stale generated に分類し、pristine と missing だけを変更します。通常の user edit は preserve し、記録 hash が current version の生成 bytes と一致しない stale claim では file を preserve したまま claim を取り下げます。](../../assets/diagrams/install-ownership.svg)
 
 各 ホスト root には repository-relative path と SHA-256 を記録した Slipway ownership manifest があります。Refresh と uninstall は記録 hash と一致する file だけを変更します。
 
-User-modified capability、unknown file、modified sentinel、malformed manifest、path escape、duplicate claim、unsafe symlink は決して静かに managed content になりません。操作は preserve または reject し理由を報告します。Transaction recovery artifact は通常の preserved user file とは別に報告されます。
+Ordinary user-modified file は current bytes が記録された claim と異なり、current version が生成した bytes でもない file です。これは preserve され、報告され、overwrite/delete されません。Stale generated claim はこれとは異なり、記録 hash が current version の生成 bytes と一致しません。この file も preserve され、overwrite/delete されず、stale claim が取り下げられます。再生成するには preserve された file を手動で削除してから `slipway install --refresh` を実行します。
+
+Unknown file、modified sentinel、malformed manifest、path escape、duplicate claim、unsafe symlink は決して静かに managed content になりません。操作は preserve または reject し理由を報告します。Transaction recovery artifact は通常の preserved user file とは別に報告されます。
 
 Generated sentinel は installation health を示すだけで、ownership ではありません。Managed-file 変更を authorize できるのは manifest だけで、unsupported manifest version は mutation 前に失敗します。

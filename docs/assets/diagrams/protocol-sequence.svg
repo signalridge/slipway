@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="protocol-sequence-title protocol-sequence-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 880" role="img" aria-labelledby="protocol-sequence-title protocol-sequence-desc">
   <title id="protocol-sequence-title">Slipway machine protocol exchange</title>
-  <desc id="protocol-sequence-desc">One host integration lifecycle in contract version 2. The host starts a Run and receives the first orient Action with a structured next operation. For every Action the host performs the work and submits one strict Outcome, and the CLI validates it, appends a journal event, observes Git independently, and returns the following Action. A needs_input Outcome pauses the Run until the host answers or skips; an explicit resume revalidates workspace identity and voids stale work. The CLI never calls a model or GitHub inside this exchange. An ended Run returns operation none with an empty variant list.</desc>
+  <desc id="protocol-sequence-desc">One host integration lifecycle in contract version 2. The host starts a Run and receives the first orient Action with a structured next operation. For every Action the host performs the work and submits one strict Outcome. The CLI strictly validates it, observes Git independently and derives the next operation, builds and appends the journal event, replaces the projection, and only then returns the following Action. Answerable decision and destructive pauses expose answer or skip; resume is available only after stop or when the current typed next.operation is a resume variant, such as budget, environment, or source-candidate recovery. The CLI never calls a model or GitHub inside this exchange. An ended Run returns operation none with an empty variant list.</desc>
   <metadata id="mermaid-source"><![CDATA[
 sequenceDiagram
   actor User
@@ -17,24 +17,27 @@ sequenceDiagram
     Host->>Host: perform the one bounded Action
     Host->>CLI: protocol submit --run --action (--outcome-file | --outcome-stdin)
     CLI->>CLI: strict validate · check action_kind + idempotency
-    CLI->>Store: append journal event, then replace projection
-    CLI->>CLI: observe Git independently
-    CLI-->>Host: next Action + next{operation}
+    CLI->>CLI: observe Git independently · derive next operation
+    CLI->>Store: build and append journal event
+    CLI->>Store: replace projection
+    CLI-->>Host: return next Action + next{operation}
   end
 
-  alt Outcome status = needs_input
-    CLI-->>Host: pause{decision_required | destructive_confirmation_required | environment_unavailable}
+  alt current typed next.operation = answer
+    CLI-->>Host: pause{decision_required | destructive_confirmation_required}
     Host->>CLI: protocol answer --text-file TEXT_FILE
-    Note over Host,CLI: destructive scope needs --confirm-destructive --scope-sha256; note uses optional --text-file
-  else user skips
+    Note over Host,CLI: destructive scope needs --confirm-destructive --scope-sha256 and an optional --text-file note
+  else user skips an Action or environment pause
     Host->>CLI: protocol skip --run --action
   end
 
-  opt after stop, pause, or budget exhaustion
+  opt after stop, or when the current typed next.operation is resume
     Host->>CLI: protocol resume RUN --root ROOT [--budget N]
     CLI->>CLI: revalidate workspace identity · void stale work
-    CLI-->>Host: fresh orient Action
+    CLI-->>Host: resulting typed state may be Active or a paused source candidate
   end
+
+  Note over Host,CLI: Answerable decision/destructive pauses use answer or skip, not resume. Only the current typed next variant authorizes resume.
 
   CLI-->>Host: ended: next{operation: none, variants: []}
   Note over CLI,Store: ended means the automatic Action queue is empty, nothing more
@@ -115,7 +118,16 @@ sequenceDiagram
       .msg-pause { fill: none; stroke: var(--pause-stroke); stroke-width: 1.9; }
       .msg-self { fill: none; stroke: var(--line); stroke-width: 1.7; }
       .msg-label { fill: var(--text); font-size: 10px; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .band-chip { fill: var(--band); }
+      .msg,
+      .msg-main,
+      .msg-action,
+      .msg-pause,
+      .msg-self {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
       .term-text { fill: var(--term-text); font-size: 12px; font-weight: 700; }
     </style>
@@ -137,10 +149,10 @@ sequenceDiagram
   <text class="sub" x="40" y="58">contract version 2 · one Action at a time · the CLI calls no model and no GitHub inside this exchange</text>
 
   <!-- lifelines -->
-  <line class="lifeline" x1="118" y1="150" x2="118" y2="662"/>
-  <line class="lifeline" x1="393" y1="150" x2="393" y2="662"/>
-  <line class="lifeline" x1="726" y1="150" x2="726" y2="662"/>
-  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="662"/>
+  <line class="lifeline" x1="118" y1="150" x2="118" y2="756"/>
+  <line class="lifeline" x1="393" y1="150" x2="393" y2="756"/>
+  <line class="lifeline" x1="726" y1="150" x2="726" y2="756"/>
+  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="756"/>
 
   <!-- participants -->
   <rect class="entry" x="48" y="88" width="140" height="46" rx="12"/>
@@ -162,17 +174,19 @@ sequenceDiagram
   <line class="msg" x1="118" y1="172" x2="386" y2="172" marker-end="url(#ps-arrow)"/>
   <text class="msg-label" x="128" y="166">explicitly invokes the slipway-run capability</text>
 
-  <line class="msg" x1="393" y1="204" x2="719" y2="204" marker-end="url(#ps-arrow)"/>
-  <text class="mono" x="403" y="198">slipway run … --goal-file GOAL_FILE [--source-file SOURCE_FILE]</text>
+  <line class="msg" x1="393" y1="216" x2="719" y2="216" marker-end="url(#ps-arrow)"/>
+  <text class="mono" x="403" y="190">slipway run … --goal-file GOAL_FILE</text>
+  <text class="mono" x="403" y="204">[--source-file SOURCE_FILE]</text>
 
-  <line class="msg" x1="726" y1="234" x2="1055" y2="234" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="736" y="228">create Run · pin workspace identity</text>
+  <line class="msg" x1="726" y1="246" x2="1055" y2="246" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="736" y="240">create Run · pin workspace identity</text>
 
-  <path class="msg-action" d="M719 264 H400" marker-end="url(#ps-arrow-action)"/>
-  <text class="msg-label" x="410" y="258">first orient Action + structured next</text>
+  <path class="msg-action" d="M719 276 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="270">first orient Action + structured next</text>
 
   <!-- 2. action loop band -->
-  <rect class="band" x="270" y="286" width="880" height="214" rx="14"/>
+  <rect class="band" x="270" y="286" width="880" height="228" rx="14"/>
+  <rect class="band-chip" x="282" y="294" width="362" height="18" rx="5"/>
   <text class="tag" x="288" y="306">ACTION LOOP · REPEATS UNTIL PAUSE, STOP, OR ENDED</text>
 
   <path class="msg-self" d="M393 322 H455 V344 H400" marker-end="url(#ps-arrow)"/>
@@ -182,36 +196,50 @@ sequenceDiagram
   <text class="mono" x="403" y="366">protocol submit --run RUN --action ACTION</text>
   <text class="mono-sub" x="403" y="384">--outcome-file FILE | --outcome-stdin</text>
 
-  <path class="msg-self" d="M726 400 H788 V420 H733" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="798" y="414">strict validate · action_kind · idempotency</text>
+  <path class="msg-self" d="M726 392 H788 V408 H733" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="798" y="404">strict validate · action_kind · idempotency</text>
 
-  <line class="msg" x1="726" y1="440" x2="1055" y2="440" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="736" y="434">append journal event, then replace projection</text>
+  <path class="msg-self" d="M726 420 H788 V436 H733" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="798" y="432">observe Git independently · derive next</text>
 
-  <path class="msg-action" d="M719 476 H400" marker-end="url(#ps-arrow-action)"/>
-  <text class="msg-label" x="410" y="470">next Action + next{operation}</text>
-  <text class="tiny" x="410" y="492">the CLI observes Git independently before deciding</text>
+  <line class="msg" x1="726" y1="454" x2="1055" y2="454" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="798" y="448">build + append journal event</text>
+
+  <line class="msg-main" x1="726" y1="478" x2="1055" y2="478" marker-end="url(#ps-arrow-main)"/>
+  <text class="msg-label" x="736" y="472">replace projection</text>
+
+  <path class="msg-action" d="M719 502 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="496">return next Action + next{operation}</text>
 
   <!-- 3. pause band -->
-  <rect class="band" x="270" y="516" width="880" height="98" rx="14"/>
-  <text class="tag" x="288" y="536">IF THE OUTCOME IS needs_input · OR THE USER SKIPS</text>
+  <rect class="band" x="270" y="530" width="880" height="100" rx="14"/>
+  <rect class="band-chip" x="282" y="538" width="320" height="18" rx="5"/>
+  <text class="tag" x="288" y="550">RECOVERY FOLLOWS THE CURRENT TYPED `next`</text>
 
-  <path class="msg-pause" d="M719 560 H400" marker-end="url(#ps-arrow-pause)"/>
-  <text class="msg-label" x="410" y="554">pause: decision_required · destructive_confirmation_required · environment_unavailable</text>
+  <path class="msg-pause" d="M719 574 H400" marker-end="url(#ps-arrow-pause)"/>
+  <text class="msg-label" x="410" y="568">answerable decision / destructive pause → answer or skip</text>
 
-  <line class="msg-pause" x1="393" y1="590" x2="719" y2="590" marker-end="url(#ps-arrow-pause)"/>
-  <text class="mono" x="403" y="584">protocol answer --text-file TEXT_FILE   ·   protocol skip</text>
-  <text class="tiny" x="403" y="606">destructive scope needs --confirm-destructive --scope-sha256; note uses optional --text-file</text>
+  <line class="msg-pause" x1="393" y1="608" x2="719" y2="608" marker-end="url(#ps-arrow-pause)"/>
+  <text class="mono" x="403" y="588">protocol answer --text-file</text>
+  <text class="mono" x="403" y="602">TEXT_FILE · protocol skip</text>
+  <rect class="band-chip" x="786" y="592" width="362" height="15" rx="4"/>
+  <text class="tiny" x="790" y="602">answer/confirm/skip can yield Active or remain Paused on budget exhaustion</text>
 
   <!-- 4. resume -->
-  <line class="msg" x1="393" y1="638" x2="719" y2="638" marker-end="url(#ps-arrow)"/>
-  <text class="mono" x="403" y="632">protocol resume RUN --root ROOT [--budget N]</text>
-  <text class="tiny" x="403" y="652">revalidates workspace identity · voids stale Action IDs, answers, and destructive grants</text>
+  <line class="msg" x1="393" y1="654" x2="719" y2="654" marker-end="url(#ps-arrow)"/>
+  <text class="mono" x="403" y="648">protocol resume RUN --root ROOT [--budget N]</text>
+  <text class="tiny" x="403" y="670">only after stop or when next.operation = resume;</text>
+  <text class="tiny" x="403" y="686">revalidates identity and voids stale work</text>
+  <text class="tiny" x="403" y="702">budget/environment/source-candidate variants may</text>
+  <text class="tiny" x="403" y="718">produce Active or Paused</text>
 
-  <!-- ended -->
-  <rect x="616" y="666" width="220" height="34" rx="10" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
-  <text class="term-text" x="726" y="688" text-anchor="middle">next{operation: "none"}</text>
+  <path class="msg-action" d="M719 750 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="744">ended · next{operation: none, variants: []}</text>
 
-  <rect class="note" x="40" y="712" width="1120" height="34" rx="10"/>
-  <text class="sub" x="60" y="734">Drive the typed `next` variants: insert values as separate argv elements in schema order · never parse or concatenate a rendered display command.</text>
+  <!-- ended is below the message rail, so the terminal state stays legible -->
+  <rect x="616" y="766" width="220" height="34" rx="10" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
+  <text class="term-text" x="726" y="788" text-anchor="middle">next{operation: "none"}</text>
+
+  <rect class="note" x="40" y="828" width="1120" height="34" rx="10"/>
+  <text class="sub" x="60" y="850">Drive the typed `next` variants: insert values as separate argv elements in schema order · never parse or concatenate a rendered display command.</text>
 </svg>

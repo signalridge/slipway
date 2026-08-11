@@ -2,7 +2,7 @@
 
 Slipway separates user intent, host execution, and durable Run state. These terms are enough to understand the product without reading the machine protocol.
 
-![Slipway Run lifecycle: explicit start enters a one-Action-at-a-time Action and Outcome loop; user controls can skip, pause, stop, or resume; ended only means the automatic Action queue is empty.](../../assets/diagrams/lifecycle.svg)
+![Slipway Run lifecycle: explicit start enters a one-Action-at-a-time Action and Outcome loop; after validation and independent Git observation the CLI follows typed next; answer, confirm, or skip may yield Active or remain Paused on budget exhaustion, source refresh may create a paused candidate, stop can move Paused to Stopped, and only stop or current next.operation = resume authorizes resume, which may yield Active or Paused; ended only means the automatic Action queue is empty.](../../assets/diagrams/lifecycle.svg)
 
 ## Run
 

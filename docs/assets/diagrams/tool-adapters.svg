@@ -82,7 +82,13 @@ flowchart TB
       .flow-main { fill: none; stroke: var(--entry-stroke); stroke-width: 2.2; }
       .flow-protocol { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
       .edge-label { fill: var(--muted); font-size: 9.5px; font-style: italic; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .flow,
+      .flow-main,
+      .flow-protocol {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
     </style>
     <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -220,11 +226,11 @@ flowchart TB
   <rect class="verify" x="800" y="700" width="240" height="100" rx="16"/>
   <text class="title-big" x="920" y="735" text-anchor="middle">slipway CLI</text>
   <text class="sub" x="920" y="758" text-anchor="middle">validation · scheduling · Run state</text>
-  <text class="tiny" x="920" y="779" text-anchor="middle">no model or GitHub credentials</text>
+  <text class="tiny" x="920" y="779" text-anchor="middle">does not own/manage provider credentials</text>
 
-  <rect class="label-bg" x="666" y="724" width="118" height="38" rx="6"/>
-  <text class="edge-label" x="672" y="739">Run Action / Outcome</text>
-  <text class="edge-label" x="672" y="753">versioned JSON</text>
+  <rect class="label-bg" x="666" y="704" width="118" height="38" rx="6"/>
+  <text class="edge-label" x="672" y="719">Run Action / Outcome</text>
+  <text class="edge-label" x="672" y="733">versioned JSON</text>
 
   <rect class="note" x="40" y="835" width="1040" height="43" rx="11"/>
   <text class="sub" x="560" y="861" text-anchor="middle">Generated files adapt host-native invocation; only Run-backed paths call the CLI, which remains the single Run-state authority.</text>

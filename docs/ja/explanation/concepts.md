@@ -2,7 +2,7 @@
 
 Slipway は user intent、ホスト execution、durable Run state を分離します。Machine protocol を読む前に、以下の用語だけで product を理解できます。
 
-![Slipway Run lifecycle: explicit start から1回1 Actionの Action/Outcome loopに入り、userは skip、pause、stop、resumeでき、endedはautomatic Action queueが空であることだけを表す。](../../assets/diagrams/lifecycle.svg)
+![Slipway Run lifecycle: explicit start から1回1 Action の Action/Outcome loop に入り、CLI は validation と Git の独立観測の後に typed next に従います。answer・confirm・skip は Active になる場合も budget exhaustion で Paused のままの場合もあり、source refresh は paused candidate を作る場合があります。stop は Paused を Stopped にでき、stop 後または current next.operation = resume のときだけ resume が認可され、結果は Active または Paused になり得ます。ended は automatic Action queue が空であることだけを表します。](../../assets/diagrams/lifecycle.svg)
 
 ## Run
 
