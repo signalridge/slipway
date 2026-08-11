@@ -101,7 +101,13 @@ flowchart LR
       .flow-main { fill: none; stroke: var(--verify-stroke); stroke-width: 2.2; }
       .flow-deny { fill: none; stroke: var(--stop-stroke); stroke-width: 2; stroke-dasharray: 7 4; }
       .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .flow,
+      .flow-main,
+      .flow-deny {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .deny-mark { stroke: var(--stop-stroke); stroke-width: 2.4; fill: none; }
     </style>
     <marker id="tb-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -190,8 +196,8 @@ flowchart LR
 
   <!-- denied path: issue content -> CLI authority -->
   <path class="flow-deny" d="M205 378 V416 H980 V378"/>
-  <rect class="label-bg" x="614" y="406" width="252" height="20" rx="5"/>
-  <text class="tiny" x="622" y="420">Issue text never becomes authority on this path</text>
+  <rect class="label-bg" x="614" y="384" width="252" height="20" rx="5"/>
+  <text class="tiny" x="622" y="398">Issue text never becomes authority on this path</text>
   <circle cx="592" cy="416" r="13" fill="var(--band)" stroke="var(--stop-stroke)" stroke-width="2.4"/>
   <line class="deny-mark" x1="584" y1="408" x2="600" y2="424"/>
   <line class="deny-mark" x1="600" y1="408" x2="584" y2="424"/>

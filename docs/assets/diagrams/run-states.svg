@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="run-states-title run-states-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="run-states-title run-states-desc">
   <title id="run-states-title">Slipway Run states and recovery</title>
   <desc id="run-states-desc">A Run is created only by an explicit user start and becomes active. An active Run pauses for one of four reported reasons: a human decision, an unavailable environment dependency, an exhausted Action budget, or confirmation of an exact destructive scope. A changed or unavailable issue source pauses as a decision or creates a paused source candidate awaiting an explicit choice. Answering, confirming, or skipping can produce an Active next Action or leave the Run Paused on budget exhaustion. Stop invalidates pending work but keeps the journal and can move a paused Run to Stopped. Resume is authorized only after stop or when the current typed next.operation is a resume variant; it may produce Active or Paused depending on the resulting typed state. Ended is terminal and cannot be resumed. Every resume revalidates the original worktree identity and voids stale work.</desc>
   <metadata id="mermaid-source"><![CDATA[
@@ -108,7 +108,14 @@ stateDiagram-v2
       .flow-pause { fill: none; stroke: var(--pause-stroke); stroke-width: 1.9; }
       .flow-stop { fill: none; stroke: var(--stop-stroke); stroke-width: 1.9; }
       .edge-label { fill: var(--muted); font-size: 9px; font-style: italic; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .flow,
+      .flow-main,
+      .flow-pause,
+      .flow-stop {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .term-text { fill: var(--term-text); font-size: 16px; font-weight: 700; }
       .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
     </style>
@@ -129,88 +136,87 @@ stateDiagram-v2
   <text class="title-big" x="40" y="36">Slipway · Run states and recovery</text>
   <text class="sub" x="40" y="58">explicit start · typed `next` controls recovery · stop keeps the journal · ended is terminal</text>
 
-  <!-- edges painted before nodes -->
-  <line class="flow" x1="96" y1="196" x2="169" y2="196" marker-end="url(#rs-arrow)"/>
-  <path class="flow-pause" d="M400 175 H693" marker-end="url(#rs-arrow-pause)"/>
-  <path class="flow-main" d="M700 228 H407" marker-end="url(#rs-arrow-main)"/>
-  <path class="flow-stop" d="M270 274 V393" marker-end="url(#rs-arrow-stop)"/>
-  <path class="flow-stop" d="M700 250 H620 V370 H470 V400" marker-end="url(#rs-arrow-stop)"/>
-  <path class="flow-main" d="M360 400 V281" marker-end="url(#rs-arrow-main)"/>
-  <path class="flow-pause" d="M470 455 H520 V510 H1040 V330 H990 V302" marker-end="url(#rs-arrow-pause)"/>
-  <path class="flow-pause" d="M990 180 C1060 180 1060 285 990 285" marker-end="url(#rs-arrow-pause)"/>
-  <path class="flow" d="M400 262 H520 V375 H680 V400 H700" marker-end="url(#rs-arrow)"/>
+  <!-- connectors use dedicated outer rails; nodes are painted afterwards -->
+  <line class="flow" x1="91" y1="195" x2="150" y2="195" marker-end="url(#rs-arrow)"/>
+  <path class="flow-pause" d="M420 205 H620" marker-end="url(#rs-arrow-pause)"/>
+  <path class="flow-main" d="M620 255 H500 V235 H420" marker-end="url(#rs-arrow-main)"/>
+  <path class="flow-stop" d="M250 275 V390 H310 V430" marker-end="url(#rs-arrow-stop)"/>
+  <path class="flow-stop" d="M700 315 H1040 V405 H430 V430" marker-end="url(#rs-arrow-stop)"/>
+  <path class="flow-pause" d="M470 475 H520 V350 H900 V315" marker-end="url(#rs-arrow-pause)"/>
+  <path class="flow-main" d="M350 135 V80 H1100 V430 H910" marker-end="url(#rs-arrow-main)"/>
+  <path class="flow-main" d="M150 475 H30 V110 H285 V135" marker-end="url(#rs-arrow-main)"/>
+  <path class="flow-pause" d="M940 170 H1150 V260 H940" marker-end="url(#rs-arrow-pause)"/>
 
   <!-- explicit start -->
-  <circle cx="65" cy="196" r="26" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
-  <circle cx="65" cy="196" r="7" fill="var(--entry-stroke)"/>
-  <text class="sub" x="65" y="243" text-anchor="middle">explicit start</text>
+  <circle cx="65" cy="195" r="26" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
+  <circle cx="65" cy="195" r="7" fill="var(--entry-stroke)"/>
+  <text class="sub" x="65" y="242" text-anchor="middle">explicit start</text>
   <text class="mono-tiny" x="65" y="258" text-anchor="middle">slipway run</text>
 
-  <!-- Active -->
-  <rect class="active" x="176" y="150" width="224" height="124" rx="18"/>
-  <text class="state-name" x="288" y="186" text-anchor="middle">Active</text>
-  <text class="sub" x="288" y="210" text-anchor="middle">one Action outstanding</text>
-  <text class="sub" x="288" y="228" text-anchor="middle">budget decrements per Action</text>
-  <text class="tiny" x="288" y="252" text-anchor="middle">host performs work, submits Outcome</text>
+  <!-- states -->
+  <rect class="active" x="150" y="135" width="270" height="140" rx="18"/>
+  <text class="state-name" x="285" y="171" text-anchor="middle">Active</text>
+  <text class="sub" x="285" y="195" text-anchor="middle">one Action outstanding</text>
+  <text class="sub" x="285" y="214" text-anchor="middle">budget decrements per Action</text>
+  <text class="tiny" x="285" y="240" text-anchor="middle">host performs work, submits Outcome</text>
+  <text class="tiny" x="285" y="258" text-anchor="middle">resume revalidates worktree identity</text>
 
-  <!-- Paused -->
-  <rect class="pause" x="700" y="128" width="290" height="174" rx="18"/>
-  <text class="state-name" x="845" y="162" text-anchor="middle">Paused</text>
-  <text class="tag" x="845" y="182" text-anchor="middle">FOUR REPORTED REASONS</text>
-  <text class="mono-tiny" x="845" y="203" text-anchor="middle">decision_required</text>
-  <text class="mono-tiny" x="845" y="220" text-anchor="middle">environment_unavailable</text>
-  <text class="mono-tiny" x="845" y="237" text-anchor="middle">destructive_confirmation_required</text>
-  <text class="mono-tiny" x="845" y="254" text-anchor="middle">budget_exhausted · CLI-only</text>
-  <text class="tiny" x="845" y="269" text-anchor="middle">source refresh → paused candidate choice</text>
-  <text class="tiny" x="845" y="285" text-anchor="middle">answer/confirm/skip may remain Paused</text>
+  <rect class="pause" x="620" y="115" width="320" height="200" rx="18"/>
+  <text class="state-name" x="780" y="151" text-anchor="middle">Paused</text>
+  <text class="tag" x="780" y="171" text-anchor="middle">FOUR REPORTED REASONS</text>
+  <text class="mono-tiny" x="780" y="193" text-anchor="middle">decision_required</text>
+  <text class="mono-tiny" x="780" y="210" text-anchor="middle">environment_unavailable</text>
+  <text class="mono-tiny" x="780" y="227" text-anchor="middle">destructive_confirmation_required</text>
+  <text class="mono-tiny" x="780" y="244" text-anchor="middle">budget_exhausted · CLI-only</text>
+  <text class="tiny" x="780" y="270" text-anchor="middle">answer/confirm/skip may remain Paused</text>
+  <text class="tiny" x="780" y="288" text-anchor="middle">source refresh → paused candidate choice</text>
+  <text class="tiny" x="780" y="306" text-anchor="middle">answerable pauses use answer or skip, not resume</text>
 
-  <!-- Stopped -->
-  <rect class="stop" x="176" y="400" width="294" height="92" rx="18"/>
-  <text class="state-name" x="323" y="434" text-anchor="middle">Stopped</text>
-  <text class="sub" x="323" y="457" text-anchor="middle">pending work invalidated · journal kept</text>
-  <text class="tiny" x="323" y="477" text-anchor="middle">stop · reorder · manual takeover</text>
+  <rect class="stop" x="150" y="430" width="320" height="90" rx="18"/>
+  <text class="state-name" x="310" y="464" text-anchor="middle">Stopped</text>
+  <text class="sub" x="310" y="486" text-anchor="middle">pending work invalidated · journal kept</text>
+  <text class="tiny" x="310" y="504" text-anchor="middle">stop · reorder · manual takeover</text>
 
-  <!-- Ended -->
-  <rect x="700" y="400" width="290" height="92" rx="18" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="2"/>
-  <text class="term-text" x="845" y="434" text-anchor="middle">Ended</text>
-  <text x="845" y="457" fill="var(--term-text)" opacity="0.78" font-size="11" text-anchor="middle">automatic Action queue empty</text>
-  <text x="845" y="477" fill="var(--term-text)" opacity="0.78" font-size="10" text-anchor="middle">terminal · resume is rejected</text>
+  <rect x="760" y="430" width="300" height="90" rx="18" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="2"/>
+  <text class="term-text" x="910" y="464" text-anchor="middle">Ended</text>
+  <text x="910" y="486" fill="var(--term-text)" opacity="0.78" font-size="11" text-anchor="middle">automatic Action queue empty</text>
+  <text x="910" y="504" fill="var(--term-text)" opacity="0.78" font-size="10" text-anchor="middle">terminal · resume is rejected</text>
 
-  <!-- edge labels -->
-  <rect class="label-bg" x="452" y="157" width="196" height="18" rx="5"/>
-  <text class="edge-label" x="458" y="170">needs_input · or CLI budget exhaustion</text>
+  <!-- labels sit beside rails, never on top of a connector -->
+  <rect class="label-bg" x="438" y="183" width="170" height="18" rx="5"/>
+  <text class="edge-label" x="444" y="196">needs_input / budget exhausted</text>
 
-  <rect class="label-bg" x="452" y="210" width="238" height="18" rx="5"/>
-  <text class="edge-label" x="458" y="223">answer/confirm/skip → Active only if next=action</text>
+  <rect class="label-bg" x="438" y="217" width="230" height="18" rx="5"/>
+  <text class="edge-label" x="444" y="230">answer / confirm / skip → Active</text>
 
-  <rect class="label-bg" x="1000" y="238" width="160" height="18" rx="5"/>
-  <text class="edge-label" x="1006" y="251">result may stay Paused</text>
+  <rect class="label-bg" x="948" y="212" width="170" height="18" rx="5"/>
+  <text class="edge-label" x="954" y="225">result may stay Paused</text>
 
-  <rect class="label-bg" x="146" y="322" width="176" height="18" rx="5"/>
-  <text class="edge-label" x="152" y="335">slipway stop &lt;run-id&gt; · Active or Paused</text>
+  <rect class="label-bg" x="155" y="366" width="180" height="18" rx="5"/>
+  <text class="edge-label" x="161" y="379">stop · reorder · take over</text>
 
-  <rect class="label-bg" x="368" y="322" width="220" height="18" rx="5"/>
-  <text class="edge-label" x="374" y="335">typed resume variant → Active if next=action</text>
+  <rect class="label-bg" x="665" y="314" width="220" height="18" rx="5"/>
+  <text class="edge-label" x="671" y="327">resume source refresh → Paused candidate</text>
 
-  <rect class="label-bg" x="474" y="358" width="202" height="18" rx="5"/>
-  <text class="edge-label" x="480" y="371">source refresh → Paused candidate</text>
+  <rect class="label-bg" x="110" y="316" width="210" height="18" rx="5"/>
+  <text class="edge-label" x="116" y="329">typed resume → Active</text>
 
-  <rect class="label-bg" x="568" y="336" width="152" height="18" rx="5"/>
-  <text class="edge-label" x="574" y="349">automatic queue empty</text>
+  <rect class="label-bg" x="760" y="62" width="200" height="18" rx="5"/>
+  <text class="edge-label" x="766" y="75">automatic queue empty</text>
 
-  <!-- resume invariants note -->
-  <rect class="band" x="40" y="530" width="546" height="140" rx="14"/>
-  <text class="tag" x="60" y="554">EVERY AUTHORIZED RESUME REVALIDATES</text>
-  <text class="sub" x="60" y="578">· only stop or the current typed `next.operation = resume` authorizes protocol resume</text>
-  <text class="sub" x="60" y="598">· the original worktree identity: root, per-worktree Git dir, Git common dir</text>
-  <text class="sub" x="60" y="618">· stale Action IDs, answers, source candidates, and destructive grants are voided</text>
-  <text class="sub" x="60" y="638">· the resulting typed state may be Active or Paused; budget replacement applies only on resume</text>
-  <text class="sub" x="60" y="658">· omitted --budget preserves positive remainder; zero replenishes to max(initial, 3)</text>
+  <!-- invariants -->
+  <rect class="band" x="40" y="570" width="546" height="140" rx="14"/>
+  <text class="tag" x="60" y="594">EVERY AUTHORIZED RESUME REVALIDATES</text>
+  <text class="sub" x="60" y="618">· only stop or current typed `next.operation = resume` authorizes protocol resume</text>
+  <text class="sub" x="60" y="638">· root, per-worktree Git dir, and Git common dir must still match</text>
+  <text class="sub" x="60" y="658">· stale Action IDs, answers, source candidates, and grants are voided</text>
+  <text class="sub" x="60" y="678">· the resulting typed state may be Active or Paused</text>
+  <text class="sub" x="60" y="698">· omitted --budget preserves positive remainder; zero replenishes</text>
 
-  <rect class="band" x="614" y="530" width="546" height="140" rx="14"/>
-  <text class="tag" x="634" y="554">ENDED IS NOT A CERTIFICATE</text>
-  <text class="sub" x="634" y="578">It means only that Slipway has no more automatic Actions to issue.</text>
-  <text class="sub" x="634" y="598">Tests passing, review findings, branch protection, pull-request approval,</text>
-  <text class="sub" x="634" y="618">and release readiness remain separate facts that Slipway reports</text>
-  <text class="sub" x="634" y="638">rather than decides.</text>
+  <rect class="band" x="614" y="570" width="546" height="140" rx="14"/>
+  <text class="tag" x="634" y="594">ENDED IS NOT A CERTIFICATE</text>
+  <text class="sub" x="634" y="618">It means only that Slipway has no more automatic Actions to issue.</text>
+  <text class="sub" x="634" y="638">Tests passing, review findings, branch protection, pull-request approval,</text>
+  <text class="sub" x="634" y="658">and release readiness remain separate facts that Slipway reports</text>
+  <text class="sub" x="634" y="678">rather than decides.</text>
 </svg>

@@ -81,7 +81,13 @@ flowchart LR
       .flow-core { fill: none; stroke: var(--core-stroke); stroke-width: 2.2; }
       .flow-host { fill: none; stroke: var(--host-stroke); stroke-width: 2; }
       .edge-label { fill: var(--muted); font-size: 9.5px; font-style: italic; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .flow,
+      .flow-core,
+      .flow-host {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .dot-host { fill: var(--host-stroke); }
       .dot-core { fill: var(--core-stroke); }
       .dot-store { fill: var(--store-stroke); }
@@ -185,8 +191,8 @@ flowchart LR
   <text class="tiny" x="900" y="550">no environment dumps intentionally collected</text>
 
   <!-- edge labels last -->
-  <rect class="label-bg" x="150" y="238" width="104" height="17" rx="5"/>
-  <text class="edge-label" x="156" y="251">explicit invocation</text>
+  <rect class="label-bg" x="140" y="238" width="100" height="17" rx="5"/>
+  <text class="edge-label" x="146" y="251">explicit invocation</text>
 
   <rect class="label-bg" x="768" y="258" width="104" height="17" rx="5"/>
   <text class="edge-label" x="774" y="271">Run Outcome</text>
@@ -197,8 +203,8 @@ flowchart LR
   <rect class="label-bg" x="768" y="326" width="104" height="17" rx="5"/>
   <text class="edge-label" x="774" y="339">one Run Action</text>
 
-  <rect class="label-bg" x="786" y="404" width="70" height="17" rx="5"/>
-  <text class="edge-label" x="792" y="417">observes Git</text>
+  <rect class="label-bg" x="800" y="404" width="70" height="17" rx="5"/>
+  <text class="edge-label" x="806" y="417">observes Git</text>
 
   <rect class="note" x="40" y="578" width="1120" height="30" rx="10"/>
   <text class="sub" x="600" y="598" text-anchor="middle">Only Run-backed paths exchange Action/Outcome JSON · planning remains host-side · the CLI never calls a model or GitHub API</text>

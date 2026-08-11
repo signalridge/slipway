@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 810" role="img" aria-labelledby="protocol-sequence-title protocol-sequence-desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 840" role="img" aria-labelledby="protocol-sequence-title protocol-sequence-desc">
   <title id="protocol-sequence-title">Slipway machine protocol exchange</title>
   <desc id="protocol-sequence-desc">One host integration lifecycle in contract version 2. The host starts a Run and receives the first orient Action with a structured next operation. For every Action the host performs the work and submits one strict Outcome. The CLI strictly validates it, observes Git independently and derives the next operation, builds and appends the journal event, replaces the projection, and only then returns the following Action. Answerable decision and destructive pauses expose answer or skip; resume is available only after stop or when the current typed next.operation is a resume variant, such as budget, environment, or source-candidate recovery. The CLI never calls a model or GitHub inside this exchange. An ended Run returns operation none with an empty variant list.</desc>
   <metadata id="mermaid-source"><![CDATA[
@@ -118,7 +118,15 @@ sequenceDiagram
       .msg-pause { fill: none; stroke: var(--pause-stroke); stroke-width: 1.9; }
       .msg-self { fill: none; stroke: var(--line); stroke-width: 1.7; }
       .msg-label { fill: var(--text); font-size: 10px; }
-      .label-bg { fill: var(--label-bg); opacity: 0.96; }
+      .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .msg,
+      .msg-main,
+      .msg-action,
+      .msg-pause,
+      .msg-self {
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
       .note { fill: var(--band); stroke: var(--band-border); stroke-width: 1.2; }
       .term-text { fill: var(--term-text); font-size: 12px; font-weight: 700; }
     </style>
@@ -140,10 +148,10 @@ sequenceDiagram
   <text class="sub" x="40" y="58">contract version 2 · one Action at a time · the CLI calls no model and no GitHub inside this exchange</text>
 
   <!-- lifelines -->
-  <line class="lifeline" x1="118" y1="150" x2="118" y2="706"/>
-  <line class="lifeline" x1="393" y1="150" x2="393" y2="706"/>
-  <line class="lifeline" x1="726" y1="150" x2="726" y2="706"/>
-  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="706"/>
+  <line class="lifeline" x1="118" y1="150" x2="118" y2="724"/>
+  <line class="lifeline" x1="393" y1="150" x2="393" y2="724"/>
+  <line class="lifeline" x1="726" y1="150" x2="726" y2="724"/>
+  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="724"/>
 
   <!-- participants -->
   <rect class="entry" x="48" y="88" width="140" height="46" rx="12"/>
@@ -189,7 +197,7 @@ sequenceDiagram
   <text class="msg-label" x="798" y="408">strict validate · action_kind · idempotency</text>
 
   <path class="msg-self" d="M726 420 H788 V440 H733" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="410" y="434">observe Git independently · derive next</text>
+  <text class="msg-label" x="798" y="426">observe Git independently · derive next</text>
 
   <line class="msg" x1="726" y1="446" x2="1055" y2="446" marker-end="url(#ps-arrow)"/>
   <text class="msg-label" x="736" y="440">build + append journal event</text>
@@ -217,10 +225,13 @@ sequenceDiagram
   <text class="tiny" x="403" y="670">only after stop or when next.operation = resume; revalidates identity and voids stale work</text>
   <text class="tiny" x="403" y="686">budget/environment/source-candidate variants may produce Active or Paused</text>
 
-  <!-- ended -->
-  <rect x="616" y="704" width="220" height="34" rx="10" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
-  <text class="term-text" x="726" y="726" text-anchor="middle">next{operation: "none"}</text>
+  <path class="msg-action" d="M719 708 H400" marker-end="url(#ps-arrow-action)"/>
+  <text class="msg-label" x="410" y="702">ended · next{operation: none, variants: []}</text>
 
-  <rect class="note" x="40" y="756" width="1120" height="34" rx="10"/>
-  <text class="sub" x="60" y="778">Drive the typed `next` variants: insert values as separate argv elements in schema order · never parse or concatenate a rendered display command.</text>
+  <!-- ended is below the message rail, so the terminal state stays legible -->
+  <rect x="616" y="724" width="220" height="34" rx="10" fill="var(--term-fill)" stroke="var(--term-fill)" stroke-width="1.8"/>
+  <text class="term-text" x="726" y="746" text-anchor="middle">next{operation: "none"}</text>
+
+  <rect class="note" x="40" y="786" width="1120" height="34" rx="10"/>
+  <text class="sub" x="60" y="808">Drive the typed `next` variants: insert values as separate argv elements in schema order · never parse or concatenate a rendered display command.</text>
 </svg>
