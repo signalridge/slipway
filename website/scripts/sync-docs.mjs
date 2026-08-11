@@ -8,6 +8,8 @@
 //     the first paragraph), stripping the now-duplicate H1 from the body;
 //   - rewrite relative `*.md` links to base-aware Starlight routes;
 //   - rewrite `assets/**` image references to the copied public asset URLs;
+//   - wrap diagram images in a link to the standalone asset, so the full-size
+//     original is reachable from the downscaled figure in the prose column;
 //   - map each edit link back to its repository source instead of generated output;
 //   - drop mkdocs-only `markdown` HTML attributes.
 //
@@ -99,6 +101,18 @@ function rewriteLinks(body, currentDir) {
   });
 }
 
+// Diagrams are drawn on a 1200px canvas with 9.5-11px labels. Inside the prose
+// column they scale to roughly 6px, and on a phone to under 3px. Wrapping each
+// one in a link to its own asset keeps the full-size original one click away.
+// The stylesheet hangs its framing off the href, so this stays plain Markdown
+// rather than raw HTML with a hand-escaped alt attribute.
+function linkDiagrams(body) {
+  return body.replace(
+    /(?<!\[)!\[([^\]]*)\]\(([^)\s]*\/assets\/diagrams\/[^)\s]+)\)/g,
+    (_whole, alt, src) => `[![${alt}](${src})](${src})`,
+  );
+}
+
 function deriveDescription(body) {
   const lines = body.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -162,6 +176,7 @@ function transform(raw, rel, lastUpdated) {
 
   const description = deriveDescription(body);
   body = rewriteLinks(body, currentDir);
+  body = linkDiagrams(body);
   body = body.replace(/\s+markdown(=("1"|'1'))?(?=[\s>])/g, ''); // drop mkdocs md_in_html attr
   body = body.replace(/^\n+/, ''); // trim leading blank lines left by H1 removal
 
