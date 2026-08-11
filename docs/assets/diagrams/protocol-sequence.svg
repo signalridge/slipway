@@ -119,6 +119,7 @@ sequenceDiagram
       .msg-self { fill: none; stroke: var(--line); stroke-width: 1.7; }
       .msg-label { fill: var(--text); font-size: 10px; }
       .label-bg { fill: var(--label-bg); opacity: 0.98; }
+      .band-chip { fill: var(--band); }
       .msg,
       .msg-main,
       .msg-action,
@@ -148,10 +149,10 @@ sequenceDiagram
   <text class="sub" x="40" y="58">contract version 2 · one Action at a time · the CLI calls no model and no GitHub inside this exchange</text>
 
   <!-- lifelines -->
-  <line class="lifeline" x1="118" y1="150" x2="118" y2="724"/>
-  <line class="lifeline" x1="393" y1="150" x2="393" y2="724"/>
-  <line class="lifeline" x1="726" y1="150" x2="726" y2="724"/>
-  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="724"/>
+  <line class="lifeline" x1="118" y1="150" x2="118" y2="756"/>
+  <line class="lifeline" x1="393" y1="150" x2="393" y2="756"/>
+  <line class="lifeline" x1="726" y1="150" x2="726" y2="756"/>
+  <line class="lifeline" x1="1062" y1="150" x2="1062" y2="756"/>
 
   <!-- participants -->
   <rect class="entry" x="48" y="88" width="140" height="46" rx="12"/>
@@ -185,6 +186,7 @@ sequenceDiagram
 
   <!-- 2. action loop band -->
   <rect class="band" x="270" y="286" width="880" height="228" rx="14"/>
+  <rect class="band-chip" x="282" y="294" width="362" height="18" rx="5"/>
   <text class="tag" x="288" y="306">ACTION LOOP · REPEATS UNTIL PAUSE, STOP, OR ENDED</text>
 
   <path class="msg-self" d="M393 322 H455 V344 H400" marker-end="url(#ps-arrow)"/>
@@ -197,11 +199,11 @@ sequenceDiagram
   <path class="msg-self" d="M726 394 H788 V414 H733" marker-end="url(#ps-arrow)"/>
   <text class="msg-label" x="798" y="408">strict validate · action_kind · idempotency</text>
 
-  <path class="msg-self" d="M726 420 H788 V440 H733" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="798" y="426">observe Git independently · derive next</text>
+  <path class="msg-self" d="M726 418 H788 V436 H733" marker-end="url(#ps-arrow)"/>
+  <text class="msg-label" x="798" y="424">observe Git independently · derive next</text>
 
   <line class="msg" x1="726" y1="446" x2="1055" y2="446" marker-end="url(#ps-arrow)"/>
-  <text class="msg-label" x="736" y="440">build + append journal event</text>
+  <text class="msg-label" x="798" y="440">build + append journal event</text>
 
   <line class="msg-main" x1="726" y1="472" x2="1055" y2="472" marker-end="url(#ps-arrow-main)"/>
   <text class="msg-label" x="736" y="466">replace projection</text>
@@ -211,15 +213,17 @@ sequenceDiagram
 
   <!-- 3. pause band -->
   <rect class="band" x="270" y="530" width="880" height="100" rx="14"/>
+  <rect class="band-chip" x="282" y="538" width="320" height="18" rx="5"/>
   <text class="tag" x="288" y="550">RECOVERY FOLLOWS THE CURRENT TYPED `next`</text>
 
-  <path class="msg-pause" d="M719 578 H400" marker-end="url(#ps-arrow-pause)"/>
-  <text class="msg-label" x="410" y="572">answerable decision / destructive pause → answer or skip</text>
+  <path class="msg-pause" d="M719 574 H400" marker-end="url(#ps-arrow-pause)"/>
+  <text class="msg-label" x="410" y="568">answerable decision / destructive pause → answer or skip</text>
 
-  <line class="msg-pause" x1="393" y1="610" x2="719" y2="610" marker-end="url(#ps-arrow-pause)"/>
-  <text class="mono" x="403" y="589">protocol answer --text-file</text>
-  <text class="mono" x="403" y="603">TEXT_FILE · protocol skip</text>
-  <text class="tiny" x="403" y="622">answer/confirm/skip can yield Active or remain Paused on budget exhaustion</text>
+  <line class="msg-pause" x1="393" y1="608" x2="719" y2="608" marker-end="url(#ps-arrow-pause)"/>
+  <text class="mono" x="403" y="588">protocol answer --text-file</text>
+  <text class="mono" x="403" y="602">TEXT_FILE · protocol skip</text>
+  <rect class="band-chip" x="399" y="610" width="362" height="15" rx="4"/>
+  <text class="tiny" x="403" y="620">answer/confirm/skip can yield Active or remain Paused on budget exhaustion</text>
 
   <!-- 4. resume -->
   <line class="msg" x1="393" y1="654" x2="719" y2="654" marker-end="url(#ps-arrow)"/>

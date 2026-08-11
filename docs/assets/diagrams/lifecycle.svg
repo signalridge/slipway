@@ -139,26 +139,25 @@ flowchart LR
   <line class="flow-main" x1="290" y1="205" x2="330" y2="205" marker-end="url(#arrow-main)"/>
   <line class="flow-main" x1="550" y1="205" x2="590" y2="205" marker-end="url(#arrow-main)"/>
   <line class="flow-main" x1="820" y1="205" x2="870" y2="205" marker-end="url(#arrow-main)"/>
-  <line class="flow-main" x1="980" y1="265" x2="980" y2="285" marker-end="url(#arrow-main)"/>
+  <line class="flow-main" x1="985" y1="265" x2="985" y2="278" marker-end="url(#arrow-main)"/>
 
-  <!-- scheduler branches: action, pause, stop, and terminal each have its own rail -->
-  <path class="flow-main" d="M985 285 V105 H440 V135" marker-end="url(#arrow-main)"/>
-  <path class="flow-control" d="M440 265 V300 H840 V205 H870" marker-end="url(#arrow-control)"/>
-  <path class="flow-pause" d="M985 375 V410 H260 V500" marker-end="url(#arrow-pause)"/>
-  <path class="flow-stop" d="M910 330 H800 V430 H625 V500" marker-end="url(#arrow-stop)"/>
-  <path class="flow" d="M985 375 H1010 V500" marker-end="url(#arrow)"/>
+  <!-- scheduler branches: each leaves the decision on its own rail, so none of them meet -->
+  <path class="flow-main" d="M1075 330 H1125 V114 H500 V135" marker-end="url(#arrow-main)"/>
+  <path class="flow-control" d="M440 265 V300 H840 V240 H870" marker-end="url(#arrow-control)"/>
+  <path class="flow-pause" d="M895 330 H260 V500" marker-end="url(#arrow-pause)"/>
+  <path class="flow-stop" d="M940 356 V410 H625 V500" marker-end="url(#arrow-stop)"/>
+  <path class="flow" d="M985 382 V500" marker-end="url(#arrow)"/>
 
-  <!-- answer/source choice takes the left margin; typed resume uses one shared lower rail -->
-  <path class="flow-main" d="M120 555 H15 V120 H350 V135" marker-end="url(#arrow-main)"/>
-  <path class="flow-control" d="M400 555 V625 H1170"/>
-  <path class="flow-control" d="M750 545 V625 H1170"/>
-  <path class="flow-control" d="M1170 625 V120 H500 V135" marker-end="url(#arrow-control)"/>
+  <!-- recovery returns share the left margin: two parallel lanes, neither crossing the other -->
+  <path class="flow-main" d="M120 555 H58 V300 H370 V265" marker-end="url(#arrow-main)"/>
+  <path class="flow-control" d="M690 590 V630 H330"/>
+  <path class="flow-control" d="M330 610 V630 H14 V126 H350 V135" marker-end="url(#arrow-control)"/>
   <path class="flow-stop" d="M400 545 H500" marker-end="url(#arrow-stop)"/>
 
   <!-- explicit start -->
   <circle cx="50" cy="205" r="25" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
   <circle cx="50" cy="205" r="7" fill="var(--entry-stroke)"/>
-  <text class="sub" x="50" y="250" text-anchor="middle">explicit start</text>
+  <text class="sub" x="53" y="250" text-anchor="middle">explicit start</text>
 
   <!-- action loop cards -->
   <rect class="entry" x="100" y="155" width="190" height="100" rx="14"/>
@@ -189,17 +188,17 @@ flowchart LR
   <text class="tiny" x="980" y="252" text-anchor="middle">build/append event · replace projection</text>
 
   <!-- scheduler decision -->
-  <polygon points="985,285 1060,330 985,375 910,330" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
+  <polygon points="985,278 1075,330 985,382 895,330" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
   <text class="title" x="985" y="326" text-anchor="middle">What next?</text>
   <text class="tiny" x="985" y="345" text-anchor="middle">scheduler + user control</text>
 
   <!-- recovery states -->
   <rect class="pause" x="120" y="500" width="280" height="110" rx="22"/>
-  <text class="title" x="260" y="532" text-anchor="middle">Paused</text>
-  <text class="sub" x="260" y="552" text-anchor="middle">decision / source choice</text>
-  <text class="sub" x="260" y="570" text-anchor="middle">environment · budget · destructive scope</text>
-  <text class="tiny" x="260" y="590" text-anchor="middle">answer / confirm / skip may remain Paused</text>
-  <text class="tiny" x="260" y="606" text-anchor="middle">source refresh → candidate choice → fresh Action</text>
+  <text class="title" x="260" y="528" text-anchor="middle">Paused</text>
+  <text class="sub" x="260" y="548" text-anchor="middle">decision / source choice</text>
+  <text class="sub" x="260" y="566" text-anchor="middle">environment · budget · destructive scope</text>
+  <text class="tiny" x="260" y="585" text-anchor="middle">answer / confirm / skip may remain Paused</text>
+  <text class="tiny" x="260" y="601" text-anchor="middle">source refresh → candidate choice → fresh Action</text>
 
   <rect class="stop" x="500" y="500" width="250" height="90" rx="22"/>
   <text class="title" x="625" y="532" text-anchor="middle">Stopped</text>
@@ -212,29 +211,29 @@ flowchart LR
   <text x="995" y="570" fill="var(--term-text)" opacity="0.78" font-size="10" text-anchor="middle">terminal for this Run</text>
 
   <!-- labels sit beside rails, never on top of a connector -->
-  <rect class="label-bg" x="620" y="70" width="100" height="18" rx="5"/>
-  <text class="edge-label" x="626" y="83">next Action</text>
+  <rect class="label-bg" x="620" y="92" width="100" height="18" rx="5"/>
+  <text class="edge-label" x="626" y="105">next Action</text>
 
   <rect class="label-bg" x="565" y="278" width="170" height="18" rx="5"/>
   <text class="edge-label" x="571" y="291">skip · no reason required</text>
 
-  <rect class="label-bg" x="500" y="388" width="230" height="18" rx="5"/>
-  <text class="edge-label" x="506" y="401">answer / resume → Paused</text>
+  <rect class="label-bg" x="290" y="336" width="230" height="18" rx="5"/>
+  <text class="edge-label" x="296" y="349">answer / resume → Paused</text>
 
-  <rect class="label-bg" x="635" y="438" width="210" height="18" rx="5"/>
-  <text class="edge-label" x="641" y="451">stop / reorder / take over</text>
+  <rect class="label-bg" x="680" y="416" width="210" height="18" rx="5"/>
+  <text class="edge-label" x="686" y="429">stop / reorder / take over</text>
 
-  <rect class="label-bg" x="1020" y="450" width="170" height="18" rx="5"/>
-  <text class="edge-label" x="1026" y="463">automatic queue empty</text>
+  <rect class="label-bg" x="1000" y="450" width="170" height="18" rx="5"/>
+  <text class="edge-label" x="1006" y="463">automatic queue empty</text>
 
   <rect class="label-bg" x="400" y="517" width="100" height="18" rx="5"/>
   <text class="edge-label" x="406" y="530">stop from Paused</text>
 
-  <rect class="label-bg" x="20" y="334" width="230" height="18" rx="5"/>
-  <text class="edge-label" x="26" y="347">answer / source choice → Action</text>
+  <rect class="label-bg" x="64" y="308" width="230" height="18" rx="5"/>
+  <text class="edge-label" x="70" y="321">answer / source choice → Action</text>
 
-  <rect class="label-bg" x="700" y="600" width="270" height="18" rx="5"/>
-  <text class="edge-label" x="706" y="613">resume variant → revalidate → Action</text>
+  <rect class="label-bg" x="410" y="608" width="270" height="18" rx="5"/>
+  <text class="edge-label" x="416" y="621">resume variant → revalidate → Action</text>
 
   <rect class="note" x="40" y="650" width="1120" height="72" rx="12"/>
   <text class="sub" x="60" y="670">Transitions follow typed `next`: answer/confirm/skip may yield Active or remain Paused on budget exhaustion; source refresh may create a paused candidate.</text>

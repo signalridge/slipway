@@ -181,8 +181,8 @@ flowchart TB
   <path class="flow-main" d="M965 160 V498 H860 V513" marker-end="url(#is-arrow-main)"/>
 
   <rect class="verify" x="230" y="520" width="700" height="44" rx="12"/>
-  <text class="mono" x="250" y="543">slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT</text>
-  <text class="tiny" x="250" y="559">distinct ad-hoc form: a goal argument after `--` · source-file does not replace the goal</text>
+  <text class="mono" x="250" y="541">slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT</text>
+  <text class="tiny" x="250" y="557">distinct ad-hoc form: a goal argument after `--` · source-file does not replace the goal</text>
 
   <!-- validate -->
   <path class="flow-main" d="M580 564 V590" marker-end="url(#is-arrow-main)"/>

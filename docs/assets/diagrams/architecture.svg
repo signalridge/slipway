@@ -112,8 +112,8 @@ flowchart LR
   <rect class="band" x="860" y="86" width="300" height="500" rx="18"/>
 
   <!-- connections: painted before cards -->
-  <path class="flow-host" d="M230 300 H246 V172 H263" marker-end="url(#arrow-host)"/>
-  <line class="flow-host" x1="515" y1="212" x2="515" y2="243" marker-end="url(#arrow-host)"/>
+  <path class="flow-host" d="M230 300 H246 V175 H263" marker-end="url(#arrow-host)"/>
+  <line class="flow-host" x1="515" y1="222" x2="515" y2="243" marker-end="url(#arrow-host)"/>
   <line class="flow" x1="346" y1="350" x2="346" y2="393" marker-end="url(#arrow)"/>
   <line class="flow" x1="514" y1="350" x2="514" y2="393" marker-end="url(#arrow)"/>
   <line class="flow" x1="682" y1="350" x2="682" y2="393" marker-end="url(#arrow)"/>
@@ -132,12 +132,12 @@ flowchart LR
   <!-- host execution region -->
   <text class="tag" x="270" y="112">AI CODING HOST · TRUSTED EXECUTOR</text>
 
-  <rect class="capability" x="270" y="132" width="490" height="80" rx="13"/>
-  <circle cx="292" cy="157" r="5" fill="var(--capability-stroke)"/>
-  <text class="title" x="308" y="162">Generated host capability</text>
-  <text class="mono" x="515" y="174" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
-  <text class="mono" x="515" y="190" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
-  <text class="mono" x="515" y="206" text-anchor="middle">slipway-workflow</text>
+  <rect class="capability" x="270" y="128" width="490" height="94" rx="13"/>
+  <circle cx="292" cy="152" r="5" fill="var(--capability-stroke)"/>
+  <text class="title" x="308" y="157">Generated host capability</text>
+  <text class="mono" x="515" y="181" text-anchor="middle">slipway-run · slipway-clarify · slipway-propose</text>
+  <text class="mono" x="515" y="197" text-anchor="middle">slipway-decompose · slipway-implement · slipway-review</text>
+  <text class="mono" x="515" y="213" text-anchor="middle">slipway-workflow</text>
 
   <rect class="host" x="270" y="250" width="490" height="100" rx="15"/>
   <text class="title-big" x="515" y="285" text-anchor="middle">AI coding host</text>
