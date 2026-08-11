@@ -145,7 +145,7 @@ stateDiagram-v2
   <path class="flow-pause" d="M470 475 H560 V350 H900 V315" marker-end="url(#rs-arrow-pause)"/>
   <path class="flow-main" d="M350 135 V100 H1170 V475 H1060" marker-end="url(#rs-arrow-main)"/>
   <path class="flow-main" d="M150 475 H30 V110 H285 V135" marker-end="url(#rs-arrow-main)"/>
-  <path class="flow-pause" d="M940 170 H1150 V260 H940" marker-end="url(#rs-arrow-pause)"/>
+  <path class="flow-pause" d="M940 170 H1130 V260 H940" marker-end="url(#rs-arrow-pause)"/>
 
   <!-- explicit start -->
   <circle cx="65" cy="195" r="26" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>

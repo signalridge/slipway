@@ -119,7 +119,7 @@ flowchart LR
   <line class="flow" x1="682" y1="350" x2="682" y2="393" marker-end="url(#arrow)"/>
   <line class="flow-core" x1="760" y1="282" x2="873" y2="282" marker-end="url(#arrow-core)"/>
   <line class="flow-core" x1="873" y1="318" x2="767" y2="318" marker-end="url(#arrow-core)"/>
-  <path class="flow-core" d="M873 345 H790 V430 H766" marker-end="url(#arrow-core)"/>
+  <path class="flow-core" d="M873 352 H790 V430 H766" marker-end="url(#arrow-core)"/>
   <line class="flow-core" x1="1010" y1="360" x2="1010" y2="389" marker-end="url(#arrow-core)"/>
 
   <!-- actor -->
