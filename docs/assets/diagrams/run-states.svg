@@ -136,9 +136,9 @@ stateDiagram-v2
   <path class="flow-stop" d="M270 274 V393" marker-end="url(#rs-arrow-stop)"/>
   <path class="flow-stop" d="M700 250 H620 V370 H470 V400" marker-end="url(#rs-arrow-stop)"/>
   <path class="flow-main" d="M360 400 V281" marker-end="url(#rs-arrow-main)"/>
-  <path class="flow-pause" d="M470 455 H560 V300 H693" marker-end="url(#rs-arrow-pause)"/>
+  <path class="flow-pause" d="M470 455 H520 V510 H1040 V330 H990 V302" marker-end="url(#rs-arrow-pause)"/>
   <path class="flow-pause" d="M990 180 C1060 180 1060 285 990 285" marker-end="url(#rs-arrow-pause)"/>
-  <path class="flow" d="M400 262 H560 V440 H693" marker-end="url(#rs-arrow)"/>
+  <path class="flow" d="M400 262 H520 V375 H680 V400 H700" marker-end="url(#rs-arrow)"/>
 
   <!-- explicit start -->
   <circle cx="65" cy="196" r="26" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>

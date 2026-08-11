@@ -128,15 +128,19 @@ flowchart LR
   <line class="flow-main" x1="550" y1="220" x2="600" y2="220" marker-end="url(#arrow-main)"/>
   <line class="flow-main" x1="820" y1="220" x2="870" y2="220" marker-end="url(#arrow-main)"/>
   <line class="flow-main" x1="980" y1="290" x2="980" y2="330" marker-end="url(#arrow-main)"/>
-  <path class="flow-main" d="M905 375 H842 V112 H450 V150" marker-end="url(#arrow-main)"/>
-  <path class="flow-control" d="M520 290 V316 H900 V290" marker-end="url(#arrow-control)"/>
-  <path class="flow-pause" d="M930 405 V445 H290 V490" marker-end="url(#arrow-pause)"/>
-  <path class="flow-stop" d="M980 420 V458 H600 V490" marker-end="url(#arrow-stop)"/>
-  <path class="flow" d="M1030 405 V455 H950 V490" marker-end="url(#arrow)"/>
-  <path class="flow-control" d="M290 490 V446 H410 V290" marker-end="url(#arrow-control)"/>
-  <path class="flow-pause" d="M400 522 H430 V472 H290 V490" marker-end="url(#arrow-pause)"/>
-  <path class="flow-stop" d="M290 602 V604 H600 V490" marker-end="url(#arrow-stop)"/>
-  <path class="flow-control" d="M600 490 V438 H490 V290" marker-end="url(#arrow-control)"/>
+
+  <!-- The loop-back runs above the cards; each scheduler branch has its own lane. -->
+  <path class="flow-main" d="M905 375 H830 V112 H450 V150" marker-end="url(#arrow-main)"/>
+  <path class="flow-control" d="M520 290 V308 H840 V292 H870" marker-end="url(#arrow-control)"/>
+  <path class="flow-pause" d="M980 420 V430 H120 V490 H180" marker-end="url(#arrow-pause)"/>
+  <path class="flow-stop" d="M1055 375 V455 H600 V490" marker-end="url(#arrow-stop)"/>
+  <path class="flow" d="M1055 375 H1150 V475 H950 V490" marker-end="url(#arrow)"/>
+
+  <!-- Recovery edges use the outside margins instead of crossing the action cards. -->
+  <path class="flow-control" d="M220 490 H105 V140 H310 V270 H350" marker-end="url(#arrow-control)"/>
+  <path class="flow-pause" d="M400 535 H440 V575 H400" marker-end="url(#arrow-pause)"/>
+  <path class="flow-stop" d="M400 575 H450 V602 H600 V575" marker-end="url(#arrow-stop)"/>
+  <path class="flow-control" d="M520 490 V445 H1140 V140 H570 V290 H550" marker-end="url(#arrow-control)"/>
 
   <!-- explicit start -->
   <circle cx="65" cy="220" r="31" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
@@ -194,24 +198,30 @@ flowchart LR
   <text x="950" y="543" fill="var(--term-text)" opacity="0.78" font-size="11" text-anchor="middle">automatic Action queue empty</text>
   <text x="950" y="559" fill="var(--term-text)" opacity="0.78" font-size="10" text-anchor="middle">terminal for this Run</text>
 
-  <!-- edge labels -->
-  <rect class="label-bg" x="626" y="102" width="83" height="18" rx="5"/>
-  <text class="edge-label" x="632" y="115">next Action</text>
+  <!-- edge labels: kept in separate lanes from the connectors -->
+  <rect class="label-bg" x="620" y="118" width="83" height="18" rx="5"/>
+  <text class="edge-label" x="626" y="131">next Action</text>
 
-  <rect class="label-bg" x="650" y="301" width="128" height="18" rx="5"/>
-  <text class="edge-label" x="656" y="314">skip · no reason required</text>
+  <rect class="label-bg" x="630" y="286" width="150" height="18" rx="5"/>
+  <text class="edge-label" x="636" y="299">skip · no reason required</text>
 
-  <rect class="label-bg" x="304" y="426" width="216" height="18" rx="5"/>
-  <text class="edge-label" x="310" y="439">answer / confirm / skip → Active only if next=action</text>
+  <rect class="label-bg" x="150" y="386" width="236" height="18" rx="5"/>
+  <text class="edge-label" x="156" y="399">next answer / resume → Paused</text>
 
-  <rect class="label-bg" x="404" y="450" width="152" height="18" rx="5"/>
-  <text class="edge-label" x="410" y="463">result may stay Paused</text>
+  <rect class="label-bg" x="490" y="435" width="194" height="18" rx="5"/>
+  <text class="edge-label" x="496" y="448">stop / reorder / take over</text>
 
-  <rect class="label-bg" x="426" y="582" width="118" height="18" rx="5"/>
-  <text class="edge-label" x="432" y="595">stop from Paused</text>
+  <rect class="label-bg" x="970" y="452" width="180" height="18" rx="5"/>
+  <text class="edge-label" x="976" y="465">automatic queue empty</text>
 
-  <rect class="label-bg" x="511" y="426" width="190" height="18" rx="5"/>
-  <text class="edge-label" x="517" y="439">typed resume variant → Active or Paused</text>
+  <rect class="label-bg" x="414" y="548" width="156" height="18" rx="5"/>
+  <text class="edge-label" x="420" y="561">budget exhausted → Paused</text>
+
+  <rect class="label-bg" x="448" y="580" width="150" height="18" rx="5"/>
+  <text class="edge-label" x="454" y="593">stop from Paused</text>
+
+  <rect class="label-bg" x="820" y="390" width="190" height="18" rx="5"/>
+  <text class="edge-label" x="826" y="403">resume → Active or Paused</text>
 
   <rect class="note" x="40" y="610" width="1120" height="72" rx="12"/>
   <text class="sub" x="60" y="630">Transitions follow typed `next`: answer/confirm/skip may yield Active or remain Paused on budget exhaustion; source refresh may create a paused candidate.</text>
