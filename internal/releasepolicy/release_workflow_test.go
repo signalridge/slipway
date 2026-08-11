@@ -362,6 +362,45 @@ func TestReleaseObservationsRemainAdvisoryAfterCorePublication(t *testing.T) {
 	assert.NotContains(t, config, "before", "GoReleaser must not turn module drift into a publication gate")
 }
 
+func TestOptionalPublishFailuresDoNotTriggerVerification(t *testing.T) {
+	workflow := readWorkflowYAML(t, ".github/workflows/release.yaml")
+	jobs := workflowMap(t, workflow, "jobs")
+
+	channels := []struct {
+		publishJob string
+		verifyJob  string
+		secret     string
+	}{
+		{publishJob: "publish-homebrew", verifyJob: "verify-homebrew", secret: "gh_pat_available"},
+		{publishJob: "publish-scoop", verifyJob: "verify-scoop", secret: "gh_pat_available"},
+		{publishJob: "publish-aur", verifyJob: "verify-aur", secret: "aur_key_available"},
+	}
+	for _, channel := range channels {
+		channel := channel
+		t.Run(channel.publishJob, func(t *testing.T) {
+			publishJob := workflowMap(t, jobs, channel.publishJob)
+			outputs := workflowMap(t, publishJob, "outputs")
+			assert.Contains(t, workflowString(t, outputs, "published"), "steps.publish-status.outputs.published")
+
+			marker := firstNamedStep(t, publishJob, "Mark optional channel publication successful")
+			assert.Equal(t, "publish-status", marker["id"])
+			assert.Equal(t, "success()", workflowString(t, marker, "if"))
+
+			verifyJob := workflowMap(t, jobs, channel.verifyJob)
+			condition := workflowString(t, verifyJob, "if")
+			assert.Contains(t, condition, "needs."+channel.publishJob+".outputs.published == 'true'")
+			assert.NotContains(t, condition, "needs."+channel.publishJob+".result == 'success'")
+			assert.Contains(t, condition, "needs.release.outputs."+channel.secret+" == 'true'")
+		})
+	}
+
+	scoopRun := firstStepRun(t, workflowMap(t, jobs, "verify-scoop"), "Install from disposable Scoop bucket")
+	assert.Contains(t, scoopRun, "$env:SCOOP = $root")
+	assert.Contains(t, scoopRun, "(Join-Path $env:SCOOP 'shims')")
+	assert.Contains(t, scoopRun, "Join-Path $env:SCOOP 'apps/slipway/current/slipway.exe'")
+	assert.NotContains(t, scoopRun, "Join-Path $root 'apps'")
+}
+
 func TestGoReleaserUsesCosignBundleSigning(t *testing.T) {
 	config := readWorkflowYAML(t, ".goreleaser.yaml")
 	signs, ok := config["signs"].([]any)
