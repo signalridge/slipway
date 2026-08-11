@@ -67,7 +67,8 @@ git diff --check
 - 精确 machine shape 以 JSON Schema 表达，并明确 runtime-only semantic check；
 - 宿主侧指令应写成 宿主行为，不能误写为 Go CLI guarantee；
 - Stable user page 不保存单次 CI run evidence 或 release history；
-- 移动页面时同时更新 source link、website splash link 与 sidebar slug。
+- 移动页面时同时更新 source link、website splash link 与 sidebar slug；
+- 修改 wordmark 后用 `node website/scripts/build-og-image.mjs` 重新生成已提交的 social card。
 
 ## 按修改类型选择测试
 

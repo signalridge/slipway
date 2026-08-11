@@ -2,6 +2,12 @@
 title: Slipway
 description: An explicitly invoked soft autopilot for AI coding.
 template: splash
+# Starlight composes `<title>` as `{title} | {site title}`, and on the landing
+# page both halves are "Slipway". Overriding the tag is the supported way out;
+# the wording is the hero headline, already written and translated per locale.
+head:
+  - tag: title
+    content: Slipway — an explicitly invoked soft autopilot for AI coding
 editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/en/index.mdx
 hero:
   title: An explicitly invoked soft autopilot for AI coding

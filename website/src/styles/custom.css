@@ -1,6 +1,13 @@
 /* Slipway brand theming for Starlight.
    Violet (#6366F1) face + coral (#FF7A59) accent, matching the wordmark. */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* Space Grotesk is served from this origin, not fonts.googleapis.com, and its
+   `@font-face` block lives in `astro.config.mjs` rather than here. Two reasons:
+   Vite rewrites `url()` inside bundled CSS and warns on every `public/` path it
+   cannot resolve at build time, and a face declared inline in `<head>` is
+   discovered while the HTML is still parsing instead of after this stylesheet
+   downloads and parses. The files themselves are in `public/fonts/`, with the
+   SIL OFL 1.1 licence alongside them. */
 
 :root {
 	--slip-violet: #6366f1;
@@ -174,36 +181,4 @@ html:not([data-has-sidebar]) .card-grid {
 	opacity: 1;
 	color: var(--slip-violet);
 	border-color: var(--slip-violet);
-}
-
-/* Landing page demo videos. */
-.demo-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
-	gap: 1rem;
-	margin: 1rem 0 2rem;
-}
-
-.demo-card {
-	margin: 0;
-}
-
-.demo-card video {
-	width: 100%;
-	aspect-ratio: 16 / 9;
-	border: 1px solid var(--sl-color-gray-5);
-	border-radius: 0.5rem;
-	background: #111;
-}
-
-.demo-card figcaption {
-	margin-top: 0.5rem;
-	font-size: var(--sl-text-sm);
-	color: var(--sl-color-gray-2);
-}
-
-@media (max-width: 36rem) {
-	.demo-grid {
-		grid-template-columns: 1fr;
-	}
 }

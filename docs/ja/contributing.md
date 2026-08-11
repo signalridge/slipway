@@ -67,7 +67,8 @@ Documentation の規則：
 - Exact machine shape は JSON Schema で表現し、runtime-only semantic check を明記する。
 - Host-side instruction は Go CLI guarantee ではなく ホスト behavior として書く。
 - Stable user page に単発 CI run evidence や release history を入れない。
-- Page 移動時は source link、website splash link、sidebar slug を同時に更新する。
+- Page 移動時は source link、website splash link、sidebar slug を同時に更新する；
+- Wordmark を変更したら `node website/scripts/build-og-image.mjs` で commit 済みの social card を再生成する。
 
 ## 変更種別ごとの test 重点
 
