@@ -220,7 +220,7 @@ flowchart TB
   <rect class="verify" x="800" y="700" width="240" height="100" rx="16"/>
   <text class="title-big" x="920" y="735" text-anchor="middle">slipway CLI</text>
   <text class="sub" x="920" y="758" text-anchor="middle">validation · scheduling · Run state</text>
-  <text class="tiny" x="920" y="779" text-anchor="middle">no model or GitHub credentials</text>
+  <text class="tiny" x="920" y="779" text-anchor="middle">does not own/manage provider credentials</text>
 
   <rect class="label-bg" x="666" y="724" width="118" height="38" rx="6"/>
   <text class="edge-label" x="672" y="739">Run Action / Outcome</text>

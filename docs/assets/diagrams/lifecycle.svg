@@ -1,19 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 690" role="img" aria-labelledby="lifecycle-title lifecycle-desc">
   <title id="lifecycle-title">Slipway Run lifecycle</title>
-  <desc id="lifecycle-desc">A Run begins only after explicit user invocation. The CLI issues one Action, the host performs work and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing another Action, pausing, stopping, or ending. A paused Run continues only through its current typed answer, skip, or resume operation; stopped Runs resume explicitly. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.</desc>
+  <desc id="lifecycle-desc">A Run begins only after explicit user invocation. The CLI issues one Action, the host performs work and returns a structured Outcome, and the CLI strictly validates, observes Git independently, derives the next operation, records the transition, and then chooses another Action, pausing, stopping, or ending. A paused Run exposes its current typed next operation: answerable decision and destructive pauses use answer, confirm, or skip, while budget, environment, or source-candidate recovery may expose a resume variant. Answer, confirm, or skip can produce Active or leave the Run Paused on budget exhaustion; source refresh can create a paused source candidate awaiting an explicit choice; stop can move a paused Run to Stopped. Only stop or the current typed next resume variant authorizes resume, which can produce Active or Paused. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
-  User([Explicit user start]) --> Run[Create or resume Run]
+  User([Explicit user start]) --> Run[Create Run or authorized resume]
   Run --> Action[CLI issues one Action\norient · clarify · implement · review · summarize]
   Action --> Host[Host performs work\nand returns structured Outcome]
-  Host --> Validate[CLI validates + records\nand observes Git independently]
-  Validate --> Next{What next?}
-  Next -->|next Action| Action
+  Host --> Validate[CLI validates + observes Git\nthen records the transition]
+  Validate --> Next{Current typed next}
+  Next -->|next.operation = action| Action
   Action -->|skip · no reason required| Validate
-  Next -->|four reported reasons: decision (incl. changed source), environment, budget, destructive scope| Paused([Paused])
-  Paused -->|current typed answer / skip / resume| Action
-  Next -->|stop / reorder / take over| Stopped([Stopped])
-  Stopped -->|explicit resume| Action
+  Next -->|next.operation = answer: decision or destructive pause| Paused([Paused])
+  Next -->|next.operation = resume: budget, environment, or source candidate| Paused
+  Paused -->|current typed answer / confirm / skip| Result{derive resulting typed state}
+  Result -->|Active · next Action| Action
+  Result -->|Paused · budget exhausted| Paused
+  Paused -->|stop| Stopped([Stopped])
+  Paused -->|only current typed next.operation = resume| Revalidate[revalidate identity · void stale work]
+  Next -->|stop / reorder / take over| Stopped
+  Stopped -->|only current typed resume variant| Revalidate
+  Revalidate -->|Active · next Action| Action
+  Revalidate -->|Paused · source refresh candidate| Paused
+  Paused -->|explicit typed source choice → fresh Action| Action
   Next -->|automatic queue empty| Ended([Ended])
   Ended -.-> Note[Not a certificate for tests, findings, merge, deploy, or release]
 ]]></metadata>
@@ -126,6 +134,8 @@ flowchart LR
   <path class="flow-stop" d="M980 420 V458 H600 V490" marker-end="url(#arrow-stop)"/>
   <path class="flow" d="M1030 405 V455 H950 V490" marker-end="url(#arrow)"/>
   <path class="flow-control" d="M290 490 V446 H410 V290" marker-end="url(#arrow-control)"/>
+  <path class="flow-pause" d="M400 522 H430 V472 H290 V490" marker-end="url(#arrow-pause)"/>
+  <path class="flow-stop" d="M290 602 V604 H600 V490" marker-end="url(#arrow-stop)"/>
   <path class="flow-control" d="M600 490 V438 H490 V290" marker-end="url(#arrow-control)"/>
 
   <!-- explicit start -->
@@ -137,8 +147,8 @@ flowchart LR
   <text class="tag" x="132" y="122">RECOVERABLE ACTION LOOP</text>
 
   <rect class="entry" x="125" y="180" width="170" height="80" rx="14"/>
-  <text class="title" x="210" y="211" text-anchor="middle">Create / resume Run</text>
-  <text class="sub" x="210" y="233" text-anchor="middle">worktree-bound · budgeted</text>
+  <text class="title" x="210" y="211" text-anchor="middle">Create Run / typed resume only</text>
+  <text class="sub" x="210" y="233" text-anchor="middle">worktree-bound · budgeted · explicit</text>
 
   <rect class="action" x="350" y="150" width="200" height="140" rx="15"/>
   <text class="title" x="450" y="181" text-anchor="middle">CLI issues one Action</text>
@@ -155,11 +165,11 @@ flowchart LR
   <text class="tiny" x="710" y="270" text-anchor="middle">reported activity is not proof</text>
 
   <rect class="verify" x="870" y="150" width="220" height="140" rx="15"/>
-  <text class="title" x="980" y="181" text-anchor="middle">Validate · record · observe</text>
+  <text class="title" x="980" y="181" text-anchor="middle">Validate · observe · record</text>
   <text class="sub" x="980" y="207" text-anchor="middle">strict Outcome validation</text>
-  <text class="sub" x="980" y="226" text-anchor="middle">append-only transition record</text>
-  <text class="sub" x="980" y="245" text-anchor="middle">independent Git observation</text>
-  <text class="tiny" x="980" y="270" text-anchor="middle">then derive the next operation</text>
+  <text class="sub" x="980" y="226" text-anchor="middle">independent Git observation</text>
+  <text class="sub" x="980" y="245" text-anchor="middle">derive the next operation</text>
+  <text class="tiny" x="980" y="270" text-anchor="middle">build/append event · replace projection</text>
 
   <!-- scheduler decision -->
   <polygon points="980,330 1055,375 980,420 905,375" fill="var(--entry-fill)" stroke="var(--entry-stroke)" stroke-width="1.8"/>
@@ -167,10 +177,12 @@ flowchart LR
   <text class="tiny" x="980" y="390" text-anchor="middle">scheduler + user control</text>
 
   <!-- outcomes -->
-  <rect class="pause" x="180" y="490" width="220" height="85" rx="22"/>
+  <rect class="pause" x="180" y="490" width="220" height="112" rx="22"/>
   <text class="title" x="290" y="521" text-anchor="middle">Paused</text>
-  <text class="sub" x="290" y="542" text-anchor="middle">decision (incl. changed source)</text>
+  <text class="sub" x="290" y="542" text-anchor="middle">decision / source choice</text>
   <text class="sub" x="290" y="558" text-anchor="middle">environment · budget · destructive scope</text>
+  <text class="tiny" x="290" y="574" text-anchor="middle">answer / confirm / skip may remain Paused</text>
+  <text class="tiny" x="290" y="590" text-anchor="middle">source refresh → candidate choice → fresh Action</text>
 
   <rect class="stop" x="490" y="490" width="220" height="85" rx="22"/>
   <text class="title" x="600" y="521" text-anchor="middle">Stopped</text>
@@ -189,15 +201,22 @@ flowchart LR
   <rect class="label-bg" x="650" y="301" width="128" height="18" rx="5"/>
   <text class="edge-label" x="656" y="314">skip · no reason required</text>
 
-  <rect class="label-bg" x="304" y="426" width="179" height="18" rx="5"/>
-  <text class="edge-label" x="310" y="439">typed answer · skip · resume</text>
+  <rect class="label-bg" x="304" y="426" width="216" height="18" rx="5"/>
+  <text class="edge-label" x="310" y="439">answer / confirm / skip → Active only if next=action</text>
 
-  <rect class="label-bg" x="511" y="426" width="125" height="18" rx="5"/>
-  <text class="edge-label" x="517" y="439">explicit resume</text>
+  <rect class="label-bg" x="404" y="450" width="152" height="18" rx="5"/>
+  <text class="edge-label" x="410" y="463">result may stay Paused</text>
 
-  <rect class="note" x="40" y="610" width="1120" height="58" rx="12"/>
-  <text class="sub" x="60" y="634">User controls: skip needs no reason · stop/resume are explicit · review is read-only and does not create an automatic repair loop</text>
-  <text class="sub" x="60" y="653">Ended is not a certificate for tests, correctness, clean review, branch policy, merge, deployment, or release readiness.</text>
+  <rect class="label-bg" x="426" y="582" width="118" height="18" rx="5"/>
+  <text class="edge-label" x="432" y="595">stop from Paused</text>
+
+  <rect class="label-bg" x="511" y="426" width="190" height="18" rx="5"/>
+  <text class="edge-label" x="517" y="439">typed resume variant → Active or Paused</text>
+
+  <rect class="note" x="40" y="610" width="1120" height="72" rx="12"/>
+  <text class="sub" x="60" y="630">Transitions follow typed `next`: answer/confirm/skip may yield Active or remain Paused on budget exhaustion; source refresh may create a paused candidate.</text>
+  <text class="sub" x="60" y="648">Only stop or current `next.operation = resume` authorizes resume; its resulting typed state may be Active or Paused.</text>
+  <text class="sub" x="60" y="666">Ended is not a certificate for tests, correctness, clean review, branch policy, merge, deployment, or release readiness.</text>
 
   <text class="title-big" x="40" y="36">Slipway · Run lifecycle</text>
   <text class="sub" x="40" y="58">one Action at a time · interruptible recovery · honest non-certifying completion</text>

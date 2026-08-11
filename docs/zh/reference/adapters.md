@@ -74,10 +74,12 @@ slipway uninstall --tool claude
 
 ## Ownership 安全
 
-![Slipway 适配器安装与 ownership 安全：install 只写入 宿主本地 capability 文件，并把其路径与 SHA-256 记录进每个 host 的 ownership manifest；该 manifest 是后续修改受管文件的唯一授权来源；refresh 与 uninstall 会按 hash 把每个记录文件重新分类为 pristine、missing 或 modified，只修改 pristine 与 missing，对 modified、未知或不安全的内容一律保留或拒绝并报告原因。](../../assets/diagrams/install-ownership.svg)
+![Slipway 适配器安装与 ownership 安全：install 只写入宿主本地 capability 文件，并把路径与 SHA-256 记录进每个 host 的 ownership manifest；该 manifest 是后续修改受管文件的唯一授权来源；refresh 与 uninstall 会把每个 claim 分类为 pristine、missing、ordinary user-modified 或 stale generated，只修改 pristine 与 missing，保留普通用户编辑，并在记录 hash 与当前版本生成 bytes 不匹配时保留文件并撤销 stale claim。](../../assets/diagrams/install-ownership.svg)
 
 每个 host root 下都有 Slipway ownership manifest，记录 repository-relative path 与 SHA-256。Refresh 和 uninstall 只修改仍与记录 hash 匹配的文件。
 
-被用户修改的 capability、未知文件、modified sentinel、malformed manifest、path escape、duplicate claim 或 unsafe symlink 不会被静默纳入 managed content；操作会保留或拒绝并报告原因。Transaction recovery artifact 与普通 preserved user file 分开报告。
+普通用户修改文件是当前 bytes 与记录 claim 不同、且不是当前版本生成 bytes 的文件；它会被保留并报告，绝不覆盖或删除。Stale generated claim 则不同：记录 hash 与当前版本生成 bytes 不匹配。文件同样会被保留且不覆盖/删除，stale claim 会撤销；若要重新生成，必须先手工删除保留文件，再运行 `slipway install --refresh`。
+
+未知文件、modified sentinel、malformed manifest、path escape、duplicate claim 或 unsafe symlink 不会被静默纳入 managed content；操作会保留或拒绝并报告原因。Transaction recovery artifact 与普通 preserved user file 分开报告。
 
 Generated sentinel 只表示 installation health，不代表 ownership。只有 manifest 可以授权后续 managed-file change；不支持的 manifest version 会在 mutation 前失败。

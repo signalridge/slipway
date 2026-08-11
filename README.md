@@ -34,10 +34,10 @@ A Slipway Run moves through one bounded Action at a time: `orient`, `clarify`,
 derives each Action from the last Outcome and its own Git observation.
 
 The host performs the work. The Slipway CLI records the Run, observes repository
-changes, and provides structured recovery. It does not call a model, hold a GitHub
-token, or decide that the software is ready to merge or release.
+changes, and provides structured recovery. It does not call a model or own/manage
+provider credentials, and it does not decide that the software is ready to merge or release.
 
-![Slipway Run lifecycle: an explicit start enters a one-Action-at-a-time loop in which the CLI issues an Action, the host performs it and returns a structured Outcome, and the CLI validates, records, and observes Git before choosing what happens next. The user can skip without a reason, stop, or resume. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.](docs/assets/diagrams/lifecycle.svg)
+![Slipway Run lifecycle: an explicit start enters a one-Action-at-a-time loop; after strict Outcome validation and independent Git observation, the CLI derives typed next; answer, confirm, or skip may yield another Active Action or leave the Run Paused on budget exhaustion, source refresh may create a paused source candidate, stop can move a paused Run to Stopped, and only stop or the current typed next.operation = resume authorizes resume, which may result in Active or Paused. Ended means only that the automatic Action queue is empty, not that the work is correct, merged, deployed, or ready to release.](docs/assets/diagrams/lifecycle.svg)
 
 > [!IMPORTANT]
 > Use a build whose `slipway --help` lists `install`, `uninstall`, `list`, `doctor`,
@@ -134,7 +134,9 @@ itself.
 Generated `propose` and `decompose` capabilities can help prepare Issues. Those are
 host-side operations: the host previews external writes, uses the user's GitHub access,
 and reports partial or failed publication. The Run/source core neither fetches nor
-publishes GitHub data and does not store credentials. The separate `doctor` command may
+publishes GitHub data and does not intentionally collect or manage provider credentials;
+host- or user-provided goals, answers, Outcomes, and command text may still be sensitive
+and persist, while environment dumps are not intentionally collected. The separate `doctor` command may
 invoke the user's local `gh` for read-only diagnostics.
 
 ## Control and recovery

@@ -28,9 +28,9 @@ Slipway は、ユーザーが明示的に起動する AI コーディング向�
 
 1回の Run は、境界の明確な Action を1つずつ進みます。`orient`、`clarify`、`implement`、`review`、`summarize` のいずれかです。この順序は固定された pipeline ではなく、CLI が直前の Outcome と自身による独立した Git 観測から各 Action を導きます。
 
-ホストが実際の作業を行い、Slipway CLI は Run の記録、リポジトリの変更 の独立観測、構造化された復旧を担当します。モデルを呼び出さず、GitHub token を保持せず、ソフトウェア が merge や release 可能かをユーザーの代わりに判断しません。
+ホストが実際の作業を行い、Slipway CLI は Run の記録、リポジトリの変更 の独立観測、構造化された復旧を担当します。モデルを呼び出さず、provider 認証情報を所有・管理せず、ソフトウェア が merge や release 可能かをユーザーの代わりに判断しません。
 
-![Slipway Run の lifecycle: 明示的な start から、1回1 Action の loop に入ります。CLI が Action を1つ発行し、ホストが実行して structured Outcome を返し、CLI が検証・記録して Git を独立に観測してから次を決めます。ユーザーは理由なく skip でき、stop や resume も可能です。Ended は automatic Action queue が空であることだけを意味し、作業が正しい・merge 済み・deploy 済み・release 可能であることは意味しません。](docs/assets/diagrams/lifecycle.svg)
+![Slipway Run の lifecycle: 明示的な start から1回1 Action の loop に入り、厳密な Outcome 検証と Git の独立観測の後に CLI が typed next を導出します。answer・confirm・skip は新しい Active Action になる場合も budget exhaustion で Paused のままの場合もあり、source refresh は paused source candidate を作る場合があります。stop は paused Run を Stopped にでき、stop 後または current typed next.operation = resume のときだけ resume が認可され、結果は Active または Paused になり得ます。Ended は queue が空であることだけを意味し、correctness や merge、deploy、release の証明ではありません。](docs/assets/diagrams/lifecycle.svg)
 
 > [!IMPORTANT]
 > `slipway --help` に `install`、`uninstall`、`list`、`doctor`、`run`、
@@ -102,7 +102,7 @@ GitHub Objective Issue は複数の Change をまとめられますが、issue-b
 
 生成された `workflow` capability は Slipway Issue workflow の product function を連携します。Rough idea、Objective、Change、既存 Run のいずれからでも current stage を確認し、最短の次の explicit capability または明示的な no-further-action outcome を示します。必要なら fact の調査、genuine な human decision の interview、work-item draft の合成を行いますが、汎用 skill router にはなりません。Self-contained で、すでにインストール済みかつ model-invocable な `/grilling` primitive だけを再利用できます。User-only front door は呼び出さず、自身では GitHub に書き込まず、Run も開始しません。
 
-生成された `propose` と `decompose` capability は Issue の準備を支援します。これらは host-side operation です。ホストが external write を preview し、ユーザーの GitHub access を使い、partial success や failure を報告します。Run/source core は GitHub data を fetch/publish せず、認証情報 も保存しません。独立した `doctor` command は read-only diagnosis のためにユーザー環境の `gh` を呼び出す場合があります。
+生成された `propose` と `decompose` capability は Issue の準備を支援します。これらは host-side operation です。ホストが external write を preview し、ユーザーの GitHub access を使い、partial success や failure を報告します。Run/source core は GitHub data を fetch/publish せず、provider 認証情報を意図的には収集・管理しません。Host/user が提供する goal、answer、Outcome、command text は機微になり得て保存されますが、environment dump は意図的に収集しません。独立した `doctor` command は read-only diagnosis のためにユーザー環境の `gh` を呼び出す場合があります。
 
 ## 制御と復旧
 

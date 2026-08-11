@@ -83,4 +83,4 @@ git diff --check
 
 ## 产品约束
 
-修改必须保留主动调用、用户控制、先查事实再提问、如实报告活动、只读 Review、可恢复 journal、ownership-aware generated file，以及不联网且不持有凭据的 core。公开接口变更时，应同步更新 code、schema、generated capability、test 和三种语言文档。
+修改必须保留主动调用、用户控制、先查事实再提问、如实报告活动、只读 Review、可恢复 journal、ownership-aware generated file，以及不访问网络、不拥有或管理 provider 凭据且不主动收集这些凭据的 Run/source core。公开接口变更时，应同步更新 code、schema、generated capability、test 和三种语言文档。

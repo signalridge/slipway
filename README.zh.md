@@ -28,9 +28,9 @@ Slipway 是一款由用户主动调用的 辅助自动化工具。它为 AI 编�
 
 一次 Run 每次只推进一个范围明确的 Action：`orient`、`clarify`、`implement`、`review` 或 `summarize`。它们的顺序不是固定流程——CLI 依据上一个 Outcome 和自己对 Git 的独立观察推导出每一个 Action。
 
-宿主负责实际工作；Slipway CLI 记录 Run、独立观察仓库变化并提供结构化恢复。它不调用模型、不持有 GitHub token，也不替用户判断软件是否可以合并或发布。
+宿主负责实际工作；Slipway CLI 记录 Run、独立观察仓库变化并提供结构化恢复。它不调用模型，也不拥有或管理 provider 凭据，不替用户判断软件是否可以合并或发布。
 
-![Slipway Run 生命周期：主动启动后进入每次一个 Action 的循环——CLI 下发一个 Action，宿主执行并返回结构化 Outcome，CLI 校验、记录并独立观察 Git，再决定下一步。用户可以无需理由地 skip，也可以 stop 或 resume。ended 只表示自动 Action 队列为空，并不代表工作正确、已合并、已部署或可以发布。](docs/assets/diagrams/lifecycle.svg)
+![Slipway Run 生命周期：主动启动后进入每次一个 Action 的循环；严格校验 Outcome 并独立观察 Git 后，CLI 推导 typed next；answer、confirm 或 skip 可能产生新的 Active Action，也可能因 budget exhaustion 继续 Paused，source refresh 可能产生 paused source candidate，stop 可以把 paused Run 变为 Stopped，只有 stop 或当前 typed next.operation = resume 才授权 resume，结果可能是 Active 或 Paused。ended 只表示自动 Action 队列为空，并不代表工作正确、已合并、已部署或可以发布。](docs/assets/diagrams/lifecycle.svg)
 
 > [!IMPORTANT]
 > 请使用 `slipway --help` 中包含 `install`、`uninstall`、`list`、`doctor`、
@@ -101,7 +101,7 @@ GitHub Objective Issue 可以组织多个 Change，但只有自包含 Change 能
 
 生成的 `workflow` 能力负责衔接 Slipway Issue 工作流中的产品功能。无论起点是粗略想法、Objective、Change 还是已有 Run，它都会先核实当前阶段，再点名最短的下一项显式调用能力或明确的 no-further-action outcome；需要时可以调查事实、逐一访谈真正的人类决策并综合 work-item 草稿，但不会充当通用 skill 路由器。它本身自包含，只可复用已经安装且允许 model invocation 的 `/grilling` primitive；它不会调用 user-only 前门，也不会自行写入 GitHub 或启动 Run。
 
-生成的 `propose` 和 `decompose` 能力可以协助准备 Issue。这些是宿主侧操作：宿主预览所有外部写入，使用用户自己的 GitHub 权限，并如实报告部分成功或失败。Run/source core 不获取或发布 GitHub 数据，也不保存凭据；独立的 `doctor` 命令可能调用用户本机的 `gh` 做只读诊断。
+生成的 `propose` 和 `decompose` 能力可以协助准备 Issue。这些是宿主侧操作：宿主预览所有外部写入，使用用户自己的 GitHub 权限，并如实报告部分成功或失败。Run/source core 不获取或发布 GitHub 数据，也不会主动收集或管理 provider 凭据；宿主或用户提供的 goal、answer、Outcome 与命令文本仍可能敏感并被保存，但不会主动收集环境变量 dump。独立的 `doctor` 命令可能调用用户本机的 `gh` 做只读诊断。
 
 ## 控制与恢复
 

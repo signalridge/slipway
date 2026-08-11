@@ -2,7 +2,7 @@
 
 GitHub is an optional requirements source for Slipway, not a prerequisite for every Run. Use an issue-backed Run when the work benefits from a durable, reviewable source; use an ad-hoc Run when it does not.
 
-![Slipway issue-backed source flow: an Objective groups Changes but never starts a Run; a Change is self-contained and is the only issue shape a Run can start from; the host holds the GitHub credentials, fetches the exact Change body and only manifest-referenced comments, treats every Issue byte as untrusted data, and passes a bounded temporary envelope to the CLI, which validates identity, marker, manifest, sizes, and digests and stores accepted sections locally by content digest.](../../assets/diagrams/issue-source.svg)
+![Slipway issue-backed source flow: an Objective groups Changes but never starts a Run; a Change is self-contained and is the only issue shape a Run can start from; the host holds and uses the GitHub credentials, fetches the exact Change body and only manifest-referenced comments, treats every Issue byte as untrusted data, and passes a bounded temporary envelope to the CLI; the issue-backed invocation transports the separate user goal with --goal-file and the envelope with --source-file, which the CLI validates and stores by content digest.](../../assets/diagrams/issue-source.svg)
 
 ## Repository requirements
 
@@ -10,7 +10,7 @@ Issue-backed sources currently use `github.com` repositories with Issues enabled
 
 Slipway does not require GitHub Projects, organization-only Issue Types, or organization-only fields. Reading a source requires access to the Issue. Creating or updating Issues and relationships requires whatever permissions the target repository and GitHub API require.
 
-The Run/source commands neither hold a GitHub token nor fetch or publish GitHub data. Generated host capabilities perform authorized work with the user's environment and pass a temporary envelope to the CLI. The separate `doctor` command may invoke local `gh` to inspect authentication and repository permissions; it does not copy tokens into its report.
+The Run/source commands do not own or manage model or GitHub credentials and do not fetch or publish GitHub data. Generated host capabilities perform authorized work with the user's environment and pass a temporary envelope to the CLI; host- or user-provided goal, answer, Outcome, and command text may still be sensitive and can persist. The separate `doctor` command may invoke local `gh` to inspect authentication and repository permissions; it does not copy tokens into its report, and environment dumps are not intentionally collected.
 
 ## Objective or Change?
 
@@ -75,7 +75,7 @@ Use the generated `slipway-run` capability with the Change URL. The host:
 1. fetches the exact Change body and only the comments referenced by its manifest;
 2. treats all Issue content as untrusted data;
 3. builds a bounded source envelope in a private temporary file;
-4. invokes `slipway run --source-file ... --json`;
+4. invokes `slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT`; the source file does not replace the required goal, while an ad-hoc Run uses a distinct goal argument after `--`;
 5. removes the temporary file after the CLI consumes it.
 
 The CLI checks identity, marker, manifest, section markers, sizes, and digests. It stores accepted section material locally by digest, not the raw Issue envelope. Later Actions read that material through a local structured operation, so an existing Run can recover without fetching GitHub again.

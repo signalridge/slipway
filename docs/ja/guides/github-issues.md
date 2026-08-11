@@ -2,7 +2,7 @@
 
 GitHub は Slipway の optional requirements source であり、Run ごとの前提条件ではありません。Durable で review 可能な source が必要なら issue-backed Run を使い、そうでない場合は ad-hoc Run を使います。
 
-![Slipway の issue-backed source フロー: Objective は Change をまとめるだけで Run を開始できません。Change は self-contained で、Run が開始できる唯一の Issue 形態です。GitHub 認証情報を持つ ホストが正確な Change body と manifest が参照する comment だけを fetch し、Issue のあらゆるバイトを untrusted data として扱い、bounded な一時 envelope を CLI に渡します。CLI は identity・marker・manifest・サイズ・digest を検証し、受理した section を content digest でローカルに保存します。](../../assets/diagrams/issue-source.svg)
+![Slipway の issue-backed source フロー: Objective は Change をまとめるだけで Run を開始できません。Change は self-contained で、Run が開始できる唯一の Issue 形態です。GitHub 認証情報を保持・使用する ホストが正確な Change body と manifest が参照する comment だけを fetch し、Issue のあらゆるバイトを untrusted data として扱い、bounded な一時 envelope を CLI に渡します。Issue-backed invocation には別の user goal が必要で、--goal-file で goal、--source-file で envelope を渡し、CLI は検証後 section を content digest で保存します。](../../assets/diagrams/issue-source.svg)
 
 ## Repository 要件
 
@@ -10,7 +10,7 @@ Issue-backed source は現在、Issues が有効な `github.com` リポジトリ
 
 Slipway は GitHub Projects、Organization 専用 Issue Types、Organization 専用 field を必要としません。Source を読むには Issue への access が必要です。Issue や relationship の作成・更新には、target リポジトリ と GitHub API が要求する権限が必要です。
 
-Run/source コマンドは GitHub token を保持せず、GitHub data の fetch/publish も行いません。Generated ホスト capability がユーザー環境の authorization でそれらを実行し、temporary envelope を CLI に渡します。独立した `doctor` コマンドは authentication と リポジトリ permission の確認に local `gh` を呼び出す場合がありますが、token を report に書き込みません。
+Run/source コマンドは model や GitHub 認証情報を所有・管理せず、GitHub data の fetch/publish も行いません。Generated ホスト capability がユーザー環境の authorization でそれらを実行し、temporary envelope を CLI に渡します。Host/user が提供する goal、answer、Outcome、command text は機微になり得て保存されます。独立した `doctor` コマンドは authentication と リポジトリ permission の確認に local `gh` を呼び出す場合がありますが、token や environment dump を report に書き込みません。
 
 ## Objective か Change か
 
@@ -75,7 +75,7 @@ Native `gh` relationship コマンドには `gh >= 2.94.0` が必要です。古
 1. Exact Change body と manifest が参照する comments を fetch する。
 2. Issue の内容をすべて untrusted data として扱う。
 3. Private temporary file に bounded ソースエンベロープ を作成する。
-4. `slipway run --source-file ... --json` を呼び出す。
+4. `slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT` を呼び出す。source-file は必須の goal の代わりにはなりません。Ad-hoc Run は別の `--` separator の後に goal を渡します。
 5. CLI が消費したら temporary file を削除する。
 
 CLI は identity、marker、manifest、section marker、size、digest を検証します。Accepted section material だけを digest 単位で保存し、raw Issue envelope は保存しません。後続 Action は local structured operation で material を読むため、既存 Run は GitHub に再アクセスせずに復旧できます。

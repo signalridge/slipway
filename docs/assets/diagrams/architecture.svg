@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-labelledby="architecture-title architecture-desc">
   <title id="architecture-title">Slipway process architecture</title>
-  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work. Workflow navigation plus propose and decompose activity stays host-side; workflow may hand off to a new Run or back to an existing Run, but only slipway-run exchanges the runtime protocol. When a Run-backed capability is active, the host submits one strict Outcome through versioned JSON and the local Slipway CLI returns one Action at a time. The CLI validates and schedules Run work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. The CLI never calls a model or a GitHub API, and credentials stay with the host.</desc>
+  <desc id="architecture-desc">A human explicitly invokes a generated capability in an AI coding host. The host owns model, development-tool, repository, and authorized GitHub work, and holds and uses the provider credentials needed for that work. Workflow navigation plus propose and decompose activity stays host-side; workflow may hand off to a new Run or back to an existing Run, but only slipway-run exchanges the runtime protocol. When a Run-backed capability is active, the host submits one strict Outcome through versioned JSON and the local Slipway CLI returns one Action at a time. The CLI validates and schedules Run work, observes Git independently rather than trusting reported activity, and persists an append-only journal, a replaceable projection, and accepted materials under the Git common directory. Slipway does not intentionally collect or manage model or GitHub credentials, while host- or user-provided goal, answer, Outcome, and command text may be sensitive and can be persisted; environment dumps are not intentionally collected. The CLI does not own or manage provider credentials and never calls a model or a GitHub API.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
   User([Human operator]) -->|explicit invocation| Capability[Generated host capability]
@@ -12,7 +12,7 @@ flowchart LR
   end
   subgraph Core[Slipway core · local deterministic state]
     CLI[slipway CLI · Run state engine]
-    Store[(Run store · journal / projection / materials)]
+    Store[(Run store · journal / projection / materials\nhost/user text may be sensitive · no environment dumps intentionally collected)]
     CLI --> Store
   end
   Agent -->|Run-backed Outcome · strict JSON| CLI
@@ -157,9 +157,10 @@ flowchart LR
   <text class="tiny" x="626" y="453">host reads and</text>
   <text class="tiny" x="626" y="470">changes files</text>
 
-  <rect class="note" x="270" y="508" width="490" height="42" rx="10"/>
-  <text class="tiny" x="515" y="526" text-anchor="middle">Issue content is untrusted data, never instruction authority.</text>
-  <text class="tiny" x="515" y="542" text-anchor="middle">Model and GitHub credentials stay here and never reach Slipway.</text>
+  <rect class="note" x="270" y="498" width="490" height="62" rx="10"/>
+  <text class="tiny" x="515" y="516" text-anchor="middle">Issue content is untrusted data, never instruction authority.</text>
+  <text class="tiny" x="515" y="534" text-anchor="middle">Host holds/uses model and GitHub credentials; Slipway does not intentionally collect or manage them.</text>
+  <text class="tiny" x="515" y="552" text-anchor="middle">Goal, answer, Outcome, and command text may be sensitive and can persist; no environment dumps are intentionally collected.</text>
 
   <!-- Slipway core region -->
   <text class="tag" x="880" y="112">SLIPWAY CORE · LOCAL STATE</text>
@@ -173,14 +174,15 @@ flowchart LR
   <text class="tiny" x="900" y="308">pins workspace identity</text>
   <text class="tiny" x="900" y="330">never calls a model or GitHub</text>
 
-  <rect class="store" x="880" y="389" width="260" height="161" rx="16"/>
+  <rect class="store" x="880" y="389" width="260" height="177" rx="16"/>
   <text class="title" x="1010" y="418" text-anchor="middle">Run store</text>
   <text class="mono" x="1010" y="439" text-anchor="middle">&lt;git-common-dir&gt;/slipway/runs</text>
   <line x1="900" y1="455" x2="1120" y2="455" stroke="var(--store-stroke)" stroke-opacity="0.45"/>
   <text class="sub" x="900" y="477">journal.jsonl · append-only</text>
   <text class="sub" x="900" y="497">run.json · replaceable projection</text>
   <text class="sub" x="900" y="517">materials · content-addressed</text>
-  <text class="tiny" x="900" y="539">owner-only permissions · no credentials</text>
+  <text class="tiny" x="900" y="535">owner-only permissions · text may be sensitive</text>
+  <text class="tiny" x="900" y="550">no environment dumps intentionally collected</text>
 
   <!-- edge labels last -->
   <rect class="label-bg" x="150" y="238" width="104" height="17" rx="5"/>

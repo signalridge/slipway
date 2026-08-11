@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="trust-boundary-title trust-boundary-desc">
   <title id="trust-boundary-title">Slipway trust boundaries</title>
-  <desc id="trust-boundary-desc">Slipway separates untrusted issue content, the trusted-to-fetch host that holds model and GitHub credentials, and the local CLI that validates without owning credentials. Issue content is data and never instruction: it cannot grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope. The CLI can validate envelope consistency, identities, and digests, but cannot cryptographically prove the host fetched GitHub honestly. Slipway assumes that the same account, root, malware, or a compromised host can exceed its protections, and that reported activity is not proof while an observed diff does not prove which process caused it.</desc>
+  <desc id="trust-boundary-desc">Slipway separates untrusted issue content, the trusted-to-fetch host that holds and uses model and GitHub credentials, and the local CLI that validates without owning or managing provider credentials. Issue content is data and never instruction: it cannot grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope. The CLI can validate envelope consistency, identities, and digests, but cannot cryptographically prove the host fetched GitHub honestly. Goal, answer, Outcome, and command text supplied by a host or user may be sensitive and can persist in the Run store; environment dumps are not intentionally collected. Slipway assumes that the same account, root, malware, or a compromised host can exceed its protections, and that reported activity is not proof while an observed diff does not prove which process caused it.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart LR
   subgraph untrusted["UNTRUSTED · data, never instruction"]
@@ -12,9 +12,9 @@ flowchart LR
     Host["AI coding host\nmodel provider credentials\nGitHub credentials via gh\nshell and tool execution"]
   end
 
-  subgraph local["VALIDATES · holds no credentials"]
-    CLI["slipway CLI\nstrict JSON · sizes · identities · digests\nanchored paths · no symlink traversal"]
-    Store["Run store · owner-only permissions"]
+  subgraph local["VALIDATES · does not own/manage provider credentials"]
+    CLI["slipway CLI\nstrict JSON · sizes · identities · digests\nanchored paths · no symlink traversal\ndoes not own/manage provider credentials"]
+    Store["Run store · owner-only permissions\nhost/user text may be sensitive\nno environment dumps intentionally collected"]
   end
 
   Issue -->|"quoted as data"| Host
@@ -113,7 +113,7 @@ flowchart LR
   </defs>
 
   <text class="title-big" x="40" y="36">Slipway · trust boundaries</text>
-  <text class="sub" x="40" y="58">Issue content is data, never instruction · the host holds every credential · the CLI validates but cannot prove honesty upstream</text>
+  <text class="sub" x="40" y="58">Issue content is data, never instruction · the host holds/uses provider credentials · the CLI does not own/manage them or prove upstream honesty</text>
 
   <!-- UNTRUSTED zone -->
   <rect class="band-untrusted" x="40" y="88" width="330" height="290" rx="16"/>
@@ -153,7 +153,7 @@ flowchart LR
 
   <!-- LOCAL zone -->
   <rect class="band-local" x="800" y="88" width="360" height="290" rx="16"/>
-  <text class="tag-ok" x="820" y="112">VALIDATES · HOLDS NO CREDENTIALS</text>
+  <text class="tag-ok" x="820" y="112">VALIDATES · NO CREDENTIAL OWNERSHIP</text>
 
   <rect class="verify" x="820" y="128" width="320" height="132" rx="12"/>
   <text class="title" x="980" y="154" text-anchor="middle">slipway CLI</text>
@@ -161,14 +161,15 @@ flowchart LR
   <text class="tiny" x="980" y="194" text-anchor="middle">anchored paths · no unsafe symlink traversal</text>
   <text class="tiny" x="980" y="212" text-anchor="middle">one-shot destructive grants, scope-digest bound</text>
   <text class="tiny" x="980" y="230" text-anchor="middle">independent Git observation</text>
-  <text class="tiny" x="980" y="250" text-anchor="middle">calls no model · reaches no GitHub</text>
+  <text class="tiny" x="980" y="250" text-anchor="middle">does not own/manage provider credentials</text>
 
-  <rect class="card" x="820" y="272" width="320" height="66" rx="12"/>
-  <text class="title" x="980" y="296" text-anchor="middle">Run store</text>
-  <text class="tiny" x="980" y="314" text-anchor="middle">Unix 0700/0600 · Windows owner-only ACL</text>
-  <text class="tiny" x="980" y="330" text-anchor="middle">no tokens · no environment dumps</text>
+  <rect class="card" x="820" y="272" width="320" height="82" rx="12"/>
+  <text class="title" x="980" y="294" text-anchor="middle">Run store</text>
+  <text class="tiny" x="980" y="312" text-anchor="middle">Unix 0700/0600 · Windows owner-only ACL</text>
+  <text class="tiny" x="980" y="330" text-anchor="middle">goal / answer / Outcome / command text may persist</text>
+  <text class="tiny" x="980" y="346" text-anchor="middle">no environment dumps intentionally collected</text>
 
-  <text class="tiny" x="820" y="360">`doctor` is the one exception: it may invoke local `gh` for read-only diagnostics.</text>
+  <text class="tiny" x="820" y="374">`doctor` is the one exception: it may invoke local `gh` for read-only diagnostics.</text>
 
   <!-- flows -->
   <path class="flow" d="M350 176 H433" marker-end="url(#tb-arrow)"/>
@@ -196,12 +197,13 @@ flowchart LR
   <line class="deny-mark" x1="600" y1="408" x2="584" y2="424"/>
 
   <!-- bottom limits -->
-  <rect class="band" x="40" y="450" width="546" height="120" rx="14"/>
+  <rect class="band" x="40" y="450" width="546" height="136" rx="14"/>
   <text class="tag-ok" x="60" y="474">WHAT THE BOUNDARY DOES GUARANTEE</text>
   <text class="sub" x="60" y="498">· the envelope is internally consistent: identity, markers, sizes, digests</text>
-  <text class="sub" x="60" y="518">· credentials stay out of Slipway storage and out of the Run core</text>
-  <text class="sub" x="60" y="538">· destructive grants bind to one exact request and scope digest</text>
-  <text class="sub" x="60" y="558">· user-modified generated files are preserved, never overwritten</text>
+  <text class="sub" x="60" y="518">· Slipway does not intentionally collect or manage model or GitHub credentials</text>
+  <text class="sub" x="60" y="538">· host/user goal, answer, Outcome, or command text may be sensitive and can persist</text>
+  <text class="sub" x="60" y="558">· no environment dumps are intentionally collected; destructive grants bind to one exact request</text>
+  <text class="sub" x="60" y="578">· user-modified generated files are preserved, never overwritten</text>
 
   <rect class="band" x="614" y="450" width="546" height="120" rx="14"/>
   <text class="tag-warn" x="634" y="474">WHAT IT CANNOT GUARANTEE</text>

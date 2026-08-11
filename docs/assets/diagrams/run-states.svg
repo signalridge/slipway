@@ -1,13 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="run-states-title run-states-desc">
   <title id="run-states-title">Slipway Run states and recovery</title>
-  <desc id="run-states-desc">A Run is created only by an explicit user start and becomes active. An active Run pauses for one of four reported reasons: a human decision, an unavailable environment dependency, an exhausted Action budget, or confirmation of an exact destructive scope. A changed or unavailable issue source pauses as a decision rather than as a reason of its own. Answering, confirming, or skipping returns a paused Run to active. Stop invalidates pending work but keeps the journal, and a stopped Run can be resumed. Ended is terminal and cannot be resumed. Every resume revalidates the original worktree identity and voids stale work.</desc>
+  <desc id="run-states-desc">A Run is created only by an explicit user start and becomes active. An active Run pauses for one of four reported reasons: a human decision, an unavailable environment dependency, an exhausted Action budget, or confirmation of an exact destructive scope. A changed or unavailable issue source pauses as a decision or creates a paused source candidate awaiting an explicit choice. Answering, confirming, or skipping can produce an Active next Action or leave the Run Paused on budget exhaustion. Stop invalidates pending work but keeps the journal and can move a paused Run to Stopped. Resume is authorized only after stop or when the current typed next.operation is a resume variant; it may produce Active or Paused depending on the resulting typed state. Ended is terminal and cannot be resumed. Every resume revalidates the original worktree identity and voids stale work.</desc>
   <metadata id="mermaid-source"><![CDATA[
 stateDiagram-v2
   [*] --> Active: explicit user start (slipway run)
   Active --> Paused: needs_input or CLI budget_exhausted
-  Paused --> Active: current typed answer / skip / resume
+  Paused --> Active: answer / confirm / skip → next.operation = action
+  Paused --> Paused: answer / confirm / skip → budget_exhausted
+  Paused --> Paused: resume source refresh → paused source candidate
+  Paused --> Stopped: stop
   Active --> Stopped: slipway stop · reorder · take over
-  Stopped --> Active: protocol resume (explicit)
+  Stopped --> Active: current typed resume variant → next.operation = action
+  Stopped --> Paused: current typed resume variant → source candidate / paused typed state
   Active --> Ended: automatic Action queue empty
   Ended --> [*]
 
@@ -17,11 +21,14 @@ stateDiagram-v2
     environment_unavailable
     budget_exhausted (CLI-only)
     destructive_confirmation_required
+    answerable decision/destructive pauses use answer or skip, not resume
+    only current typed next.operation = resume authorizes resume
   end note
 
   note right of Stopped
     pending work invalidated
     journal retained and resumable
+    resume may result in Active or Paused
   end note
 
   note right of Ended
@@ -120,14 +127,17 @@ stateDiagram-v2
   </defs>
 
   <text class="title-big" x="40" y="36">Slipway · Run states and recovery</text>
-  <text class="sub" x="40" y="58">explicit start · four reported pause reasons · stop keeps the journal · ended is terminal</text>
+  <text class="sub" x="40" y="58">explicit start · typed `next` controls recovery · stop keeps the journal · ended is terminal</text>
 
   <!-- edges painted before nodes -->
   <line class="flow" x1="96" y1="196" x2="169" y2="196" marker-end="url(#rs-arrow)"/>
   <path class="flow-pause" d="M400 175 H693" marker-end="url(#rs-arrow-pause)"/>
   <path class="flow-main" d="M700 228 H407" marker-end="url(#rs-arrow-main)"/>
   <path class="flow-stop" d="M270 274 V393" marker-end="url(#rs-arrow-stop)"/>
+  <path class="flow-stop" d="M700 250 H620 V370 H470 V400" marker-end="url(#rs-arrow-stop)"/>
   <path class="flow-main" d="M360 400 V281" marker-end="url(#rs-arrow-main)"/>
+  <path class="flow-pause" d="M470 455 H560 V300 H693" marker-end="url(#rs-arrow-pause)"/>
+  <path class="flow-pause" d="M990 180 C1060 180 1060 285 990 285" marker-end="url(#rs-arrow-pause)"/>
   <path class="flow" d="M400 262 H560 V440 H693" marker-end="url(#rs-arrow)"/>
 
   <!-- explicit start -->
@@ -144,14 +154,15 @@ stateDiagram-v2
   <text class="tiny" x="288" y="252" text-anchor="middle">host performs work, submits Outcome</text>
 
   <!-- Paused -->
-  <rect class="pause" x="700" y="128" width="290" height="146" rx="18"/>
+  <rect class="pause" x="700" y="128" width="290" height="174" rx="18"/>
   <text class="state-name" x="845" y="162" text-anchor="middle">Paused</text>
   <text class="tag" x="845" y="182" text-anchor="middle">FOUR REPORTED REASONS</text>
   <text class="mono-tiny" x="845" y="203" text-anchor="middle">decision_required</text>
   <text class="mono-tiny" x="845" y="220" text-anchor="middle">environment_unavailable</text>
   <text class="mono-tiny" x="845" y="237" text-anchor="middle">destructive_confirmation_required</text>
   <text class="mono-tiny" x="845" y="254" text-anchor="middle">budget_exhausted · CLI-only</text>
-  <text class="tiny" x="845" y="269" text-anchor="middle">a changed issue source pauses as a decision</text>
+  <text class="tiny" x="845" y="269" text-anchor="middle">source refresh → paused candidate choice</text>
+  <text class="tiny" x="845" y="285" text-anchor="middle">answer/confirm/skip may remain Paused</text>
 
   <!-- Stopped -->
   <rect class="stop" x="176" y="400" width="294" height="92" rx="18"/>
@@ -169,27 +180,34 @@ stateDiagram-v2
   <rect class="label-bg" x="452" y="157" width="196" height="18" rx="5"/>
   <text class="edge-label" x="458" y="170">needs_input · or CLI budget exhaustion</text>
 
-  <rect class="label-bg" x="452" y="210" width="182" height="18" rx="5"/>
-  <text class="edge-label" x="458" y="223">protocol answer · confirm · skip</text>
+  <rect class="label-bg" x="452" y="210" width="238" height="18" rx="5"/>
+  <text class="edge-label" x="458" y="223">answer/confirm/skip → Active only if next=action</text>
 
-  <rect class="label-bg" x="146" y="322" width="126" height="18" rx="5"/>
-  <text class="edge-label" x="152" y="335">slipway stop &lt;run-id&gt;</text>
+  <rect class="label-bg" x="1000" y="238" width="160" height="18" rx="5"/>
+  <text class="edge-label" x="1006" y="251">result may stay Paused</text>
 
-  <rect class="label-bg" x="368" y="322" width="130" height="18" rx="5"/>
-  <text class="edge-label" x="374" y="335">protocol resume · explicit</text>
+  <rect class="label-bg" x="146" y="322" width="176" height="18" rx="5"/>
+  <text class="edge-label" x="152" y="335">slipway stop &lt;run-id&gt; · Active or Paused</text>
+
+  <rect class="label-bg" x="368" y="322" width="220" height="18" rx="5"/>
+  <text class="edge-label" x="374" y="335">typed resume variant → Active if next=action</text>
+
+  <rect class="label-bg" x="474" y="358" width="202" height="18" rx="5"/>
+  <text class="edge-label" x="480" y="371">source refresh → Paused candidate</text>
 
   <rect class="label-bg" x="568" y="336" width="152" height="18" rx="5"/>
   <text class="edge-label" x="574" y="349">automatic queue empty</text>
 
   <!-- resume invariants note -->
-  <rect class="band" x="40" y="530" width="546" height="122" rx="14"/>
-  <text class="tag" x="60" y="554">EVERY RESUME REVALIDATES</text>
-  <text class="sub" x="60" y="578">· the original worktree identity: root, per-worktree Git dir, Git common dir</text>
-  <text class="sub" x="60" y="598">· stale Action IDs, answers, source candidates, and destructive grants are voided</text>
-  <text class="sub" x="60" y="618">· omitted --budget keeps a positive remainder; zero is replenished to max(initial, 3)</text>
-  <text class="sub" x="60" y="638">· an explicit --budget N replaces it, applied only on the mutation that resumes</text>
+  <rect class="band" x="40" y="530" width="546" height="140" rx="14"/>
+  <text class="tag" x="60" y="554">EVERY AUTHORIZED RESUME REVALIDATES</text>
+  <text class="sub" x="60" y="578">· only stop or the current typed `next.operation = resume` authorizes protocol resume</text>
+  <text class="sub" x="60" y="598">· the original worktree identity: root, per-worktree Git dir, Git common dir</text>
+  <text class="sub" x="60" y="618">· stale Action IDs, answers, source candidates, and destructive grants are voided</text>
+  <text class="sub" x="60" y="638">· the resulting typed state may be Active or Paused; budget replacement applies only on resume</text>
+  <text class="sub" x="60" y="658">· omitted --budget preserves positive remainder; zero replenishes to max(initial, 3)</text>
 
-  <rect class="band" x="614" y="530" width="546" height="122" rx="14"/>
+  <rect class="band" x="614" y="530" width="546" height="140" rx="14"/>
   <text class="tag" x="634" y="554">ENDED IS NOT A CERTIFICATE</text>
   <text class="sub" x="634" y="578">It means only that Slipway has no more automatic Actions to issue.</text>
   <text class="sub" x="634" y="598">Tests passing, review findings, branch protection, pull-request approval,</text>

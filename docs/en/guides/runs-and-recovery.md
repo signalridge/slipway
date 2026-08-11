@@ -2,7 +2,7 @@
 
 A Run is durable enough to stop and resume, but its journal is not a secret vault or a completion certificate. This guide explains what users can inspect and retain.
 
-![Slipway Run states: an explicit start makes a Run active; it pauses for one of four reported reasons — a human decision, an unavailable environment, an exhausted budget, or destructive confirmation — and answering, confirming, or skipping returns it to active; stop invalidates pending work but keeps the journal and can be resumed, while ended is terminal.](../../assets/diagrams/run-states.svg)
+![Slipway Run states: an explicit start makes a Run Active; it pauses for a human decision, unavailable environment, exhausted budget, or destructive confirmation; answer, confirm, or skip can produce another Active Action or leave it Paused on budget exhaustion, and source refresh can create a paused source candidate awaiting an explicit choice; stop can move a paused Run to Stopped; only stop or the current typed next.operation = resume authorizes resume, which may result in Active or Paused, while Ended is terminal and non-certifying.](../../assets/diagrams/run-states.svg)
 
 ## Inspect Runs
 

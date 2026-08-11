@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 740" role="img" aria-labelledby="issue-source-title issue-source-desc">
   <title id="issue-source-title">Slipway issue-backed source flow</title>
-  <desc id="issue-source-desc">An Objective is optional planning structure that groups several independently deliverable Changes and can never start a Run. A Change is self-contained and is the only issue shape a Run can start from. The host holds the GitHub credentials: it fetches the exact Change body and only the comments its manifest references, treats all issue content as untrusted data, and passes a bounded temporary envelope to the CLI. The CLI validates identity, marker, manifest, sizes, and digests, then stores accepted sections locally by content digest so later Actions read them without fetching GitHub again. An ad-hoc Run needs no issue at all.</desc>
+  <desc id="issue-source-desc">An Objective is optional planning structure that groups several independently deliverable Changes and can never start a Run. A Change is self-contained and is the only issue shape a Run can start from. The host holds and uses the GitHub credentials: it fetches the exact Change body and only the comments its manifest references, treats all issue content as untrusted data, and passes a bounded temporary envelope to the CLI. Starting the issue-backed Run still requires a separate user goal transported with --goal-file; the invocation is `slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT`; --source-file carries the Issue envelope and does not replace the goal. The CLI validates identity, marker, manifest, sizes, and digests, then stores accepted sections locally by content digest so later Actions read them without fetching GitHub again. An ad-hoc Run needs no issue at all and keeps its goal after the -- separator.</desc>
   <metadata id="mermaid-source"><![CDATA[
 flowchart TB
   Objective["Objective (optional)\nslipway-level: objective/v1\nplanning structure only — can never start a Run"]
@@ -19,7 +19,7 @@ flowchart TB
     Fetch --> Untrusted --> Envelope
   end
 
-  Envelope --> Run["slipway run --source-file ... --json"]
+  Envelope --> Run["slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT\nissue-backed goal + source; ad-hoc goal remains after --"]
   Run --> Validate{"4 · CLI validates\nidentity · marker · manifest\nsection markers · sizes · digests"}
   Validate -->|reject| Err["missing, extra, duplicate, minimized,\nedited, oversized, or hash-mismatched → rejected"]
   Validate -->|accept| Store["5 · store accepted sections by content digest"]
@@ -174,7 +174,8 @@ flowchart TB
   <path class="flow-main" d="M965 160 V498 H860 V513" marker-end="url(#is-arrow-main)"/>
 
   <rect class="verify" x="230" y="520" width="700" height="44" rx="12"/>
-  <text class="mono" x="250" y="547">slipway run --source-file FILE --json --root ROOT      ·      or an ad-hoc goal after --</text>
+  <text class="mono" x="250" y="543">slipway run --goal-file GOAL_FILE --source-file SOURCE_FILE --json --root ROOT</text>
+  <text class="tiny" x="250" y="559">distinct ad-hoc form: a goal argument after `--` · source-file does not replace the goal</text>
 
   <!-- validate -->
   <path class="flow-main" d="M580 564 V590" marker-end="url(#is-arrow-main)"/>

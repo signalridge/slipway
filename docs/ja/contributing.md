@@ -83,4 +83,4 @@ Documentation の規則：
 
 ## Product 制約
 
-変更は、明示的起動、ユーザー制御、質問より先の事実確認、正直な activity 報告、read-only Review、recoverable な ジャーナル、ownership-aware generated file、network/認証情報を持たない core を維持する必要があります。公開 surface の変更時は、code、schema、generated capability、test、3言語の documentation を同時に更新してください。
+変更は、明示的起動、ユーザー制御、質問より先の事実確認、正直な activity 報告、read-only Review、recoverable な ジャーナル、ownership-aware generated file、network にアクセスせず provider 認証情報を所有・管理せず意図的にも収集しない Run/source core を維持する必要があります。公開 surface の変更時は、code、schema、generated capability、test、3言語の documentation を同時に更新してください。

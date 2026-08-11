@@ -1,8 +1,8 @@
 # 架构
 
-Slipway 将控制循环放在本地 CLI，将模型相关工作放在生成的宿主 adapter 中。这样 CLI 可以验证状态，而无需持有模型或 GitHub 凭据。
+Slipway 将控制循环放在本地 CLI，将模型相关工作放在生成的宿主 adapter 中。这样 CLI 可以验证状态，而无需拥有或管理模型提供方或 GitHub 凭据；Slipway 也不会主动收集这些凭据。
 
-![Slipway 进程架构：用户主动调用 AI 编程工具中的生成能力；宿主负责模型、仓库和经授权的 GitHub 工作，只有 Run-backed 路径会通过版本化 JSON 连接本地 CLI 与持久 Run store。](../../assets/diagrams/architecture.svg)
+![Slipway 进程架构：用户主动调用 AI 编程工具中的生成能力；宿主负责模型、仓库、经授权的 GitHub 工作及其使用的凭据；Slipway 不会主动收集或管理这些凭据，而 Run store 仍可能保存宿主或用户提供的敏感 goal、answer、Outcome 与命令文本，但不会主动收集环境变量 dump。](../../assets/diagrams/architecture.svg)
 
 ## 进程边界
 
@@ -83,14 +83,14 @@ Source Bundle 的设计理由与被拒方案记录在 [ADR-0001](../../../adr/00
 
 ## 安全边界
 
-![Slipway 信任边界：Issue 内容与工作区是不可信数据，永远不能授予 shell 权限、泄露凭据、绕过确认或扩大破坏性范围；AI coding host 被信任去执行动作并持有全部凭据；本地 CLI 校验严格 JSON、大小、身份与 digest，自身不持有任何凭据，但无法证明宿主诚实地抓取了 GitHub。](../../assets/diagrams/trust-boundary.svg)
+![Slipway 信任边界：Issue 内容与工作区是不可信数据，永远不能授予 shell 权限、泄露凭据、绕过确认或扩大破坏性范围；AI coding host 被信任去执行动作并持有、使用 provider 凭据；Slipway 不会主动收集或管理这些凭据，本地 CLI 在不拥有或管理 provider 凭据的情况下校验严格 JSON、大小、身份与 digest；goal、answer、Outcome 与命令文本可能敏感并被保存，但不会主动收集环境变量 dump。](../../assets/diagrams/trust-boundary.svg)
 
 Slipway 假设同账号进程、root、malware 或 compromised host 可以越过其保护。在该边界内，它会：
 
 - anchor filesystem operation 并拒绝 unsafe symlink traversal；
 - 将待删除项移动到 private quarantine 并重新校验 identity，以收窄删除竞态窗口，但不声称实现 exact-object deletion：持续竞争的同 UID watcher 仍可能在最终校验与基于 pathname 的 `unlink` 或 `rmdir` 系统调用之间替换该路径；
 - 验证 strict JSON、size、identity 与 digest；
-- 不在 Slipway storage 中保存凭据，并让 GitHub 获取/发布留在 Run core 之外；
+- 不会主动收集或管理 model-provider 或 GitHub 凭据；宿主或用户提供的 goal、answer、Outcome 与命令文本仍可能敏感并被保存，但不会主动收集环境变量 dump；
 - 将一次性 destructive grant 与自然语言 answer 分离；
 - 保留用户修改过的 generated file；
 - 报告平台 durability limitation。

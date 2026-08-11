@@ -2,7 +2,7 @@
 
 Slipway 将用户意图、宿主执行和持久 Run 状态分开。理解以下术语即可使用产品，无需先阅读机器协议。
 
-![Slipway Run 生命周期：主动启动后进入每次一个 Action 的 Action/Outcome 循环；用户可以 skip、pause、stop 或 resume；ended 只表示自动 Action 队列为空。](../../assets/diagrams/lifecycle.svg)
+![Slipway Run 生命周期：主动启动后进入每次一个 Action 的 Action/Outcome 循环；CLI 校验并独立观察 Git 后遵循 typed next；answer、confirm 或 skip 可能进入 Active，也可能因 budget exhaustion 保持 Paused，source refresh 可能产生 paused candidate，stop 可以把 Paused 变为 Stopped，只有 stop 或当前 next.operation = resume 才授权 resume，结果可能是 Active 或 Paused；ended 只表示自动 Action 队列为空。](../../assets/diagrams/lifecycle.svg)
 
 ## Run
 

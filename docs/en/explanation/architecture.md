@@ -1,8 +1,8 @@
 # Architecture
 
-Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning model or GitHub credentials.
+Slipway keeps the control loop in a local CLI and the model-specific work in generated host adapters. This boundary lets the CLI validate state without owning or managing model-provider or GitHub credentials; Slipway does not intentionally collect those credentials.
 
-![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, and authorized GitHub work, while only Run-backed paths exchange versioned JSON with the local CLI and durable Run store.](../../assets/diagrams/architecture.svg)
+![Slipway process architecture: a user explicitly invokes a generated capability in an AI coding host; the host owns model, repository, authorized GitHub work, and the credentials it uses; Slipway does not intentionally collect or manage those credentials, while the Run store may persist sensitive host- or user-provided goals, answers, Outcomes, and command text but intentionally collects no environment dumps.](../../assets/diagrams/architecture.svg)
 
 ## Process boundaries
 
@@ -83,14 +83,14 @@ For a given revision, its code, built `--help`, generated capabilities, user doc
 
 ## Security boundary
 
-![Slipway trust boundaries: Issue content and the working tree are untrusted data that can never grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope; the AI coding host is trusted to act and holds every credential; the local CLI validates strict JSON, sizes, identities, and digests while holding no credentials, but cannot prove the host fetched GitHub honestly.](../../assets/diagrams/trust-boundary.svg)
+![Slipway trust boundaries: Issue content and the working tree are untrusted data that can never grant shell authority, disclose credentials, bypass confirmation, or widen destructive scope; the AI coding host is trusted to act and holds and uses provider credentials; Slipway does not intentionally collect or manage them, and the local CLI validates strict JSON, sizes, identities, and digests without owning or managing provider credentials; goal, answer, Outcome, and command text may be sensitive and can persist, while environment dumps are not intentionally collected.](../../assets/diagrams/trust-boundary.svg)
 
 Slipway assumes that processes with the same account, root, malware, or a compromised host can exceed its protections. Within that boundary it:
 
 - anchors filesystem operations and rejects unsafe symlink traversal;
 - narrows deletion races by relocating entries into a private quarantine and revalidating identity, but does not claim exact-object deletion: a continuously racing same-UID watcher can still replace the final pathname between validation and the pathname-based `unlink` or `rmdir` system call;
 - validates strict JSON, sizes, identities, and digests;
-- keeps credentials out of Slipway storage and GitHub fetch/publication out of the Run core;
+- does not intentionally collect or manage model-provider or GitHub credentials; host- or user-provided goal, answer, Outcome, and command text may still be sensitive and persist, while environment dumps are not intentionally collected;
 - separates one-shot destructive grants from natural-language answers;
 - preserves user-modified generated files;
 - reports platform durability limitations.

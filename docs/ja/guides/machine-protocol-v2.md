@@ -4,7 +4,7 @@
 
 正規の契約は、バージョン付きパスの [machine protocol schema](../../reference/v2/machine-protocol.schema.json) と [ソースエンベロープ schema](../../reference/v2/source-envelope.schema.json) です。URL のバージョンは JSON の `contract_version` または `source_version` とそろえてください。バージョンなしの互換エイリアスは意図的に公開しません。
 
-![Slipway machine protocol の交換: ホストが Run を開始し、最初の orient Action と structured next を受け取ります。Action ごとに ホストが作業を行って厳密な Outcome を1つ submit し、CLI は検証して ジャーナル event を append し、独立して Git を観測してから次の Action を返します。needs_input Outcome は ホストが answer または skip するまで Run を pause し、明示的な resume は workspace identity を再検証して古い作業を無効化します。](../../assets/diagrams/protocol-sequence.svg)
+![Slipway machine protocol の交換: ホストが Run を開始し、最初の orient Action と structured next を受け取ります。各 Action の厳密な Outcome の後、CLI は検証、Git の独立観測と次の operation の導出、ジャーナル event の構築・append、projection の置換を順に行い、次の Action を返します。回答可能な decision または destructive pause は answer または skip を使い、stop 後または current typed next.operation が resume variant のときだけ resume が認可され、結果は Active または Paused（source candidate の選択待ちを含む）になります。](../../assets/diagrams/protocol-sequence.svg)
 
 ## 前提条件
 
