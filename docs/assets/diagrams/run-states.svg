@@ -143,7 +143,7 @@ stateDiagram-v2
   <path class="flow-stop" d="M250 275 V390 H310 V430" marker-end="url(#rs-arrow-stop)"/>
   <path class="flow-stop" d="M700 315 H1040 V405 H430 V430" marker-end="url(#rs-arrow-stop)"/>
   <path class="flow-pause" d="M470 475 H520 V350 H900 V315" marker-end="url(#rs-arrow-pause)"/>
-  <path class="flow-main" d="M350 135 V80 H1100 V430 H910" marker-end="url(#rs-arrow-main)"/>
+  <path class="flow-main" d="M350 135 V100 H1100 V430 H910" marker-end="url(#rs-arrow-main)"/>
   <path class="flow-main" d="M150 475 H30 V110 H285 V135" marker-end="url(#rs-arrow-main)"/>
   <path class="flow-pause" d="M940 170 H1150 V260 H940" marker-end="url(#rs-arrow-pause)"/>
 
@@ -186,23 +186,23 @@ stateDiagram-v2
   <rect class="label-bg" x="438" y="183" width="170" height="18" rx="5"/>
   <text class="edge-label" x="444" y="196">needs_input / budget exhausted</text>
 
-  <rect class="label-bg" x="438" y="217" width="230" height="18" rx="5"/>
-  <text class="edge-label" x="444" y="230">answer / confirm / skip → Active</text>
+  <rect class="label-bg" x="430" y="210" width="165" height="18" rx="5"/>
+  <text class="edge-label" x="436" y="223">answer / confirm / skip → Active</text>
 
   <rect class="label-bg" x="948" y="212" width="170" height="18" rx="5"/>
   <text class="edge-label" x="954" y="225">result may stay Paused</text>
 
-  <rect class="label-bg" x="155" y="366" width="180" height="18" rx="5"/>
-  <text class="edge-label" x="161" y="379">stop · reorder · take over</text>
+  <rect class="label-bg" x="270" y="366" width="180" height="18" rx="5"/>
+  <text class="edge-label" x="276" y="379">stop · reorder · take over</text>
 
-  <rect class="label-bg" x="665" y="314" width="220" height="18" rx="5"/>
-  <text class="edge-label" x="671" y="327">resume source refresh → Paused candidate</text>
+  <rect class="label-bg" x="665" y="330" width="220" height="18" rx="5"/>
+  <text class="edge-label" x="671" y="343">resume source refresh → Paused candidate</text>
 
   <rect class="label-bg" x="110" y="316" width="210" height="18" rx="5"/>
   <text class="edge-label" x="116" y="329">typed resume → Active</text>
 
-  <rect class="label-bg" x="760" y="62" width="200" height="18" rx="5"/>
-  <text class="edge-label" x="766" y="75">automatic queue empty</text>
+  <rect class="label-bg" x="760" y="78" width="200" height="18" rx="5"/>
+  <text class="edge-label" x="766" y="91">automatic queue empty</text>
 
   <!-- invariants -->
   <rect class="band" x="40" y="570" width="546" height="140" rx="14"/>

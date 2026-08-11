@@ -158,7 +158,7 @@ flowchart LR
   <text class="tiny" x="440" y="358">to be believed without observation.</text>
 
   <!-- LOCAL zone -->
-  <rect class="band-local" x="800" y="88" width="360" height="290" rx="16"/>
+  <rect class="band-local" x="800" y="88" width="360" height="320" rx="16"/>
   <text class="tag-ok" x="820" y="112">VALIDATES · NO CREDENTIAL OWNERSHIP</text>
 
   <rect class="verify" x="820" y="128" width="320" height="132" rx="12"/>
@@ -175,7 +175,8 @@ flowchart LR
   <text class="tiny" x="980" y="330" text-anchor="middle">goal / answer / Outcome / command text may persist</text>
   <text class="tiny" x="980" y="346" text-anchor="middle">no environment dumps intentionally collected</text>
 
-  <text class="tiny" x="820" y="374">`doctor` is the one exception: it may invoke local `gh` for read-only diagnostics.</text>
+  <text class="tiny" x="980" y="368" text-anchor="middle">`doctor` is the one exception: it may invoke local `gh` for</text>
+  <text class="tiny" x="980" y="384" text-anchor="middle">read-only diagnostics.</text>
 
   <!-- flows -->
   <path class="flow" d="M350 176 H433" marker-end="url(#tb-arrow)"/>
@@ -195,12 +196,12 @@ flowchart LR
   <text class="edge-label" x="742" y="219">one Action at a time</text>
 
   <!-- denied path: issue content -> CLI authority -->
-  <path class="flow-deny" d="M205 378 V416 H980 V378"/>
-  <rect class="label-bg" x="614" y="384" width="252" height="20" rx="5"/>
-  <text class="tiny" x="622" y="398">Issue text never becomes authority on this path</text>
-  <circle cx="592" cy="416" r="13" fill="var(--band)" stroke="var(--stop-stroke)" stroke-width="2.4"/>
-  <line class="deny-mark" x1="584" y1="408" x2="600" y2="424"/>
-  <line class="deny-mark" x1="600" y1="408" x2="584" y2="424"/>
+  <path class="flow-deny" d="M205 378 V432 H980 V408"/>
+  <rect class="label-bg" x="614" y="410" width="252" height="20" rx="5"/>
+  <text class="tiny" x="622" y="424">Issue text never becomes authority on this path</text>
+  <circle cx="592" cy="432" r="13" fill="var(--band)" stroke="var(--stop-stroke)" stroke-width="2.4"/>
+  <line class="deny-mark" x1="584" y1="424" x2="600" y2="440"/>
+  <line class="deny-mark" x1="600" y1="424" x2="584" y2="440"/>
 
   <!-- bottom limits -->
   <rect class="band" x="40" y="450" width="546" height="136" rx="14"/>
