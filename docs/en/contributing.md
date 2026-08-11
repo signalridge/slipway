@@ -67,7 +67,8 @@ Documentation rules:
 - use JSON schemas for exact machine shape and state runtime-only semantic checks explicitly;
 - qualify host-side instructions as host behavior rather than Go CLI guarantees;
 - keep run-specific evidence and release history out of stable user pages;
-- update source links, website splash links, and sidebar slugs together when moving a page.
+- update source links, website splash links, and sidebar slugs together when moving a page;
+- regenerate the committed social card with `node website/scripts/build-og-image.mjs` after changing the wordmark.
 
 ## Test focus by change type
 

@@ -2,6 +2,12 @@
 title: Slipway
 description: ユーザーが明示的に起動する AI コーディング向けの補助自動化ツール。
 template: splash
+# Starlight は `<title>` を `{title} | {サイトタイトル}` で組み立てるため、
+# ランディングページでは両方が "Slipway" になる。タグの上書きが公式の回避手段で、
+# 文言は各ロケールで既に翻訳済みの hero 見出しを流用する。
+head:
+  - tag: title
+    content: Slipway — ユーザーが明示的に起動する AI コーディング向けの補助自動化ツール
 editUrl: https://github.com/signalridge/slipway/edit/main/website/src/content/docs/ja/index.mdx
 hero:
   title: ユーザーが明示的に起動する AI コーディング向けの補助自動化ツール
