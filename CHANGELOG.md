@@ -5,6 +5,18 @@ All notable changes to Slipway will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1](https://github.com/signalridge/slipway/compare/v1.0.0...v1.0.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* align release checks and diagrams ([#456](https://github.com/signalridge/slipway/issues/456)) ([99d0085](https://github.com/signalridge/slipway/commit/99d00850cf9ee25beed16a4b8ee362052dc88e6f))
+
+
+### Performance
+
+* **website:** serve the display font from this origin ([#460](https://github.com/signalridge/slipway/issues/460)) ([53326ee](https://github.com/signalridge/slipway/commit/53326ee3925b1f283ddbbd31f2c84ca24c2f2e0e))
+
 ## [1.0.0](https://github.com/signalridge/slipway/compare/v0.41.1...v1.0.0) (2026-08-10)
 
 
