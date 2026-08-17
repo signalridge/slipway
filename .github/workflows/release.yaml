@@ -538,7 +538,7 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.commit_oid }}
       - name: Install Nix
-        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
       - name: Build package
         run: nix build .#slipway
       - name: Verify binary
@@ -617,7 +617,7 @@ jobs:
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
       - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         if: always()
         with:
           sarif_file: trivy-results.sarif
